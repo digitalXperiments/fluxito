@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Query scopes — {{ dashboard.title }} — Fluxito{% endblock %}
+{% set active = 'saved_dashboards' %}
+
+{% block main %}
+<main class="app-main">
+
+  <div class="page-head">
+    <div>
+      <span class="label">Scopes · refresh authorization</span>
+      <h1>{{ dashboard.title }}<span class="serif-italic">, scoped.</span></h1>
+      <p>
+        Which data sources may this dashboard's live-refresh endpoint reach? Every card's
+        stored query is checked against this list on every browser refresh. Platform-only
+        entries wildcard every resource on that platform. Add a resource id to restrict
+        further.
+      </p>
+      <p>
+        <a href="/live-dashboards/{{ dashboard.slug }}" class="btn sm">← Back to dashboard</a>
+      </p>
+    </div>
+  </div>
+
+  <div class="ps-card" style="padding:24px 26px;margin-top:16px">
+    <h3 class="ps-h3">Current scopes</h3>
+    <p class="ps-card-lede">Delete rows to revoke access. Refresh calls matching a deleted scope return 403.</p>
+    <div id="scopeList" style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem">
+      <div style="opacity:0.6">Loading…</div>
+    </div>
+  </div>
+
+  <div class="ps-card" style="padding:24px 26px;margin-top:16px">
+    <h3 class="ps-h3">Add scope</h3>
+    <p class="ps-card-lede">Pick a platform, optionally restrict to a specific resource.</p>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-top:0.5rem">
+      <label style="flex:1;min-width:180px">
+        <span class="label">Platform</span>
+        <select id="newPlatform" style="width:100%"></select>
+      </label>
+      <label style="flex:2;min-width:240px">
+        <span class="label">Resource (optional — leave blank for platform-wildcard)</span>
+        <select id="newResource" style="width:100%">
+          <option value="">Any resource on this platform</option>
+        </select>
+      </label>
+      <button type="button" class="btn sm" onclick="addScope()">Add</button>
+    </div>
+    <div id="manualRow" style="display:none;margin-top:0.75rem">
+      <label style="display:block">
+        <span class="label">Manual resource id (for platforms without a connected resource list)</span>
+        <input type="text" id="newManual" style="width:100%" placeholder="e.g. customer-123" />
+      </label>
+    </div>
+  </div>
+
+  <div style="margin-top:1rem;display:flex;gap:0.75rem">
+    <button type="button" class="btn" onclick="saveScopes()">Save changes</button>
+    <span id="saveStatus" style="align-self:center;font-size:0.85rem;opacity:0.7"></span>
+  </div>
+
+</main>
+
+<script>
+  const DASHBOARD_ID = {{ dashboard.id | tojson }};
+  let STATE = { scopes: [], platform_keys: {}, resources: [] };
+
+  async function loadScopes() {
+    const res = await fetch(`/api/saved-dashboards/${DASHBOARD_ID}/scopes`, {credentials: 'same-origin'});
+    if (!res.ok) {
+      document.getElementById('scopeList').innerHTML = `<div style="color:#c4421a">Failed to load: ${res.status}</div>`;
+      return;
+    }
+    const data = await res.json();
+    STATE.scopes = Array.isArray(data.query_scopes) ? data.query_scopes.slice() : [];
+    STATE.platform_keys = data.platform_resource_keys || {};
+    STATE.resources = data.available_resources || [];
+    renderScopeList();
+    populatePlatformSelect();
+  }
+
+  function renderScopeList() {
+    const box = document.getElementById('scopeList');
+    if (!STATE.scopes.length) {
+      box.innerHTML = '<div style="opacity:0.6">No scopes yet. Dashboard refresh calls will be denied until you add one.</div>';
+      return;
+    }
+    box.innerHTML = STATE.scopes.map((s, i) => {
+      const key = STATE.platform_keys[s.platform];
+      const resource = key && s[key] ? ` · ${key}=${s[key]}` : ' · (any resource)';
+      const extra = Object.entries(s)
+        .filter(([k]) => k !== 'platform' && k !== key)
+        .map(([k, v]) => ` · ${k}=${v}`)
+        .join('');
+      return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border:1px solid rgba(0,0,0,0.08);border-radius:6px">
+        <span style="flex:1"><strong>${escapeHtml(s.platform)}</strong>${escapeHtml(resource + extra)}</span>
+        <button class="mini-btn mini-btn-danger" onclick="removeScope(${i})">Remove</button>
+      </div>`;
+    }).join('');
+  }
+
+  function populatePlatformSelect() {
+    const sel = document.getElementById('newPlatform');
+    sel.innerHTML = Object.keys(STATE.platform_keys).map(p =>
+      `<option value="${p}">${p}</option>`
+    ).join('');
+    sel.onchange = onPlatformChange;
+    onPlatformChange();
+  }
+
+  function onPlatformChange() {
+    const platform = document.getElementById('newPlatform').value;
+    const resSel = document.getElementById('newResource');
+    const manualRow = document.getElementById('manualRow');
+    const platformResources = STATE.resources.filter(r => r.platform === platform);
+    if (platformResources.length) {
+      resSel.innerHTML =
+        '<option value="">Any resource on this platform</option>' +
+        platformResources.map(r =>
+          `<option value="${escapeAttr(r.resource_value)}">${escapeHtml(r.label)}</option>`
+        ).join('');
+      resSel.disabled = false;
+      manualRow.style.display = 'none';
+    } else {
+      resSel.innerHTML = '<option value="">Any resource on this platform</option>';
+      resSel.disabled = true;
+      manualRow.style.display = 'block';
+    }
+  }
+
+  function addScope() {
+    const platform = document.getElementById('newPlatform').value;
+    if (!platform) return;
+    const key = STATE.platform_keys[platform];
+    const fromSelect = document.getElementById('newResource').value;
+    const manual = document.getElementById('newManual').value.trim();
+    const resourceValue = fromSelect || manual;
+    const entry = { platform };
+    if (resourceValue && key) entry[key] = resourceValue;
+    STATE.scopes.push(entry);
+    document.getElementById('newResource').value = '';
+    document.getElementById('newManual').value = '';
+    renderScopeList();
+  }
+
+  function removeScope(i) {
+    STATE.scopes.splice(i, 1);
+    renderScopeList();
+  }
+
+  async function saveScopes() {
+    const status = document.getElementById('saveStatus');
+    status.textContent = 'Saving…';
+    const res = await fetch(`/api/saved-dashboards/${DASHBOARD_ID}/scopes`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({scopes: STATE.scopes}),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      status.textContent = `Error: ${err.slice(0, 180)}`;
+      status.style.color = '#c4421a';
+      return;
+    }
+    status.textContent = 'Saved.';
+    status.style.color = '';
+    setTimeout(() => { status.textContent = ''; }, 2500);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  loadScopes();
+</script>
+{% endblock %}

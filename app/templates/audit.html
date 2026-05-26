@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% from "partials/platform_icons.html" import platform_icon %}
+{% block title %}Activity &amp; audit — Fluxito{% endblock %}
+{% set active = 'audit' %}
+
+{# Map a backend platform slug to a prototype .pbadge class #}
+{% macro pbadge_class(slug) -%}
+{%- set s = (slug or '')|lower -%}
+{%- if s in ['ga4', 'google-analytics', 'google_analytics'] -%}ga4
+{%- elif s == 'amplitude' -%}amp
+{%- elif s in ['adobe-analytics', 'adobe_analytics', 'adobe'] -%}aa
+{%- elif s == 'gtm' -%}gtm
+{%- elif s in ['adobe-launch', 'adobe_launch'] -%}al
+{%- elif s in ['google-ads', 'google_ads', 'gads'] -%}gads
+{%- elif s == 'meta' -%}meta
+{%- elif s == 'tiktok' -%}tiktok
+{%- elif s in ['snap', 'snapchat'] -%}snap
+{%- elif s == 'bigquery' -%}bq
+{%- elif s == 'redshift' -%}rs
+{%- elif s == 'snowflake' -%}sf
+{%- elif s in ['search-console', 'search_console'] -%}sc
+{%- else -%}ghost
+{%- endif -%}
+{%- endmacro %}
+
+{% macro pbadge_letters(slug) -%}
+{%- set s = (slug or '')|lower -%}
+{%- if s in ['ga4', 'google-analytics', 'google_analytics'] -%}G4
+{%- elif s == 'amplitude' -%}AM
+{%- elif s in ['adobe-analytics', 'adobe_analytics'] -%}AA
+{%- elif s == 'gtm' -%}GT
+{%- elif s in ['adobe-launch', 'adobe_launch', 'adobe'] -%}AL
+{%- elif s in ['google-ads', 'google_ads', 'gads'] -%}GA
+{%- elif s == 'meta' -%}MT
+{%- elif s == 'tiktok' -%}TT
+{%- elif s in ['snap', 'snapchat'] -%}SN
+{%- elif s == 'bigquery' -%}BQ
+{%- elif s == 'redshift' -%}RS
+{%- elif s == 'snowflake' -%}SF
+{%- elif s in ['search-console', 'search_console'] -%}SC
+{%- else -%}··
+{%- endif -%}
+{%- endmacro %}
+
+{% block main %}
+<main class="app-main">
+
+  <div class="page-head">
+    <div>
+      <span class="label">Tool call log · last 14 days</span>
+      <h1>Every tool call, <em class="serif-italic" style="color:var(--blue)">logged.</em></h1>
+      <p>Every request an AI client made on your connections — GA4 reports, GTM diffs, ad pauses, warehouse SQL. Click any row to see the arguments, response, and latency. Writes are flagged and scope-gated.</p>
+    </div>
+  </div>
+
+  {# ── KPI row ── #}
+  <div class="audit-hd-row">
+    <div class="kpi">
+      <span class="label">Tool calls · 7d</span>
+      <div class="val mono">{{ stats.total_week }}</div>
+      <div class="meta">Read + audit + write</div>
+    </div>
+    <div class="kpi">
+      <span class="label">Write ops</span>
+      <div class="val mono">{{ stats.writes_week }}</div>
+      <div class="meta">{{ stats.writes_week and 'GTM + Google Ads' or 'None this week' }}</div>
+    </div>
+    <div class="kpi">
+      <span class="label">Issues</span>
+      <div class="val mono">{{ stats.failures_week }}</div>
+      <div class="meta {% if stats.failures_week > 0 %}down{% endif %}">
+        {% if stats.total_week and stats.total_week > 0 %}{{ ((stats.failures_week or 0) / stats.total_week * 100) | round(2) }}% rate{% else %}—{% endif %}
+      </div>
+    </div>
+    <div class="kpi">
+      <span class="label">Source clients</span>
+      <div class="val mono">{{ stats.sources_count }}</div>
+      <div class="meta">{% if stats.sources_list %}{{ stats.sources_list | join(' · ') }}{% else %}None yet{% endif %}</div>
+    </div>
+  </div>
+
+  {# ── Daily groups ── #}
+  {% if day_list %}
+    {% for d in day_list %}
+    <div class="day-group">
+      <div class="day-hd">
+        <span class="day">{{ d.label }}{% if d.date %} · {{ d.date.strftime('%b %-d, %Y') }}{% endif %}</span>
+        <span class="sum">
+          {{ d.total }} call{% if d.total != 1 %}s{% endif %}
+          {% if d.writes > 0 %} · <strong>{{ d.writes }}</strong> write{% if d.writes != 1 %}s{% endif %}{% endif %}
+          {% if d.issues > 0 %} · <strong style="color:var(--red)">{{ d.issues }}</strong> issue{% if d.issues != 1 %}s{% endif %}{% endif %}
+          {% if d.sources_list %} · {{ d.sources_list | join(', ') }}{% endif %}
+        </span>
+      </div>
+
+      {# Account events (signin, connection added, etc) #}
+      {% if d.account_events %}
+      <div class="activity" style="background:var(--bg-2)">
+        {% for e in d.account_events %}
+        <div class="activity-row account-event">
+          <span class="t">{{ e.time_str }}</span>
+          <span class="pbadge sm ghost" aria-hidden="true"><span>··</span></span>
+          <span class="tool" style="font-family:var(--sans);font-style:italic;color:var(--muted)">
+            {% if e.event_type in ('signin', 'signup') %}Account: {{ e.description }}
+            {% elif e.event_type == 'connection_added' %}Connection: {{ e.description }}
+            {% else %}{{ e.description }}
+            {% endif %}
+          </span>
+          <span class="client"></span>
+          <span class="status">—</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# Platform-grouped tool calls — collapsed summary by default #}
+      {% for plat in d.platforms_list %}
+      {% set group_id = d.key ~ '-' ~ plat.slug %}
+      <div class="activity">
+        {# ── Summary row (always visible, clickable to expand) ── #}
+        <div class="plat-head plat-toggle" onclick="togglePlatCalls('{{ group_id }}')" role="button" tabindex="0">
+          <span class="pbadge sm {{ pbadge_class(plat.slug) }}"><span>{{ pbadge_letters(plat.slug) }}</span></span>
+          <span class="plat-name">{{ plat.name }}</span>
+          <span class="plat-stats">
+            {% set tool_names = [] %}
+            {% for c in plat.calls %}
+              {% if c.tool_name not in tool_names %}{% set _ = tool_names.append(c.tool_name) %}{% endif %}
+            {% endfor %}
+            <span class="plat-stat">{{ plat.count }} call{% if plat.count != 1 %}s{% endif %}</span>
+            <span class="plat-stat">{{ tool_names | length }} tool{% if tool_names | length != 1 %}s{% endif %}</span>
+            {% if plat.writes > 0 %}<span class="plat-stat plat-stat-write">{{ plat.writes }} write{% if plat.writes != 1 %}s{% endif %}</span>{% endif %}
+            {% if plat.issues > 0 %}<span class="plat-stat plat-stat-err">{{ plat.issues }} issue{% if plat.issues != 1 %}s{% endif %}</span>{% endif %}
+          </span>
+          <span class="plat-meta">
+            {% for tn in tool_names[:4] %}
+              <span class="plat-tool-chip">{{ tn }}</span>
+            {% endfor %}
+            {% if tool_names | length > 4 %}
+              <span class="plat-tool-chip" style="color:var(--muted)">+{{ tool_names | length - 4 }}</span>
+            {% endif %}
+          </span>
+          <span class="plat-expand-icon" id="icon-{{ group_id }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </div>
+
+        {# ── Individual calls (hidden by default) ── #}
+        <div class="plat-calls" id="calls-{{ group_id }}" style="display:none">
+          {% for c in plat.calls %}
+          <a class="activity-row{% if c.is_issue %} is-err{% endif %}" href="/activity-log/{{ c.id }}" style="text-decoration:none;color:inherit">
+            <span class="t">{{ c.time_str }}</span>
+            <span class="pbadge sm {{ pbadge_class(plat.slug) }}"><span>{{ pbadge_letters(plat.slug) }}</span></span>
+            <span class="tool">{{ c.tool_name }}</span>
+            <span class="client">{% if c.summary %}{{ c.summary }}{% endif %}</span>
+            <span class="status {% if c.is_issue %}err{% endif %}">
+              {% if c.is_write %}write{% else %}read{% endif %} · {{ c.status }}
+              {% if c.duration_ms is not none %} · {{ c.duration_ms }}ms{% endif %}
+            </span>
+          </a>
+          {% endfor %}
+          {% if plat.count > plat.calls|length %}
+          <div class="activity-row more-row">
+            <span class="t"></span>
+            <span></span>
+            <span class="tool" style="color:var(--muted);font-style:italic">
+              + {{ plat.count - plat.calls|length }} more
+              {% if plat.count - plat.calls|length != 1 %}calls{% else %}call{% endif %}
+            </span>
+            <span></span>
+            <span></span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if not d.account_events and not d.platforms_list %}
+      <div class="empty-day">No calls on this day.</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="audit-empty">
+    <h3>No activity yet.</h3>
+    <p>Once your AI starts making tool calls, every request will appear here — day by day, click into any row for the full arguments and response.</p>
+    <a href="/connect" class="btn primary">Connect a platform <span class="arrow">→</span></a>
+  </div>
+  {% endif %}
+
+</main>
+
+<style>
+/* Audit-specific tweaks */
+.audit-hd-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 0 0 36px; }
+@media (max-width: 900px) { .audit-hd-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .audit-hd-row { grid-template-columns: 1fr; } }
+
+.day-group { margin-bottom: 40px; }
+.day-hd {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 10px 0 14px; border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+.day-hd .day { font-size: 14px; font-weight: 500; color: var(--ink); font-family: var(--mono); letter-spacing: 0.02em; }
+.day-hd .sum { font-size: 12.5px; color: var(--muted); }
+.day-hd .sum strong { color: var(--ink); font-weight: 600; }
+
+/* Platform summary row (clickable to expand) */
+.plat-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; background: var(--bg-2);
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line-2);
+  font-size: 12.5px;
+}
+.plat-head.plat-toggle {
+  cursor: pointer; user-select: none;
+  transition: background .12s;
+}
+.plat-head.plat-toggle:hover { background: color-mix(in srgb, var(--bg-2) 60%, var(--bg)); }
+.plat-head .plat-name { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.plat-head .plat-stats {
+  display: flex; align-items: center; gap: 6px;
+  margin-left: 4px;
+}
+.plat-stat {
+  font-family: var(--mono); font-size: 11px; font-weight: 500;
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--bg); border: 1px solid var(--line);
+  color: var(--ink-soft); white-space: nowrap;
+}
+.plat-stat-write { background: color-mix(in srgb, var(--amber) 10%, transparent); border-color: color-mix(in srgb, var(--amber) 30%, var(--line)); color: var(--amber); font-weight: 600; }
+.plat-stat-err { background: color-mix(in srgb, var(--red) 8%, transparent); border-color: color-mix(in srgb, var(--red) 25%, var(--line)); color: var(--red); font-weight: 600; }
+
+.plat-head .plat-meta {
+  display: flex; align-items: center; gap: 4px;
+  margin-left: auto;
+}
+.plat-tool-chip {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  padding: 2px 7px; border-radius: 4px;
+  background: var(--bg); border: 1px solid var(--line);
+  color: var(--muted); white-space: nowrap;
+}
+
+.plat-expand-icon {
+  flex-shrink: 0; display: flex; align-items: center;
+  color: var(--muted); margin-left: 8px;
+  transition: transform .2s cubic-bezier(.16,1,.3,1);
+}
+.plat-expand-icon.is-open { transform: rotate(180deg); }
+
+/* Expanded calls list */
+.plat-calls { border-top: 1px solid var(--line-2); }
+
+.activity-row.is-err .status { color: var(--red); }
+.activity-row.more-row { opacity: 0.7; padding: 6px 14px; }
+.empty-day { padding: 14px; color: var(--muted); font-size: 13px; font-style: italic; text-align: center; }
+.activity-row.account-event { background: transparent; }
+
+.audit-empty {
+  text-align: center;
+  padding: 60px 24px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-l);
+  background: var(--bg-2);
+}
+.audit-empty h3 { font-size: 22px; font-weight: 600; margin: 0 0 8px; color: var(--ink); }
+.audit-empty p { color: var(--ink-soft); max-width: 480px; margin: 0 auto 22px; }
+</style>
+
+<script>
+function togglePlatCalls(groupId) {
+  var calls = document.getElementById('calls-' + groupId);
+  var icon = document.getElementById('icon-' + groupId);
+  if (!calls) return;
+  var isOpen = calls.style.display !== 'none';
+  calls.style.display = isOpen ? 'none' : '';
+  if (icon) icon.classList.toggle('is-open', !isOpen);
+}
+</script>
+{% endblock %}

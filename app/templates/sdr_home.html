@@ -1,0 +1,1046 @@
+{% extends "base.html" %}
+{% block title %}Solution Design — Fluxito{% endblock %}
+{% set active = 'sdr' %}
+
+{% block head_extra %}
+<style>
+  /* ── SDR guided onboarding (empty state) ──────────────────────── */
+  .sdr-onboard {
+    max-width: 860px; margin: 8px auto 40px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .sdr-step {
+    border: 1px solid var(--border); border-radius: var(--r-lg);
+    background: var(--surface);
+    padding: 24px 28px;
+  }
+  .sdr-step-head {
+    display: flex; align-items: flex-start; gap: 16px;
+    margin-bottom: 18px;
+  }
+  .sdr-step-num {
+    flex-shrink: 0;
+    width: 32px; height: 32px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--ink); color: var(--bg);
+    font-family: var(--mono); font-size: 13px; font-weight: 700;
+  }
+  .sdr-step-head h3 {
+    font-size: 17px; font-weight: 600; color: var(--text);
+    margin: 2px 0 4px; letter-spacing: -0.01em;
+  }
+  .sdr-step-head p {
+    font-size: 13.5px; color: var(--text-muted); line-height: 1.55; margin: 0;
+  }
+  .sdr-step-body { padding-left: 48px; }
+
+  /* Skip-to-step-2 CTA */
+  .sdr-skip-wrap {
+    display: flex; justify-content: center; margin-top: 22px;
+  }
+  .sdr-skip-cta {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 9px 18px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px; text-decoration: none; font-family: inherit;
+    transition: all 0.15s ease;
+  }
+  .sdr-skip-cta:hover {
+    background: var(--ink, #0B0B0E); border-color: var(--ink, #0B0B0E);
+    color: var(--bg, #FFFFFF);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(11, 11, 14, 0.12);
+  }
+  .sdr-skip-cta strong {
+    color: var(--text); font-weight: 600;
+    transition: color 0.15s ease;
+  }
+  .sdr-skip-cta:hover strong { color: var(--bg, #FFFFFF); }
+  .sdr-skip-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+    flex-shrink: 0;
+  }
+  .sdr-skip-arrow {
+    font-size: 14px; line-height: 1;
+    transition: transform 0.2s ease;
+  }
+  .sdr-skip-cta:hover .sdr-skip-arrow { transform: translateY(2px); }
+
+  /* Prompt cards */
+  .sdr-prompts {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .sdr-prompt-card {
+    border: 1px solid var(--border); border-radius: var(--r-md);
+    padding: 14px 16px; background: var(--surface-2);
+    transition: border-color .15s;
+  }
+  .sdr-prompt-card.recommended {
+    border-color: var(--ink);
+    background: var(--surface);
+  }
+  .sdr-prompt-label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; color: var(--text);
+    margin-bottom: 8px;
+    font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .sdr-prompt-tag {
+    display: inline-flex; align-items: center;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--ink); color: var(--bg);
+    font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  }
+  .sdr-prompt-row {
+    display: flex; gap: 8px; align-items: stretch;
+  }
+  .sdr-prompt-text {
+    flex: 1; min-width: 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-sm); padding: 9px 12px;
+    font-family: var(--mono); font-size: 12.5px; color: var(--text);
+    overflow-x: auto; white-space: nowrap;
+    user-select: all;
+  }
+  .sdr-copy-btn {
+    flex-shrink: 0;
+    padding: 0 14px; border-radius: var(--r-sm);
+    border: 1px solid var(--ink); background: var(--ink); color: var(--bg);
+    font-family: var(--sans); font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: opacity .15s;
+  }
+  .sdr-copy-btn:hover { opacity: 0.85; }
+  .sdr-copy-btn.is-copied {
+    background: var(--success, #10b981); border-color: var(--success, #10b981);
+  }
+  .sdr-prompt-hint {
+    font-size: 12px; color: var(--text-subtle); margin: 8px 0 0; line-height: 1.5;
+  }
+
+  /* Step 3 preview grid */
+  .sdr-preview-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+  }
+  .sdr-preview-item {
+    display: flex; gap: 12px;
+    padding: 14px; border: 1px solid var(--border);
+    border-radius: var(--r-md); background: var(--surface-2);
+  }
+  .sdr-preview-ico {
+    flex-shrink: 0;
+    width: 32px; height: 32px; border-radius: var(--r-sm);
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+  .sdr-preview-item strong {
+    display: block; font-size: 13px; font-weight: 600;
+    color: var(--text); margin-bottom: 2px;
+  }
+  .sdr-preview-item span {
+    font-size: 12px; color: var(--text-muted); line-height: 1.45;
+  }
+
+  @media (max-width: 680px) {
+    .sdr-step { padding: 18px 18px; }
+    .sdr-step-body { padding-left: 0; }
+    .sdr-preview-grid { grid-template-columns: 1fr; }
+    .sdr-prompt-row { flex-direction: column; }
+    .sdr-copy-btn { padding: 8px 14px; }
+  }
+
+  /* ── Header ───────────────────────────────────────────────────── */
+  .sdr-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+  }
+  .sdr-header-left { flex: 1; min-width: 200px; }
+  .sdr-header-left h2 {
+    font-size: 18px; font-weight: 600; color: var(--text); margin: 0 0 6px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sdr-header-meta {
+    font-size: 12px; color: var(--text-subtle); font-family: var(--mono);
+  }
+  .sdr-header-actions {
+    display: flex; gap: 8px; align-items: center; flex-shrink: 0;
+  }
+
+  /* badges */
+  .sdr-badge {
+    display: inline-flex; align-items: center;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; padding: 3px 8px;
+    border-radius: var(--r-sm); font-family: var(--mono);
+  }
+  .sdr-badge.draft { background: var(--warning-soft); color: var(--warning); }
+  .sdr-badge.approved { background: var(--success-soft); color: var(--success); }
+  .sdr-badge.version { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); }
+
+  /* ── Summary strip ────────────────────────────────────────────── */
+  .sdr-summary-strip {
+    display: flex; gap: 24px; flex-wrap: wrap; padding: 14px 20px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--r-lg); margin-bottom: 20px;
+    font-size: 13px; color: var(--text-muted);
+  }
+  .sdr-summary-strip .stat {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sdr-summary-strip .stat-val {
+    font-weight: 600; color: var(--text); font-family: var(--mono);
+  }
+
+  /* ── Tab bar ──────────────────────────────────────────────────── */
+  .sdr-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border);
+    margin-bottom: 0; overflow-x: auto;
+  }
+  .sdr-tab {
+    padding: 10px 18px; font-size: 13px; font-weight: 500;
+    color: var(--text-muted); cursor: pointer;
+    border: none; background: none;
+    border-bottom: 2px solid transparent;
+    transition: color .15s, border-color .15s;
+    white-space: nowrap; font-family: inherit;
+  }
+  .sdr-tab:hover { color: var(--text); }
+  .sdr-tab.is-active {
+    color: var(--text); border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+  .sdr-tab .tab-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 18px; padding: 0 5px;
+    font-size: 10px; font-weight: 600; font-family: var(--mono);
+    border-radius: var(--r-full); background: var(--surface-2);
+    color: var(--text-subtle); margin-left: 6px;
+  }
+  .sdr-tab.is-active .tab-count {
+    background: var(--accent-soft); color: var(--accent);
+  }
+
+  /* ── Spreadsheet table ────────────────────────────────────────── */
+  .sdr-sheet-wrap {
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
+    overflow: hidden; background: var(--surface);
+  }
+  .sdr-sheet-toolbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .sdr-sheet-toolbar .search-box {
+    flex: 1; max-width: 320px;
+  }
+  .sdr-sheet-toolbar .search-box input {
+    width: 100%; padding: 6px 10px 6px 32px;
+    font-size: 12px; border: 1px solid var(--border);
+    border-radius: var(--r-md); background: var(--surface);
+    color: var(--text); font-family: inherit;
+    outline: none; transition: border-color .15s;
+  }
+  .sdr-sheet-toolbar .search-box input:focus {
+    border-color: var(--accent);
+  }
+  .sdr-sheet-toolbar .search-box {
+    position: relative;
+  }
+  .sdr-sheet-toolbar .search-box::before {
+    content: '';
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px;
+    background: var(--text-subtle);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") center/contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") center/contain no-repeat;
+  }
+  .sdr-sheet-toolbar .filter-btn {
+    font-size: 12px; padding: 5px 10px;
+    border: 1px solid var(--border); border-radius: var(--r-md);
+    background: var(--surface); color: var(--text-muted);
+    cursor: pointer; font-family: var(--mono);
+    transition: border-color .15s, color .15s;
+  }
+  .sdr-sheet-toolbar .filter-btn:hover {
+    border-color: var(--accent); color: var(--text);
+  }
+  .sdr-sheet-toolbar .filter-btn.is-active {
+    background: var(--accent-soft); border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .sdr-table-scroll { overflow-x: auto; }
+
+  .sdr-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    table-layout: auto;
+  }
+  .sdr-table th {
+    padding: 9px 14px; text-align: left;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-subtle);
+    font-family: var(--mono); background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap; cursor: pointer; user-select: none;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .sdr-table th:hover { color: var(--text); }
+  .sdr-table th .sort-arrow {
+    display: inline-block; margin-left: 3px; font-size: 9px;
+    opacity: 0.3; transition: opacity .15s;
+  }
+  .sdr-table th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+
+  .sdr-table td {
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    color: var(--text); vertical-align: top;
+    max-width: 320px; line-height: 1.5;
+  }
+  .sdr-table tr:last-child td { border-bottom: none; }
+  .sdr-table tr:hover td { background: var(--accent-soft); }
+  .sdr-table tr.is-deprecated td { opacity: 0.5; }
+
+  /* Cell types */
+  .cell-mono {
+    font-family: var(--mono); font-size: 12px;
+  }
+  .cell-truncate {
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  .cell-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; padding: 2px 7px;
+    border-radius: var(--r-sm); font-family: var(--mono);
+  }
+  .cell-badge.planned { background: var(--surface-2); color: var(--text-subtle); }
+  .cell-badge.implemented { background: var(--info-soft); color: var(--info); }
+  .cell-badge.verified { background: var(--success-soft); color: var(--success); }
+  .cell-badge.deprecated { background: var(--danger-soft); color: var(--danger); }
+
+  .cell-required {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: var(--r-sm);
+    font-size: 11px; font-weight: 700;
+  }
+  .cell-required.yes { background: var(--success-soft); color: var(--success); }
+  .cell-required.no { background: var(--surface-2); color: var(--text-subtle); }
+
+  .cell-todo {
+    display: inline-flex; align-items: center; gap: 3px;
+    background: var(--warning-soft); color: var(--warning);
+    font-size: 11px; font-weight: 600; padding: 2px 6px;
+    border-radius: 4px; font-family: var(--mono);
+  }
+
+  .cell-platform {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 11px; font-weight: 600; padding: 2px 7px;
+    border-radius: var(--r-sm); font-family: var(--mono);
+    background: var(--surface-2); border: 1px solid var(--border);
+    text-transform: uppercase;
+  }
+
+  /* dest matrix check/dash */
+  .dest-check { color: var(--success); font-weight: 600; font-size: 14px; }
+  .dest-dash { color: var(--text-subtle); font-size: 14px; }
+
+  /* ── Meta panel (Business Context tab) ────────────────────────── */
+  .sdr-meta-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    padding: 20px;
+  }
+  .sdr-meta-card {
+    padding: 18px 20px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--r-lg);
+  }
+  .sdr-meta-card.full-width { grid-column: 1 / -1; }
+  .sdr-meta-card-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-subtle);
+    font-family: var(--mono); margin-bottom: 10px;
+  }
+  .sdr-meta-card-body {
+    font-size: 13.5px; line-height: 1.65; color: var(--text);
+    white-space: pre-wrap;
+  }
+  .sdr-meta-card-body .todo-inline {
+    background: var(--warning-soft); color: var(--warning);
+    font-size: 11px; font-weight: 600; padding: 1px 5px;
+    border-radius: 3px; font-family: var(--mono);
+  }
+
+  /* ── Gaps strip ───────────────────────────────────────────────── */
+  .sdr-gaps-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; background: var(--warning-soft);
+    border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin-bottom: 20px; font-size: 13px; color: var(--warning);
+  }
+  .sdr-gaps-bar svg { flex-shrink: 0; }
+  .sdr-gaps-bar .gap-count { font-weight: 700; font-family: var(--mono); }
+
+  /* ── Responsive ───────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    .sdr-meta-grid { grid-template-columns: 1fr; }
+    .sdr-summary-strip { gap: 12px; padding: 12px 14px; flex-direction: column; }
+    .sdr-header { flex-direction: column; }
+    .sdr-header-actions { width: 100%; justify-content: flex-start; }
+  }
+  @media (max-width: 680px) {
+    .sdr-tab { padding: 8px 12px; font-size: 12px; }
+    .sdr-table td, .sdr-table th { padding: 8px 10px; }
+  }
+</style>
+{% endblock %}
+
+{% block main %}
+<main class="app-main">
+  <div class="page-head">
+    <div>
+      <span class="label">Solution Design Reference</span>
+      <h1>Your tracking <em class="serif-italic">blueprint.</em></h1>
+      <p>The canonical document describing what events should fire, when, with what parameters,
+         to which destinations, and why.</p>
+    </div>
+  </div>
+
+  {% if not sdr %}
+  {# ── Empty state — guided 3-step flow ── #}
+  <div class="sdr-onboard">
+
+    {# Step 1 — Connect MCP client #}
+    <div class="sdr-step">
+      <div class="sdr-step-head">
+        <span class="sdr-step-num">1</span>
+        <div>
+          <h3>Connect an MCP client</h3>
+          <p>Fluxito runs through an MCP server. Link Claude (or another client) so it can read your setup and draft the plan.</p>
+        </div>
+      </div>
+      <div class="sdr-step-body">
+        {% include "partials/add_to_ai.html" %}
+        <div class="sdr-skip-wrap">
+          <a href="#step-2" class="sdr-skip-cta">
+            <span class="sdr-skip-dot" aria-hidden="true"></span>
+            Already connected? <strong>Skip to step 2</strong>
+            <span class="sdr-skip-arrow" aria-hidden="true">↓</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    {# Step 2 — Prompt Claude #}
+    <div class="sdr-step" id="step-2">
+      <div class="sdr-step-head">
+        <span class="sdr-step-num">2</span>
+        <div>
+          <h3>Ask Claude to generate the SDR</h3>
+          <p>Pick the starting point that matches where you are. Claude handles the rest conversationally.</p>
+        </div>
+      </div>
+      <div class="sdr-step-body">
+        <div class="sdr-prompts">
+          <div class="sdr-prompt-card recommended">
+            <div class="sdr-prompt-label">
+              <span class="sdr-prompt-tag">Recommended</span>
+              From your live setup
+            </div>
+            <div class="sdr-prompt-row">
+              <code class="sdr-prompt-text">Generate an SDR for my project</code>
+              <button class="sdr-copy-btn" data-copy="Generate an SDR for my project" type="button">Copy</button>
+            </div>
+            <p class="sdr-prompt-hint">Pulls GA4 events, GTM tags, and Ads conversions to bootstrap a draft.</p>
+          </div>
+
+          <div class="sdr-prompt-card">
+            <div class="sdr-prompt-label">From GA4 only</div>
+            <div class="sdr-prompt-row">
+              <code class="sdr-prompt-text">Generate an SDR based on my GA4 events from the last 90 days</code>
+              <button class="sdr-copy-btn" data-copy="Generate an SDR based on my GA4 events from the last 90 days" type="button">Copy</button>
+            </div>
+            <p class="sdr-prompt-hint">Useful if only GA4 is connected, or you want to scope the audit.</p>
+          </div>
+
+          <div class="sdr-prompt-card">
+            <div class="sdr-prompt-label">From scratch</div>
+            <div class="sdr-prompt-row">
+              <code class="sdr-prompt-text">Create a blank SDR I can fill in for a &lt;ecommerce / SaaS / lead-gen&gt; site</code>
+              <button class="sdr-copy-btn" data-copy="Create a blank SDR I can fill in for a <ecommerce / SaaS / lead-gen> site" type="button">Copy</button>
+            </div>
+            <p class="sdr-prompt-hint">Starts with a template — good for greenfield or pre-launch tracking.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Step 3 — Review here #}
+    <div class="sdr-step">
+      <div class="sdr-step-head">
+        <span class="sdr-step-num">3</span>
+        <div>
+          <h3>Review &amp; refine here</h3>
+          <p>Once Claude writes the draft, it appears on this page as a live spreadsheet. Ask follow-ups to fill gaps, change owners, or approve a version.</p>
+        </div>
+      </div>
+      <div class="sdr-step-body">
+        <div class="sdr-preview-grid">
+          <div class="sdr-preview-item">
+            <div class="sdr-preview-ico">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+            </div>
+            <div>
+              <strong>Event catalog</strong>
+              <span>Every event, trigger, status, and owner in a sortable table.</span>
+            </div>
+          </div>
+          <div class="sdr-preview-item">
+            <div class="sdr-preview-ico">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+            </div>
+            <div>
+              <strong>Parameters &amp; validation</strong>
+              <span>Types, required flags, source, example values, validation rules.</span>
+            </div>
+          </div>
+          <div class="sdr-preview-item">
+            <div class="sdr-preview-ico">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>
+            </div>
+            <div>
+              <strong>Destination matrix</strong>
+              <span>Which events land in GA4, Meta, TikTok, BigQuery, etc.</span>
+            </div>
+          </div>
+          <div class="sdr-preview-item">
+            <div class="sdr-preview-ico">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div>
+              <strong>Gaps &amp; TODOs</strong>
+              <span>Missing owners, undocumented params, and consent gaps flagged inline.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {% else %}
+  {# ── Spreadsheet viewer ── #}
+  {% set events = sdr.get('events', []) %}
+  {% set total_events = events | length %}
+  {% set total_params = namespace(n=0) %}
+  {% set total_dests = namespace(n=0) %}
+  {% set todo_count = gaps | length %}
+  {% for e in events %}
+    {% set total_params.n = total_params.n + (e.get('parameters', []) | length) %}
+    {% set total_dests.n = total_dests.n + (e.get('destinations', []) | length) %}
+  {% endfor %}
+
+  {# Header #}
+  <div class="sdr-header">
+    <div class="sdr-header-left">
+      <h2>
+        {{ sdr.name }}
+        <span class="sdr-badge {{ sdr.status }}">{{ sdr.status }}</span>
+        {% if version_info %}
+        <span class="sdr-badge version">v{{ version_info.version_number }}</span>
+        {% endif %}
+      </h2>
+      <div class="sdr-header-meta">
+        Updated {{ sdr.updated_at[:10] if sdr.updated_at else '—' }}
+        {% if version_info %}
+         · Approved {{ version_info.approved_at[:10] if version_info.approved_at else '' }}
+        {% endif %}
+      </div>
+    </div>
+    <div class="sdr-header-actions">
+      <button class="btn btn-sm" onclick="exportXlsx()" id="exportBtn" title="Export as Excel">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export .xlsx
+      </button>
+      <a href="/solution-design/edit" class="btn btn-sm">Edit raw</a>
+      <a href="/solution-design/versions" class="btn btn-sm">Versions</a>
+    </div>
+  </div>
+
+  {# Summary strip #}
+  <div class="sdr-summary-strip">
+    <div class="stat"><span class="stat-val">{{ total_events }}</span> events</div>
+    <div class="stat"><span class="stat-val">{{ total_params.n }}</span> parameters</div>
+    <div class="stat"><span class="stat-val">{{ total_dests.n }}</span> destination mappings</div>
+    {% if todo_count > 0 %}
+    <div class="stat" style="color:var(--warning)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span class="stat-val">{{ todo_count }}</span> gaps remaining
+    </div>
+    {% endif %}
+  </div>
+
+  {# Tab bar #}
+  <div class="sdr-tabs" id="sdrTabs">
+    <button class="sdr-tab is-active" data-tab="events" onclick="switchSdrTab('events')">
+      Event Catalog <span class="tab-count">{{ total_events }}</span>
+    </button>
+    <button class="sdr-tab" data-tab="params" onclick="switchSdrTab('params')">
+      Parameters <span class="tab-count">{{ total_params.n }}</span>
+    </button>
+    <button class="sdr-tab" data-tab="destinations" onclick="switchSdrTab('destinations')">
+      Destinations <span class="tab-count">{{ total_dests.n }}</span>
+    </button>
+    <button class="sdr-tab" data-tab="userprops" onclick="switchSdrTab('userprops')">
+      User Properties
+    </button>
+    <button class="sdr-tab" data-tab="context" onclick="switchSdrTab('context')">
+      Business Context
+    </button>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════
+     TAB 1: Event Catalog
+     ═══════════════════════════════════════════════════════════════ #}
+  <div class="sdr-sheet-wrap" id="panel-events">
+    <div class="sdr-sheet-toolbar">
+      <div class="search-box">
+        <input type="text" placeholder="Search events…" id="searchEvents" oninput="filterTable('events')">
+      </div>
+      <button class="filter-btn" data-filter="all" onclick="filterStatus(this,'events')">All</button>
+      <button class="filter-btn" data-filter="implemented" onclick="filterStatus(this,'events')">Implemented</button>
+      <button class="filter-btn" data-filter="planned" onclick="filterStatus(this,'events')">Planned</button>
+      <button class="filter-btn" data-filter="verified" onclick="filterStatus(this,'events')">Verified</button>
+    </div>
+    <div class="sdr-table-scroll">
+      <table class="sdr-table" id="table-events">
+        <thead>
+          <tr>
+            <th onclick="sortTable('table-events',0)">#<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-events',1)">Event Name<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-events',2)">Business Purpose<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-events',3)">Trigger<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-events',4)">Status<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-events',5)">Params<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-events',6)">Destinations<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-events',7)">Owner (Biz)<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-events',8)">Owner (Tech)<span class="sort-arrow">▼</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ev in events %}
+          {% set status = ev.get('status', 'planned') or 'planned' %}
+          <tr data-status="{{ status }}" class="{% if status == 'deprecated' %}is-deprecated{% endif %}">
+            <td class="cell-mono" style="color:var(--text-subtle)">{{ loop.index }}</td>
+            <td class="cell-mono" style="font-weight:600">{{ ev.name }}</td>
+            <td class="cell-truncate" style="max-width:280px">
+              {% set purpose = ev.get('purpose', '') or '' %}
+              {% if '[TODO' in purpose %}
+                <span class="cell-todo">TODO</span>
+              {% else %}
+                {{ purpose[:120] }}{% if purpose|length > 120 %}…{% endif %}
+              {% endif %}
+            </td>
+            <td>
+              {% set trigger = ev.get('trigger_type', '') or '' %}
+              {% if trigger %}
+                <span class="cell-mono" style="font-size:12px">{{ trigger }}</span>
+              {% else %}
+                <span class="cell-todo">TODO</span>
+              {% endif %}
+            </td>
+            <td><span class="cell-badge {{ status }}">{{ status }}</span></td>
+            <td class="cell-mono" style="text-align:center">{{ ev.get('parameters', []) | length }}</td>
+            <td>
+              {% for d in ev.get('destinations', []) %}
+                <span class="cell-platform">{{ d.platform }}</span>
+              {% else %}
+                <span class="cell-todo">TODO</span>
+              {% endfor %}
+            </td>
+            <td>
+              {% set biz = ev.get('owner_business', '') or '' %}
+              {% if biz and '[TODO' not in biz %}{{ biz }}{% elif biz %}—{% else %}—{% endif %}
+            </td>
+            <td>
+              {% set tech = ev.get('owner_technical', '') or '' %}
+              {% if tech and '[TODO' not in tech %}{{ tech }}{% elif tech %}—{% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════
+     TAB 2: Event Parameters
+     ═══════════════════════════════════════════════════════════════ #}
+  <div class="sdr-sheet-wrap" id="panel-params" style="display:none">
+    <div class="sdr-sheet-toolbar">
+      <div class="search-box">
+        <input type="text" placeholder="Search parameters…" id="searchParams" oninput="filterTable('params')">
+      </div>
+      <button class="filter-btn" data-filter="all" onclick="filterRequired(this)">All</button>
+      <button class="filter-btn" data-filter="required" onclick="filterRequired(this)">Required only</button>
+    </div>
+    <div class="sdr-table-scroll">
+      <table class="sdr-table" id="table-params">
+        <thead>
+          <tr>
+            <th onclick="sortTable('table-params',0)">Event<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-params',1)">Parameter<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-params',2)">Type<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-params',3)">Required<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-params',4)">Source<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-params',5)">Example<span class="sort-arrow">▼</span></th>
+            <th onclick="sortTable('table-params',6)">Validation<span class="sort-arrow">▼</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ev in events %}
+          {% for p in ev.get('parameters', []) %}
+          <tr data-required="{{ 'yes' if p.required else 'no' }}">
+            <td class="cell-mono" style="font-weight:600;white-space:nowrap">{{ ev.name }}</td>
+            <td class="cell-mono">{{ p.name }}</td>
+            <td>
+              {% set ptype = p.get('type', '') or '' %}
+              {% if ptype and '[TODO' not in ptype %}
+                <span class="cell-mono" style="font-size:12px">{{ ptype }}</span>
+              {% else %}
+                <span class="cell-todo">TODO</span>
+              {% endif %}
+            </td>
+            <td style="text-align:center">
+              {% if p.required %}
+                <span class="cell-required yes">Y</span>
+              {% else %}
+                <span class="cell-required no">N</span>
+              {% endif %}
+            </td>
+            <td>
+              {% set src = p.get('source', '') or '' %}
+              {% if src and '[TODO' not in src %}
+                <span class="cell-mono" style="font-size:12px">{{ src }}</span>
+              {% else %}
+                <span style="color:var(--text-subtle)">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% set ex = p.get('example', '') or '' %}
+              {% if ex and '[TODO' not in ex %}
+                <code style="font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:3px">{{ ex }}</code>
+              {% else %}
+                <span style="color:var(--text-subtle)">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% set val = p.get('validation_rule', '') or '' %}
+              {% if val %}{{ val }}{% else %}<span style="color:var(--text-subtle)">—</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════
+     TAB 3: Destinations Matrix
+     ═══════════════════════════════════════════════════════════════ #}
+  {% set all_platforms = [] %}
+  {% for ev in events %}
+    {% for d in ev.get('destinations', []) %}
+      {% if d.platform not in all_platforms %}
+        {% set _ = all_platforms.append(d.platform) %}
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+
+  <div class="sdr-sheet-wrap" id="panel-destinations" style="display:none">
+    <div class="sdr-sheet-toolbar">
+      <div class="search-box">
+        <input type="text" placeholder="Search events…" id="searchDest" oninput="filterTable('destinations')">
+      </div>
+    </div>
+    <div class="sdr-table-scroll">
+      <table class="sdr-table" id="table-destinations">
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Status</th>
+            {% for plat in all_platforms %}
+            <th style="text-align:center">{{ plat | upper }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for ev in events %}
+          {% set ev_platforms = {} %}
+          {% for d in ev.get('destinations', []) %}
+            {% set _ = ev_platforms.update({d.platform: d.get('dest_event_name', '') or ''}) %}
+          {% endfor %}
+          <tr>
+            <td class="cell-mono" style="font-weight:600">{{ ev.name }}</td>
+            <td><span class="cell-badge {{ ev.get('status','planned') or 'planned' }}">{{ ev.get('status','planned') or 'planned' }}</span></td>
+            {% for plat in all_platforms %}
+            <td style="text-align:center">
+              {% if plat in ev_platforms %}
+                {% set mapped_name = ev_platforms[plat] %}
+                {% if mapped_name and mapped_name != ev.name %}
+                  <span class="dest-check" title="{{ mapped_name }}">&#10003;</span>
+                  <div style="font-size:10px;font-family:var(--mono);color:var(--text-muted);margin-top:2px">{{ mapped_name }}</div>
+                {% else %}
+                  <span class="dest-check">&#10003;</span>
+                {% endif %}
+              {% else %}
+                <span class="dest-dash">—</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════
+     TAB 4: User Properties
+     ═══════════════════════════════════════════════════════════════ #}
+  <div class="sdr-sheet-wrap" id="panel-userprops" style="display:none">
+    <div class="sdr-table-scroll" style="padding:20px">
+      {% set uprops = parsed_meta.get('user_properties', '') or '' %}
+      {% if uprops and '[TODO' not in uprops %}
+      <table class="sdr-table" id="table-userprops">
+        <thead>
+          <tr>
+            <th>Property Name</th>
+            <th>Scope</th>
+            <th>Source</th>
+            <th>Example</th>
+            <th>Platforms</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="5" style="text-align:center;color:var(--text-muted);padding:32px">
+              User properties parsed from markdown. Refine via Claude to populate structured rows.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:16px;padding:14px 18px;background:var(--surface-2);border-radius:var(--r-md);font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--text)">{{ uprops }}</div>
+      {% else %}
+      <div style="text-align:center;padding:48px 20px;color:var(--text-muted)">
+        <div style="font-size:14px;margin-bottom:8px">No user properties documented yet</div>
+        <div style="font-size:12px;color:var(--text-subtle)">
+          Use Claude to refine the SDR and add custom dimensions / user properties.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════
+     TAB 5: Business Context & Metadata
+     ═══════════════════════════════════════════════════════════════ #}
+  <div class="sdr-sheet-wrap" id="panel-context" style="display:none">
+    <div class="sdr-meta-grid">
+      {# Business Context #}
+      <div class="sdr-meta-card full-width">
+        <div class="sdr-meta-card-label">Business Context</div>
+        <div class="sdr-meta-card-body">
+          {% set bctx = parsed_meta.get('business_context', '') or '' %}
+          {% if bctx and '[TODO' not in bctx %}{{ bctx }}{% else %}<span class="todo-inline">TODO — Describe business model, KPIs, conversion definitions</span>{% endif %}
+        </div>
+      </div>
+
+      {# User Journeys #}
+      <div class="sdr-meta-card full-width">
+        <div class="sdr-meta-card-label">User Journeys</div>
+        <div class="sdr-meta-card-body">
+          {% set uj = parsed_meta.get('user_journeys', '') or '' %}
+          {% if uj and '[TODO' not in uj %}{{ uj }}{% else %}<span class="todo-inline">TODO — Define core user journeys with entry points and completion markers</span>{% endif %}
+        </div>
+      </div>
+
+      {# Data Layer Schema #}
+      <div class="sdr-meta-card">
+        <div class="sdr-meta-card-label">Data Layer Schema</div>
+        <div class="sdr-meta-card-body">
+          {% set dls = parsed_meta.get('data_layer_schema', '') or '' %}
+          {% if dls and '[TODO' not in dls %}{{ dls }}{% else %}<span class="todo-inline">TODO — Naming convention, push shape, ecommerce schema</span>{% endif %}
+        </div>
+      </div>
+
+      {# Consent & Privacy #}
+      <div class="sdr-meta-card">
+        <div class="sdr-meta-card-label">Consent & Privacy</div>
+        <div class="sdr-meta-card-body">
+          {% set cp = parsed_meta.get('consent_and_privacy', '') or '' %}
+          {% if cp and '[TODO' not in cp %}{{ cp }}{% else %}<span class="todo-inline">TODO — CMP, consent categories, gating rules</span>{% endif %}
+        </div>
+      </div>
+
+      {# Ownership #}
+      <div class="sdr-meta-card">
+        <div class="sdr-meta-card-label">Ownership & Governance</div>
+        <div class="sdr-meta-card-body">
+          {% set ow = parsed_meta.get('ownership', '') or '' %}
+          {% if ow and '[TODO' not in ow %}{{ ow }}{% else %}<span class="todo-inline">TODO — SDR owner, review cadence, change process</span>{% endif %}
+        </div>
+      </div>
+
+      {# Business Type #}
+      <div class="sdr-meta-card">
+        <div class="sdr-meta-card-label">Configuration</div>
+        <div class="sdr-meta-card-body" style="font-size:13px">
+          <div style="display:flex;gap:24px;flex-wrap:wrap">
+            <div>
+              <span style="color:var(--text-subtle)">Business type:</span>
+              <strong>{{ parsed_meta.get('business_type', '—') or '—' }}</strong>
+            </div>
+            <div>
+              <span style="color:var(--text-subtle)">SDR status:</span>
+              <strong>{{ sdr.status }}</strong>
+            </div>
+            <div>
+              <span style="color:var(--text-subtle)">Version:</span>
+              <strong>{{ parsed_meta.get('sdr_version', '—') or '—' }}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  /* ── Tab switching ── */
+  window.switchSdrTab = function(tab) {
+    document.querySelectorAll('.sdr-sheet-wrap').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.sdr-tab').forEach(t => t.classList.remove('is-active'));
+    var panel = document.getElementById('panel-' + tab);
+    if (panel) panel.style.display = '';
+    var btn = document.querySelector('.sdr-tab[data-tab="'+tab+'"]');
+    if (btn) btn.classList.add('is-active');
+  };
+
+  /* ── Search filter ── */
+  window.filterTable = function(tab) {
+    var inputId = tab === 'events' ? 'searchEvents' : tab === 'params' ? 'searchParams' : 'searchDest';
+    var tableId = tab === 'events' ? 'table-events' : tab === 'params' ? 'table-params' : 'table-destinations';
+    var q = document.getElementById(inputId).value.toLowerCase();
+    var rows = document.querySelectorAll('#' + tableId + ' tbody tr');
+    rows.forEach(function(row){
+      var text = row.textContent.toLowerCase();
+      row.style.display = text.includes(q) ? '' : 'none';
+    });
+  };
+
+  /* ── Status filter (events tab) ── */
+  window.filterStatus = function(btn, tab) {
+    var toolbar = btn.closest('.sdr-sheet-toolbar');
+    toolbar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    var filter = btn.dataset.filter;
+    var rows = document.querySelectorAll('#table-events tbody tr');
+    rows.forEach(function(row){
+      if (filter === 'all') { row.style.display = ''; return; }
+      row.style.display = row.dataset.status === filter ? '' : 'none';
+    });
+  };
+
+  /* ── Required filter (params tab) ── */
+  window.filterRequired = function(btn) {
+    var toolbar = btn.closest('.sdr-sheet-toolbar');
+    toolbar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    var filter = btn.dataset.filter;
+    var rows = document.querySelectorAll('#table-params tbody tr');
+    rows.forEach(function(row){
+      if (filter === 'all') { row.style.display = ''; return; }
+      row.style.display = row.dataset.required === 'yes' ? '' : 'none';
+    });
+  };
+
+  /* ── Sort table ── */
+  window.sortTable = function(tableId, colIdx) {
+    var table = document.getElementById(tableId);
+    if (!table) return;
+    var tbody = table.querySelector('tbody');
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    var th = table.querySelectorAll('th')[colIdx];
+
+    // Toggle direction
+    var asc = th.dataset.sortDir !== 'asc';
+    table.querySelectorAll('th').forEach(function(h){ h.classList.remove('sorted'); delete h.dataset.sortDir; });
+    th.classList.add('sorted');
+    th.dataset.sortDir = asc ? 'asc' : 'desc';
+    th.querySelector('.sort-arrow').textContent = asc ? '▲' : '▼';
+
+    rows.sort(function(a, b){
+      var aVal = (a.cells[colIdx] || {}).textContent || '';
+      var bVal = (b.cells[colIdx] || {}).textContent || '';
+      // Try numeric
+      var aNum = parseFloat(aVal), bNum = parseFloat(bVal);
+      if (!isNaN(aNum) && !isNaN(bNum)) return asc ? aNum - bNum : bNum - aNum;
+      return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
+    rows.forEach(function(r){ tbody.appendChild(r); });
+  };
+
+  /* ── Export XLSX ── */
+  window.exportXlsx = function() {
+    var projectId = {{ sdr.project_id | tojson if sdr else 'null' }};
+    if (!projectId) return;
+    var btn = document.getElementById('exportBtn');
+    btn.disabled = true; btn.textContent = 'Exporting…';
+    window.location.href = '/api/projects/' + projectId + '/solution-design/export.xlsx';
+    setTimeout(function(){ btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export .xlsx'; }, 3000);
+  };
+
+  /* ── Activate "All" filter by default ── */
+  var allBtns = document.querySelectorAll('.filter-btn[data-filter="all"]');
+  allBtns.forEach(function(b){ b.classList.add('is-active'); });
+
+  /* ── Copy-to-clipboard on prompt cards ── */
+  document.querySelectorAll('.sdr-copy-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var text = btn.getAttribute('data-copy') || '';
+      var done = function(){
+        var original = btn.textContent;
+        btn.textContent = 'Copied';
+        btn.classList.add('is-copied');
+        setTimeout(function(){ btn.textContent = original; btn.classList.remove('is-copied'); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function(){
+          // fallback
+          var ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta);
+          ta.select(); try { document.execCommand('copy'); } catch(e) {}
+          document.body.removeChild(ta); done();
+        });
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta);
+        ta.select(); try { document.execCommand('copy'); } catch(e) {}
+        document.body.removeChild(ta); done();
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

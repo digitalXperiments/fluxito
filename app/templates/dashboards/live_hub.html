@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Live dashboards — Fluxito{% endblock %}
+{% set active = 'live' %}
+
+{% block main %}
+<main class="app-main">
+
+  <div class="page-head">
+    <div>
+      <span class="label">Live surface · refreshes on open</span>
+      <h1>Your live <em class="serif-italic">dashboards.</em></h1>
+      <p>Real-time marketing data across every connected platform. Your AI deploys them; you open, share, or retire them here.</p>
+    </div>
+  </div>
+
+  {% if deployed_dashboards %}
+  <div class="lh-grid">
+    {% for d in deployed_dashboards %}
+    <div class="lh-card" data-dash-id="{{ d.id }}">
+      <div class="lh-card-hd">
+        <a href="/live-dashboards/{{ d.slug }}" class="lh-title">{{ d.name }}</a>
+        {% if d.is_public %}
+        <span class="status-pill live js-visibility-badge">Public</span>
+        {% else %}
+        <span class="status-pill js-visibility-badge">Private</span>
+        {% endif %}
+      </div>
+
+      <div class="lh-meta">
+        {{ d.card_count or 0 }} card{% if (d.card_count or 0) != 1 %}s{% endif %}
+        {% if d.updated_at %} · Updated {{ d.updated_at | fmt_date }}{% endif %}
+      </div>
+
+      {% if d.description %}
+      <p class="lh-desc">{{ d.description }}</p>
+      {% endif %}
+
+      <div class="lh-foot">
+        <a href="/live-dashboards/{{ d.slug }}" class="lh-open">Open <span class="arrow">→</span></a>
+        <div class="lh-actions">
+          <button type="button" class="mini-btn"
+                  onclick="toggleDashVisibility('{{ d.id }}', {{ 'false' if d.is_public else 'true' }}, this)">
+            {% if d.is_public %}Make private{% else %}Make public{% endif %}
+          </button>
+          <button type="button" class="mini-btn mini-btn-danger"
+                  onclick="deleteDash('{{ d.id }}','{{ d.name|replace("'","\\'") }}')">Delete</button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="audit-empty">
+    <h3>No live dashboards yet</h3>
+    {% if has_connections %}
+    <p>Your platforms are connected — now ask your AI to build one.<br>
+       Try: <em>"Create a dashboard showing GA4 sessions and Google Ads spend for the last 7 days."</em></p>
+    <div style="max-width:720px;margin:24px auto 0;text-align:left;">
+      {% include "partials/add_to_ai.html" %}
+    </div>
+    <div style="margin-top:18px;">
+      <a href="/templates" class="btn">Browse templates</a>
+    </div>
+    {% else %}
+    <p>Connect a platform first, then ask your AI to build a dashboard.<br>
+       <em>"Create a dashboard showing GA4 sessions and Google Ads spend for the last 7 days."</em></p>
+    <a href="/connect" class="btn primary" style="margin-top:16px">Connect your first platform <span class="arrow">→</span></a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Full-page loading overlay — shown when a dashboard link is clicked -->
+<div id="dashLoadingOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+  <div style="width:36px;height:36px;border:3px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:spin .8s linear infinite;"></div>
+  <div id="dashLoadingTitle" style="font-size:14px;font-weight:500;color:var(--ink);font-family:var(--mono);letter-spacing:0.02em;">Loading dashboard…</div>
+</main>
+
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Live dashboard hub grid */
+.lh-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 18px;
+}
+.lh-card {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 22px 24px;
+  border: 1px solid var(--line); border-radius: var(--r-l);
+  background: var(--bg); transition: border-color 0.15s, transform 0.15s;
+}
+.lh-card:hover { border-color: var(--ink); transform: translateY(-1px); }
+.lh-card-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.lh-title {
+  font-size: 18px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--ink); text-decoration: none;
+}
+.lh-title:hover { text-decoration: underline; }
+.lh-meta {
+  font-size: 12px; color: var(--muted);
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.lh-desc {
+  margin: 4px 0 0; font-size: 13.5px; color: var(--ink-soft);
+  line-height: 1.55; flex: 1;
+}
+.lh-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 14px; margin-top: auto;
+  border-top: 1px solid var(--line-2);
+  gap: 10px;
+}
+.lh-open {
+  font-size: 13px; font-weight: 500; color: var(--ink);
+  text-decoration: none;
+}
+.lh-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.mini-btn {
+  padding: 5px 11px; font-size: 11.5px; font-weight: 500;
+  border-radius: 6px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink-soft); cursor: pointer;
+  transition: all 0.12s;
+}
+.mini-btn:hover { border-color: var(--ink); color: var(--ink); }
+.mini-btn.mini-btn-save { color: #137333; border-color: #c2e0c8; }
+.mini-btn.mini-btn-save:hover { background: #e6f4ea; border-color: #a8d5b0; }
+.mini-btn.mini-btn-saved { background: #e6f4ea; color: #137333; border-color: #a8d5b0; }
+.mini-btn.mini-btn-danger {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 35%, transparent);
+  background: color-mix(in srgb, var(--red) 6%, transparent);
+}
+.mini-btn.mini-btn-danger:hover {
+  color: #fff; background: var(--red); border-color: var(--red);
+}
+
+@media (max-width: 680px) {
+  .lh-grid { grid-template-columns: 1fr; }
+  .lh-foot { flex-direction: column; align-items: flex-start; }
+}
+</style>
+
+<script>
+// Intercept dashboard open links and show overlay
+document.addEventListener('click', function(e) {
+  const link = e.target.closest('a[href^="/live-dashboards/"]');
+  if (!link) return;
+  const overlay = document.getElementById('dashLoadingOverlay');
+  const card = link.closest('.lh-card');
+  const titleEl = card && card.querySelector('.lh-title');
+  const name = titleEl ? titleEl.textContent.trim() : '';
+  document.getElementById('dashLoadingTitle').textContent = name
+    ? 'Loading ' + name + '…'
+    : 'Loading dashboard…';
+  overlay.style.display = 'flex';
+});
+window.addEventListener('pageshow', function(e) {
+  if (e.persisted) document.getElementById('dashLoadingOverlay').style.display = 'none';
+});
+
+async function deleteDash(id, name) {
+  if (!confirm('Delete dashboard "' + name + '"? This cannot be undone.')) return;
+  const res = await fetch('/api/saved-dashboards/' + id, { method: 'DELETE', credentials: 'same-origin' });
+  if (res.ok) location.reload();
+  else alert('Failed to delete dashboard.');
+}
+
+async function toggleDashVisibility(id, makePublic, btn) {
+  const res = await fetch('/api/saved-dashboards/' + id + '/share', {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_public: makePublic })
+  });
+  if (!res.ok) { alert('Failed to update visibility.'); return; }
+  const card = btn.closest('.lh-card');
+  const badge = card.querySelector('.js-visibility-badge');
+  if (makePublic) {
+    badge.textContent = 'Public';
+    badge.className = 'status-pill live js-visibility-badge';
+    btn.textContent = 'Make private';
+    btn.setAttribute('onclick', "toggleDashVisibility('" + id + "', false, this)");
+  } else {
+    badge.textContent = 'Private';
+    badge.className = 'status-pill js-visibility-badge';
+    btn.textContent = 'Make public';
+    btn.setAttribute('onclick', "toggleDashVisibility('" + id + "', true, this)");
+  }
+}
+</script>
+{% endblock %}

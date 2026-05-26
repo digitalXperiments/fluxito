@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Welcome — Fluxito{% endblock %}
+
+{% block main %}
+<main class="app-main" style="max-width:880px">
+  <div class="page-head">
+    <div>
+      <span class="label">Welcome · {{ user.display_name or user.email.split('@')[0] | title }}</span>
+      <h1>Let's <em class="serif-italic">connect</em> your data.</h1>
+      <p>Three quick steps to bring your marketing stack into any AI. Read-only by default — you flip on write scopes only if you want them.</p>
+    </div>
+  </div>
+
+  <div class="onboard-steps">
+    <div class="onboard-step">
+      <span class="n">01</span>
+      <div class="body">
+        <h3>Connect a platform</h3>
+        <p>Start with GA4 + Google Ads — that covers most questions. Add Meta, TikTok, GTM, BigQuery and more from the Connections page anytime.</p>
+        <a href="/connect" class="btn primary" style="margin-top:14px">Connect a platform <span class="arrow">→</span></a>
+      </div>
+    </div>
+
+    <div class="onboard-step">
+      <span class="n">02</span>
+      <div class="body">
+        <h3>Add Fluxito to your AI</h3>
+        <p>Pick your tool — we'll copy the server URL for you. Claude is native MCP; ChatGPT goes through the bridge; Cursor and LM Studio work locally.</p>
+        <div style="margin-top:14px">
+          {% include "partials/add_to_ai.html" %}
+        </div>
+      </div>
+    </div>
+
+    <div class="onboard-step">
+      <span class="n">03</span>
+      <div class="body">
+        <h3>Ask your first question</h3>
+        <p>Try: <span class="mono">"What were my top 5 landing pages last week?"</span> · <span class="mono">"Audit my GTM container."</span> · <span class="mono">"Compare Meta vs Google Ads ROAS this month."</span></p>
+        <div style="margin-top:14px">
+          <a href="/home" class="btn">Open dashboard</a>
+          <a href="/templates" class="btn">Browse templates</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<style>
+/* Onboarding — local tweaks */
+.onboard-steps { display: grid; gap: 18px; margin-top: 28px; }
+.onboard-step {
+  display: grid; grid-template-columns: 76px 1fr; gap: 22px;
+  padding: 28px 30px; border: 1px solid var(--line); border-radius: var(--r-l);
+  background: var(--bg); align-items: start;
+}
+.onboard-step .n {
+  font-family: var(--mono); font-size: 14px; font-weight: 500;
+  color: var(--muted); letter-spacing: 0.02em;
+}
+.onboard-step h3 { margin: 0 0 6px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.onboard-step p { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.55; }
+.onboard-step .mono { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); background: var(--bg-3); padding: 2px 6px; border-radius: 4px; }
+
+@media (max-width: 640px) {
+  .onboard-step { grid-template-columns: 1fr; gap: 8px; padding: 22px; }
+}
+</style>
+{% endblock %}

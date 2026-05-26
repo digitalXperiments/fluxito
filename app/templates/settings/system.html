@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}System Settings — Fluxito{% endblock %}
+{% set active = 'system_settings' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/system-settings.css?v={{ asset_hash('css/system-settings.css') }}"/>
+{% endblock %}
+
+{% block main %}
+<main class="app-main">
+  <div class="page-head">
+    <div>
+      <span class="label">Admin</span>
+      <h1>System <em class="serif-italic">settings.</em></h1>
+      <p>Runtime configuration stored in the database. Values here override env-var defaults.</p>
+    </div>
+  </div>
+
+  <div class="sys-categories" id="systemSettingsGrid">
+    {% for cat in categories %}
+    <section class="sys-category">
+      <div class="sys-cat-head">
+        <h2 class="sys-cat-title">{{ cat.title }}</h2>
+        <p class="sys-cat-desc">{{ cat.description }}</p>
+      </div>
+
+      <div class="sys-card">
+        {% for item in cat.settings %}
+        <form class="sys-row {% if not loop.last %}sys-row-border{% endif %}"
+              data-key="{{ item.key }}"
+              data-secret="{{ '1' if item.is_secret else '0' }}"
+              onsubmit="SystemSettings.save(event)">
+          <div class="sys-label">
+            <div class="sys-label-top">
+              <span class="sys-name">{{ item.label }}</span>
+              <span class="sys-badge {% if item.source == 'db' %}is-db{% else %}is-env{% endif %}">{{ item.source }}</span>
+            </div>
+            <div class="sys-desc">{{ item.description }}</div>
+            <code class="sys-key">{{ item.key }}</code>
+          </div>
+          <div class="sys-field">
+            {% if item.is_secret %}
+            <input class="f-input sys-input" name="value" type="password" autocomplete="new-password"
+                   placeholder="{{ '••••••••' if item.value == '********' else 'Not set' }}"/>
+            {% elif item.value_type == 'int' %}
+            <input class="f-input sys-input" name="value" type="number" step="1" value="{{ item.value or '' }}"
+                   placeholder="Not set"/>
+            {% elif item.value_type == 'float' %}
+            <input class="f-input sys-input" name="value" type="number" step="0.01" value="{{ item.value or '' }}"
+                   placeholder="Not set"/>
+            {% else %}
+            <input class="f-input sys-input" name="value" type="text" value="{{ item.value or '' }}"
+                   placeholder="Not set"/>
+            {% endif %}
+            <div class="sys-row-actions">
+              <button class="btn primary sm" type="submit">Save</button>
+              <button class="btn ghost sm" type="button" onclick="SystemSettings.reset('{{ item.key }}')">Reset</button>
+            </div>
+          </div>
+        </form>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+</main>
+
+<script src="/static/js/system-settings.js?v={{ asset_hash('js/system-settings.js') }}"></script>
+{% endblock %}

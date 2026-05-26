@@ -1,0 +1,480 @@
+{% extends "base.html" %}
+{% from "partials/platform_icons.html" import platform_icon %}
+{% block title %}Activity — Fluxito{% endblock %}
+{% set active = 'profile' %}
+
+{% block main %}
+<main class="app-main">
+
+  {# ── Back link ── #}
+  <div class="breadcrumbs">
+    <a href="/profile">← Back to profile</a>
+  </div>
+
+  {# ── Header ── #}
+  <div class="page-head">
+    <span class="label">Day-by-day</span>
+    <h1>Activity <em class="serif-italic">log.</em></h1>
+    <p>What your AI tools queried or changed, grouped by platform.</p>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════
+     THIS WEEK — summary stat cards
+     ══════════════════════════════════════════════════════════════ #}
+  <div class="act-section-label">This week</div>
+  <div class="act-stats-grid">
+    <div class="act-stat-card">
+      <div class="act-stat-icon act-ic-blue">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <div class="act-stat-body">
+        <div class="act-stat-value">{{ stats.total_week }}</div>
+        <div class="act-stat-label">Total calls</div>
+      </div>
+    </div>
+    <div class="act-stat-card">
+      <div class="act-stat-icon act-ic-amber">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </div>
+      <div class="act-stat-body">
+        <div class="act-stat-value">{{ stats.writes_week }}</div>
+        <div class="act-stat-label">Changes made</div>
+      </div>
+    </div>
+    <div class="act-stat-card">
+      <div class="act-stat-icon {% if stats.failures_week > 0 %}act-ic-red{% else %}act-ic-muted{% endif %}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div class="act-stat-body">
+        <div class="act-stat-value">{{ stats.failures_week }}</div>
+        <div class="act-stat-label">Issues</div>
+      </div>
+    </div>
+    <div class="act-stat-card">
+      <div class="act-stat-icon act-ic-ink">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <div class="act-stat-body">
+        <div class="act-stat-value">{{ stats.sources_count }}</div>
+        <div class="act-stat-label">
+          {% if stats.sources_list %}
+            {{ stats.sources_list | join(', ') }}
+          {% else %}
+            AI tools used
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════
+     DAY-BY-DAY BREAKDOWN
+     ══════════════════════════════════════════════════════════════ #}
+  <div class="act-section-row">
+    <div class="act-section-label">Daily breakdown</div>
+    <div class="act-section-range">Last {{ window_days }} days</div>
+  </div>
+
+  {% if day_list %}
+    {% for d in day_list %}
+    <div class="day-card">
+      {# Day header — label + counters + sources #}
+      <div class="day-header">
+        <div class="day-label-wrap">
+          <div class="day-label">{{ d.label }}</div>
+          {% if d.date %}
+          <div class="day-date">{{ d.date.strftime('%b %-d, %Y') }}</div>
+          {% endif %}
+        </div>
+        <div class="day-counters">
+          {% if d.total > 0 %}
+          <span class="day-counter">
+            <strong>{{ d.total }}</strong> call{% if d.total != 1 %}s{% endif %}
+          </span>
+          {% endif %}
+          {% if d.writes > 0 %}
+          <span class="day-counter day-counter-write">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <strong>{{ d.writes }}</strong> change{% if d.writes != 1 %}s{% endif %}
+          </span>
+          {% endif %}
+          {% if d.issues > 0 %}
+          <span class="day-counter day-counter-issue">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg>
+            <strong>{{ d.issues }}</strong> issue{% if d.issues != 1 %}s{% endif %}
+          </span>
+          {% endif %}
+          {% if d.sources_list %}
+          <span class="day-counter day-counter-source">
+            via {{ d.sources_list | join(', ') }}
+          </span>
+          {% endif %}
+        </div>
+      </div>
+
+      {# Account events for this day #}
+      {% if d.account_events %}
+      <div class="day-events">
+        {% for e in d.account_events %}
+        <div class="day-event-row">
+          <div class="day-event-icon">
+            {% if e.event_type in ('signin', 'signup') %}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            {% elif e.event_type == 'connection_added' %}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            {% else %}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            {% endif %}
+          </div>
+          <div class="day-event-text">{{ e.description }}</div>
+          <div class="day-event-time">{{ e.time_str }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# Platform breakdown with tool-level detail #}
+      {% if d.platforms_list %}
+      <div class="day-platforms">
+        {% for plat in d.platforms_list %}
+        <div class="day-platform">
+          <div class="day-platform-header">
+            <div class="day-platform-icon">
+              {% if plat.slug and plat.slug != 'other' %}{{ platform_icon(plat.slug, 22) }}{% else %}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/></svg>
+              {% endif %}
+            </div>
+            <div class="day-platform-title">
+              <div class="day-platform-name">{{ plat.label }}</div>
+              <div class="day-platform-meta">
+                {{ plat.count }} call{% if plat.count != 1 %}s{% endif %} · {{ plat.unique_tools }} tool{% if plat.unique_tools != 1 %}s{% endif %}
+                {% if plat.writes > 0 %} · <span class="act-write">{{ plat.writes }} write{% if plat.writes != 1 %}s{% endif %}</span>{% endif %}
+                {% if plat.issues > 0 %} · <span class="act-issue">{{ plat.issues }} issue{% if plat.issues != 1 %}s{% endif %}</span>{% endif %}
+              </div>
+            </div>
+          </div>
+
+          {# Tool-level table #}
+          <div class="day-tools-table">
+            {% for t in plat.tools_list %}
+            <div class="day-tool-row {% if t.is_write_tool %}is-write{% endif %} {% if t.issues > 0 %}is-issue{% endif %}">
+              <div class="day-tool-bullet"></div>
+              <code class="day-tool-name">{{ t.name }}</code>
+              <div class="day-tool-meta">
+                {% if t.is_write_tool %}<span class="t-flag act-pill-write">Write</span>{% endif %}
+                {% if t.issues > 0 %}<span class="t-flag act-pill-err">{{ t.issues }} failed</span>{% endif %}
+              </div>
+              <div class="day-tool-count">{{ t.count }}×</div>
+              <div class="day-tool-time">last at {{ t.last_time_str }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% elif not d.account_events %}
+      <div class="day-empty">No tool calls on this day.</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    {# ── Empty state ── #}
+    <div class="audit-empty">
+      <div class="act-empty-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <h3>No activity yet</h3>
+      <p>Once your AI starts querying your data, you'll see a daily breakdown here.</p>
+    </div>
+  {% endif %}
+
+</main>
+
+<style>
+.breadcrumbs {
+  font-size: 12px; color: var(--muted);
+  margin-bottom: 8px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.breadcrumbs a { color: var(--ink-soft); text-decoration: none; }
+.breadcrumbs a:hover { color: var(--ink); }
+
+.act-section-label {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  font-family: var(--mono);
+  margin-bottom: 14px;
+}
+.act-section-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin: 36px 0 14px;
+}
+.act-section-range {
+  font-size: 11px; color: var(--muted);
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+
+/* ── Stat cards ── */
+.act-stats-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(4, 1fr);
+}
+.act-stat-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 20px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+}
+.act-stat-icon {
+  width: 36px; height: 36px;
+  border-radius: var(--r-m);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.act-ic-blue {
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  color: var(--blue);
+}
+.act-ic-amber {
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  color: var(--amber);
+}
+.act-ic-red {
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  color: var(--red);
+}
+.act-ic-muted {
+  background: var(--bg-2);
+  color: var(--muted);
+}
+.act-ic-ink {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.act-stat-body { min-width: 0; flex: 1; }
+.act-stat-value {
+  font-size: 22px; font-weight: 500;
+  letter-spacing: -0.015em; color: var(--ink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.act-stat-label {
+  font-size: 12px; color: var(--muted);
+  margin-top: 2px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Day card ── */
+.day-card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  padding: 22px 24px;
+  margin-bottom: 14px;
+}
+.day-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line-2);
+  margin-bottom: 16px;
+}
+.day-label-wrap { min-width: 120px; }
+.day-label {
+  font-size: 15px; font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.day-date {
+  font-size: 11.5px; color: var(--muted);
+  margin-top: 2px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.day-counters {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  align-items: center;
+}
+.day-counter {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--ink-soft);
+  padding: 4px 10px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  font-family: var(--mono); letter-spacing: 0.01em;
+}
+.day-counter strong { font-weight: 600; color: var(--ink); }
+.day-counter-write {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  border-color: color-mix(in srgb, var(--amber) 25%, var(--line));
+}
+.day-counter-write strong { color: var(--amber); }
+.day-counter-issue {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  border-color: color-mix(in srgb, var(--red) 25%, var(--line));
+}
+.day-counter-issue strong { color: var(--red); }
+.day-counter-source {
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  padding-left: 4px;
+}
+
+/* ── Account events ── */
+.day-events {
+  display: flex; flex-direction: column; gap: 8px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line-2);
+}
+.day-events:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.day-event-row {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--ink-soft);
+}
+.day-event-icon {
+  width: 22px; height: 22px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.day-event-text { flex: 1; min-width: 0; }
+.day-event-time {
+  font-size: 11px; color: var(--muted);
+  font-family: var(--mono); letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* ── Platforms ── */
+.day-platforms {
+  display: flex; flex-direction: column; gap: 18px;
+}
+.day-platform {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-m);
+  overflow: hidden;
+}
+.day-platform-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line-2);
+}
+.day-platform-icon {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.day-platform-title { flex: 1; min-width: 0; }
+.day-platform-name {
+  font-size: 13.5px; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.day-platform-meta {
+  font-size: 11.5px; color: var(--muted);
+  margin-top: 2px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+
+.act-write { color: var(--amber); font-weight: 600; }
+.act-issue { color: var(--red); font-weight: 600; }
+
+/* ── Tool table ── */
+.day-tools-table {
+  display: flex; flex-direction: column;
+}
+.day-tool-row {
+  display: grid;
+  grid-template-columns: 8px 1fr auto auto 120px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line-2);
+}
+.day-tool-row:last-child { border-bottom: none; }
+.day-tool-bullet {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.day-tool-row.is-write .day-tool-bullet { background: var(--amber); }
+.day-tool-row.is-issue .day-tool-bullet { background: var(--red); }
+.day-tool-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  background: transparent; padding: 0;
+  letter-spacing: 0.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.day-tool-meta {
+  display: flex; gap: 6px; flex-shrink: 0;
+}
+.day-tool-count {
+  font-family: var(--mono);
+  font-size: 12px; color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.day-tool-time {
+  font-family: var(--mono);
+  font-size: 11px; color: var(--muted);
+  text-align: right;
+  letter-spacing: 0.02em;
+}
+
+.act-pill-write {
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--amber);
+  font-size: 9.5px;
+  padding: 1px 6px;
+}
+.act-pill-err {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red);
+  font-size: 9.5px;
+  padding: 1px 6px;
+}
+
+.day-empty {
+  padding: 10px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.act-empty-icon {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: var(--bg-2);
+  color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-bottom: 16px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .act-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .day-tool-row {
+    grid-template-columns: 8px 1fr auto;
+    grid-template-rows: auto auto;
+    row-gap: 2px;
+  }
+  .day-tool-meta { grid-column: 3 / 4; }
+  .day-tool-count { grid-column: 2 / 4; text-align: left; }
+  .day-tool-time { grid-column: 2 / 4; text-align: left; }
+}
+@media (max-width: 560px) {
+  .act-stats-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}

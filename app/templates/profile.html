@@ -1,0 +1,502 @@
+{% extends "base.html" %}
+{% block title %}Profile — Fluxito{% endblock %}
+{% set active = 'profile' %}
+
+{% block main %}
+<main class="app-main">
+
+  {# ── Identity header ── #}
+  <div class="pf-identity">
+    <div class="pf-avatar" id="profileAvatar">{{ (user.display_name or user.email)[:2] | upper }}</div>
+    <div style="flex:1;min-width:0">
+      <div class="pf-name-row">
+        <h1 id="profileDisplayName">{{ user.display_name or user.email.split('@')[0] | title }}</h1>
+        {% if not user.is_active %}
+          <span class="t-flag" style="background:color-mix(in srgb, var(--amber) 12%, transparent);color:var(--amber)">Deactivated</span>
+        {% endif %}
+      </div>
+      <div class="pf-sub">{{ user.email }}{% if user.created_at %} · Member since {{ user.created_at | fmt_date }}{% endif %}</div>
+    </div>
+  </div>
+
+  {# ── Stats row ── #}
+  <div class="pf-stats">
+    <div class="pf-stat">
+      <div class="pf-stat-label">Platforms</div>
+      <div class="pf-stat-val">{{ total_conns }}</div>
+      <div class="pf-stat-foot">Connected</div>
+    </div>
+    <div class="pf-stat">
+      <div class="pf-stat-label">Dashboards</div>
+      <div class="pf-stat-val">{{ dashboard_count }}</div>
+      <div class="pf-stat-foot">Live dashboards</div>
+    </div>
+    <div class="pf-stat">
+      <div class="pf-stat-label">Notifications</div>
+      <div class="pf-stat-val">{{ unread_notifs }}</div>
+      <div class="pf-stat-foot">Unread</div>
+    </div>
+  </div>
+
+  {# ── Two-column: Personal Info + Preferences ── #}
+  <div class="pf-grid">
+
+    <div class="pf-col">
+      <div class="pf-card">
+        <div class="pf-card-head">
+          <h2>Personal Info</h2>
+        </div>
+        <form id="profileForm" onsubmit="return false;" class="kpi-form" style="gap:12px">
+          <label class="f-field">
+            <span>Display name</span>
+            <input class="f-input" type="text" id="displayName" name="display_name"
+                   value="{{ user.display_name or '' }}"
+                   placeholder="How should we call you?" maxlength="255"/>
+          </label>
+          <label class="f-field">
+            <span>Email address</span>
+            <input class="f-input" type="email" id="emailField" name="email"
+                   value="{{ user.email }}"
+                   placeholder="your@email.com"/>
+          </label>
+          <button type="button" class="btn primary block" id="saveProfileBtn" onclick="Fluxito._saveProfile()">Save changes</button>
+        </form>
+      </div>
+
+      <div class="pf-card">
+        <div class="pf-card-head">
+          <h2>Preferences</h2>
+        </div>
+        <div class="pf-pref-row">
+          <div>
+            <div class="pf-pref-name">Appearance</div>
+            <div class="pf-pref-sub">Automatically follows your system theme</div>
+          </div>
+          <span class="t-flag">Auto</span>
+        </div>
+        {% if org %}
+        <div class="pf-pref-row" style="margin-top:8px">
+          <div>
+            <div class="pf-pref-name">Organization</div>
+            <div class="pf-pref-sub">{{ org.name }} · {{ org_member_count }} members</div>
+          </div>
+          <a href="/org" class="btn sm">Manage</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Audit shortcut ── #}
+  <a href="/activity-log" class="pf-audit">
+    <div class="pf-audit-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div class="pf-audit-title">Activity &amp; audit trail</div>
+      <div class="pf-audit-sub">Day-by-day AI tool calls — click any row for full traceability</div>
+    </div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+  </a>
+
+  {% if recent_notifs %}
+  <div class="pf-card" style="margin-top:0">
+    <div class="pf-card-head">
+      <h2>Recent activity</h2>
+      <div style="display:flex;gap:10px;align-items:center">
+        {% if unread_notifs > 0 %}<span class="t-flag" style="background:color-mix(in srgb, var(--ink) 6%, transparent);color:var(--ink)">{{ unread_notifs }} new</span>{% endif %}
+        <a href="/profile/activity" class="pf-view-all">View all →</a>
+      </div>
+    </div>
+    <div class="pf-notif-list">
+      {% for n in recent_notifs[:6] %}
+      <a {% if n.action_url %}href="{{ n.action_url }}"{% else %}href="#"{% endif %} class="pf-notif {% if not n.is_read %}unread{% endif %}">
+        <div class="pf-notif-dot"></div>
+        <div style="flex:1;min-width:0">
+          <div class="pf-notif-title">{{ n.title }}</div>
+          <div class="pf-notif-msg">{{ n.message }}</div>
+        </div>
+        <div class="pf-notif-date">{{ n.created_at | fmt_date }}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Account management ── #}
+  <div class="pf-card pf-danger-card">
+    <div class="pf-card-head">
+      <h2>Account</h2>
+    </div>
+
+    <div id="accountActions">
+      {% if user.is_active %}
+        <div id="deactivateSection">
+          <div class="pf-danger-row warn">
+            <div>
+              <div class="pf-danger-title">Deactivate account</div>
+              <div class="pf-danger-sub">Temporarily disable your account. Your data is preserved and you can reactivate anytime.</div>
+            </div>
+            <button class="btn sm" style="color:var(--amber);border-color:var(--amber)" onclick="Fluxito._deactivateAccount()">Deactivate</button>
+          </div>
+          <div class="pf-danger-foot">To permanently delete your account, you must deactivate it first.</div>
+        </div>
+      {% else %}
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="pf-danger-row warn-filled">
+            <div>
+              <div class="pf-danger-title" style="color:var(--amber)">Account deactivated</div>
+              <div class="pf-danger-sub">Your account is currently inactive. Reactivate to resume normal access.</div>
+            </div>
+            <button class="btn primary sm" onclick="Fluxito._reactivateAccount()">Reactivate</button>
+          </div>
+          <div class="pf-danger-row danger-filled">
+            <div>
+              <div class="pf-danger-title" style="color:var(--red)">Delete account permanently</div>
+              <div class="pf-danger-sub">This will erase all your data, connections, dashboards, and history. This cannot be undone.</div>
+            </div>
+            <button class="btn sm" style="color:var(--red);border-color:var(--red)" onclick="Fluxito._deleteAccount()">Delete</button>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Usage modal #}
+  <div class="kpi-modal-backdrop" id="usageModal">
+    <div class="kpi-modal" style="max-width:620px">
+      <div class="kpi-modal-head">
+        <h3>Usage breakdown</h3>
+        <button class="mini-btn" onclick="document.getElementById('usageModal').classList.remove('is-open')">✕</button>
+      </div>
+      <div class="kpi-modal-body" id="usageModalBody" style="max-height:60vh;overflow-y:auto">
+        <div class="pf-loading">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<style>
+.pf-identity {
+  display: flex; align-items: center; gap: 20px;
+  padding: 8px 0 30px;
+}
+.pf-avatar {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: var(--ink); color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 22px;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.pf-name-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.pf-name-row h1 {
+  font-size: clamp(22px, 3vw, 28px);
+  font-weight: 500; letter-spacing: -0.02em;
+  margin: 0;
+}
+.pf-sub { font-size: 13.5px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+
+.pf-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 14px; margin-bottom: 28px;
+}
+.pf-stat {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  background: var(--bg);
+}
+.pf-stat-click { cursor: pointer; transition: border-color 0.15s; }
+.pf-stat-click:hover { border-color: var(--ink); }
+.pf-stat-label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+  font-family: var(--mono);
+}
+.pf-stat-val {
+  font-size: 28px; font-weight: 600; margin-top: 8px;
+  letter-spacing: -0.02em; color: var(--ink);
+  line-height: 1.1; font-variant-numeric: tabular-nums;
+}
+.pf-stat-foot { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
+.pf-stat-link { color: var(--ink); }
+
+.pf-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 22px; margin-bottom: 24px;
+}
+.pf-col { display: flex; flex-direction: column; gap: 22px; }
+
+.pf-card {
+  padding: 24px 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  background: var(--bg);
+}
+.pf-card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 18px;
+}
+.pf-card-head h2 {
+  font-size: 15px; font-weight: 600; margin: 0;
+  letter-spacing: -0.01em; color: var(--ink);
+}
+.pf-view-all {
+  font-size: 12.5px; color: var(--ink);
+  text-decoration: none;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.pf-view-all:hover { text-decoration: underline; }
+
+
+.pf-pref-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; background: var(--bg-2);
+  border-radius: var(--r-m);
+}
+.pf-pref-name { font-size: 13px; font-weight: 500; color: var(--ink); }
+.pf-pref-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+
+.pf-audit {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 24px;
+  border: 1px solid var(--line); border-radius: var(--r-l);
+  background: var(--bg);
+  text-decoration: none; color: inherit;
+  margin-bottom: 22px;
+  transition: border-color 0.15s;
+}
+.pf-audit:hover { border-color: var(--ink); }
+.pf-audit-icon {
+  width: 36px; height: 36px; border-radius: var(--r-m);
+  background: var(--bg-2); color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.pf-audit-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.pf-audit-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+
+.pf-notif-list {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  overflow: hidden;
+}
+.pf-notif {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-2);
+  text-decoration: none; color: inherit;
+  transition: background 0.12s;
+}
+.pf-notif:last-child { border-bottom: none; }
+.pf-notif:hover { background: var(--bg-2); }
+.pf-notif.unread { background: color-mix(in srgb, var(--ink) 2%, var(--bg)); }
+.pf-notif-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--bg-3); flex-shrink: 0;
+}
+.pf-notif.unread .pf-notif-dot { background: var(--ink); }
+.pf-notif-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+.pf-notif.unread .pf-notif-title { font-weight: 600; }
+.pf-notif-msg {
+  font-size: 12px; color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-top: 1px;
+}
+.pf-notif-date {
+  font-size: 11px; color: var(--muted);
+  flex-shrink: 0; white-space: nowrap;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+
+.pf-danger-card { margin-top: 0; }
+.pf-danger-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 14px 16px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+.pf-danger-row.warn-filled {
+  background: color-mix(in srgb, var(--amber) 6%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--amber) 40%, var(--line));
+}
+.pf-danger-row.danger-filled {
+  background: color-mix(in srgb, var(--red) 5%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--red) 40%, var(--line));
+}
+.pf-danger-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.pf-danger-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; line-height: 1.5; }
+.pf-danger-foot { font-size: 11px; color: var(--muted); margin-top: 8px; padding: 0 4px; font-family: var(--mono); }
+
+.pf-loading { text-align: center; padding: 32px; color: var(--muted); font-family: var(--mono); }
+
+@media (max-width: 900px) {
+  .pf-stats { grid-template-columns: repeat(2, 1fr); }
+  .pf-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 500px) {
+  .pf-stats { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  window.Fluxito._saveProfile = async function() {
+    var btn = document.getElementById('saveProfileBtn');
+    var name = document.getElementById('displayName').value.trim();
+    var email = document.getElementById('emailField').value.trim();
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      var res = await fetch('/api/profile', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: name, email: email })
+      });
+      var data = await res.json();
+      if (res.ok && data.ok) {
+        Fluxito.toast('Profile updated successfully');
+        var el = document.getElementById('profileDisplayName');
+        if (el && name) el.textContent = name;
+        var av = document.getElementById('profileAvatar');
+        if (av && name) av.textContent = name.substring(0,2).toUpperCase();
+      } else {
+        Fluxito.toast(data.error || 'Failed to update profile', 'error');
+      }
+    } catch(e) { Fluxito.toast('Network error', 'error'); }
+    btn.disabled = false; btn.textContent = 'Save changes';
+  };
+
+  window.Fluxito._openUsageModal = async function() {
+    var modal = document.getElementById('usageModal');
+    var body = document.getElementById('usageModalBody');
+    modal.classList.add('is-open');
+    body.innerHTML = '<div class="pf-loading">Loading…</div>';
+    try {
+      var res = await fetch('/api/profile/usage', { credentials: 'same-origin' });
+      var data = await res.json();
+      if (!res.ok) { body.innerHTML = '<div style="padding:20px;color:var(--red);">Failed to load data</div>'; return; }
+      var html = '';
+
+      html += '<div style="text-align:center;padding:12px 0 20px;border-bottom:1px solid var(--line);margin-bottom:16px;">';
+      html += '<div style="font-size:32px;font-weight:600;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums;">' + (data.total || 0).toLocaleString() + '</div>';
+      html += '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:4px;">total API calls in ' + data.month + '</div></div>';
+
+      if (data.by_platform && data.by_platform.length) {
+        html += '<div style="margin-bottom:20px;">';
+        html += '<div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;font-family:var(--mono);">By platform</div>';
+        for (var i = 0; i < data.by_platform.length; i++) {
+          var p = data.by_platform[i];
+          var pPct = data.total ? Math.round(p.count / data.total * 100) : 0;
+          html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">';
+          html += '<span style="font-size:13px;font-weight:500;width:100px;text-transform:capitalize;color:var(--ink);">' + p.platform + '</span>';
+          html += '<div style="flex:1;background:var(--bg-3);border-radius:4px;height:18px;overflow:hidden;border:1px solid var(--line-2);">';
+          html += '<div style="background:var(--ink);height:100%;width:' + pPct + '%;border-radius:4px;transition:width .3s;"></div></div>';
+          html += '<span style="font-size:12px;font-weight:600;width:50px;text-align:right;font-family:var(--mono);">' + p.count.toLocaleString() + '</span></div>';
+        }
+        html += '</div>';
+      }
+
+      if (data.by_tool && data.by_tool.length) {
+        html += '<div style="margin-bottom:20px;">';
+        html += '<div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;font-family:var(--mono);">By tool</div>';
+        var tools = data.by_tool.slice(0, 15);
+        for (var j = 0; j < tools.length; j++) {
+          var t = tools[j];
+          html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line-2);">';
+          html += '<span style="font-size:13px;font-family:var(--mono);color:var(--ink);">' + t.tool + '</span>';
+          html += '<span style="font-size:12px;font-weight:600;font-family:var(--mono);">' + t.count.toLocaleString() + '</span></div>';
+        }
+        html += '</div>';
+      }
+
+      if (data.by_day && data.by_day.length) {
+        html += '<div>';
+        html += '<div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;font-family:var(--mono);">Daily activity</div>';
+        var maxDay = Math.max.apply(null, data.by_day.map(function(d){ return d.count; }));
+        html += '<div style="display:flex;align-items:flex-end;gap:3px;height:60px;">';
+        for (var k = 0; k < data.by_day.length; k++) {
+          var d = data.by_day[k];
+          var h = maxDay ? Math.max(4, Math.round(d.count / maxDay * 56)) : 4;
+          html += '<div title="' + d.date + ': ' + d.count + ' calls" style="flex:1;height:' + h + 'px;background:var(--ink);border-radius:2px;min-width:4px;transition:height .3s;"></div>';
+        }
+        html += '</div>';
+        html += '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--muted);font-family:var(--mono);">';
+        if (data.by_day.length) {
+          html += '<span>' + data.by_day[0].date.slice(5) + '</span>';
+          html += '<span>' + data.by_day[data.by_day.length - 1].date.slice(5) + '</span>';
+        }
+        html += '</div></div>';
+      }
+
+      if (!data.by_tool.length && !data.by_platform.length) {
+        html = '<div class="pf-loading">No usage data this month yet.</div>';
+      }
+
+      body.innerHTML = html;
+    } catch(e) {
+      body.innerHTML = '<div style="padding:20px;color:var(--red);">Failed to load usage data</div>';
+    }
+  };
+
+  window.Fluxito._deactivateAccount = async function() {
+    if (!confirm('Are you sure you want to deactivate your account? You can reactivate it later.')) return;
+    try {
+      var res = await fetch('/api/account/deactivate', { method: 'POST', credentials: 'same-origin' });
+      var data = await res.json();
+      if (res.ok && data.ok) {
+        Fluxito.toast('Account deactivated');
+        setTimeout(function(){ window.location.reload(); }, 800);
+      } else {
+        Fluxito.toast(data.error || 'Failed to deactivate', 'error');
+      }
+    } catch(e) { Fluxito.toast('Network error', 'error'); }
+  };
+
+  window.Fluxito._reactivateAccount = async function() {
+    try {
+      var res = await fetch('/api/account/reactivate', { method: 'POST', credentials: 'same-origin' });
+      var data = await res.json();
+      if (res.ok && data.ok) {
+        Fluxito.toast('Account reactivated!');
+        setTimeout(function(){ window.location.reload(); }, 800);
+      } else {
+        Fluxito.toast(data.error || 'Failed to reactivate', 'error');
+      }
+    } catch(e) { Fluxito.toast('Network error', 'error'); }
+  };
+
+  window.Fluxito._deleteAccount = async function() {
+    var input = prompt('This will permanently delete your account and all data.\n\nType DELETE to confirm:');
+    if (input !== 'DELETE') {
+      if (input !== null) Fluxito.toast('Deletion cancelled — confirmation text did not match', 'error');
+      return;
+    }
+    try {
+      var res = await fetch('/api/account/delete', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: 'DELETE' })
+      });
+      var data = await res.json();
+      if (res.ok && data.ok) {
+        Fluxito.toast('Account deleted. Goodbye.');
+        setTimeout(function(){ window.location.href = '/'; }, 1500);
+      } else {
+        Fluxito.toast(data.error || 'Failed to delete', 'error');
+      }
+    } catch(e) { Fluxito.toast('Network error', 'error'); }
+  };
+});
+</script>
+
+{% endblock %}

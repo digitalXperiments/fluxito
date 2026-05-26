@@ -1,0 +1,102 @@
+{# Render a single dashboard card. Expects `card` with:
+   - title, platform (str), card_type (TABLE|METRIC|AUDIT|LIST), is_live, refreshed_at
+   - snap: the card's raw result dict (columns/rows, metrics, findings, items)
+#}
+{% set icon_map = {'ga4': '📊', 'meta': '📘', 'tiktok': '🎵', 'snap': '👻', 'google': '🎯', 'gtm': '🏷️', 'bigquery': '🗄️'} %}
+{% set icon = icon_map.get(card.platform, '📈') %}
+{% set _metrics = (card.snap or {}).get('metrics', []) if card.card_type == 'METRIC' else [] %}
+{% set _is_kpi_tile = (card.card_type == 'METRIC' and _metrics|length == 1) %}
+
+<div class="data-card{% if _is_kpi_tile %} kpi-tile{% endif %}" data-card-type="{{ card.card_type }}">
+  <div class="card-header">
+    <div class="card-title">
+      <span>{{ icon }}</span>
+      <span title="{{ card.title }}">{{ card.title }}</span>
+      {% if card.card_type and card.card_type != "UNKNOWN" %}
+        <span class="type-badge">{{ card.card_type }}</span>
+      {% endif %}
+    </div>
+    <div class="row" style="gap:8px;">
+      <span class="card-meta">{{ (card.platform or '')|upper }}</span>
+      {% if card.is_live %}
+        <span class="badge badge-live">Live</span>
+      {% else %}
+        <span class="badge">Cached</span>
+      {% endif %}
+      {% if card.refreshed_at %}<span class="card-meta">{{ card.refreshed_at | fmt_date }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="card-body">
+    {% if card.card_type == "TABLE" %}
+      {% set snap = card.snap or {} %}
+      {% set rows = snap.get('rows', []) %}
+      {% set columns = snap.get('columns', []) %}
+      {% if snap.get('metadata') %}
+        <div class="row text-xs text-subtle mb-3" style="gap:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+          {% for k, v in snap.metadata.items() %}<span>{{ k.replace('_',' ') }}: <strong>{{ v }}</strong></span>{% endfor %}
+        </div>
+      {% endif %}
+      {% if rows %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+          <tbody>{% for row in rows %}<tr>{% for col in columns %}<td>{{ row.get(col, '') }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table>
+        {% if snap.get('truncated') %}<p class="truncation-note">Showing first {{ rows|length }} of {{ snap.get('total_rows', rows|length) }} rows</p>{% endif %}
+      </div>
+      {% else %}<p class="empty">No rows to display.</p>{% endif %}
+
+    {% elif card.card_type == "METRIC" %}
+      {% set metrics = (card.snap or {}).get('metrics', []) %}
+      {% if metrics and metrics|length == 1 %}
+        {% set m = metrics[0] %}
+        <div class="big-metric" style="padding:4px 0 6px;">
+          <div class="metric-value">{{ m.get('value','') }}</div>
+          <div class="metric-label">{{ m.get('label') or m.get('key','') }}</div>
+        </div>
+      {% elif metrics %}
+      <div class="metric-kpi-grid">
+        {% for m in metrics %}
+        <div class="metric-kpi">
+          <div class="l">{{ m.get('label') or m.get('key','') }}</div>
+          <div class="v">{{ m.get('value','') }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}<p class="empty">No metrics to display.</p>{% endif %}
+
+    {% elif card.card_type == "AUDIT" %}
+      {% set snap = card.snap or {} %}
+      {% set findings = snap.get('findings', []) %}
+      {% if snap.get('score') is not none %}
+        {% set score = snap.score %}
+        {% set score_class = 'badge-success' if (score|int) >= 70 else ('badge-warning' if (score|int) >= 40 else 'badge-danger') %}
+        <div class="row mb-3" style="gap:10px;"><span class="audit-score">Score: {{ score|int }}</span><span class="badge {{ score_class }}">{{ 'Good' if (score|int) >= 70 else ('Needs attention' if (score|int) >= 40 else 'Critical') }}</span></div>
+      {% endif %}
+      {% if snap.get('summary') %}<p class="audit-summary">{{ snap.summary }}</p>{% endif %}
+      {% if findings %}
+      <div class="findings-list">
+        {% for f in findings %}
+          {% set sev = (f.get('severity','info')|lower) %}
+          {% set cls = {'critical':'badge-danger','error':'badge-danger','high':'badge-warning','warning':'badge-warning','warn':'badge-warning','medium':'badge-warning','low':'badge-success','info':'badge','ok':'badge-success','pass':'badge-success'}.get(sev, 'badge') %}
+          <div class="finding-row">
+            <span class="finding-badge {{ cls }}">{{ sev|upper }}</span>
+            <span class="finding-msg">{{ f.get('message','') }}{% if f.get('context') %} <span class="finding-ctx">— {{ f.context }}</span>{% endif %}</span>
+          </div>
+        {% endfor %}
+        {% if snap.get('truncated') %}<p class="truncation-note">Showing {{ findings|length }} of {{ snap.get('total_findings', findings|length) }} findings</p>{% endif %}
+      </div>
+      {% else %}<p class="empty">No findings.</p>{% endif %}
+
+    {% elif card.card_type == "LIST" %}
+      {% set items = (card.snap or {}).get('items', []) %}
+      {% if items %}
+      <ul class="data-list">{% for item in items %}<li class="list-item">{{ item }}</li>{% endfor %}</ul>
+      {% if (card.snap or {}).get('truncated') %}<p class="truncation-note">Showing {{ items|length }} of {{ card.snap.get('total_items', items|length) }} items</p>{% endif %}
+      {% else %}<p class="empty">No items.</p>{% endif %}
+
+    {% else %}
+      <p class="empty">This card uses an older format. Re-save it to refresh.</p>
+    {% endif %}
+  </div>
+</div>

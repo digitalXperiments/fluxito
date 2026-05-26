@@ -1,0 +1,1239 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — Settings — Fluxito{% endblock %}
+{% set active = 'projects' %}
+
+{% block main %}
+<main class="app-main">
+
+  {# ── Breadcrumb ── #}
+  <div class="breadcrumbs">
+    <a href="/projects">Projects</a>
+    <span class="bc-sep">/</span>
+    <span class="bc-here">{{ project.name }}</span>
+  </div>
+
+  {# ── Header ── #}
+  <div class="page-head">
+    <div class="ps-head">
+      <div class="ps-mark">{{ project.name[:2] | upper }}</div>
+      <div class="ps-head-main">
+        <span class="label">Project settings</span>
+        <h1>{{ project.name }}</h1>
+        {% if project.description %}
+        <p class="ps-desc">{{ project.description }}</p>
+        {% endif %}
+      </div>
+      <span class="t-flag ps-plan ps-plan-{{ project.plan }}">{{ project.plan | capitalize }}</span>
+    </div>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════
+     TABS
+     ══════════════════════════════════════════════════════════════ #}
+  <div class="ps-tabs" id="settingsTabs">
+    <button class="ps-tab is-active" data-tab="members" onclick="switchTab('members')">Members <span class="ps-tab-n">{{ members | length }}</span></button>
+    <button class="ps-tab" data-tab="connections" onclick="switchTab('connections')">Connections <span class="ps-tab-n">{{ connections | length }}</span></button>
+    {% if membership.role in ('owner', 'admin') %}
+    <button class="ps-tab" data-tab="notifications" onclick="switchTab('notifications')">Notifications <span class="ps-tab-n">{{ (email_senders | length) + (slack_webhooks | length) }}</span></button>
+    {% endif %}
+    <button class="ps-tab" data-tab="general" onclick="switchTab('general')">General</button>
+  </div>
+
+  {# ── MEMBERS TAB ── #}
+  <div class="ps-panel is-active" data-panel="members">
+
+    {# Invite bar (owner/admin only) #}
+    {% if membership.role in ('owner', 'admin') %}
+    <div class="ps-card" style="padding:18px 20px;margin-bottom:18px">
+      <form id="inviteForm" class="ps-invite">
+        <label class="f-field" style="flex:1;min-width:220px">
+          <span>Invite by email</span>
+          <input type="email" name="email" class="f-input" placeholder="colleague@example.com" required>
+        </label>
+        <label class="f-field" style="min-width:140px">
+          <span>Role</span>
+          <select name="role" class="f-input">
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        <button type="submit" class="btn primary" id="inviteBtn">Invite</button>
+      </form>
+      <div id="inviteMsg" class="ps-msg" style="display:none"></div>
+    </div>
+    {% endif %}
+
+    {# Member list #}
+    <div class="ps-card" style="padding:0">
+      <table class="ps-table">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Role</th>
+            <th>Joined</th>
+            {% if membership.role in ('owner', 'admin') %}<th style="width:220px"></th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in members %}
+          <tr data-member-id="{{ m.id }}">
+            <td>
+              <div class="ps-mbr-name">{{ m.display_name or m.email.split('@')[0] }}</div>
+              <div class="ps-mbr-email">{{ m.email }}</div>
+            </td>
+            <td>
+              <span class="t-flag ps-role ps-role-{{ m.role }}">{{ m.role | capitalize }}</span>
+            </td>
+            <td class="ps-mono-sm">
+              {{ m.joined_at[:10] if m.joined_at else 'Pending' }}
+            </td>
+            {% if membership.role in ('owner', 'admin') and m.role != 'owner' %}
+            <td style="text-align:right;white-space:nowrap">
+              {% if membership.role == 'owner' %}
+              <select class="f-input ps-role-select"
+                      onchange="changeRole('{{ project.slug }}', '{{ m.id }}', this.value)" data-current="{{ m.role }}">
+                <option value="admin" {% if m.role == 'admin' %}selected{% endif %}>Admin</option>
+                <option value="member" {% if m.role == 'member' %}selected{% endif %}>Member</option>
+              </select>
+              {% endif %}
+              <button class="btn sm danger-outline" onclick="removeMember('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Remove</button>
+            </td>
+            {% elif membership.role in ('owner', 'admin') %}
+            <td></td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ps-meta-note">
+      {{ members | length }} members
+    </div>
+  </div>
+
+  {# ── CONNECTIONS TAB ── #}
+  <div class="ps-panel" data-panel="connections" style="display:none">
+    {% if connections %}
+    <div class="ps-conn-grid">
+      {% for c in connections %}
+      <div class="ps-card ps-conn">
+        <div class="ps-conn-head">
+          <div class="ps-conn-name">{{ c.provider | capitalize }}</div>
+          <span class="t-flag ps-conn-status ps-conn-{{ c.status }}">{{ c.status | capitalize }}</span>
+        </div>
+        <div class="ps-conn-email">{{ c.google_email }}</div>
+        {% if c.status == 'disconnected' %}
+        <div class="ps-warn">
+          The user who connected this platform was removed. An admin needs to reconnect.
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="audit-empty">
+      <h3>No connections yet</h3>
+      <p>Connect a platform to start pulling data into this project.</p>
+      <a href="/connect" class="btn primary" style="margin-top:14px">Connect a platform</a>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── NOTIFICATIONS TAB (owner/admin only) ── #}
+  {% if membership.role in ('owner', 'admin') %}
+  <div class="ps-panel" data-panel="notifications" style="display:none">
+
+    <p class="ps-lede">
+      Configure how this project sends scheduled reports and shared dashboards.
+      Credentials are encrypted at rest and never leave the server. We don't bill you
+      for delivery — bring your own SMTP, SES, or Slack webhook.
+    </p>
+
+    <h2 class="ps-h2">Email <em class="serif-italic">senders.</em></h2>
+
+    {# ── Existing senders list ── #}
+    {% if email_senders %}
+    <div class="ps-card" style="padding:0;margin-bottom:20px">
+      <table class="ps-table">
+        <thead>
+          <tr>
+            <th>Sender</th>
+            <th>Type</th>
+            <th>Last test</th>
+            <th style="width:260px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in email_senders %}
+          <tr data-sender-id="{{ s.id }}">
+            <td>
+              <div class="ps-sender-name">
+                {{ s.label or s.from_address or 'Unnamed sender' }}
+                {% if s.is_default %}<span class="t-flag ps-role ps-role-admin">Default</span>{% endif %}
+              </div>
+              <div class="ps-mbr-email">
+                {% if s.from_name %}{{ s.from_name }} &lt;{{ s.from_address }}&gt;{% else %}{{ s.from_address }}{% endif %}
+              </div>
+            </td>
+            <td class="ps-mono-sm" style="text-transform:uppercase">{{ s.type }}</td>
+            <td class="ps-mono-sm">
+              {% if s.last_test_status == 'ok' %}
+                <span class="ps-ok">✓ OK</span>
+                {% if s.last_tested_at %}<div class="ps-stamp">{{ s.last_tested_at[:16] | replace('T', ' ') }}</div>{% endif %}
+              {% elif s.last_test_status == 'error' %}
+                <span class="ps-err" title="{{ s.last_test_error }}">✗ Failed</span>
+                {% if s.last_tested_at %}<div class="ps-stamp">{{ s.last_tested_at[:16] | replace('T', ' ') }}</div>{% endif %}
+              {% else %}
+                <span style="color:var(--muted)">Not tested</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="btn sm" onclick="testSender('{{ s.id }}', false)">Test</button>
+              {% if not s.is_default %}
+              <button class="btn sm" onclick="setDefaultSender('{{ s.id }}')">Make default</button>
+              {% endif %}
+              <button class="btn sm danger-outline" onclick="deleteSender('{{ s.id }}', '{{ (s.label or s.from_address or 'this sender') | e }}')">Delete</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="ps-card" style="padding:20px;margin-bottom:20px;text-align:center">
+      <div class="ps-muted-sm">No email senders configured yet. Add one below to enable scheduled reports.</div>
+    </div>
+    {% endif %}
+
+    {# ── Add sender ── #}
+    <div class="ps-card" style="padding:22px 24px">
+      <h3 class="ps-h3">Add email sender</h3>
+
+      <div class="ps-subtabs">
+        <button type="button" class="ps-subtab is-active" data-subtab="smtp" onclick="switchSenderTab('smtp')">SMTP</button>
+        <button type="button" class="ps-subtab" data-subtab="ses" onclick="switchSenderTab('ses')">Amazon SES</button>
+      </div>
+
+      <form id="senderForm">
+        <input type="hidden" name="type" id="senderType" value="smtp">
+
+        {# Shared (display) fields #}
+        <div class="ps-grid-2">
+          <label class="f-field">
+            <span>Label</span>
+            <input type="text" name="label" class="f-input" placeholder="e.g. Gmail reports">
+          </label>
+          <label class="f-field">
+            <span>From address *</span>
+            <input type="email" name="from_address" class="f-input" placeholder="reports@example.com" required>
+          </label>
+        </div>
+        <div class="ps-grid-2">
+          <label class="f-field">
+            <span>From name</span>
+            <input type="text" name="from_name" class="f-input" placeholder="Analytics Reports">
+          </label>
+          <label class="ps-check">
+            <input type="checkbox" name="is_default" id="senderIsDefault" {% if not email_senders %}checked disabled{% endif %}>
+            <span>Use as default sender{% if not email_senders %} (first sender is always default){% endif %}</span>
+          </label>
+        </div>
+
+        {# SMTP fields #}
+        <div id="smtpFields" class="sender-fields">
+          <div class="ps-grid-3">
+            <label class="f-field" style="grid-column: span 2">
+              <span>SMTP host *</span>
+              <input type="text" name="smtp_host" class="f-input" placeholder="smtp.gmail.com">
+            </label>
+            <label class="f-field">
+              <span>Port *</span>
+              <input type="number" name="smtp_port" class="f-input" value="587">
+            </label>
+          </div>
+          <div class="ps-grid-3">
+            <label class="f-field">
+              <span>TLS</span>
+              <select name="smtp_tls_mode" class="f-input">
+                <option value="starttls" selected>STARTTLS (587)</option>
+                <option value="ssl">SSL/TLS (465)</option>
+                <option value="none">None (not recommended)</option>
+              </select>
+            </label>
+            <label class="f-field">
+              <span>Username</span>
+              <input type="text" name="smtp_username" class="f-input" autocomplete="off" placeholder="optional">
+            </label>
+            <label class="f-field">
+              <span>Password</span>
+              <input type="password" name="smtp_password" class="f-input" autocomplete="new-password" placeholder="optional">
+            </label>
+          </div>
+          <div class="ps-hint">
+            Gmail users: generate an App Password at myaccount.google.com/apppasswords — regular passwords won't work.
+          </div>
+        </div>
+
+        {# SES fields #}
+        <div id="sesFields" class="sender-fields" style="display:none">
+          <div class="ps-grid-2">
+            <label class="f-field">
+              <span>Region *</span>
+              <input type="text" name="ses_region" class="f-input" placeholder="us-east-1">
+            </label>
+            <label class="f-field">
+              <span>Configuration set</span>
+              <input type="text" name="ses_configuration_set" class="f-input" placeholder="optional — for bounce tracking">
+            </label>
+          </div>
+          <div class="ps-grid-2">
+            <label class="f-field">
+              <span>Access key ID *</span>
+              <input type="text" name="ses_access_key_id" class="f-input" autocomplete="off" placeholder="AKIA…">
+            </label>
+            <label class="f-field">
+              <span>Secret access key *</span>
+              <input type="password" name="ses_secret_access_key" class="f-input" autocomplete="new-password">
+            </label>
+          </div>
+          <div class="ps-hint">
+            The IAM user needs <code>ses:SendRawEmail</code> and <code>ses:GetSendQuota</code>. The <em>from address</em> must be a verified identity in this region.
+          </div>
+        </div>
+
+        <div class="ps-form-foot">
+          <button type="submit" class="btn primary" id="senderSaveBtn">Save sender</button>
+          <button type="button" class="btn" id="senderVerifyBtn">Test connection (no send)</button>
+          <div id="senderMsg" class="ps-msg" style="display:none"></div>
+        </div>
+      </form>
+    </div>
+
+    {# ── SLACK WEBHOOKS ── #}
+    <h2 class="ps-h2" style="margin-top:36px">Slack <em class="serif-italic">webhooks.</em></h2>
+    <p class="ps-lede">
+      Incoming webhooks deliver scheduled reports straight to a Slack channel.
+      Create one from <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noopener">api.slack.com/messaging/webhooks</a>
+      and paste the URL below. Each webhook is a distinct destination — add one
+      per channel you want to send to.
+    </p>
+
+    {% if slack_webhooks %}
+    <div class="ps-card" style="padding:0;margin-bottom:16px">
+      <table class="ps-table">
+        <thead>
+          <tr>
+            <th>Label</th>
+            <th>Last test</th>
+            <th style="width:220px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w in slack_webhooks %}
+          <tr data-webhook-id="{{ w.id }}">
+            <td>
+              <div class="ps-mbr-name">{{ w.label or 'Unnamed webhook' }}</div>
+              <div class="ps-stamp">Added {{ (w.created_at or '')[:10] }}</div>
+            </td>
+            <td class="ps-mono-sm">
+              {% if w.last_test_status == 'ok' %}
+                <span class="ps-ok">✓ OK</span>
+                {% if w.last_tested_at %}<div class="ps-stamp">{{ w.last_tested_at[:16] | replace('T', ' ') }}</div>{% endif %}
+              {% elif w.last_test_status == 'error' %}
+                <span class="ps-err" title="{{ w.last_test_error }}">✗ Failed</span>
+                {% if w.last_tested_at %}<div class="ps-stamp">{{ w.last_tested_at[:16] | replace('T', ' ') }}</div>{% endif %}
+              {% else %}
+                <span style="color:var(--muted)">Not tested</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="btn sm" onclick="testSlackWebhook('{{ w.id }}')">Test</button>
+              <button class="btn sm danger-outline" onclick="deleteSlackWebhook('{{ w.id }}', '{{ (w.label or 'this webhook') | e }}')">Delete</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="ps-card" style="padding:16px;margin-bottom:16px;text-align:center">
+      <div class="ps-muted-sm">No Slack webhooks yet. Add one below to enable Slack delivery for scheduled reports.</div>
+    </div>
+    {% endif %}
+
+    <div class="ps-card" style="padding:22px 24px">
+      <h3 class="ps-h3">Add Slack webhook</h3>
+      <form id="slackWebhookForm" class="ps-slack-form">
+        <label class="f-field">
+          <span>Label *</span>
+          <input type="text" name="label" class="f-input" placeholder="#marketing-daily" required>
+        </label>
+        <label class="f-field">
+          <span>Webhook URL *</span>
+          <input type="url" name="webhook_url" class="f-input" placeholder="https://hooks.slack.com/services/…" required autocomplete="off">
+        </label>
+        <button type="submit" class="btn primary" id="slackWebhookBtn" style="margin-top:22px">Save</button>
+      </form>
+      <div id="slackWebhookMsg" class="ps-msg" style="display:none;margin-top:12px"></div>
+    </div>
+
+  </div>
+  {% endif %}
+
+  {# ── GENERAL TAB ── #}
+  <div class="ps-panel" data-panel="general" style="display:none">
+    <div class="ps-card" style="padding:24px 26px">
+      <h3 class="ps-h3">Project details</h3>
+      <div class="ps-detail-list">
+        <div><span>Name</span><strong>{{ project.name }}</strong></div>
+        <div><span>Slug</span><code>{{ project.slug }}</code></div>
+        <div><span>Plan</span><strong>{{ project.plan | capitalize }}</strong></div>
+        <div><span>ID</span><code>{{ project.id }}</code></div>
+      </div>
+    </div>
+
+    <!-- Dashboard Style Configuration -->
+    <div class="ps-card" id="dashboardStyleCard" style="padding:24px 26px;margin-top:16px">
+      <h3 class="ps-h3">Dashboard Style</h3>
+      <p class="ps-card-lede">Controls how Claude styles dashboards it builds for this project.</p>
+
+      <div class="pf-style-modes" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem">
+        <label class="pf-radio-option" style="display:flex;align-items:flex-start;gap:0.5rem;cursor:pointer">
+          <input type="radio" name="styleMode" value="none" style="margin-top:0.2rem"
+            {% if not project.dashboard_style_config %}checked{% endif %} />
+          <span><strong>Claude's judgment</strong><br><small style="opacity:0.6">Claude picks the aesthetic freely. Recommended.</small></span>
+        </label>
+        <label class="pf-radio-option" style="display:flex;align-items:flex-start;gap:0.5rem;cursor:pointer">
+          <input type="radio" name="styleMode" value="preset" style="margin-top:0.2rem"
+            {% if project.dashboard_style_config and project.dashboard_style_config.get('preset') not in (none, 'custom') %}checked{% endif %} />
+          <span><strong>Preset</strong><br><small style="opacity:0.6">Choose a curated theme.</small></span>
+        </label>
+        <label class="pf-radio-option" style="display:flex;align-items:flex-start;gap:0.5rem;cursor:pointer">
+          <input type="radio" name="styleMode" value="custom" style="margin-top:0.2rem"
+            {% if project.dashboard_style_config and project.dashboard_style_config.get('preset') == 'custom' %}checked{% endif %} />
+          <span><strong>Custom</strong><br><small style="opacity:0.6">Set your own colors and fonts.</small></span>
+        </label>
+      </div>
+
+      <div id="presetPicker" style="display:none;margin-bottom:1rem">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.75rem">
+          {% for preset_key, preset_label, preset_bg, preset_primary, preset_accent in [
+            ('editorial_warm', 'Editorial Warm', '#faf6ee', '#2d4a1e', '#c4421a'),
+            ('dark_analytics', 'Dark Analytics', '#0f172a', '#6366f1', '#06b6d4'),
+            ('clean_minimal', 'Clean Minimal', '#ffffff', '#18181b', '#2563eb'),
+            ('bold_data', 'Bold Data', '#fafafa', '#7c3aed', '#db2777'),
+          ] %}
+          <label style="cursor:pointer">
+            <input type="radio" name="stylePreset" value="{{ preset_key }}" style="display:none"
+              {% if project.dashboard_style_config and project.dashboard_style_config.get('preset') == preset_key %}checked{% endif %} />
+            <div style="border:2px solid {{ preset_primary }};border-radius:8px;padding:0.75rem;background:{{ preset_bg }}"
+                 onclick="this.previousElementSibling.checked=true">
+              <div style="font-weight:600;font-size:0.85rem;color:{{ preset_primary }}">{{ preset_label }}</div>
+              <div style="display:flex;gap:4px;margin-top:6px">
+                <span style="width:24px;height:8px;border-radius:2px;background:{{ preset_primary }};display:inline-block"></span>
+                <span style="width:16px;height:8px;border-radius:2px;background:{{ preset_accent }};display:inline-block"></span>
+              </div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div id="customConfig" style="display:none;margin-bottom:1rem">
+        {% set sc = project.dashboard_style_config or {} %}
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:0.75rem">
+          <label style="font-size:0.85rem">Background<br><input type="color" name="cfgBackground" value="{{ sc.get('background', '#ffffff') }}" style="width:100%;height:2rem"></label>
+          <label style="font-size:0.85rem">Primary<br><input type="color" name="cfgPrimary" value="{{ sc.get('primary', '#18181b') }}" style="width:100%;height:2rem"></label>
+          <label style="font-size:0.85rem">Accent<br><input type="color" name="cfgAccent" value="{{ sc.get('accent', '#2563eb') }}" style="width:100%;height:2rem"></label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
+          <label style="font-size:0.85rem">Heading font
+            <select name="cfgFontHeading" style="width:100%;margin-top:0.25rem">
+              {% for font in ['Playfair Display', 'Inter', 'DM Serif Display', 'Merriweather', 'Space Grotesk'] %}
+              <option{% if sc.get('font_heading') == font %} selected{% endif %}>{{ font }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label style="font-size:0.85rem">Body font
+            <select name="cfgFontBody" style="width:100%;margin-top:0.25rem">
+              {% for font in ['Inter', 'DM Sans', 'IBM Plex Sans', 'Source Sans 3'] %}
+              <option{% if sc.get('font_body') == font %} selected{% endif %}>{{ font }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <div style="font-size:0.85rem">Chart palette
+          {% set palette = sc.get('chart_palette', ['#18181b', '#2563eb', '#64748b', '#94a3b8']) %}
+          <div style="display:flex;gap:0.5rem;margin-top:0.25rem">
+            {% for i in range(4) %}
+            <input type="color" name="cfgPalette{{ i }}" value="{{ palette[i] if i < palette|length else '#cccccc' }}" style="width:3rem;height:2rem">
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="btn sm" onclick="saveDashStyleConfig()">Save style</button>
+      <span id="styleConfigStatus" style="font-size:0.8rem;margin-left:0.75rem;opacity:0.7"></span>
+    </div>
+
+    {% if membership.role == 'owner' %}
+    <div class="ps-card ps-warn-card" style="padding:24px 26px;margin-top:16px">
+      <h3 class="ps-h3">Transfer <em class="serif-italic">ownership.</em></h3>
+      <p class="ps-card-lede">Transfer this project to another member. You'll be demoted to Admin.</p>
+      <form id="transferForm" class="ps-invite">
+        <label class="f-field" style="flex:1">
+          <span>New owner</span>
+          <select name="user_id" class="f-input">
+            {% for m in members if m.role != 'owner' %}
+            <option value="{{ m.user_id }}">{{ m.display_name or m.email }} ({{ m.role }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="btn warn-outline" id="transferBtn">Transfer</button>
+      </form>
+      <div id="transferMsg" class="ps-msg" style="display:none;margin-top:10px"></div>
+    </div>
+
+    <div class="ps-card ps-danger-card" style="padding:24px 26px;margin-top:16px">
+      <h3 class="ps-h3" style="color:var(--red)">Delete <em class="serif-italic">project.</em></h3>
+      <p class="ps-card-lede">Permanently deactivate this project and all its connections, dashboards, and member access. This action cannot be undone.</p>
+      <button class="btn danger-outline" onclick="deleteProject()">Delete this project</button>
+    </div>
+    {% endif %}
+  </div>
+
+
+</main>
+
+<style>
+/* ── Breadcrumbs ─────────────────────────────────── */
+.breadcrumbs {
+  font-size: 12px; color: var(--muted);
+  margin-bottom: 8px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.breadcrumbs a { color: var(--ink-soft); text-decoration: none; }
+.breadcrumbs a:hover { color: var(--ink); }
+.bc-sep { margin: 0 8px; color: var(--line); }
+.bc-here { color: var(--ink); }
+
+/* ── Header ──────────────────────────────────────── */
+.ps-head {
+  display: flex; align-items: flex-start; gap: 18px; flex-wrap: wrap;
+}
+.ps-mark {
+  width: 52px; height: 52px;
+  border-radius: var(--r-m);
+  background: var(--ink); color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 16px;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+.ps-head-main { flex: 1; min-width: 260px; }
+.ps-desc {
+  font-size: 14px; color: var(--ink-soft); line-height: 1.55;
+  margin-top: 6px;
+}
+.ps-plan { flex-shrink: 0; align-self: flex-start; margin-top: 6px; }
+.ps-plan-free { background: var(--bg-3); color: var(--muted); }
+.ps-plan-pro {
+  background: color-mix(in srgb, #8b5cf6 12%, transparent);
+  color: #8b5cf6;
+}
+.ps-plan-team {
+  background: color-mix(in srgb, #ec4899 12%, transparent);
+  color: #ec4899;
+}
+
+/* ── Tabs ────────────────────────────────────────── */
+.ps-tabs {
+  display: flex; gap: 2px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+}
+.ps-tab {
+  background: transparent; border: none;
+  padding: 12px 16px;
+  font: inherit; font-size: 13.5px; font-weight: 500;
+  color: var(--muted); cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  letter-spacing: -0.005em;
+  transition: color 0.15s, border-color 0.15s;
+}
+.ps-tab:hover { color: var(--ink); }
+.ps-tab.is-active { color: var(--ink); border-bottom-color: var(--ink); }
+.ps-tab-n {
+  display: inline-block;
+  font-family: var(--mono); font-size: 11px;
+  color: var(--muted);
+  background: var(--bg-2);
+  padding: 1px 7px; border-radius: 10px;
+  margin-left: 4px;
+}
+
+.ps-panel { animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── Card base ───────────────────────────────────── */
+.ps-card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  overflow: hidden;
+}
+.ps-warn-card { border-color: color-mix(in srgb, var(--amber) 30%, var(--line)); }
+.ps-danger-card { border-color: color-mix(in srgb, var(--red) 30%, var(--line)); }
+
+/* ── Invite form ─────────────────────────────────── */
+.ps-invite {
+  display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+}
+
+/* ── Message banners ─────────────────────────────── */
+.ps-msg {
+  padding: 8px 14px; border-radius: var(--r-m);
+  font-size: 12.5px; line-height: 1.5;
+  display: inline-block;
+  border: 1px solid var(--line-2);
+  background: var(--bg-2); color: var(--ink-soft);
+}
+
+/* ── Table ───────────────────────────────────────── */
+.ps-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13.5px;
+}
+.ps-table thead tr { border-bottom: 1px solid var(--line); }
+.ps-table th {
+  text-align: left; padding: 14px 18px;
+  font-weight: 600; font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.ps-table tbody tr { border-bottom: 1px solid var(--line-2); }
+.ps-table tbody tr:last-child { border-bottom: none; }
+.ps-table td { padding: 14px 18px; vertical-align: middle; }
+
+.ps-mbr-name { font-weight: 500; color: var(--ink); font-size: 14px; }
+.ps-mbr-email { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); letter-spacing: 0.02em; }
+.ps-mono-sm { font-size: 12.5px; color: var(--ink-soft); font-family: var(--mono); letter-spacing: 0.02em; }
+
+.ps-role-admin { background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); }
+.ps-role-member { background: var(--bg-3); color: var(--muted); }
+.ps-role-owner { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+
+.ps-role-select {
+  font-size: 12px; padding: 4px 8px;
+  width: auto; display: inline-block; margin-right: 6px;
+}
+
+.ps-meta-note {
+  margin-top: 14px; font-size: 12px;
+  color: var(--muted); font-family: var(--mono); letter-spacing: 0.02em;
+}
+.ps-meta-note a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+.ps-meta-note a:hover { border-bottom-color: var(--ink); }
+
+/* ── Connections ─────────────────────────────────── */
+.ps-conn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.ps-conn { padding: 20px 22px; }
+.ps-conn-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 6px;
+}
+.ps-conn-name { font-weight: 600; color: var(--ink); font-size: 14.5px; flex: 1; letter-spacing: -0.01em; }
+.ps-conn-status { font-size: 10.5px; }
+.ps-conn-active { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+.ps-conn-disconnected { background: color-mix(in srgb, var(--amber) 14%, transparent); color: var(--amber); }
+.ps-conn-email {
+  font-size: 12.5px; color: var(--muted);
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.ps-warn {
+  font-size: 12px; color: var(--amber);
+  margin-top: 10px; padding: 8px 12px;
+  border-radius: var(--r-m);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 25%, var(--line));
+  line-height: 1.5;
+}
+
+/* ── Section headings in notifications/general ── */
+.ps-lede {
+  font-size: 13.5px; color: var(--ink-soft); line-height: 1.6;
+  max-width: 720px; margin: 0 0 16px;
+}
+.ps-h2 {
+  font-size: clamp(20px, 2.8vw, 26px);
+  font-weight: 500; letter-spacing: -0.02em;
+  margin: 8px 0 14px; color: var(--ink);
+  line-height: 1.2;
+}
+.ps-h3 {
+  font-size: 16px; font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px; color: var(--ink);
+}
+.ps-h4 {
+  font-size: 13px; font-weight: 600;
+  letter-spacing: -0.005em;
+  margin: 0 0 10px; color: var(--ink);
+}
+.ps-card-lede {
+  font-size: 13px; color: var(--ink-soft);
+  line-height: 1.55; margin: 0 0 14px;
+}
+
+.ps-sender-name {
+  font-weight: 500; color: var(--ink); font-size: 14px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+
+.ps-ok { color: var(--green); font-weight: 500; }
+.ps-err { color: var(--red); font-weight: 500; }
+.ps-stamp { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.ps-muted-sm { font-size: 13px; color: var(--ink-soft); }
+
+/* ── Sub-tabs (sender form) ─────────────────────── */
+.ps-subtabs {
+  display: inline-flex; gap: 4px;
+  background: var(--bg-2);
+  padding: 4px; border-radius: var(--r-m);
+  margin-bottom: 18px;
+  border: 1px solid var(--line-2);
+}
+.ps-subtab {
+  background: transparent; border: none;
+  padding: 7px 16px;
+  font: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--muted); cursor: pointer;
+  border-radius: var(--r-s, 6px);
+  transition: background 0.15s, color 0.15s;
+}
+.ps-subtab:hover { color: var(--ink); }
+.ps-subtab.is-active {
+  background: var(--bg); color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* ── Form grids ───────────────────────────────────── */
+.ps-grid-2 {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px; margin-bottom: 14px;
+}
+.ps-grid-3 {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px; margin-bottom: 14px;
+}
+.ps-check {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--ink);
+  align-self: flex-end;
+  padding-bottom: 10px;
+}
+.ps-check input { accent-color: var(--ink); }
+
+.ps-hint {
+  font-size: 12px; color: var(--muted);
+  margin-top: 6px; line-height: 1.55;
+}
+.ps-hint code {
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--bg-2); padding: 1px 6px;
+  border-radius: 4px; color: var(--ink-soft);
+}
+
+.ps-form-foot {
+  display: flex; gap: 10px; align-items: center;
+  margin-top: 18px; flex-wrap: wrap;
+}
+
+.ps-slack-form {
+  display: grid; grid-template-columns: 1fr 2fr auto;
+  gap: 12px; align-items: end;
+}
+
+/* ── Detail list (general) ─────────────────────── */
+.ps-detail-list { display: grid; gap: 12px; font-size: 14px; }
+.ps-detail-list > div {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+.ps-detail-list > div:last-child { border-bottom: none; padding-bottom: 0; }
+.ps-detail-list span:first-child {
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted);
+  font-family: var(--mono);
+  min-width: 80px;
+}
+.ps-detail-list code {
+  font-family: var(--mono); font-size: 12.5px;
+  background: var(--bg-2); padding: 3px 8px;
+  border-radius: 4px; color: var(--ink-soft);
+}
+
+
+/* ── Button variants specific here ─────────────── */
+.btn.danger-outline {
+  border-color: color-mix(in srgb, var(--red) 30%, var(--line));
+  color: var(--red);
+  background: var(--bg);
+}
+.btn.danger-outline:hover {
+  background: color-mix(in srgb, var(--red) 6%, var(--bg));
+  border-color: var(--red);
+}
+.btn.warn-outline {
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--line));
+  color: var(--amber);
+  background: var(--bg);
+}
+.btn.warn-outline:hover {
+  background: color-mix(in srgb, var(--amber) 6%, var(--bg));
+  border-color: var(--amber);
+}
+.btn.sm { padding: 5px 11px; font-size: 12px; }
+
+/* ── Responsive ─────────────────────────────────── */
+@media (max-width: 720px) {
+  .ps-grid-2, .ps-grid-3 { grid-template-columns: 1fr; }
+  .ps-stat-grid { grid-template-columns: 1fr; }
+  .ps-slack-form { grid-template-columns: 1fr; }
+  .ps-slack-form button { margin-top: 0 !important; }
+  .ps-check { padding-bottom: 0; margin-top: 4px; }
+}
+</style>
+
+<script>
+// ── Tab switching ──
+function switchTab(tabName) {
+  document.querySelectorAll('.ps-tab').forEach(function(b) { b.classList.remove('is-active'); });
+  document.querySelectorAll('.ps-panel').forEach(function(p) { p.style.display = 'none'; p.classList.remove('is-active'); });
+  var btn = document.querySelector('.ps-tab[data-tab="' + tabName + '"]');
+  if (btn) btn.classList.add('is-active');
+  var panel = document.querySelector('[data-panel="' + tabName + '"]');
+  if (panel) { panel.style.display = ''; panel.classList.add('is-active'); }
+}
+
+// ── Invite member ──
+var inviteForm = document.getElementById('inviteForm');
+if (inviteForm) {
+  inviteForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('inviteBtn');
+    var msg = document.getElementById('inviteMsg');
+    btn.disabled = true; btn.textContent = 'Inviting…';
+    msg.style.display = 'none';
+    var fd = new FormData(this);
+    try {
+      var res = await fetch('/api/project/{{ project.slug }}/members', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: fd.get('email'), role: fd.get('role')}),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
+      msg.textContent = data.message || 'Invited!';
+      msg.style.background = 'color-mix(in srgb, var(--green) 10%, transparent)';
+      msg.style.color = 'var(--green)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+      msg.style.display = 'inline-block';
+      setTimeout(function(){ window.location.reload(); }, 1200);
+    } catch(err) {
+      msg.textContent = err.message;
+      msg.style.background = 'color-mix(in srgb, var(--red) 10%, transparent)';
+      msg.style.color = 'var(--red)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+      msg.style.display = 'inline-block';
+      btn.disabled = false; btn.textContent = 'Invite';
+    }
+  });
+}
+
+// ── Remove member ──
+async function removeMember(slug, memberId, email) {
+  if (!confirm('Remove ' + email + ' from this project? Their connections will be marked as disconnected.')) return;
+  try {
+    var res = await fetch('/api/project/' + slug + '/members/' + memberId, {method: 'DELETE'});
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
+    window.location.reload();
+  } catch(err) { alert(err.message); }
+}
+
+// ── Change role ──
+async function changeRole(slug, memberId, newRole) {
+  try {
+    var res = await fetch('/api/project/' + slug + '/members/' + memberId + '/role', {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({role: newRole}),
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
+  } catch(err) { alert(err.message); window.location.reload(); }
+}
+
+// ── Transfer ownership ──
+var transferForm = document.getElementById('transferForm');
+if (transferForm) {
+  transferForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    if (!confirm('Transfer ownership? You will be demoted to Admin.')) return;
+    var btn = document.getElementById('transferBtn');
+    var msg = document.getElementById('transferMsg');
+    btn.disabled = true;
+    var fd = new FormData(this);
+    try {
+      var res = await fetch('/api/project/{{ project.slug }}/transfer-ownership', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: fd.get('user_id')}),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
+      msg.textContent = data.message || 'Ownership transferred!';
+      msg.style.color = 'var(--green)';
+      msg.style.background = 'color-mix(in srgb, var(--green) 8%, transparent)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+      msg.style.display = 'inline-block';
+      setTimeout(function(){ window.location.reload(); }, 1500);
+    } catch(err) {
+      msg.textContent = err.message;
+      msg.style.color = 'var(--red)';
+      msg.style.background = 'color-mix(in srgb, var(--red) 8%, transparent)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+      msg.style.display = 'inline-block';
+      btn.disabled = false;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NOTIFICATIONS — email senders
+// ═══════════════════════════════════════════════════════════════════
+var SENDER_API = '/api/project/{{ project.slug }}/email-senders';
+
+function switchSenderTab(kind) {
+  document.querySelectorAll('[data-subtab]').forEach(function(b) { b.classList.remove('is-active'); });
+  var btn = document.querySelector('[data-subtab="' + kind + '"]');
+  if (btn) btn.classList.add('is-active');
+  document.getElementById('smtpFields').style.display = (kind === 'smtp') ? '' : 'none';
+  document.getElementById('sesFields').style.display = (kind === 'ses') ? '' : 'none';
+  document.getElementById('senderType').value = kind;
+}
+
+function _senderMsg(text, kind) {
+  var el = document.getElementById('senderMsg');
+  if (!el) return;
+  el.textContent = text;
+  var color, bg, bd;
+  if (kind === 'error') {
+    color = 'var(--red)';
+    bg = 'color-mix(in srgb, var(--red) 8%, transparent)';
+    bd = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+  } else if (kind === 'success') {
+    color = 'var(--green)';
+    bg = 'color-mix(in srgb, var(--green) 8%, transparent)';
+    bd = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+  } else {
+    color = 'var(--ink-soft)';
+    bg = 'var(--bg-2)';
+    bd = 'var(--line-2)';
+  }
+  el.style.color = color; el.style.background = bg; el.style.borderColor = bd;
+  el.style.display = 'inline-block';
+}
+
+function _collectSenderBody() {
+  var form = document.getElementById('senderForm');
+  var fd = new FormData(form);
+  var type = fd.get('type') || 'smtp';
+  var body = {
+    type: type,
+    label: (fd.get('label') || '').trim(),
+    from_address: (fd.get('from_address') || '').trim(),
+    from_name: (fd.get('from_name') || '').trim(),
+    is_default: !!form.querySelector('[name="is_default"]').checked,
+    config: {},
+  };
+  if (type === 'smtp') {
+    body.config = {
+      host: (fd.get('smtp_host') || '').trim(),
+      port: parseInt(fd.get('smtp_port') || '587', 10),
+      username: (fd.get('smtp_username') || '').trim() || null,
+      password: fd.get('smtp_password') || null,
+      tls_mode: fd.get('smtp_tls_mode') || 'starttls',
+    };
+  } else if (type === 'ses') {
+    body.config = {
+      region: (fd.get('ses_region') || '').trim(),
+      access_key_id: (fd.get('ses_access_key_id') || '').trim(),
+      secret_access_key: fd.get('ses_secret_access_key') || '',
+      configuration_set: (fd.get('ses_configuration_set') || '').trim() || null,
+    };
+  }
+  return body;
+}
+
+var senderForm = document.getElementById('senderForm');
+if (senderForm) {
+  senderForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('senderSaveBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    _senderMsg('Saving…', 'info');
+    try {
+      var res = await fetch(SENDER_API, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(_collectSenderBody()),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.detail || 'Failed to save sender');
+      _senderMsg('Saved — reloading…', 'success');
+      setTimeout(function(){ window.location.reload(); }, 700);
+    } catch(err) {
+      _senderMsg(err.message, 'error');
+      btn.disabled = false; btn.textContent = 'Save sender';
+    }
+  });
+}
+
+var verifyBtn = document.getElementById('senderVerifyBtn');
+if (verifyBtn) {
+  verifyBtn.addEventListener('click', async function() {
+    verifyBtn.disabled = true; var oldText = verifyBtn.textContent;
+    verifyBtn.textContent = 'Testing…';
+    _senderMsg('Contacting server — this may take a few seconds…', 'info');
+    try {
+      // Save first, then immediately verify the saved row. UX matches the per-row
+      // "Test" button and avoids a separate in-memory verify endpoint.
+      var saveRes = await fetch(SENDER_API, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(_collectSenderBody()),
+      });
+      var saveData = await saveRes.json();
+      if (!saveRes.ok) throw new Error(saveData.message || saveData.detail || 'Failed to save before test');
+      var id = saveData.id || (saveData.sender && saveData.sender.id);
+      if (!id) { _senderMsg('Saved. Use the Test button on the row above.', 'success'); setTimeout(function(){ window.location.reload(); }, 900); return; }
+      var testRes = await fetch(SENDER_API + '/' + id + '/test', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({verify_only: true}),
+      });
+      var testData = await testRes.json();
+      if (!testRes.ok || testData.ok === false) {
+        _senderMsg('Saved but connection check failed: ' + (testData.message || testData.detail || 'unknown'), 'error');
+      } else {
+        _senderMsg('Connection OK — reloading…', 'success');
+      }
+      setTimeout(function(){ window.location.reload(); }, 1200);
+    } catch(err) {
+      _senderMsg(err.message, 'error');
+      verifyBtn.disabled = false; verifyBtn.textContent = oldText;
+    }
+  });
+}
+
+async function testSender(senderId, sendReal) {
+  var to = null;
+  if (sendReal) {
+    to = prompt('Send a test email to which address?');
+    if (!to) return;
+  }
+  try {
+    var res = await fetch(SENDER_API + '/' + senderId + '/test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(sendReal ? {to: to} : {verify_only: true}),
+    });
+    var data = await res.json();
+    if (!res.ok || data.ok === false) {
+      alert('Test failed: ' + (data.message || data.detail || 'unknown error'));
+    } else {
+      alert(sendReal ? 'Test email sent.' : 'Connection check OK.');
+    }
+    window.location.reload();
+  } catch(err) { alert(err.message); }
+}
+
+async function setDefaultSender(senderId) {
+  try {
+    var res = await fetch(SENDER_API + '/' + senderId, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({is_default: true}),
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
+    window.location.reload();
+  } catch(err) { alert(err.message); }
+}
+
+async function deleteSender(senderId, label) {
+  if (!confirm('Delete sender "' + label + '"? Any scheduled reports using it will need to be reassigned.')) return;
+  try {
+    var res = await fetch(SENDER_API + '/' + senderId, { method: 'DELETE' });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
+    window.location.reload();
+  } catch(err) { alert(err.message); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NOTIFICATIONS — Slack webhooks
+// ═══════════════════════════════════════════════════════════════════
+var SLACK_API = '/api/project/{{ project.slug }}/slack-webhooks';
+
+function _slackMsg(text, kind) {
+  var el = document.getElementById('slackWebhookMsg');
+  if (!el) return;
+  el.textContent = text;
+  var color, bg, bd;
+  if (kind === 'error') {
+    color = 'var(--red)';
+    bg = 'color-mix(in srgb, var(--red) 8%, transparent)';
+    bd = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+  } else if (kind === 'success') {
+    color = 'var(--green)';
+    bg = 'color-mix(in srgb, var(--green) 8%, transparent)';
+    bd = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+  } else {
+    color = 'var(--ink-soft)';
+    bg = 'var(--bg-2)';
+    bd = 'var(--line-2)';
+  }
+  el.style.color = color; el.style.background = bg; el.style.borderColor = bd;
+  el.style.display = 'inline-block';
+}
+
+var slackForm = document.getElementById('slackWebhookForm');
+if (slackForm) {
+  slackForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('slackWebhookBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    _slackMsg('Saving…', 'info');
+    var fd = new FormData(this);
+    try {
+      var res = await fetch(SLACK_API, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          label: (fd.get('label') || '').trim(),
+          webhook_url: (fd.get('webhook_url') || '').trim(),
+        }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || data.detail || 'Failed');
+      _slackMsg('Saved — reloading…', 'success');
+      setTimeout(function(){ window.location.reload(); }, 600);
+    } catch(err) {
+      _slackMsg(err.message, 'error');
+      btn.disabled = false; btn.textContent = 'Save';
+    }
+  });
+}
+
+async function testSlackWebhook(webhookId) {
+  if (!confirm('Send a test message to this Slack webhook? A small connection-check message will be posted to the channel.')) return;
+  try {
+    var res = await fetch(SLACK_API + '/' + webhookId + '/test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({}),
+    });
+    var data = await res.json();
+    if (!res.ok || data.success === false) {
+      alert('Test failed: ' + (data.error || data.message || data.detail || 'unknown error'));
+    } else {
+      alert('Test message posted to Slack.');
+    }
+    window.location.reload();
+  } catch(err) { alert(err.message); }
+}
+
+async function deleteSlackWebhook(webhookId, label) {
+  if (!confirm('Delete Slack webhook "' + label + '"? Any schedules using it will need to be reassigned.')) return;
+  try {
+    var res = await fetch(SLACK_API + '/' + webhookId, { method: 'DELETE' });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || data.message || data.detail || 'Failed');
+    window.location.reload();
+  } catch(err) { alert(err.message); }
+}
+
+// ── Dashboard Style Configuration ──
+(function() {
+  function syncStylePanels() {
+    var mode = document.querySelector('input[name="styleMode"]:checked')?.value;
+    var presetEl = document.getElementById('presetPicker');
+    var customEl = document.getElementById('customConfig');
+    if (presetEl) presetEl.style.display = mode === 'preset' ? '' : 'none';
+    if (customEl) customEl.style.display = mode === 'custom' ? '' : 'none';
+  }
+  document.querySelectorAll('input[name="styleMode"]').forEach(function(r) { r.addEventListener('change', syncStylePanels); });
+  syncStylePanels();
+})();
+
+async function saveDashStyleConfig() {
+  var mode = document.querySelector('input[name="styleMode"]:checked')?.value;
+  var style_config = null;
+  if (mode === 'preset') {
+    var preset = document.querySelector('input[name="stylePreset"]:checked')?.value;
+    if (preset) style_config = { preset: preset };
+  } else if (mode === 'custom') {
+    var palette = [0,1,2,3].map(function(i) { return document.querySelector('input[name="cfgPalette' + i + '"]')?.value; }).filter(Boolean);
+    style_config = {
+      preset: 'custom',
+      background: document.querySelector('input[name="cfgBackground"]').value,
+      primary: document.querySelector('input[name="cfgPrimary"]').value,
+      accent: document.querySelector('input[name="cfgAccent"]').value,
+      font_heading: document.querySelector('select[name="cfgFontHeading"]').value,
+      font_body: document.querySelector('select[name="cfgFontBody"]').value,
+      chart_palette: palette,
+    };
+  }
+  var statusEl = document.getElementById('styleConfigStatus');
+  statusEl.textContent = 'Saving…';
+  var slug = {{ project.slug | tojson }};
+  var resp = await fetch('/api/project/' + slug + '/dashboard-settings', {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ style_config: style_config }),
+  });
+  statusEl.textContent = resp.ok ? 'Saved.' : 'Error saving.';
+  setTimeout(function() { statusEl.textContent = ''; }, 3000);
+}
+
+// ── Delete project ──
+async function deleteProject() {
+  if (!confirm('Are you sure you want to delete "{{ project.name }}"? This will deactivate all connections, dashboards, and member access.')) return;
+  if (!confirm('This cannot be undone. Are you absolutely sure?')) return;
+  try {
+    var res = await fetch('/api/project/{{ project.slug }}', { method: 'DELETE' });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.detail || 'Failed to delete project');
+    if (data.redirect_url) {
+      window.location.href = data.redirect_url;
+    } else {
+      window.location.href = '/projects';
+    }
+  } catch(err) {
+    alert(err.message);
+  }
+}
+</script>
+{% endblock %}

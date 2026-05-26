@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Dashboard not found — Fluxito{% endblock %}
+{% block main %}
+<main class="app-main" style="max-width:720px">
+  <div class="page-head">
+    <div>
+      <span class="label">404 · Dashboard</span>
+      <h1>Not <em class="serif-italic">here.</em></h1>
+      <p>This link may have expired, or the dashboard was made private by its owner.</p>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-top:8px">
+    <a href="/" class="btn primary">Back to home <span class="arrow">→</span></a>
+    <a href="/live-dashboards" class="btn">Your dashboards</a>
+  </div>
+</main>
+{% endblock %}

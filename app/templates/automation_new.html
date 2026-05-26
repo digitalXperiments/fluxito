@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}New Automation — Fluxito{% endblock %}
+{% set active = 'automations' %}
+
+{% block main %}
+<main class="app-main" style="max-width:860px">
+
+  <div class="breadcrumbs">
+    <a href="/automations">Automations</a>
+    <span class="sep">›</span>
+    <span class="crumb-cur">New custom automation</span>
+  </div>
+
+  <div class="page-head">
+    <div>
+      <span class="label">Author a custom automation</span>
+      <h1>Your own <em class="serif-italic">recipe.</em></h1>
+      <p>Custom automations live inside this project. Use <code>{{ '{{project_name}}' }}</code> and <code>{{ '{{channel_label}}' }}</code> in the prompt body — they'll be substituted at install time.</p>
+    </div>
+  </div>
+
+  <div class="ad-card" style="margin-top:0">
+    <form id="new-automation-form" class="kpi-form">
+      <label class="f-field">
+        <span>Title</span>
+        <input id="title" class="f-input" type="text" required maxlength="255" placeholder="e.g. Friday revenue snapshot">
+      </label>
+
+      <label class="f-field">
+        <span>Description</span>
+        <textarea id="description" class="f-input" rows="2" maxlength="2000" placeholder="What this automation does, in one or two sentences."></textarea>
+      </label>
+
+      <div class="f-row">
+        <label class="f-field">
+          <span>Theme</span>
+          <select id="theme" class="f-input">
+            {% for t in themes %}<option value="{{ t.key }}">{{ t.label }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="f-field">
+          <span>Cooldown (hours)</span>
+          <input id="cooldown" class="f-input" type="number" min="0" max="168" value="0">
+        </label>
+      </div>
+
+      <div class="f-row">
+        <label class="f-field">
+          <span>Default cron</span>
+          <input id="default_cron" class="f-input" type="text" placeholder="0 9 * * 1-5" style="font-family:var(--mono)">
+        </label>
+        <label class="f-field">
+          <span>Schedule label</span>
+          <input id="schedule_label" class="f-input" type="text" placeholder='e.g. "Weekday mornings at 9am"'>
+        </label>
+      </div>
+
+      <div class="f-field">
+        <span>Required platforms</span>
+        <div class="na-checks">
+          {% for p in platform_choices %}
+          <label class="na-check">
+            <input type="checkbox" class="platform-cb" value="{{ p }}">
+            {{ p | replace('_',' ') | title }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="f-field">
+        <span>Channel hints</span>
+        <div class="na-checks">
+          <label class="na-check">
+            <input type="checkbox" class="channel-cb" value="slack"> Slack
+          </label>
+          <label class="na-check">
+            <input type="checkbox" class="channel-cb" value="email"> Email
+          </label>
+        </div>
+      </div>
+
+      <label class="f-field">
+        <span>Prompt template</span>
+        <textarea id="prompt_template" class="f-input" rows="14" required
+                  style="font-family:var(--mono);font-size:12.5px"
+                  placeholder="You are running the [name] automation for the Fluxito project &quot;{{ '{{project_name}}' }}&quot;.&#10;&#10;Goal: ...&#10;&#10;Steps:&#10;  1. Call set_active_project with &quot;{{ '{{project_name}}' }}&quot;.&#10;  2. ...&#10;&#10;Post results to {{ '{{channel_label}}' }}."></textarea>
+      </label>
+
+      <div class="f-foot" style="justify-content:flex-start">
+        <button id="save-btn" type="button" class="btn primary">Save automation</button>
+        <a href="/automations" class="btn">Cancel</a>
+      </div>
+      <div id="save-status" style="font-size:13px;text-align:center;margin-top:4px"></div>
+    </form>
+  </div>
+</main>
+
+<style>
+.na-upsell {
+  padding: 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, var(--line));
+  border-radius: var(--r-m);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  color: var(--amber);
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+.na-upsell strong { font-weight: 600; }
+.na-upsell a { color: var(--amber); font-weight: 500; text-decoration: underline; }
+
+.na-checks { display: flex; gap: 8px; flex-wrap: wrap; }
+.na-check {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-m);
+  font-size: 12.5px; cursor: pointer;
+  background: var(--bg); color: var(--ink-soft);
+}
+.na-check:hover { border-color: var(--ink); color: var(--ink); }
+#save-status .err { color: var(--red); }
+</style>
+
+<script>
+document.getElementById('save-btn').addEventListener('click', async () => {
+  const payload = {
+    title: document.getElementById('title').value.trim(),
+    description: document.getElementById('description').value.trim(),
+    theme: document.getElementById('theme').value,
+    prompt_template: document.getElementById('prompt_template').value,
+    default_cron: document.getElementById('default_cron').value.trim() || null,
+    default_schedule_label: document.getElementById('schedule_label').value.trim() || null,
+    cooldown_hours: parseInt(document.getElementById('cooldown').value || '0', 10),
+    required_platforms: Array.from(document.querySelectorAll('.platform-cb:checked')).map(c => c.value),
+    channel_hints: Array.from(document.querySelectorAll('.channel-cb:checked')).map(c => c.value),
+    variables: [],
+  };
+  if (!payload.title || !payload.prompt_template) {
+    document.getElementById('save-status').innerHTML = '<span class="err">Title and prompt template are required.</span>';
+    return;
+  }
+  document.getElementById('save-status').textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/automations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      window.location.href = data.view_url;
+    } else {
+      document.getElementById('save-status').innerHTML = `<span class="err">${data.message || 'Save failed'}</span>`;
+    }
+  } catch (e) {
+    document.getElementById('save-status').innerHTML = '<span class="err">Network error</span>';
+  }
+});
+</script>
+{% endblock %}

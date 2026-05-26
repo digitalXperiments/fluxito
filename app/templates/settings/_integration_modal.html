@@ -1,0 +1,99 @@
+{# ── Integration configure modal ─────────────────────────────────────────
+   Single modal; JS replaces inner content per-platform via openModal().
+   ──────────────────────────────────────────────────────────────────────── #}
+<div class="modal-backdrop" id="intgModalBackdrop" aria-modal="true" role="dialog" aria-label="Configure integration">
+  <div class="modal intg-modal" id="intgModal">
+
+    {# Header (brand gradient set by JS) #}
+    <div class="intg-modal-head" id="intgModalHead">
+      <div class="intg-modal-title-row">
+        <span class="pbadge" id="intgModalBadge"></span>
+        <span class="intg-modal-title" id="intgModalTitle">Configure</span>
+      </div>
+      <button class="intg-modal-close" aria-label="Close" onclick="IntgUI.closeModal()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="modal-body intg-modal-body">
+
+      {# Setup guide link #}
+      <div class="intg-guide-link" id="intgGuideLink" style="display:none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <a id="intgGuideAnchor" href="#" target="_blank" rel="noopener">View setup guide</a>
+      </div>
+
+      {# Step 1 — Dev console #}
+      <div class="intg-step">
+        <div class="intg-step-num">1</div>
+        <div class="intg-step-content">
+          <div class="intg-step-title">Open developer console</div>
+          <a id="intgConsoleLink" href="#" target="_blank" rel="noopener" class="btn sm">
+            Open console
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </a>
+        </div>
+      </div>
+
+      {# Step 2 — Redirect URIs #}
+      <div class="intg-step">
+        <div class="intg-step-num">2</div>
+        <div class="intg-step-content">
+          <div class="intg-step-title">Register these redirect URIs</div>
+          <div id="intgRedirectUris" class="intg-uri-list"></div>
+        </div>
+      </div>
+
+      {# Step 3 — Credentials form #}
+      <div class="intg-step">
+        <div class="intg-step-num">3</div>
+        <div class="intg-step-content">
+          <div class="intg-step-title">Enter your app credentials</div>
+          <form id="intgForm" onsubmit="IntgUI.handleSave(event)" autocomplete="off">
+            <div class="f-stack">
+
+              <label class="f-field">
+                <span>Client ID</span>
+                <input type="text" name="client_id" id="intgClientId" class="f-input" required placeholder="Paste your client ID">
+              </label>
+
+              <label class="f-field">
+                <span>Client Secret</span>
+                <div class="intg-secret-wrap">
+                  <input type="password" name="client_secret" id="intgClientSecret" class="f-input" required placeholder="Paste your client secret">
+                  <button type="button" class="intg-secret-toggle" aria-label="Show/hide secret" onclick="IntgUI.toggleSecret()">
+                    <svg id="intgSecretEye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </label>
+
+              {# Google only: optional developer token #}
+              <div id="intgDevTokenWrap" style="display:none">
+                <label class="f-field">
+                  <span>Google Ads Developer Token <span style="color:var(--muted);font-weight:400">(optional — Google Ads only)</span></span>
+                  <input type="text" name="developer_token" id="intgDevToken" class="f-input" placeholder="Paste developer token if using Google Ads">
+                </label>
+              </div>
+
+            </div>
+
+            {# Inline test result #}
+            <div id="intgTestResult" style="display:none" class="intg-test-result"></div>
+
+          </form>
+        </div>
+      </div>
+
+    </div>
+
+    {# Footer #}
+    <div class="modal-footer intg-modal-footer">
+      <button type="button" class="btn sm" onclick="IntgUI.testCredentials()">Test</button>
+      <div style="flex:1"></div>
+      <button type="button" class="btn sm intg-remove-modal-btn" id="intgRemoveBtn" style="display:none" onclick="IntgUI.removeFromModal()">Remove</button>
+      <button type="button" class="btn ghost sm" onclick="IntgUI.closeModal()">Cancel</button>
+      <button type="submit" form="intgForm" class="btn primary sm" id="intgSaveBtn">Save</button>
+    </div>
+
+  </div>
+</div>

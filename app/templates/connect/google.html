@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% from "partials/platform_icons.html" import platform_icon %}
+{% block title %}{% if is_new %}Connect Google Suite{% else %}Edit Google Suite{% endif %} — Fluxito{% endblock %}
+{% set active = 'connect' %}
+
+{% block main %}
+<main class="app-main" style="max-width:720px">
+  <div class="breadcrumbs">
+    <a href="/connect">← All connections</a>
+  </div>
+
+  {# ── Header ── #}
+  <div class="g-head">
+    <div class="g-icon">{{ platform_icon("google", 30) }}</div>
+    <div class="g-head-main">
+      <span class="label">Google workspace</span>
+      <h1>{% if is_new %}Connect <em class="serif-italic">Google Suite.</em>{% else %}Edit <em class="serif-italic">Google Suite.</em>{% endif %}</h1>
+      {% if editing %}
+        <p>{{ editing.email }}</p>
+      {% else %}
+        <p>Choose which services to enable, then sign in with Google.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Services ── #}
+  <div class="g-section">
+    <div class="g-section-label">Services</div>
+
+    <div class="g-svc-list" id="googleServicesForm">
+
+      {# ── GA4 ── #}
+      <div class="g-svc" id="svcCardGA4">
+        <label class="g-svc-check">
+          <input type="checkbox" id="gSvcGA4" {% if is_new or (editing and editing.has_ga4) %}checked{% endif %}
+                 onchange="toggleCard('GA4')">
+        </label>
+        <div class="g-svc-icon">{{ platform_icon("ga4", 22) }}</div>
+        <div class="g-svc-body">
+          <div class="g-svc-name">Google Analytics 4</div>
+          <div class="g-svc-desc">
+            {% if editing and editing.ga4_properties > 0 %}
+              {{ editing.ga4_properties }} propert{{ 'y' if editing.ga4_properties == 1 else 'ies' }} discovered
+            {% else %}
+              Query reports, audiences, and real-time data
+            {% endif %}
+          </div>
+        </div>
+        <select id="gSvcGA4Level" class="g-svc-level f-input">
+          <option value="read" {% if not editing or not editing.ga4_write %}selected{% endif %}>Read only</option>
+          <option value="write" {% if editing and editing.ga4_write %}selected{% endif %}>Read + Write</option>
+        </select>
+      </div>
+
+      {# ── GTM ── #}
+      <div class="g-svc" id="svcCardGTM">
+        <label class="g-svc-check">
+          <input type="checkbox" id="gSvcGTM" {% if is_new or (editing and editing.has_gtm) %}checked{% endif %}
+                 onchange="toggleCard('GTM')">
+        </label>
+        <div class="g-svc-icon">{{ platform_icon("gtm", 22) }}</div>
+        <div class="g-svc-body">
+          <div class="g-svc-name">Google Tag Manager</div>
+          <div class="g-svc-desc">
+            {% if editing and editing.gtm_containers > 0 %}
+              {{ editing.gtm_containers }} container{{ 's' if editing.gtm_containers != 1 else '' }} discovered
+            {% else %}
+              Manage tags, triggers, and variables
+            {% endif %}
+          </div>
+        </div>
+        <select id="gSvcGTMLevel" class="g-svc-level f-input">
+          <option value="read" {% if not editing or not editing.gtm_write %}selected{% endif %}>Read only</option>
+          <option value="write" {% if editing and editing.gtm_write %}selected{% endif %}>Edit + Publish</option>
+        </select>
+      </div>
+
+      {# ── Google Search Console ── #}
+      <div class="g-svc" id="svcCardGSC">
+        <label class="g-svc-check">
+          <input type="checkbox" id="gSvcGSC" {% if is_new or (editing and editing.has_gsc) %}checked{% endif %}
+                 onchange="toggleCard('GSC')">
+        </label>
+        <div class="g-svc-icon">{{ platform_icon("search_console", 22) }}</div>
+        <div class="g-svc-body">
+          <div class="g-svc-name">Google Search Console</div>
+          <div class="g-svc-desc">
+            {% if editing and editing.gsc_sites and editing.gsc_sites > 0 %}
+              {{ editing.gsc_sites }} site{{ 's' if editing.gsc_sites != 1 else '' }} discovered
+            {% else %}
+              Organic search queries, CTR, impressions, and sitemaps
+            {% endif %}
+          </div>
+        </div>
+        <select id="gSvcGSCLevel" class="g-svc-level f-input">
+          <option value="read" {% if not editing or not editing.gsc_write %}selected{% endif %}>Read only</option>
+          <option value="write" {% if editing and editing.gsc_write %}selected{% endif %}>Read + Sitemap Write</option>
+        </select>
+      </div>
+
+      {# ── Google Ads ── #}
+      <div class="g-svc" id="svcCardAds">
+        <label class="g-svc-check">
+          <input type="checkbox" id="gSvcAds" {% if is_new or (editing and editing.has_ads) %}checked{% endif %}
+                 onchange="toggleCard('Ads')">
+        </label>
+        <div class="g-svc-icon">{{ platform_icon("google_ads", 22) }}</div>
+        <div class="g-svc-body">
+          <div class="g-svc-name">Google Ads</div>
+          <div class="g-svc-desc">
+            {% if editing and editing.ads_accounts > 0 %}
+              {{ editing.ads_accounts }} account{{ 's' if editing.ads_accounts != 1 else '' }} discovered
+            {% else %}
+              Campaign performance, keywords, and conversions
+            {% endif %}
+          </div>
+        </div>
+        <span class="t-flag g-read-flag">Read only</span>
+      </div>
+
+    </div>
+
+    {# ── Info note ── #}
+    <div class="g-info">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="g-info-ic"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      <div class="g-info-text">
+        {% if is_new %}
+          You'll be redirected to Google to sign in. Only the scopes for your selected services will be requested.
+        {% else %}
+          Changing services or access levels requires re-authenticating with Google. Your existing data and discovered properties will be preserved.
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── Actions ── #}
+    <div class="g-actions">
+      <button class="btn primary g-cta" onclick="connectGoogle()">
+        {% if is_new %}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Connect with Google
+        {% else %}
+          Save &amp; Reconnect
+        {% endif %}
+      </button>
+      <a href="/connect" class="btn">Cancel</a>
+    </div>
+  </div>
+</main>
+
+<style>
+.breadcrumbs {
+  font-size: 12px; color: var(--muted);
+  margin-bottom: 14px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.breadcrumbs a { color: var(--ink-soft); text-decoration: none; }
+.breadcrumbs a:hover { color: var(--ink); }
+
+.g-head {
+  display: flex; align-items: flex-start; gap: 18px;
+  padding-bottom: 28px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line-2);
+}
+.g-icon {
+  width: 58px; height: 58px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.g-head-main { flex: 1; min-width: 0; }
+.g-head-main h1 {
+  font-size: clamp(24px, 3.5vw, 32px);
+  font-weight: 500; letter-spacing: -0.02em;
+  margin: 6px 0 6px; color: var(--ink);
+  line-height: 1.15;
+}
+.g-head-main p {
+  font-size: 14px; color: var(--ink-soft);
+  line-height: 1.55; margin: 0;
+}
+
+.g-section-label {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  font-family: var(--mono);
+  margin-bottom: 14px;
+}
+
+.g-svc-list { display: flex; flex-direction: column; gap: 10px; }
+.g-svc {
+  display: grid;
+  grid-template-columns: 18px 40px 1fr;
+  grid-template-rows: auto auto;
+  gap: 0 14px;
+  align-items: center;
+  padding: 16px 18px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  transition: opacity 0.15s, border-color 0.15s;
+}
+.g-svc-check {
+  grid-row: 1 / -1; grid-column: 1;
+  display: flex; align-items: center; cursor: pointer;
+}
+.g-svc-check input {
+  width: 18px; height: 18px;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+.g-svc-icon {
+  grid-row: 1 / -1; grid-column: 2;
+  width: 40px; height: 40px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  display: flex; align-items: center; justify-content: center;
+}
+.g-svc-body { grid-column: 3; min-width: 0; }
+.g-svc-name {
+  font-size: 14.5px; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.g-svc-desc {
+  font-size: 12.5px; color: var(--ink-soft);
+  margin-top: 3px; line-height: 1.5;
+}
+.g-svc-level {
+  grid-column: 3;
+  width: fit-content; min-width: 120px;
+  font-size: 12.5px; padding: 6px 10px;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--bg);
+  color: var(--ink);
+}
+.g-read-flag {
+  grid-column: 3;
+  margin-top: 8px;
+  width: fit-content;
+  background: var(--bg-3); color: var(--muted);
+  font-size: 11px; padding: 4px 10px;
+}
+
+.g-info {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-top: 18px;
+  padding: 14px 18px;
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 25%, var(--line));
+  border-radius: var(--r-m);
+}
+.g-info-ic { color: var(--blue); flex-shrink: 0; margin-top: 2px; }
+.g-info-text {
+  font-size: 13px; color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.g-actions {
+  display: flex; gap: 12px;
+  margin-top: 26px;
+  flex-wrap: wrap;
+}
+.g-cta {
+  flex: 1; min-width: 240px;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .g-svc { grid-template-columns: 18px 1fr; }
+  .g-svc-icon { display: none; }
+  .g-svc-body { grid-column: 2; }
+  .g-svc-level { grid-column: 2; }
+  .g-read-flag { grid-column: 2; }
+}
+</style>
+
+<script>
+function toggleCard(svc) {
+  var checked = document.getElementById('gSvc' + svc).checked;
+  var card = document.getElementById('svcCard' + svc);
+  if (checked) {
+    card.style.opacity = '1';
+    card.style.borderColor = '';
+  } else {
+    card.style.opacity = '.55';
+    card.style.borderColor = 'var(--line)';
+  }
+}
+
+// Init card states on load
+['GA4', 'GTM', 'Ads', 'GSC'].forEach(function(svc) { toggleCard(svc); });
+
+function connectGoogle() {
+  var products = [];
+  if (document.getElementById('gSvcGA4').checked) products.push('ga4');
+  if (document.getElementById('gSvcGTM').checked) products.push('gtm');
+  if (document.getElementById('gSvcAds').checked) products.push('ads');
+  if (document.getElementById('gSvcGSC').checked) products.push('gsc');
+
+  if (products.length === 0) {
+    Fluxito.toast('Select at least one service', 'error');
+    return;
+  }
+
+  var writeGA4 = document.getElementById('gSvcGA4').checked && document.getElementById('gSvcGA4Level').value === 'write' ? '1' : '0';
+  var writeGTM = document.getElementById('gSvcGTM').checked && document.getElementById('gSvcGTMLevel').value === 'write' ? '1' : '0';
+  var writeGSC = document.getElementById('gSvcGSC').checked && document.getElementById('gSvcGSCLevel').value === 'write' ? '1' : '0';
+
+  var url = '/api/connections/google/initiate?products=' + products.join(',') + '&write_ga4=' + writeGA4 + '&write_gtm=' + writeGTM + '&write_gsc=' + writeGSC;
+  window.location.href = url;
+}
+</script>
+{% endblock %}

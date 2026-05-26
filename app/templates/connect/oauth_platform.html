@@ -1,0 +1,22 @@
+{% extends "connect/platform.html" %}
+
+{% block platform_body %}
+<div class="alert alert-info mb-4">
+  <div class="alert-icon">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+  </div>
+  <div class="alert-body">
+    <div class="alert-title">You'll be redirected to {{ platform_name }} to authorize access.</div>
+    <div>Fluxito only requests the minimum scopes needed. You can revoke anytime from your {{ platform_name }} account settings.</div>
+  </div>
+</div>
+
+<div class="stack mb-6">
+  <div class="text-sm text-muted"><strong>What we'll read:</strong></div>
+  <ul style="font-size:13px;color:var(--text-muted);padding-left:16px;">
+    {% for scope in scopes %}<li style="padding:3px 0;list-style:disc;">{{ scope }}</li>{% endfor %}
+  </ul>
+</div>
+
+<a href="{{ authorize_url }}" class="btn primary block">Continue to {{ platform_name }} →</a>
+{% endblock %}

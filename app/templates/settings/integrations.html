@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Integrations — Fluxito{% endblock %}
+{% set active = 'integrations' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/integrations.css?v={{ asset_hash('css/integrations.css') }}"/>
+{% endblock %}
+
+{% block main %}
+<main class="app-main">
+
+  {# ── Page header ── #}
+  <div class="page-head">
+    <div>
+      <span class="label">Admin</span>
+      <h1>Integrations</h1>
+      <p>Configure OAuth apps so users can connect their platforms. Credentials stored in DB take precedence over environment variables.</p>
+    </div>
+  </div>
+
+  {# ── First-run welcome banner (shown when ?welcome=1) ── #}
+  {% if request.query_params.get('welcome') == '1' %}
+  <div class="intg-banner" style="border-color:color-mix(in srgb,var(--green,#16a34a) 35%,var(--line));background:color-mix(in srgb,var(--green,#16a34a) 6%,var(--bg));">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--green,#16a34a);flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span style="color:var(--ink);">
+      <strong>Admin account created.</strong>
+      Configure at least one OAuth app below so users can connect their platforms.
+      Click <strong>Configure</strong> on any platform card to enter its client ID and secret.
+    </span>
+  </div>
+  {% endif %}
+
+  {# ── Env-based banner ── #}
+  {% set env_platforms = platforms | selectattr('source', 'equalto', 'env') | list %}
+  {% if env_platforms %}
+  <div class="intg-banner">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>
+      {{ env_platforms | map(attribute='platform') | map('capitalize') | join(', ') }}
+      {% if env_platforms | length == 1 %}is{% else %}are{% endif %}
+      configured via environment variables. Use the UI below to migrate credentials to the database for easier rotation.
+    </span>
+  </div>
+  {% endif %}
+
+  {# ── Platform grid ── #}
+  <div class="intg-grid" id="intgGrid">
+    {% for p in platforms %}
+    {% set slug = p.platform %}
+    {% set source = p.source %}
+    <div class="intg-card" id="intg-card-{{ slug }}" data-platform="{{ slug }}" data-source="{{ source }}">
+
+      {# Brand header #}
+      <div class="intg-card-head intg-head-{{ slug }}">
+        <span class="pbadge {{ slug }}"></span>
+        <span class="intg-platform-name">{{ slug | capitalize }}</span>
+      </div>
+
+      {# Status #}
+      <div class="intg-card-body">
+        <div class="intg-status-row">
+          {% if source == 'db' %}
+          <span class="intg-badge intg-badge-db">Configured (DB)</span>
+          {% elif source == 'env' %}
+          <span class="intg-badge intg-badge-env">Configured (env)</span>
+          {% else %}
+          <span class="intg-badge intg-badge-none">Not configured</span>
+          {% endif %}
+        </div>
+
+        {% if p.client_id_masked %}
+        <div class="intg-id-row">
+          <span class="intg-id-label">Client ID</span>
+          <span class="intg-id-value">{{ p.client_id_masked }}</span>
+        </div>
+        {% endif %}
+
+        {% if source == 'db' and p.updated_at %}
+        <div class="intg-updated">Updated {{ p.updated_at | fmt_datetime }}</div>
+        {% else %}
+        <div class="intg-updated">&nbsp;</div>
+        {% endif %}
+
+        <div class="intg-actions">
+          <button class="btn primary sm" onclick="IntgUI.openModal('{{ slug }}')">Configure</button>
+          {% if source == 'db' %}
+          <button class="btn sm intg-remove-btn" onclick="IntgUI.removeCredentials('{{ slug }}')">Remove</button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</main>
+
+{# ── Modal ── #}
+{% include "settings/_integration_modal.html" %}
+
+<script src="/static/js/integrations.js?v={{ asset_hash('js/integrations.js') }}"></script>
+{% endblock %}

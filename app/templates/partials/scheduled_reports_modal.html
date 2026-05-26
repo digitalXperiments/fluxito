@@ -1,0 +1,739 @@
+{#
+  Scheduled Reports modal
+  -----------------------
+  Included from dashboards/live_view.html. Gives project owners/admins a
+  CRUD UI for ReportSchedule rows attached to the current dashboard.
+
+  Required template variables:
+    dash.id         — dashboard UUID (used in all API URLs)
+    dash.title      — used as the default schedule name prefix
+    is_owner        — only shown when truthy OR when the caller can manage
+
+  Talks to six endpoints defined in app/api/scheduled_report_routes.py:
+    GET    /api/dashboards/{id}/schedule-options
+    GET    /api/dashboards/{id}/schedules
+    POST   /api/dashboards/{id}/schedules
+    PATCH  /api/dashboards/{id}/schedules/{sid}
+    DELETE /api/dashboards/{id}/schedules/{sid}
+    POST   /api/dashboards/{id}/schedules/{sid}/run
+    GET    /api/dashboards/{id}/schedules/{sid}/runs
+
+  Kept as a partial so the ~600-line live_view.html stays readable.
+#}
+
+<style>
+  /* ── modal chrome override — the base .modal maxes out at ~540px ── */
+  .sched-modal .modal { max-width: 780px; }
+  .sched-modal .modal-body { padding: 0; }
+  .sched-panel { padding: 18px 22px 22px; }
+  .sched-panel.hidden { display: none; }
+
+  /* ── list view ───────────────────────────────────────────────────── */
+.sched-empty { text-align:center; padding:40px 20px; color:var(--text-muted);
+                 border:1px dashed var(--border); border-radius:var(--r-md); }
+  .sched-row { display:flex; align-items:center; gap:10px; padding:12px 14px;
+               border:1px solid var(--border); border-radius:var(--r-md);
+               margin-bottom:8px; background:var(--bg); }
+  .sched-row .sched-main { flex:1; min-width:0; }
+  .sched-row .sched-name { font-weight:600; font-size:14px; color:var(--text);
+                           display:flex; align-items:center; gap:8px; }
+  .sched-row .sched-meta { font-size:11.5px; color:var(--text-muted); margin-top:3px;
+                           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sched-row .sched-actions { display:flex; gap:6px; flex-shrink:0; }
+  .sched-row .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .sched-row .status-ok { background:#10b981; }
+  .sched-row .status-partial { background:#f59e0b; }
+  .sched-row .status-failed { background:#ef4444; }
+  .sched-row .status-running { background:#6c8cff; }
+  .sched-row .status-none { background:var(--border-strong,#9ca3af); }
+  .sched-row.is-disabled { opacity:.55; }
+
+  /* ── form view ───────────────────────────────────────────────────── */
+  .sched-form .form-row { margin-bottom:14px; }
+  .sched-form label { display:block; font-size:12px; font-weight:600;
+                      color:var(--text-muted); margin-bottom:4px;
+                      text-transform:uppercase; letter-spacing:.04em; }
+  .sched-form .input, .sched-form .select, .sched-form .textarea { width:100%; }
+  .sched-form .row-split { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .sched-form .row-triple { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .sched-form .help { font-size:11px; color:var(--text-muted); margin-top:3px; }
+  .sched-form .chip-list { display:flex; flex-wrap:wrap; gap:6px; }
+  .sched-form .chip-list .chip { padding:5px 10px; border:1px solid var(--border);
+                                 border-radius:999px; background:var(--bg); font-size:12px;
+                                 cursor:pointer; user-select:none; }
+  .sched-form .chip-list .chip.is-active { background:var(--accent); color:var(--bg);
+                                           border-color:var(--accent); }
+  .sched-form .channel-block { border:1px solid var(--border); border-radius:var(--r-md);
+                               padding:12px 14px; margin-bottom:10px; background:var(--bg); }
+  .sched-form .channel-block .ch-head { display:flex; justify-content:space-between;
+                                        align-items:center; margin-bottom:10px; }
+  .sched-form .channel-block .ch-type { font-weight:600; font-size:13px; }
+  .sched-form .cadence-fields[data-cadence="daily"] .cf-weekday,
+  .sched-form .cadence-fields[data-cadence="daily"] .cf-monthday,
+  .sched-form .cadence-fields[data-cadence="daily"] .cf-custom,
+  .sched-form .cadence-fields[data-cadence="weekly"] .cf-monthday,
+  .sched-form .cadence-fields[data-cadence="weekly"] .cf-custom,
+  .sched-form .cadence-fields[data-cadence="monthly"] .cf-weekday,
+  .sched-form .cadence-fields[data-cadence="monthly"] .cf-custom,
+  .sched-form .cadence-fields[data-cadence="custom_cron"] .cf-weekday,
+  .sched-form .cadence-fields[data-cadence="custom_cron"] .cf-monthday,
+  .sched-form .cadence-fields[data-cadence="custom_cron"] .cf-hour { display:none; }
+  .sched-form .form-error { color:#ef4444; font-size:12px; margin-top:6px; }
+  .sched-form .inline-link { color:var(--accent); text-decoration:none; font-size:11.5px; }
+  .sched-form .inline-link:hover { text-decoration:underline; }
+
+  /* ── run history drawer ──────────────────────────────────────────── */
+  .sched-runs { border:1px solid var(--border); border-radius:var(--r-md);
+                max-height:260px; overflow:auto; }
+  .sched-runs .run-row { display:grid; grid-template-columns:auto 1fr auto auto;
+                         gap:10px; align-items:center; padding:8px 12px;
+                         font-size:12px; border-bottom:1px solid var(--border); }
+  .sched-runs .run-row:last-child { border-bottom:0; }
+  .sched-runs .run-err { color:#ef4444; font-size:11px; grid-column:1/-1;
+                         padding-top:4px; white-space:pre-wrap; word-break:break-word; }
+</style>
+
+<!-- ── Schedule reports modal ─────────────────────────────────────────── -->
+<div class="modal-backdrop sched-modal" id="schedulesModal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header row-between">
+      <div class="modal-title">Scheduled reports</div>
+      <button class="btn sm" type="button" onclick="Scheds.close()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Panel 1: list of schedules ------------------------------------- -->
+      <div class="sched-panel" id="schedListPanel">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn primary sm" type="button" id="btnNewSchedule">+ New schedule</button>
+        </div>
+        <div id="schedListContainer"></div>
+      </div>
+
+      <!-- Panel 2: create/edit form -------------------------------------- -->
+      <div class="sched-panel sched-form hidden" id="schedFormPanel">
+        <div class="row mb-3" style="gap:4px;">
+          <a href="#" class="text-muted text-sm" id="schedFormBack">← Back to schedules</a>
+        </div>
+        <h3 class="text-md" id="schedFormTitle" style="margin:0 0 14px; font-size:15px;">New schedule</h3>
+
+        <div class="form-row">
+          <label>Name</label>
+          <input type="text" class="input" id="schedName" maxlength="255" placeholder="e.g. Weekly marketing digest"/>
+        </div>
+
+        <div class="form-row">
+          <label>Description (optional)</label>
+          <textarea class="textarea" id="schedDesc" rows="2" maxlength="2000"></textarea>
+        </div>
+
+        <div class="form-row">
+          <label>Cadence</label>
+          <div class="chip-list" id="schedCadenceChips">
+            <span class="chip is-active" data-cadence="daily">Daily</span>
+            <span class="chip" data-cadence="weekly">Weekly</span>
+            <span class="chip" data-cadence="monthly">Monthly</span>
+            <span class="chip" data-cadence="custom_cron">Custom cron</span>
+          </div>
+        </div>
+
+        <div class="form-row cadence-fields" data-cadence="daily">
+          <div class="row-triple">
+            <div class="cf-hour">
+              <label>Hour (0–23)</label>
+              <input type="number" class="input" id="schedHour" value="9" min="0" max="23"/>
+            </div>
+            <div class="cf-hour">
+              <label>Minute (0–59)</label>
+              <input type="number" class="input" id="schedMinute" value="0" min="0" max="59"/>
+            </div>
+            <div class="cf-weekday">
+              <label>Weekday</label>
+              <select class="select" id="schedWeekday">
+                <option value="mon">Monday</option>
+                <option value="tue">Tuesday</option>
+                <option value="wed">Wednesday</option>
+                <option value="thu">Thursday</option>
+                <option value="fri">Friday</option>
+                <option value="sat">Saturday</option>
+                <option value="sun">Sunday</option>
+              </select>
+            </div>
+            <div class="cf-monthday">
+              <label>Day of month (1–28)</label>
+              <input type="number" class="input" id="schedDayOfMonth" value="1" min="1" max="28"/>
+            </div>
+            <div class="cf-custom" style="grid-column:1/-1;">
+              <label>Cron expression (5 fields: m h d M w)</label>
+              <input type="text" class="input" id="schedCustomCron" placeholder="e.g. 0 9 * * 1-5"/>
+              <div class="help">POSIX cron, 5 fields. <code>0 9 * * 1-5</code> = 9 AM every weekday.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row row-split">
+          <div>
+            <label>Timezone</label>
+            <select class="select" id="schedTimezone"></select>
+          </div>
+          <div>
+            <label>Date range</label>
+            <select class="select" id="schedMacro"></select>
+            <div class="help">Rolling windows (e.g. "Last 30 days") re-calculate relative to each send date — best for dashboards with dynamic date filters. Static comparison dashboards (e.g. H1 vs H2) will receive fresh data but ignore the date range.</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>Delivery channels</label>
+          <div id="schedChannels"></div>
+          <div class="row" style="gap:8px; margin-top:8px;">
+            <button class="btn sm" type="button" id="btnAddEmailChannel">+ Email</button>
+            <button class="btn sm" type="button" id="btnAddSlackChannel">+ Slack</button>
+          </div>
+          <div class="help">Email channels attach the dashboard as a PDF. Slack channels post a Block Kit summary. Credentials come from the project's notification settings.</div>
+        </div>
+
+        <div class="form-row">
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0; font-size:13px;">
+            <input type="checkbox" id="schedEnabled" checked/>
+            Enabled (will fire on its cadence)
+          </label>
+        </div>
+
+        <div class="form-error" id="schedFormError" style="display:none;"></div>
+
+        <div class="row-between" style="margin-top:18px;">
+          <button class="btn sm danger-outline" type="button" id="schedDeleteBtn" style="display:none;">Delete schedule</button>
+          <div class="row" style="gap:8px; margin-left:auto;">
+            <button class="btn" type="button" id="schedCancelBtn">Cancel</button>
+            <button class="btn primary" type="button" id="schedSaveBtn">Save schedule</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 3: run history drawer ------------------------------------- -->
+      <div class="sched-panel hidden" id="schedRunsPanel">
+        <div class="row mb-3" style="gap:4px;">
+          <a href="#" class="text-muted text-sm" id="schedRunsBack">← Back to schedules</a>
+        </div>
+        <h3 class="text-md" id="schedRunsTitle" style="margin:0 0 14px; font-size:15px;">Recent runs</h3>
+        <div class="sched-runs" id="schedRunsList"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// Initialise the module once per page. Keyed off the dashboard id so
+// there's no ambiguity when this partial gets dropped on multi-dashboard
+// pages in the future.
+(function(){
+  const DASH_ID = {{ dash.id | tojson }};
+  const DASH_TITLE = {{ dash.title | tojson }};
+  const BASE = '/api/dashboards/' + encodeURIComponent(DASH_ID);
+  const esc = (window.Fluxito && Fluxito.esc) || function(s){
+    return String(s||'').replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  };
+
+  const modal = document.getElementById('schedulesModal');
+  const panelList = document.getElementById('schedListPanel');
+  const panelForm = document.getElementById('schedFormPanel');
+  const panelRuns = document.getElementById('schedRunsPanel');
+
+  // State fetched once per modal open
+  let OPTIONS = { senders: [], webhooks: [], macros: [], timezones: [] };
+  let SCHEDULES = [];
+  let EDITING_ID = null;   // null → creating new
+
+  // ── Panel nav ────────────────────────────────────────────────────────
+  function show(panel){
+    panelList.classList.add('hidden');
+    panelForm.classList.add('hidden');
+    panelRuns.classList.add('hidden');
+    panel.classList.remove('hidden');
+  }
+
+  // ── List view rendering ──────────────────────────────────────────────
+  function fmtDate(iso){
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleString(); } catch(_) { return iso; }
+  }
+  function statusClass(s){
+    return ({success:'status-ok', partial:'status-partial',
+             failed:'status-failed', running:'status-running'})[s] || 'status-none';
+  }
+  function cadenceDescription(sched){
+    const parts = [sched.cadence];
+    if (sched.cron_expression) parts.push('(' + sched.cron_expression + ')');
+    parts.push('· ' + (sched.timezone || 'UTC'));
+    return parts.join(' ');
+  }
+  function channelSummary(sched){
+    const ch = sched.channels || [];
+    if (!ch.length) return 'no channels';
+    const bits = [];
+    const email = ch.filter(c => c.type === 'email');
+    const slack = ch.filter(c => c.type === 'slack');
+    if (email.length) {
+      const recipients = email.reduce((n,c) => n + (c.to||[]).length, 0);
+      bits.push(recipients + ' email recipient' + (recipients === 1 ? '' : 's'));
+    }
+    if (slack.length) bits.push(slack.length + ' Slack channel' + (slack.length === 1 ? '' : 's'));
+    return bits.join(' · ');
+  }
+
+  function renderList(){
+    const host = document.getElementById('schedListContainer');
+    if (!SCHEDULES.length) {
+      host.innerHTML = '<div class="sched-empty">' +
+        '<p><strong>No scheduled reports yet.</strong></p>' +
+        '<p>Set one up to email or Slack this dashboard on a cadence.</p>' +
+        '</div>';
+      return;
+    }
+    host.innerHTML = SCHEDULES.map(s => {
+      const dotCls = statusClass(s.last_status);
+      const nextRun = s.next_run_at ? 'Next: ' + fmtDate(s.next_run_at) : 'Not yet scheduled';
+      const failures = s.consecutive_failures > 0
+        ? ' · <span style="color:#ef4444;">' + s.consecutive_failures + ' consecutive failure' + (s.consecutive_failures===1?'':'s') + '</span>'
+        : '';
+      return (
+        '<div class="sched-row ' + (s.enabled ? '' : 'is-disabled') + '" data-id="' + esc(s.id) + '">' +
+          '<div class="sched-main">' +
+            '<div class="sched-name">' +
+              '<span class="status-dot ' + dotCls + '" title="Last status: ' + esc(s.last_status || 'never run') + '"></span>' +
+              esc(s.name) +
+              (s.enabled ? '' : ' <span class="badge">Disabled</span>') +
+            '</div>' +
+            '<div class="sched-meta">' + esc(cadenceDescription(s)) + ' · ' + esc(channelSummary(s)) + ' · ' + nextRun + failures + '</div>' +
+          '</div>' +
+          '<div class="sched-actions">' +
+            '<button class="btn sm" data-act="toggle">' + (s.enabled ? 'Disable' : 'Enable') + '</button>' +
+            '<button class="btn sm" data-act="run">Run now</button>' +
+            '<button class="btn sm" data-act="runs">History</button>' +
+            '<button class="btn sm" data-act="edit">Edit</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+
+    // Bind row actions
+    host.querySelectorAll('.sched-row').forEach(row => {
+      const sid = row.dataset.id;
+      row.querySelectorAll('[data-act]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const act = btn.dataset.act;
+          if (act === 'toggle') return toggleSchedule(sid);
+          if (act === 'run')    return runScheduleNow(sid);
+          if (act === 'runs')   return openRunHistory(sid);
+          if (act === 'edit')   return openEditForm(sid);
+        });
+      });
+    });
+  }
+
+  // ── Options / schedules loader ───────────────────────────────────────
+  async function loadAll(){
+    const [optsRes, listRes] = await Promise.all([
+      fetch(BASE + '/schedule-options', {credentials:'same-origin'}),
+      fetch(BASE + '/schedules',        {credentials:'same-origin'}),
+    ]);
+    if (!optsRes.ok) {
+      const err = await safeJson(optsRes);
+      throw new Error(err.error || ('Options load failed: ' + optsRes.status));
+    }
+    if (!listRes.ok) {
+      const err = await safeJson(listRes);
+      throw new Error(err.error || ('Schedules load failed: ' + listRes.status));
+    }
+    OPTIONS = await optsRes.json();
+    const data = await listRes.json();
+    SCHEDULES = data.schedules || [];
+    populateStaticDropdowns();
+    renderList();
+  }
+
+  async function safeJson(res){
+    try { return await res.json(); } catch(_) { return {}; }
+  }
+
+  function populateStaticDropdowns(){
+    // Timezone dropdown — curated list, but user can also type
+    const tz = document.getElementById('schedTimezone');
+    tz.innerHTML = (OPTIONS.timezones || ['UTC'])
+      .map(z => '<option value="' + esc(z) + '">' + esc(z) + '</option>')
+      .join('');
+    // Macro dropdown — label niceness
+    const macroLabels = {
+      today:'Today', yesterday:'Yesterday',
+      last_7_days:'Last 7 days', last_14_days:'Last 14 days',
+      last_28_days:'Last 28 days', last_30_days:'Last 30 days',
+      last_90_days:'Last 90 days',
+      this_week:'This week (Mon–Sun)', last_week:'Last week (Mon–Sun)',
+      this_month:'This month', last_month:'Last month',
+      month_to_date:'Month to date', week_to_date:'Week to date',
+      quarter_to_date:'Quarter to date', year_to_date:'Year to date',
+    };
+    const macro = document.getElementById('schedMacro');
+    macro.innerHTML = (OPTIONS.macros || []).map(m =>
+      '<option value="' + esc(m) + '">' + esc(macroLabels[m] || m) + '</option>'
+    ).join('');
+  }
+
+  // ── Form state ───────────────────────────────────────────────────────
+  function clearForm(){
+    document.getElementById('schedName').value = DASH_TITLE + ' — scheduled report';
+    document.getElementById('schedDesc').value = '';
+    document.getElementById('schedHour').value = 9;
+    document.getElementById('schedMinute').value = 0;
+    document.getElementById('schedWeekday').value = 'mon';
+    document.getElementById('schedDayOfMonth').value = 1;
+    document.getElementById('schedCustomCron').value = '';
+    document.getElementById('schedEnabled').checked = true;
+    setCadence('daily');
+    // Default macro is last_7_days if available, else first
+    const macro = document.getElementById('schedMacro');
+    macro.value = (OPTIONS.macros || []).includes('last_7_days') ? 'last_7_days' : (OPTIONS.macros || [])[0] || '';
+    // Default TZ — UTC (first in curated list)
+    document.getElementById('schedTimezone').value = (OPTIONS.timezones || ['UTC'])[0];
+    // Start with one empty email channel if possible, otherwise a slack if we have webhooks
+    document.getElementById('schedChannels').innerHTML = '';
+    if ((OPTIONS.senders || []).length) addEmailChannel();
+    else if ((OPTIONS.webhooks || []).length) addSlackChannel();
+    document.getElementById('schedFormError').style.display = 'none';
+    document.getElementById('schedDeleteBtn').style.display = 'none';
+  }
+
+  function setCadence(cad){
+    document.querySelectorAll('#schedCadenceChips .chip').forEach(c => {
+      c.classList.toggle('is-active', c.dataset.cadence === cad);
+    });
+    document.querySelector('.cadence-fields').dataset.cadence = cad;
+  }
+
+  function addEmailChannel(initial){
+    initial = initial || {};
+    const host = document.getElementById('schedChannels');
+    const senderOpts = (OPTIONS.senders || []).map(s =>
+      '<option value="' + esc(s.id) + '"' + (initial.sender_id === s.id ? ' selected' : '') + '>' +
+      esc(s.label) + ' &lt;' + esc(s.from_address) + '&gt;' + (s.is_default ? ' (default)' : '') +
+      '</option>'
+    ).join('');
+    const recipients = (initial.to || []).join(', ');
+    const block = document.createElement('div');
+    block.className = 'channel-block';
+    block.dataset.type = 'email';
+    block.innerHTML =
+      '<div class="ch-head"><span class="ch-type">✉ Email</span>' +
+        '<button class="btn sm" type="button" data-remove>Remove</button></div>' +
+      '<div class="form-row"><label>Sender</label>' +
+        '<select class="select ch-sender">' + (senderOpts ||
+          '<option value="">No senders configured — set one up in Project settings → Notifications</option>') + '</select></div>' +
+      '<div class="form-row"><label>Recipients (comma-separated)</label>' +
+        '<input type="text" class="input ch-to" placeholder="alice@example.com, bob@example.com" value="' + esc(recipients) + '"/></div>' +
+      '<div class="form-row"><label>Subject (optional)</label>' +
+        '<input type="text" class="input ch-subject" maxlength="300" value="' + esc(initial.subject || '') + '"/></div>' +
+      '<div class="form-row"><label>Intro message (optional)</label>' +
+        '<textarea class="textarea ch-intro" rows="2" maxlength="1000">' + esc(initial.intro || '') + '</textarea></div>';
+    block.querySelector('[data-remove]').addEventListener('click', () => block.remove());
+    host.appendChild(block);
+  }
+
+  function addSlackChannel(initial){
+    initial = initial || {};
+    const host = document.getElementById('schedChannels');
+    const opts = (OPTIONS.webhooks || []).map(w =>
+      '<option value="' + esc(w.id) + '"' + (initial.webhook_id === w.id ? ' selected' : '') + '>' +
+      esc(w.label) + '</option>'
+    ).join('');
+    const block = document.createElement('div');
+    block.className = 'channel-block';
+    block.dataset.type = 'slack';
+    block.innerHTML =
+      '<div class="ch-head"><span class="ch-type">💬 Slack</span>' +
+        '<button class="btn sm" type="button" data-remove>Remove</button></div>' +
+      '<div class="form-row"><label>Webhook</label>' +
+        '<select class="select ch-webhook">' + (opts ||
+          '<option value="">No Slack webhooks configured — set one up in Project settings → Notifications</option>') + '</select></div>' +
+      '<div class="help">Scheduled Slack messages post a Block Kit summary of the dashboard. AI insights are never included in scheduled sends.</div>';
+    block.querySelector('[data-remove]').addEventListener('click', () => block.remove());
+    host.appendChild(block);
+  }
+
+  function readChannelsFromForm(){
+    const out = [];
+    document.querySelectorAll('#schedChannels .channel-block').forEach(b => {
+      if (b.dataset.type === 'email') {
+        const to = (b.querySelector('.ch-to').value || '').split(',').map(s=>s.trim()).filter(Boolean);
+        const spec = { type: 'email', to };
+        const sender = b.querySelector('.ch-sender').value;
+        if (sender) spec.sender_id = sender;
+        const subj = (b.querySelector('.ch-subject').value || '').trim();
+        if (subj) spec.subject = subj;
+        const intro = (b.querySelector('.ch-intro').value || '').trim();
+        if (intro) spec.intro = intro;
+        out.push(spec);
+      } else if (b.dataset.type === 'slack') {
+        const wid = b.querySelector('.ch-webhook').value;
+        if (wid) out.push({ type: 'slack', webhook_id: wid });
+      }
+    });
+    return out;
+  }
+
+  // ── Create / edit / delete ───────────────────────────────────────────
+  function openNewForm(){
+    EDITING_ID = null;
+    document.getElementById('schedFormTitle').textContent = 'New schedule';
+    clearForm();
+    show(panelForm);
+  }
+
+  function openEditForm(sid){
+    const s = SCHEDULES.find(x => x.id === sid);
+    if (!s) return;
+    EDITING_ID = sid;
+    document.getElementById('schedFormTitle').textContent = 'Edit schedule';
+    clearForm();
+    document.getElementById('schedName').value = s.name || '';
+    document.getElementById('schedDesc').value = s.description || '';
+    setCadence(s.cadence || 'daily');
+
+    // Pre-fill cadence-specific fields by re-parsing cron_expression —
+    // the API doesn't round-trip the original hour/minute/weekday, so
+    // we take a best-effort read of the cron string. Users who built
+    // cron expressions by hand get "custom_cron" treatment.
+    const parts = (s.cron_expression || '').split(/\s+/);
+    if (parts.length === 5) {
+      if (s.cadence === 'daily' || s.cadence === 'weekly' || s.cadence === 'monthly') {
+        const minute = parseInt(parts[0], 10);
+        const hour = parseInt(parts[1], 10);
+        if (!isNaN(minute)) document.getElementById('schedMinute').value = minute;
+        if (!isNaN(hour)) document.getElementById('schedHour').value = hour;
+      }
+      if (s.cadence === 'weekly') {
+        const dow = parts[4];
+        const mapping = {'0':'sun','1':'mon','2':'tue','3':'wed','4':'thu','5':'fri','6':'sat'};
+        if (mapping[dow]) document.getElementById('schedWeekday').value = mapping[dow];
+      }
+      if (s.cadence === 'monthly') {
+        const dom = parseInt(parts[2], 10);
+        if (!isNaN(dom)) document.getElementById('schedDayOfMonth').value = dom;
+      }
+      if (s.cadence === 'custom_cron') {
+        document.getElementById('schedCustomCron').value = s.cron_expression;
+      }
+    }
+
+    // Timezone — add as custom option if not in curated list
+    const tzSel = document.getElementById('schedTimezone');
+    if (s.timezone && ![].slice.call(tzSel.options).some(o => o.value === s.timezone)) {
+      const opt = document.createElement('option');
+      opt.value = s.timezone; opt.textContent = s.timezone + ' (custom)';
+      tzSel.appendChild(opt);
+    }
+    tzSel.value = s.timezone || 'UTC';
+
+    // Macro — prefer filter_params.macro, fall back to start_date macro form
+    const macroSel = document.getElementById('schedMacro');
+    const fp = s.filter_params || {};
+    let chosenMacro = fp.macro;
+    // Detect macro-form start_date like "{" + "{last_7_days}" + "}" — we
+    // build the sentinel at runtime so Jinja doesn't try to evaluate it.
+    const MACRO_OPEN = '{' + '{';
+    if (!chosenMacro && typeof fp.start_date === 'string' && fp.start_date.startsWith(MACRO_OPEN)) {
+      chosenMacro = fp.start_date.replace(/[{}]/g, '').trim();
+    }
+    if (chosenMacro) macroSel.value = chosenMacro;
+
+    document.getElementById('schedEnabled').checked = !!s.enabled;
+
+    // Channels — re-render from scratch to preserve user config
+    document.getElementById('schedChannels').innerHTML = '';
+    (s.channels || []).forEach(c => {
+      if (c.type === 'email') addEmailChannel(c);
+      else if (c.type === 'slack') addSlackChannel(c);
+    });
+
+    document.getElementById('schedDeleteBtn').style.display = 'inline-flex';
+    show(panelForm);
+  }
+
+  async function saveForm(){
+    const err = document.getElementById('schedFormError');
+    err.style.display = 'none'; err.textContent = '';
+    const name = document.getElementById('schedName').value.trim();
+    if (!name) { err.textContent = 'Name is required.'; err.style.display = 'block'; return; }
+
+    const cadence = document.querySelector('#schedCadenceChips .chip.is-active').dataset.cadence;
+    const channels = readChannelsFromForm();
+    if (!channels.length) {
+      err.textContent = 'Add at least one delivery channel.';
+      err.style.display = 'block';
+      return;
+    }
+
+    // Build filter_params — we store the macro both in .macro AND
+    // .start_date/.end_date form so the runner can recognise either
+    // shape. The backend prefers .macro when both are set.
+    const macroVal = document.getElementById('schedMacro').value;
+    const filter_params = {};
+    if (macroVal) filter_params.macro = macroVal;
+
+    const body = {
+      name: name,
+      description: document.getElementById('schedDesc').value.trim() || null,
+      enabled: document.getElementById('schedEnabled').checked,
+      cadence: cadence,
+      hour: parseInt(document.getElementById('schedHour').value, 10) || 9,
+      minute: parseInt(document.getElementById('schedMinute').value, 10) || 0,
+      weekday: document.getElementById('schedWeekday').value,
+      day_of_month: parseInt(document.getElementById('schedDayOfMonth').value, 10) || 1,
+      custom_cron: document.getElementById('schedCustomCron').value.trim() || null,
+      timezone: document.getElementById('schedTimezone').value || 'UTC',
+      filter_params: filter_params,
+      channels: channels,
+      format: 'pdf',
+      include_insights: false,   // scheduled sends never include AI insights
+    };
+
+    const saveBtn = document.getElementById('schedSaveBtn');
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+    try {
+      const url = EDITING_ID ? BASE + '/schedules/' + encodeURIComponent(EDITING_ID) : BASE + '/schedules';
+      const method = EDITING_ID ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method, credentials:'same-origin',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      // Refresh list + go back
+      await loadAll();
+      show(panelList);
+      if (window.Fluxito && Fluxito.toast) Fluxito.toast(EDITING_ID ? 'Schedule updated' : 'Schedule created');
+    } catch (e) {
+      err.textContent = 'Save failed: ' + (e.message || '');
+      err.style.display = 'block';
+    } finally {
+      saveBtn.disabled = false; saveBtn.textContent = 'Save schedule';
+    }
+  }
+
+  async function deleteSchedule(){
+    if (!EDITING_ID) return;
+    if (!confirm('Delete this schedule? This cannot be undone.')) return;
+    const res = await fetch(BASE + '/schedules/' + encodeURIComponent(EDITING_ID), {
+      method: 'DELETE', credentials: 'same-origin',
+    });
+    if (!res.ok) {
+      const d = await safeJson(res);
+      alert('Delete failed: ' + (d.error || res.status));
+      return;
+    }
+    await loadAll();
+    show(panelList);
+    if (window.Fluxito && Fluxito.toast) Fluxito.toast('Schedule deleted');
+  }
+
+  async function toggleSchedule(sid){
+    const s = SCHEDULES.find(x => x.id === sid);
+    if (!s) return;
+    const res = await fetch(BASE + '/schedules/' + encodeURIComponent(sid), {
+      method: 'PATCH', credentials:'same-origin',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({enabled: !s.enabled}),
+    });
+    if (!res.ok) {
+      const d = await safeJson(res);
+      alert('Toggle failed: ' + (d.error || res.status));
+      return;
+    }
+    await loadAll();
+  }
+
+  async function runScheduleNow(sid){
+    const s = SCHEDULES.find(x => x.id === sid);
+    if (!s) return;
+    if (!confirm('Send this report right now to all configured recipients?')) return;
+    const res = await fetch(BASE + '/schedules/' + encodeURIComponent(sid) + '/run', {
+      method: 'POST', credentials:'same-origin',
+    });
+    const d = await safeJson(res);
+    if (!res.ok) {
+      alert('Run failed: ' + (d.error || res.status));
+      return;
+    }
+    if (window.Fluxito && Fluxito.toast) Fluxito.toast('Report sent — check run history');
+    await loadAll();
+  }
+
+  async function openRunHistory(sid){
+    const s = SCHEDULES.find(x => x.id === sid);
+    if (!s) return;
+    document.getElementById('schedRunsTitle').textContent = 'Recent runs — ' + s.name;
+    const host = document.getElementById('schedRunsList');
+    host.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted);">Loading…</div>';
+    show(panelRuns);
+    try {
+      const res = await fetch(BASE + '/schedules/' + encodeURIComponent(sid) + '/runs', {credentials:'same-origin'});
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || res.status);
+      const runs = data.runs || [];
+      if (!runs.length) {
+        host.innerHTML = '<div class="sched-empty">No runs yet. Use "Run now" on the list page to fire one immediately.</div>';
+        return;
+      }
+      host.innerHTML = runs.map(r => {
+        const dur = r.duration_ms != null ? (r.duration_ms + ' ms') : '—';
+        const dot = statusClass(r.status);
+        const errLine = r.error ? '<div class="run-err">' + esc(r.error) + '</div>' : '';
+        return '<div class="run-row">' +
+          '<span class="status-dot ' + dot + '"></span>' +
+          '<span>' + esc(fmtDate(r.started_at)) + ' · ' + esc(r.status) + ' · ' + esc(r.triggered_by) + '</span>' +
+          '<span>' + (r.channels_succeeded || 0) + '/' + ((r.channels_succeeded || 0) + (r.channels_failed || 0)) + ' ok</span>' +
+          '<span>' + esc(dur) + '</span>' +
+          errLine +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      host.innerHTML = '<div class="sched-empty" style="color:#ef4444;">Failed to load runs: ' + esc(e.message||'') + '</div>';
+    }
+  }
+
+  // ── Public API ──────────────────────────────────────────────────────
+  const Scheds = {
+    open: async function(){
+      show(panelList);
+      document.getElementById('schedListContainer').innerHTML =
+        '<div style="padding:30px; text-align:center; color:var(--text-muted);">Loading schedules…</div>';
+      modal.classList.add('is-open');
+      try { await loadAll(); }
+      catch (e) {
+        document.getElementById('schedListContainer').innerHTML =
+          '<div class="sched-empty" style="color:#ef4444;">Failed to load: ' + esc(e.message||'') + '</div>';
+      }
+    },
+    close: function(){ modal.classList.remove('is-open'); },
+  };
+  window.Scheds = Scheds;
+
+  // ── Wire up buttons ─────────────────────────────────────────────────
+  document.getElementById('btnNewSchedule').addEventListener('click', openNewForm);
+  document.getElementById('schedFormBack').addEventListener('click', (e) => { e.preventDefault(); show(panelList); });
+  document.getElementById('schedCancelBtn').addEventListener('click', () => show(panelList));
+  document.getElementById('schedSaveBtn').addEventListener('click', saveForm);
+  document.getElementById('schedDeleteBtn').addEventListener('click', deleteSchedule);
+  document.getElementById('schedRunsBack').addEventListener('click', (e) => { e.preventDefault(); show(panelList); });
+  document.getElementById('btnAddEmailChannel').addEventListener('click', () => addEmailChannel());
+  document.getElementById('btnAddSlackChannel').addEventListener('click', () => addSlackChannel());
+
+  // Cadence chip toggle
+  document.querySelectorAll('#schedCadenceChips .chip').forEach(chip => {
+    chip.addEventListener('click', () => setCadence(chip.dataset.cadence));
+  });
+})();
+</script>

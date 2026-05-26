@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% block title %}{{ template.title }} — Fluxito Templates{% endblock %}
+{% set active = 'templates' %}
+
+{% block main %}
+<main class="app-main">
+
+  <div class="breadcrumbs">
+    <a href="/templates">Templates</a>
+    <span class="sep">›</span>
+    <span class="crumb-mid">{{ template.category | replace('_',' ') | title }}</span>
+    <span class="sep">›</span>
+    <span class="crumb-cur">{{ template.title }}</span>
+  </div>
+
+  {% set cat_colors = {
+    'ecommerce': '#10b981',
+    'ppc': '#f59e0b',
+    'seo': '#3b82f6',
+    'gtm': '#8b5cf6',
+    'analytics': '#06b6d4',
+    'cross_channel': '#ec4899',
+    'warehouse': '#64748b',
+    'custom': '#4b7bec',
+  } %}
+  {% set cat_color = cat_colors.get(template.category, '#4b7bec') %}
+
+  <div class="ad-header">
+    <div class="ad-header-top">
+      <div class="auto-icon" style="width:56px;height:56px;font-size:22px;background:{{ cat_color }}18;color:{{ cat_color }}">
+        {{ template.category[0] | upper }}
+      </div>
+      <div style="flex:1;min-width:0">
+        <span class="label">{{ template.category | replace('_',' ') | title }}</span>
+        <h1 style="margin-top:4px">{{ template.title }}</h1>
+        <div class="ad-flags">
+          {% if template.is_featured %}<span class="t-flag">★ Featured</span>{% endif %}
+          {% if template.type == 'system' %}
+            <span class="t-flag system">Built-in</span>
+          {% else %}
+            <span class="t-flag custom">Custom</span>
+          {% endif %}
+          <span class="t-flag">{{ template.min_tier | title }} plan</span>
+        </div>
+      </div>
+    </div>
+
+    {% if template.description %}
+    <p class="ad-desc">{{ template.description }}</p>
+    {% endif %}
+
+    <div class="ad-stat-row">
+      <div class="ad-stat">
+        <span class="l">Steps</span>
+        <span class="v mono">{{ template.steps | length }}</span>
+      </div>
+      <div class="ad-stat">
+        <span class="l">Platforms</span>
+        <span class="v mono">{{ template.required_platforms | length }}</span>
+      </div>
+      <div class="ad-stat">
+        <span class="l">Deploys</span>
+        <span class="v mono">{{ template.use_count }}</span>
+      </div>
+      {% if template.variables %}
+      <div class="ad-stat">
+        <span class="l">Variables</span>
+        <span class="v mono">{{ template.variables | length }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="td-cta-row">
+      {% if can_deploy %}
+      <button class="btn primary" onclick="deployTemplate('{{ template.slug }}','{{ template.title | e }}')">
+        Deploy as Dashboard <span class="arrow">→</span>
+      </button>
+      {% else %}
+      <button class="btn" disabled>Missing platforms</button>
+      {% endif %}
+      <a href="/templates" class="btn">Back to library</a>
+    </div>
+  </div>
+
+  {% if template.required_platforms %}
+  <div class="td-section">
+    <div class="td-section-label">Required platforms</div>
+    <div class="td-plat-row">
+      {% for p in template.required_platforms %}
+      {% set is_connected = p in connected_platforms %}
+      <div class="td-plat {% if is_connected %}on{% else %}off{% endif %}">
+        <span class="dot"></span>
+        <span class="name">{{ p | replace('_',' ') | title }}</span>
+        {% if is_connected %}
+        <span class="status">Connected</span>
+        {% else %}
+        <a href="/connect" class="status link">Connect →</a>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if template.variables %}
+  <div class="td-section">
+    <div class="td-section-label">Variables</div>
+    <div class="ad-card" style="margin-top:0">
+      <p class="ad-card-sub">These values are filled in at deploy time — from defaults or your connected accounts.</p>
+      <div class="td-vars-grid">
+        {% for v in template.variables %}
+        <div class="td-var">
+          <div class="td-var-label">{{ v.label }}</div>
+          <div class="td-var-meta mono">
+            {{ v.type | title }}
+            {% if v.default %} · Default: <span class="td-var-code">{{ v.default }}</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="td-section">
+    <div class="td-section-label">What this template does</div>
+    <div class="td-steps">
+      {% for step in template.steps %}
+      <div class="td-step-row">
+        <div class="td-step-rail">
+          <div class="td-step-num" style="background:{{ cat_color }}18;color:{{ cat_color }};border-color:{{ cat_color }}40">
+            {{ loop.index }}
+          </div>
+          {% if not loop.last %}<div class="td-step-line"></div>{% endif %}
+        </div>
+
+        <div class="td-step-card">
+          <div class="td-step-hd">
+            <h3>{{ step.card_title }}</h3>
+            <span class="t-flag">{{ step.card_type }}</span>
+          </div>
+
+          <div class="td-step-tags">
+            {% if step.platform %}<span class="t-cat">{{ step.platform | replace('_',' ') | title }}</span>{% endif %}
+            <span class="t-flag">{{ step.tool }}</span>
+          </div>
+
+          <div class="td-step-body">
+            {% set action = step.params.get('action', '') %}
+            {% if action %}
+            <div class="td-action-line">
+              <strong>Action:</strong>
+              <code>{{ action }}</code>
+            </div>
+            {% endif %}
+
+            {% set skip_keys = ['platform', 'action'] %}
+            {% set visible_params = [] %}
+            {% for k, v in step.params.items() if k not in skip_keys %}
+              {% if visible_params.append({'key': k, 'val': v}) %}{% endif %}
+            {% endfor %}
+
+            {% if visible_params %}
+            <div class="td-params">
+              {% for p in visible_params %}
+              <div class="td-param-row">
+                <span class="k">{{ p.key }}:</span>
+                <span class="v">
+                  {% if p.val is string and p.val.startswith('{{') %}
+                    <span class="tmpl">{{ p.val }}</span>
+                  {% elif p.val is sequence and p.val is not string %}
+                    [{{ p.val | join(', ') }}]
+                  {% else %}
+                    {{ p.val }}
+                  {% endif %}
+                </span>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="td-bottom-cta">
+    <div>
+      <div class="td-bottom-title">Ready to deploy?</div>
+      <div class="td-bottom-sub">This template creates a live dashboard with {{ template.steps | length }} cards.</div>
+    </div>
+    {% if can_deploy %}
+    <button class="btn primary" onclick="deployTemplate('{{ template.slug }}','{{ template.title | e }}')">Deploy <span class="arrow">→</span></button>
+    {% else %}
+    <a href="/connect" class="btn">Connect missing platforms</a>
+    {% endif %}
+  </div>
+
+</main>
+
+<style>
+.breadcrumbs {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 0 28px; font-size: 12.5px;
+  color: var(--muted); font-family: var(--mono); letter-spacing: 0.02em;
+}
+.breadcrumbs a { color: var(--ink); text-decoration: none; font-weight: 500; }
+.breadcrumbs a:hover { text-decoration: underline; }
+.breadcrumbs .sep { opacity: 0.5; }
+.breadcrumbs .crumb-cur { color: var(--ink); font-weight: 500; }
+
+.ad-card {
+  padding: 24px 28px;
+  border: 1px solid var(--line); border-radius: var(--r-l);
+  background: var(--bg);
+  margin-top: 20px;
+}
+.ad-card h2 { font-size: 18px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+.ad-card-sub { font-size: 13px; color: var(--ink-soft); margin: 0 0 20px; }
+
+.ad-header {
+  padding: 28px 32px;
+  border: 1px solid var(--line); border-radius: var(--r-l);
+  background: var(--bg);
+  margin-bottom: 24px;
+}
+.ad-header-top { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 14px; }
+.ad-header h1 { font-size: clamp(24px,3vw,32px); line-height: 1.15; margin: 0; }
+.ad-flags { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+
+.ad-desc {
+  font-size: 15px; color: var(--ink-soft); line-height: 1.6;
+  margin: 14px 0 20px;
+}
+
+.ad-stat-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 20px; padding: 18px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+}
+.ad-stat { text-align: center; }
+.ad-stat .l {
+  display: block; font-size: 11px; font-weight: 500; font-family: var(--mono);
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+}
+.ad-stat .v {
+  display: block; font-size: 14.5px; font-weight: 600; color: var(--ink); margin-top: 4px;
+}
+.ad-stat .v.mono { font-family: var(--mono); }
+
+.td-cta-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+.td-section { margin-top: 32px; }
+.td-section-label {
+  font-size: 11px; font-weight: 500; font-family: var(--mono);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); margin-bottom: 14px;
+}
+
+.td-plat-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.td-plat {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px;
+  border: 1px solid var(--line); border-radius: var(--r-m);
+  background: var(--bg);
+}
+.td-plat.on { border-color: color-mix(in srgb, var(--green) 40%, var(--line)); }
+.td-plat.off { border-color: color-mix(in srgb, var(--amber) 30%, var(--line)); opacity: 0.9; }
+.td-plat .dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--muted);
+}
+.td-plat.on .dot { background: var(--green); }
+.td-plat.off .dot { background: var(--amber); }
+.td-plat .name { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+.td-plat .status {
+  font-size: 11.5px; font-weight: 500; font-family: var(--mono);
+  color: var(--green); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.td-plat .status.link { color: var(--ink); text-decoration: none; }
+.td-plat .status.link:hover { text-decoration: underline; }
+
+.td-vars-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+.td-var {
+  padding: 12px 14px;
+  border: 1px solid var(--line-2); border-radius: var(--r-m);
+  background: var(--bg-2);
+}
+.td-var-label { font-size: 13px; font-weight: 600; color: var(--ink); }
+.td-var-meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; letter-spacing: 0.02em; }
+.td-var-code {
+  padding: 1px 6px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 4px; font-size: 11px;
+}
+
+.td-steps { display: flex; flex-direction: column; gap: 0; }
+.td-step-row { display: flex; gap: 20px; position: relative; }
+.td-step-rail {
+  display: flex; flex-direction: column; align-items: center;
+  flex-shrink: 0; width: 36px;
+}
+.td-step-num {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 13.5px; font-family: var(--mono);
+  border: 2px solid; z-index: 1;
+}
+.td-step-line { width: 2px; flex: 1; background: var(--line); min-height: 20px; }
+
+.td-step-card {
+  flex: 1;
+  padding: 18px 20px;
+  border: 1px solid var(--line); border-radius: var(--r-m);
+  background: var(--bg);
+  margin-bottom: 14px;
+}
+.td-step-hd {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px; margin-bottom: 8px;
+}
+.td-step-hd h3 {
+  margin: 0; font-size: 15px; font-weight: 600;
+  color: var(--ink); line-height: 1.3;
+}
+.td-step-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.td-step-body { font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; }
+
+.td-action-line { margin-bottom: 6px; }
+.td-action-line strong { color: var(--ink); font-weight: 600; }
+.td-action-line code {
+  padding: 1px 6px; background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 4px; font-size: 11.5px; font-family: var(--mono);
+}
+
+.td-params {
+  margin-top: 8px; padding: 10px 14px;
+  background: var(--bg-2); border-radius: var(--r-m);
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.7;
+}
+.td-param-row .k { color: var(--muted); }
+.td-param-row .v { color: var(--ink); }
+.td-param-row .tmpl { color: var(--blue); }
+
+.td-bottom-cta {
+  margin-top: 40px; padding-top: 32px;
+  border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+}
+.td-bottom-title { font-size: 16px; font-weight: 600; color: var(--ink); }
+.td-bottom-sub { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+
+.t-flag {
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 600;
+  padding: 3px 8px; border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  color: var(--muted); letter-spacing: 0.02em;
+}
+.t-flag.system { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue); }
+.t-flag.custom { background: color-mix(in srgb, var(--purple) 10%, transparent); color: var(--purple); }
+
+.t-cat {
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 600;
+  padding: 3px 8px; border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  color: var(--muted); letter-spacing: 0.02em;
+}
+
+@media (max-width: 680px) {
+  .td-step-row { gap: 14px; }
+  .td-step-rail { width: 28px; }
+  .td-step-num { width: 28px; height: 28px; font-size: 12px; }
+}
+</style>
+
+<script>
+async function deployTemplate(slug, title) {
+  if (!confirm('Deploy "' + title + '" as a new live dashboard?')) return;
+  const res = await fetch('/api/templates/deploy', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template_slug: slug })
+  });
+  const data = await res.json();
+  if (data.success) {
+    if (typeof Fluxito !== 'undefined' && Fluxito.toast) Fluxito.toast('Dashboard deployed!');
+    else alert('Dashboard deployed!');
+    setTimeout(() => window.location.href = data.live_url, 600);
+  } else {
+    const msg = data.message || 'Deploy failed';
+    if (typeof Fluxito !== 'undefined' && Fluxito.toast) Fluxito.toast(msg, 'error');
+    else alert(msg);
+  }
+}
+</script>
+{% endblock %}

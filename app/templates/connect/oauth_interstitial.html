@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% from "partials/platform_icons.html" import platform_icon %}
+{% block title %}Connect {{ platform_name }} — Fluxito{% endblock %}
+{% set active = 'connect' %}
+
+{% block main %}
+<main class="app-main" style="max-width:680px">
+  <div class="breadcrumbs">
+    <a href="/connect">← All connections</a>
+  </div>
+
+  {# ── Header ── #}
+  <div class="oi-head">
+    <div class="oi-icon">{{ platform_icon(platform_slug, 30) }}</div>
+    <div class="oi-head-main">
+      <span class="label">Authorize access</span>
+      <h1>Connect <em class="serif-italic">{{ platform_name }}.</em></h1>
+      <p>{{ platform_desc }}</p>
+    </div>
+  </div>
+
+  {# ── Permissions ── #}
+  <div class="oi-section">
+    <div class="oi-section-label">Permissions requested</div>
+
+    <div class="oi-perm-list">
+      {% for emoji, scope, description in permissions %}
+      <div class="oi-perm">
+        <div class="oi-perm-emoji">{{ emoji }}</div>
+        <div class="oi-perm-body">
+          <div class="oi-perm-scope">{{ scope }}</div>
+          <div class="oi-perm-desc">{{ description }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# ── Info note ── #}
+    <div class="oi-info">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="oi-info-ic"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      <div class="oi-info-text">
+        You'll be redirected to {{ platform_name }} to authorize access. Fluxito only requests the minimum scopes needed. You can revoke anytime from your {{ platform_name }} account settings.
+      </div>
+    </div>
+
+    {# ── Actions ── #}
+    <div class="oi-actions">
+      <a href="{{ authorize_url }}" class="btn primary oi-cta" style="background:{{ btn_bg }};color:{{ btn_text_color }};box-shadow:{{ btn_shadow }};border:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        Connect with {{ platform_name }}
+      </a>
+      <a href="/connect" class="btn">Cancel</a>
+    </div>
+  </div>
+</main>
+
+<style>
+.breadcrumbs {
+  font-size: 12px; color: var(--muted);
+  margin-bottom: 14px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.breadcrumbs a { color: var(--ink-soft); text-decoration: none; }
+.breadcrumbs a:hover { color: var(--ink); }
+
+.oi-head {
+  display: flex; align-items: flex-start; gap: 18px;
+  padding-bottom: 28px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line-2);
+}
+.oi-icon {
+  width: 58px; height: 58px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.oi-head-main { flex: 1; min-width: 0; }
+.oi-head-main h1 {
+  font-size: clamp(24px, 3.5vw, 32px);
+  font-weight: 500; letter-spacing: -0.02em;
+  margin: 6px 0 6px; color: var(--ink);
+  line-height: 1.15;
+}
+.oi-head-main p {
+  font-size: 14px; color: var(--ink-soft);
+  line-height: 1.55; margin: 0;
+}
+
+.oi-section-label {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  font-family: var(--mono);
+  margin-bottom: 14px;
+}
+
+.oi-perm-list {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.oi-perm {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 18px 20px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+}
+.oi-perm-emoji { font-size: 20px; flex-shrink: 0; margin-top: 1px; line-height: 1; }
+.oi-perm-body { flex: 1; min-width: 0; }
+.oi-perm-scope {
+  font-size: 14.5px; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.oi-perm-desc {
+  font-size: 13px; color: var(--ink-soft);
+  margin-top: 4px; line-height: 1.55;
+}
+
+.oi-info {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-top: 20px;
+  padding: 14px 18px;
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 25%, var(--line));
+  border-radius: var(--r-m);
+}
+.oi-info-ic { color: var(--blue); flex-shrink: 0; margin-top: 2px; }
+.oi-info-text {
+  font-size: 13px; color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.oi-actions {
+  display: flex; gap: 12px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+.oi-cta {
+  flex: 1; min-width: 240px;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  font-size: 14px;
+}
+</style>
+{% endblock %}

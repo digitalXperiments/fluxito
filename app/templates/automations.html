@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% block title %}Automations — Fluxito{% endblock %}
+{% set active = 'automations' %}
+
+{% block main %}
+<main class="app-main">
+
+  <div class="page-head">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap">
+      <div style="flex:1;min-width:280px">
+        <span class="label">Scheduled monitors{% if show_mine %} · yours{% endif %}</span>
+        <h1>Automations on <em class="serif-italic">a cadence.</em></h1>
+        <p>Cowork-native scheduled monitor recipes. Pick an automation, choose a channel, and Cowork runs it on its own schedule — daily digests, anomaly watchers, budget pacing, tracking-health checks. Zero server-side compute.</p>
+      </div>
+      {% if user %}
+      <a href="/automations/new" class="btn primary" style="white-space:nowrap">+ New Automation</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if user %}
+  <div class="t-seg">
+    <a href="/automations{% if current_theme %}?theme={{ current_theme }}{% endif %}"
+       class="{% if not show_mine %}is-active{% endif %}">
+      Curated <span class="t-seg-count">{{ system_count }}</span>
+    </a>
+    <a href="/automations?mine=1{% if current_theme %}&theme={{ current_theme }}{% endif %}"
+       class="{% if show_mine %}is-active{% endif %}">
+      My Automations <span class="t-seg-count">{{ user_count }}</span>
+    </a>
+  </div>
+  {% endif %}
+
+  <div class="t-filters">
+    <a href="/automations{% if show_mine %}?mine=1{% endif %}"
+       class="t-chip-filter {% if not current_theme %}is-active{% endif %}">All themes</a>
+    {% for th in themes %}
+    <a href="/automations?theme={{ th.key }}{% if show_mine %}&mine=1{% endif %}"
+       class="t-chip-filter {% if current_theme == th.key %}is-active{% endif %}">{{ th.label }}</a>
+    {% endfor %}
+  </div>
+
+  {% if automations %}
+  <div class="auto-grid">
+    {% for p in automations %}
+    {% set theme_colors = {
+      'daily_digest': '#10b981',
+      'anomaly': '#ef4444',
+      'pacing': '#f59e0b',
+      'exec_summary': '#8b5cf6',
+      'tag_health': '#06b6d4',
+      'launch_monitor': '#ec4899',
+    } %}
+    {% set theme_color = theme_colors.get(p.theme, '#4b7bec') %}
+    <a href="/automations/{{ p.slug }}" class="auto-card">
+      <div class="auto-hd">
+        <div class="auto-icon" style="background:{{ theme_color }}14;color:{{ theme_color }}">
+          {% if p.theme == 'daily_digest' %}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          {% elif p.theme == 'anomaly' %}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          {% elif p.theme == 'pacing' %}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          {% elif p.theme == 'exec_summary' %}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          {% elif p.theme == 'tag_health' %}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          {% elif p.theme == 'launch_monitor' %}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          {% else %}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          {% endif %}
+        </div>
+        <div class="auto-hd-body">
+          <div class="auto-title">{{ p.title }}</div>
+          <div class="auto-flags">
+            <span class="t-cat">{{ p.theme_label }}</span>
+            {% if p.is_featured %}<span class="t-flag">★ Featured</span>{% endif %}
+            {% if p.type == 'system' %}
+              <span class="t-flag system">Built-in</span>
+            {% else %}
+              <span class="t-flag custom">Custom</span>
+            {% endif %}
+            {% if p.min_tier == 'pro' %}<span class="t-flag" style="background:color-mix(in srgb,#8b5cf6 12%,transparent);color:#8b5cf6">Pro</span>
+            {% elif p.min_tier == 'team' %}<span class="t-flag" style="background:color-mix(in srgb,#ec4899 12%,transparent);color:#ec4899">Team</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if p.description %}
+      <p class="auto-desc">{{ p.description[:200] }}{% if p.description|length > 200 %}…{% endif %}</p>
+      {% endif %}
+
+      <div class="auto-meta">
+        {% if p.default_schedule_label %}<span title="Suggested cadence">⏱ {{ p.default_schedule_label }}</span>{% endif %}
+        {% if p.cooldown_hours and p.cooldown_hours > 0 %}<span>· {{ p.cooldown_hours }}h cooldown</span>{% endif %}
+      </div>
+
+      {% if p.required_platforms %}
+      <div class="auto-plats">
+        {% for plat in p.required_platforms %}
+        {% if plat in connected_platforms %}
+        <span class="auto-plat-pill on">✓ {{ plat | replace('_',' ') | title }}</span>
+        {% else %}
+        <span class="auto-plat-pill">{{ plat | replace('_',' ') | title }}</span>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="auto-foot">
+        <div class="auto-foot-meta">
+          {% if p.use_count and p.use_count > 0 %}<span>{{ p.use_count }} install{% if p.use_count != 1 %}s{% endif %}</span>{% endif %}
+          {% if not p.all_connected %}<span class="needs">Needs: {{ p.missing_platforms | join(', ') }}</span>{% endif %}
+        </div>
+        <span class="auto-open">View &amp; install <span class="arrow">→</span></span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="audit-empty">
+    {% if show_mine %}
+    <h3>No custom automations yet</h3>
+    <p>Build your own monitor with the New Automation button, or browse the curated library for inspiration.</p>
+    <a href="/automations" class="btn" style="margin-top:16px">Browse curated</a>
+    {% else %}
+    <h3>No automations match this filter</h3>
+    <p>Try a different theme, or view all themes.</p>
+    <a href="/automations" class="btn" style="margin-top:16px">All themes</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="auto-tip">
+    <strong>How automations work —</strong>
+    Each automation is a self-contained prompt that <a href="https://claude.com" target="_blank">Claude in Cowork</a>
+    runs on a cron you choose. Cowork's scheduler does the work — Fluxito never runs anything in the background.
+    The prompt reads &amp; writes a workspace state file so anomaly automations don't re-fire unnecessarily, and
+    posts results to the channel you pick at install time.
+  </div>
+</main>
+
+<style>
+/* ── Segmented tabs: Curated / My Automations ── */
+.t-seg {
+  display: inline-flex;
+  gap: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 20px;
+}
+.t-seg a {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 18px;
+  font-family: var(--sans);
+  font-size: 13px; font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  border-radius: 8px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.t-seg a:hover { color: var(--ink); }
+.t-seg a.is-active {
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(11, 11, 14, 0.06), 0 0 0 1px var(--line);
+}
+.t-seg-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px;
+  padding: 0 6px;
+  font-family: var(--mono);
+  font-size: 11px; font-weight: 600;
+  border-radius: 6px;
+  background: var(--bg-3);
+  color: var(--muted);
+  line-height: 1;
+}
+.t-seg a.is-active .t-seg-count {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+/* ── Filter chips: theme row ── */
+.t-filters {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.t-chip-filter {
+  display: inline-flex; align-items: center;
+  padding: 6px 14px;
+  font-family: var(--sans);
+  font-size: 12px; font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.t-chip-filter:hover {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+  background: var(--bg-2);
+}
+.t-chip-filter.is-active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+  font-weight: 600;
+}
+
+/* ── Card CTA: View & install ── */
+.auto-open {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px;
+  font-family: var(--sans);
+  font-size: 12px; font-weight: 600;
+  color: var(--bg);
+  background: var(--ink);
+  border-radius: 8px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.auto-open .arrow { transition: transform 0.15s; }
+.auto-card:hover .auto-open { opacity: 0.85; }
+.auto-card:hover .auto-open .arrow { transform: translateX(3px); }
+
+/* ── Category pill ── */
+.t-cat {
+  display: inline-flex; align-items: center;
+  font-family: var(--mono);
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--bg-3);
+  color: var(--ink-soft);
+  line-height: 1;
+}
+
+.auto-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.auto-card {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 24px 26px;
+  border: 1px solid var(--line); border-radius: 14px;
+  background: var(--bg); text-decoration: none; color: inherit;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+.auto-card:hover {
+  border-color: var(--ink);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -6px rgba(11, 11, 14, 0.08);
+}
+
+.auto-hd { display: flex; gap: 14px; align-items: flex-start; }
+.auto-icon {
+  width: 42px; height: 42px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 16px; flex-shrink: 0;
+  font-family: var(--mono);
+}
+.auto-hd-body { flex: 1; min-width: 0; }
+.auto-title {
+  font-size: 16px; font-weight: 600; color: var(--ink);
+  letter-spacing: -0.015em; line-height: 1.3;
+}
+.auto-flags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+.auto-desc {
+  margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.6; flex: 1;
+}
+
+.auto-meta {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: 0.03em;
+}
+
+.auto-plats { display: flex; gap: 6px; flex-wrap: wrap; }
+.auto-plat-pill {
+  font-size: 10px; font-weight: 600; font-family: var(--mono);
+  padding: 3px 9px; border-radius: 6px;
+  background: var(--bg-3); color: var(--muted);
+  border: 1px solid var(--line-2);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.auto-plat-pill.on {
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 25%, transparent);
+}
+
+.auto-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 14px; border-top: 1px solid var(--line-2);
+  font-size: 12px;
+}
+.auto-foot-meta {
+  display: flex; gap: 14px; color: var(--muted); flex-wrap: wrap;
+  font-family: var(--mono); letter-spacing: 0.02em; font-size: 11px;
+}
+.auto-foot-meta .needs { color: var(--amber); }
+
+.auto-tip {
+  margin-top: 36px; padding: 18px 22px;
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  font-size: 13.5px; color: var(--ink-soft); line-height: 1.6;
+}
+.auto-tip strong { color: var(--ink); font-weight: 600; }
+.auto-tip a { color: var(--ink); }
+
+@media (max-width: 680px) {
+  .auto-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}

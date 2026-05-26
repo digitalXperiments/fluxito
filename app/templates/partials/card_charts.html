@@ -1,0 +1,634 @@
+{# Shared chart mounting logic for all dashboard views.
+   Requires:
+     - ECharts loaded: <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js" defer></script>
+     - window.Fluxito from partials/card_renderer_js.html (for fmtNum/esc)
+     - Cards rendered with [data-card-id] and [data-chart] elements
+   Provides:
+     - window.Fluxito.mountCharts(cards, gridEl?) — mounts ECharts into chart slots
+
+   Smart features:
+     - Honors card.snap.chart_config (explicit type/series/colors/axes)
+     - Auto-detects date columns → forces line; categorical → bar
+     - Horizontal bar when label is categorical and ≤8 rows
+     - Dual y-axis when series scales diverge by >5×
+     - Highlights last-period data point (current quarter / most recent date)
+     - Single-series by default; multi-series only if chart_config asks or shapes align
+#}
+<script>
+(function(){
+  var F = window.Fluxito = window.Fluxito || {};
+  var _instances = {};
+
+  var _MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Detect if a string looks like a date/time label
+  function looksLikeDate(s){
+    if (s === null || s === undefined) return false;
+    s = String(s).trim();
+    if (!s) return false;
+    // ISO-ish: 2024-01-05, 2024-01, 2024, 2024-Q1, FY24-Q1, FY24Q1
+    if (/^\d{4}(-\d{1,2}(-\d{1,2})?)?$/.test(s)) return true;
+    if (/^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(s)) return true;
+    if (/^(FY)?\d{2,4}[\- ]?Q[1-4]$/i.test(s)) return true;
+    if (/^Q[1-4][\- ]?\d{2,4}$/i.test(s)) return true;
+    if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(s)) return true;
+    // Month names
+    if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(s)) return true;
+    // YYYYMMDD compact integer (e.g. 20251126)
+    if (/^\d{8}$/.test(s)) {
+      var y = parseInt(s.slice(0,4), 10), mo = parseInt(s.slice(4,6), 10), d = parseInt(s.slice(6,8), 10);
+      if (y > 1900 && y < 2100 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return true;
+    }
+    return false;
+  }
+
+  // Format a date-like label into a human-readable string
+  function fmtDateLabel(s){
+    s = String(s).trim();
+    if (/^\d{8}$/.test(s)) {
+      var mo = parseInt(s.slice(4,6), 10) - 1;
+      var d = parseInt(s.slice(6,8), 10);
+      return (_MONTH_SHORT[mo] || s.slice(4,6)) + ' ' + d + ', ' + s.slice(0,4);
+    }
+    return s;
+  }
+
+  // Format a month-number label (1–12) into abbreviated month name
+  function fmtMonthLabel(s){
+    var n = parseInt(s, 10);
+    return (n >= 1 && n <= 12) ? _MONTH_SHORT[n-1] : s;
+  }
+
+  // Column name looks like a month-number dimension
+  function isMonthNumCol(colName){
+    return /^month(_num(ber)?)?$/i.test(colName);
+  }
+
+  // Heuristic formatter for a numeric column based on its name.
+  // Removes underscores before matching so both camelCase and snake_case work.
+  function getColFmt(colName) {
+    var n = String(colName || '').toLowerCase().replace(/_/g, '');
+    // Rate / percentage: bounce_rate, ctr, engagement_rate, conversion_rate, click_rate…
+    if (/rate$/.test(n) || /^ctr$|ctr$|^cvr$|cvr$/.test(n)) {
+      return function(v) { return F.fmtMetricValue ? F.fmtMetricValue(v, 'percent') : v + '%'; };
+    }
+    // Duration: average_session_duration, session_duration, time_on_page, avg_time…
+    if (/duration|timeon|timespent|dwelltime|avgtime/.test(n)) {
+      return function(v) { return F.fmtMetricValue ? F.fmtMetricValue(v, 'duration_sec') : v + 's'; };
+    }
+    return function(v) { return F.fmtNum ? F.fmtNum(v) : v; };
+  }
+
+  function toNum(v){
+    var n = parseFloat(String(v==null?'':v).replace(/,/g,''));
+    return isNaN(n) ? 0 : n;
+  }
+
+  // A "derivative metric" is a column whose values are derived from other
+  // columns on the same row — typically a %-change, rate, ratio, or index.
+  // These should not be charted alongside their source metrics, because:
+  //   (a) mixing a % with an absolute value on the same chart is visually
+  //       confusing and forces meaningless dual axes,
+  //   (b) the %-series is usually small in magnitude but can be large in
+  //       absolute value (e.g. -98, +82), which fools the scale-sorter.
+  // Detection is purely name-based; the table still shows every column.
+  function isDerivativeMetric(colName){
+    if (!colName) return false;
+    var n = String(colName).toLowerCase();
+    // common suffixes/infixes for % change, rate, ratio, yoy/mom/wow/qoq deltas
+    return /(^|_)(pct|rate|ratio|share|index|delta|chg|change|growth|variance|diff)($|_)/.test(n)
+        || /(yoy|mom|wow|qoq|pct_?chg|chg_?pct|_pct$|_rate$|_ratio$|_share$)/.test(n);
+  }
+
+  // Given array of numbers, return max absolute value
+  function maxAbs(arr){
+    var m = 0;
+    for (var i=0;i<arr.length;i++){ var a = Math.abs(arr[i]); if (a > m) m = a; }
+    return m;
+  }
+
+  // Decide if two series should share a y-axis or be split (scale divergence >5×)
+  function scalesDivergent(a, b){
+    var ma = maxAbs(a), mb = maxAbs(b);
+    if (ma === 0 || mb === 0) return false;
+    var ratio = ma > mb ? (ma/mb) : (mb/ma);
+    return ratio > 5;
+  }
+
+  // Palette (matches the accent used in Fluxito CSS vars, with companions)
+  function palette(isDark){
+    return {
+      accent:    isDark ? '#fbbf24' : '#b47800',   // amber (current brand)
+      primary:   isDark ? '#60a5fa' : '#2563eb',   // blue
+      secondary: isDark ? '#34d399' : '#059669',   // green
+      neg:       isDark ? '#f87171' : '#dc2626',   // red
+      neutral:   isDark ? '#9ca3af' : '#6b7280',   // gray
+      pink:      isDark ? '#f472b6' : '#db2777',
+      cyan:      isDark ? '#22d3ee' : '#0891b2',
+      muted:     isDark ? '#64748b' : '#94a3b8',
+    };
+  }
+
+  // Resolve a semantic color role or hex to an actual color
+  function resolveColor(val, pal){
+    if (!val) return null;
+    if (val.charAt && val.charAt(0) === '#') return val;
+    return pal[val] || pal.primary;
+  }
+
+  // Build a series spec with highlight on the last (most recent) data point
+  function withHighlightLast(data, baseColor, highlightColor){
+    return data.map(function(v, i){
+      var isLast = i === data.length - 1;
+      return {
+        value: v,
+        itemStyle: isLast ? {color: highlightColor} : {color: baseColor},
+      };
+    });
+  }
+
+  // ── Auto-renderer: no chart_config ─────────────────────────────────────
+  function autoTableChart(inst, card, axisColor, gridColor, pal){
+    var snap = card.snap || {};
+    var rows = snap.rows || [];
+    var columns = snap.columns || [];
+    if (!rows.length || !columns.length) { inst.clear(); return; }
+
+    var numericCols = F.numericColsOf ? F.numericColsOf(columns, rows) : columns.filter(function(c){
+      return rows.slice(0,5).every(function(r){ var v = String(r[c]||'').replace(/,/g,''); return v && !isNaN(parseFloat(v)); });
+    });
+    var labelCol = columns.find(function(c){ return numericCols.indexOf(c) === -1; }) || columns[0];
+    if (!labelCol || !numericCols.length) { inst.clear(); return; }
+
+    // Split into absolute vs derivative (pct/rate/yoy-chg) columns.
+    // If we have at least one absolute series, chart ONLY those — derivatives
+    // still appear in the table beneath the chart. If the card is *only*
+    // derivatives (e.g. a rates-only report), fall back to charting them.
+    // Always exclude the label/dimension column from chart series.
+    var absoluteCols = numericCols.filter(function(c){ return !isDerivativeMetric(c) && c !== labelCol; });
+    var chartCols = (absoluteCols.length ? absoluteCols : numericCols.filter(function(c){ return c !== labelCol; }));
+
+    // Decide orientation: if label is a date → line chart. Else categorical
+    // with ≤8 rows → horizontal bar. More rows → vertical bar.
+    var sampleLabels = rows.slice(0, Math.min(5, rows.length)).map(function(r){ return String(r[labelCol] == null ? '' : r[labelCol]); });
+    var dateLike = sampleLabels.length > 0 && sampleLabels.every(looksLikeDate) && sampleLabels[0] !== 'undefined';
+    var isMonthNum = !dateLike && isMonthNumCol(labelCol);
+
+    var take = Math.min(rows.length, 20);
+    // Always sort date/month dimensions ascending so charts read left→right chronologically
+    var takeRows = rows.slice(0, take);
+    if (dateLike || isMonthNum) {
+      takeRows = takeRows.slice().sort(function(a, b) {
+        var la = String(a[labelCol] == null ? '' : a[labelCol]);
+        var lb = String(b[labelCol] == null ? '' : b[labelCol]);
+        if (isMonthNum) return parseInt(la, 10) - parseInt(lb, 10);
+        return la < lb ? -1 : la > lb ? 1 : 0;
+      });
+    }
+    var rawLabels = takeRows.map(function(r){ return String(r[labelCol] == null ? '' : r[labelCol]); });
+    var labels = dateLike ? rawLabels.map(fmtDateLabel) : (isMonthNum ? rawLabels.map(fmtMonthLabel) : rawLabels);
+    var isHorizontal = !dateLike && !isMonthNum && take <= 8;
+
+    // Pick series: prefer a single primary metric unless the columns all look
+    // like sibling metrics (similar scale). Scale-divergent columns get split
+    // onto dual axes; very small ones are dropped.
+    var allSeries = chartCols.slice(0, 4).map(function(c){
+      return {col: c, data: takeRows.map(function(r){ return toNum(r[c]); })};
+    });
+
+    // Step 1: Drop any series that is all-zero
+    allSeries = allSeries.filter(function(s){ return maxAbs(s.data) > 0; });
+    if (!allSeries.length) { inst.clear(); return; }
+
+    // Step 2: Sort by scale descending so the biggest owns the left axis
+    allSeries.sort(function(a,b){ return maxAbs(b.data) - maxAbs(a.data); });
+
+    // Step 3: Assign to axes. The first series always goes on left axis.
+    // Every subsequent series: if its scale is within 2x of the left axis max,
+    // stays on left. Else goes on right axis (one right axis max). If a third
+    // series would need a third axis, drop it with a tooltip warning.
+    var leftSeries = [allSeries[0]];
+    var rightSeries = [];
+    var leftMax = maxAbs(allSeries[0].data);
+    for (var i=1; i<allSeries.length && leftSeries.length + rightSeries.length < 3; i++){
+      var s = allSeries[i];
+      var sMax = maxAbs(s.data);
+      var ratioLeft = Math.max(leftMax/(sMax||1e-9), sMax/(leftMax||1e-9));
+      if (ratioLeft <= 2) {
+        leftSeries.push(s);
+      } else if (!rightSeries.length) {
+        rightSeries.push(s);
+      } else {
+        // Would need a 3rd axis — skip. (Better UX to omit than mix scales.)
+      }
+    }
+
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var colors = [pal.primary, pal.secondary, pal.pink, pal.cyan];
+    var highlightColor = pal.accent;
+
+    // For line/bar charts: highlight last point by color-splitting the first series.
+    // In horizontal mode, the value axis is X, so dual axes use xAxisIndex;
+    // in vertical/line mode, value axis is Y, so dual axes use yAxisIndex.
+    function buildSeries(group, axisIndex, useColorIdx){
+      return group.map(function(s, i){
+        var color = colors[(useColorIdx + i) % colors.length];
+        var base = {
+          name: s.col,
+          data: s.data,
+          emphasis: {focus:'series'},
+        };
+        if (isHorizontal) { base.xAxisIndex = axisIndex; }
+        else { base.yAxisIndex = axisIndex; }
+        if (dateLike) {
+          // Line chart, highlight last point
+          return Object.assign(base, {
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            symbolSize: 6,
+            lineStyle: {width: 2.5, color: color},
+            itemStyle: {color: color},
+            areaStyle: {opacity: 0.10, color: color},
+            data: withHighlightLast(s.data, color, highlightColor),
+          });
+        }
+        if (isHorizontal) {
+          return Object.assign(base, {
+            type: 'bar',
+            barMaxWidth: 28,
+            itemStyle: {color: color, borderRadius: [0, 4, 4, 0]},
+          });
+        }
+        return Object.assign(base, {
+          type: 'bar',
+          barMaxWidth: 28,
+          itemStyle: {color: color, borderRadius: [4, 4, 0, 0]},
+          // Highlight the last bar (most recent period) in accent color
+          data: group.length === 1 ? withHighlightLast(s.data, color, highlightColor) : s.data,
+        });
+      });
+    }
+
+    var seriesAll = buildSeries(leftSeries, 0, 0).concat(buildSeries(rightSeries, 1, leftSeries.length));
+
+    var leftFmt = getColFmt(leftSeries[0].col);
+    var rightFmt = rightSeries.length ? getColFmt(rightSeries[0].col) : null;
+    // Build col→formatter map for tooltip so each series value shows with its own unit
+    var _fmtMap = {};
+    leftSeries.concat(rightSeries).forEach(function(s){ _fmtMap[s.col] = getColFmt(s.col); });
+    var tooltipFmt = function(params) {
+      if (!params || !params.length) return '';
+      var lines = ['<div style="font-size:12px;margin-bottom:2px;font-weight:600;">' + (F.esc ? F.esc(params[0].axisValue) : params[0].axisValue) + '</div>'];
+      params.forEach(function(p) {
+        var fmt = _fmtMap[p.seriesName] || (F.fmtNum || function(v){ return v; });
+        lines.push(p.marker + ' ' + (F.esc ? F.esc(p.seriesName) : p.seriesName) + ': <strong>' + fmt(p.value) + '</strong>');
+      });
+      return lines.join('<br/>');
+    };
+
+    var yAxes = [{
+      type: 'value',
+      axisLabel: {color: axisColor, fontSize: 10, formatter: leftFmt},
+      splitLine: {lineStyle: {color: gridColor}},
+      axisLine: {show: false},
+    }];
+    if (rightSeries.length) {
+      yAxes.push({
+        type: 'value',
+        position: 'right',
+        axisLabel: {color: axisColor, fontSize: 10, formatter: rightFmt},
+        splitLine: {show: false},
+        axisLine: {show: false},
+      });
+    }
+
+    var option;
+    if (isHorizontal) {
+      // Horizontal: value axis is X. Build dual xAxis if rightSeries present.
+      var xAxes = [{
+        type: 'value',
+        axisLabel: {color: axisColor, fontSize: 10, formatter: leftFmt},
+        splitLine: {lineStyle: {color: gridColor}},
+        axisLine: {show: false},
+      }];
+      if (rightSeries.length) {
+        xAxes.push({
+          type: 'value',
+          position: 'top',
+          axisLabel: {color: axisColor, fontSize: 10, formatter: rightFmt},
+          splitLine: {show: false},
+          axisLine: {show: false},
+        });
+      }
+      option = {
+        grid: {top: rightSeries.length ? 46 : 30, right: 30, bottom: 30, left: 10, containLabel: true},
+        tooltip: {trigger: 'axis', axisPointer: {type: 'shadow'}, formatter: tooltipFmt},
+        legend: {top: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
+        yAxis: {type: 'category', data: labels, axisLabel: {color: axisColor, fontSize: 11}, axisLine: {lineStyle: {color: gridColor}}, inverse: true},
+        xAxis: xAxes,
+        series: seriesAll,
+      };
+    } else {
+      option = {
+        grid: {top: 30, right: rightSeries.length ? 52 : 14, bottom: 30, left: 48, containLabel: true},
+        tooltip: {trigger: 'axis', axisPointer: {type: 'shadow'}, formatter: tooltipFmt},
+        legend: {top: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
+        xAxis: {type: 'category', data: labels, axisLabel: {color: axisColor, fontSize: 10, rotate: labels.length > 8 ? 35 : 0}, axisLine: {lineStyle: {color: gridColor}}},
+        yAxis: yAxes,
+        series: seriesAll,
+      };
+    }
+    inst.setOption(option, true);
+  }
+
+  // ── Explicit chart_config path ─────────────────────────────────────────
+  // chart_config shape:
+  //   {
+  //     type: "bar" | "hbar" | "line" | "area" | "stacked_bar" | "pie" | "donut",
+  //     x:    "column_name",                 // required for non-pie
+  //     series: [
+  //       {col: "sessions", label?: "Sessions", color?: "primary"|"#hex", axis?: "left"|"right", stack?: "total"},
+  //       ...
+  //     ],
+  //     highlight_last?: true,              // highlight most recent data point
+  //     orientation?: "horizontal",         // forces hbar
+  //     smooth?: true,                      // line charts
+  //   }
+  function configuredChart(inst, card, cfg, axisColor, gridColor, pal){
+    var snap = card.snap || {};
+    var rows = snap.rows || [];
+    if (!rows.length || !cfg.series || !cfg.series.length) { inst.clear(); return; }
+
+    var type = (cfg.type || 'bar').toLowerCase();
+    var isPie = (type === 'pie' || type === 'donut');
+    var isHorizontal = (type === 'hbar' || cfg.orientation === 'horizontal');
+    var isLine = (type === 'line' || type === 'area');
+    var isStacked = (type === 'stacked_bar');
+    var isArea = (type === 'area');
+
+    if (isPie) {
+      var labelColP = cfg.x || (snap.columns||[])[0];
+      var valueColP = cfg.series[0].col;
+      var data = rows.map(function(r){ return {name: String(r[labelColP]), value: toNum(r[valueColP])}; });
+      inst.setOption({
+        tooltip: {trigger: 'item'},
+        legend: {bottom: 0, textStyle: {color: axisColor, fontSize: 11}},
+        series: [{
+          type: 'pie',
+          radius: type === 'donut' ? ['45%', '70%'] : '70%',
+          data: data,
+          label: {color: axisColor, fontSize: 11},
+          itemStyle: {borderColor: 'var(--surface)', borderWidth: 2},
+        }],
+        color: [pal.primary, pal.secondary, pal.pink, pal.cyan, pal.accent, pal.muted],
+      }, true);
+      return;
+    }
+
+    // Resolve x-column: honour cfg.x only if it actually exists in rows; otherwise
+    // fall back to the first non-numeric column so the chart never shows "undefined".
+    var _snapCols = snap.columns || [];
+    var _seriesCols = cfg.series.map(function(s){ return s.col; });
+    var xCol = cfg.x;
+    if (!xCol || (rows.length && rows[0][xCol] === undefined && _snapCols.indexOf(xCol) === -1)) {
+      // cfg.x doesn't exist — pick first column that isn't a series column
+      xCol = _snapCols.find(function(c){ return _seriesCols.indexOf(c) === -1; }) || _snapCols[0];
+    }
+    var xSamples = rows.slice(0, Math.min(5, rows.length)).map(function(r){ return String(r[xCol] == null ? '' : r[xCol]); });
+    var xDateLike = xSamples.length > 0 && xSamples.every(looksLikeDate);
+    var xMonthNum = !xDateLike && isMonthNumCol(xCol);
+    var sortedRows = rows;
+    if (xDateLike || xMonthNum) {
+      sortedRows = rows.slice().sort(function(a, b) {
+        var la = String(a[xCol] == null ? '' : a[xCol]);
+        var lb = String(b[xCol] == null ? '' : b[xCol]);
+        if (xMonthNum) return parseInt(la, 10) - parseInt(lb, 10);
+        return la < lb ? -1 : la > lb ? 1 : 0;
+      });
+    }
+    var rawXLabels = sortedRows.map(function(r){ return String(r[xCol] == null ? '' : r[xCol]); });
+    var labels = xDateLike ? rawXLabels.map(fmtDateLabel) : (xMonthNum ? rawXLabels.map(fmtMonthLabel) : rawXLabels);
+    var hasRight = cfg.series.some(function(s){ return s.axis === 'right'; });
+    var highlightLast = cfg.highlight_last !== false; // default true
+
+    // Build col→formatter map for tooltip and axes
+    var _fmtMapC = {};
+    cfg.series.forEach(function(s){ _fmtMapC[s.label || s.col] = getColFmt(s.col); });
+    var tooltipFmtC = function(params) {
+      if (!params || !params.length) return '';
+      var lines = ['<div style="font-size:12px;margin-bottom:2px;font-weight:600;">' + (F.esc ? F.esc(params[0].axisValue) : params[0].axisValue) + '</div>'];
+      params.forEach(function(p) {
+        var fmt = _fmtMapC[p.seriesName] || (F.fmtNum || function(v){ return v; });
+        lines.push(p.marker + ' ' + (F.esc ? F.esc(p.seriesName) : p.seriesName) + ': <strong>' + fmt(p.value) + '</strong>');
+      });
+      return lines.join('<br/>');
+    };
+    var leftColC = (cfg.series.find(function(s){ return s.axis !== 'right'; }) || cfg.series[0]).col;
+    var rightColC = hasRight ? ((cfg.series.find(function(s){ return s.axis === 'right'; }) || {col: null}).col) : null;
+
+    var seriesSpec = cfg.series.map(function(s, i){
+      var color = resolveColor(s.color, pal) || [pal.primary, pal.secondary, pal.pink, pal.cyan][i % 4];
+      var raw = sortedRows.map(function(r){ return toNum(r[s.col] === undefined ? null : r[s.col]); });
+      var axisIdx = s.axis === 'right' ? 1 : 0;
+      var base = {
+        name: s.label || s.col,
+      };
+      // In horizontal mode the value axis is X, so dual axes use xAxisIndex.
+      if (isHorizontal) { base.xAxisIndex = axisIdx; }
+      else { base.yAxisIndex = axisIdx; }
+      if (isLine) {
+        return Object.assign(base, {
+          type: 'line',
+          smooth: cfg.smooth !== false,
+          symbol: 'circle',
+          symbolSize: 6,
+          lineStyle: {width: 2.5, color: color},
+          itemStyle: {color: color},
+          areaStyle: isArea ? {opacity: 0.15, color: color} : undefined,
+          data: (highlightLast && cfg.series.length === 1) ? withHighlightLast(raw, color, pal.accent) : raw,
+        });
+      }
+      var barOpts = {
+        type: 'bar',
+        barMaxWidth: 28,
+        itemStyle: {color: color, borderRadius: isHorizontal ? [0,4,4,0] : [4,4,0,0]},
+      };
+      if (isStacked) barOpts.stack = s.stack || 'total';
+      var data = (highlightLast && cfg.series.length === 1 && !isStacked)
+        ? withHighlightLast(raw, color, pal.accent)
+        : raw;
+      return Object.assign(base, barOpts, {data: data});
+    });
+
+    var yAxes = [{
+      type: 'value',
+      axisLabel: {color: axisColor, fontSize: 10, formatter: getColFmt(leftColC)},
+      splitLine: {lineStyle: {color: gridColor}},
+      axisLine: {show: false},
+    }];
+    if (hasRight) {
+      yAxes.push({
+        type: 'value',
+        position: 'right',
+        axisLabel: {color: axisColor, fontSize: 10, formatter: getColFmt(rightColC)},
+        splitLine: {show: false},
+        axisLine: {show: false},
+      });
+    }
+
+    var option;
+    if (isHorizontal) {
+      // In horizontal layout, yAxes (built above for "right") are not used as Y;
+      // we translate "axis:right" into dual xAxis instead.
+      var xAxesH = [{
+        type: 'value',
+        axisLabel: {color: axisColor, fontSize: 10, formatter: getColFmt(leftColC)},
+        splitLine: {lineStyle: {color: gridColor}},
+        axisLine: {show: false},
+      }];
+      if (hasRight) {
+        xAxesH.push({
+          type: 'value',
+          position: 'top',
+          axisLabel: {color: axisColor, fontSize: 10, formatter: getColFmt(rightColC)},
+          splitLine: {show: false},
+          axisLine: {show: false},
+        });
+      }
+      option = {
+        grid: {top: hasRight ? 46 : 30, right: 30, bottom: 30, left: 10, containLabel: true},
+        tooltip: {trigger: 'axis', axisPointer: {type: 'shadow'}, formatter: tooltipFmtC},
+        legend: {top: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
+        yAxis: {type: 'category', data: labels, axisLabel: {color: axisColor, fontSize: 11}, axisLine: {lineStyle: {color: gridColor}}, inverse: true},
+        xAxis: xAxesH,
+        series: seriesSpec,
+      };
+    } else {
+      option = {
+        grid: {top: 30, right: hasRight ? 52 : 14, bottom: 30, left: 48, containLabel: true},
+        tooltip: {trigger: 'axis', axisPointer: {type: 'shadow'}, formatter: tooltipFmtC},
+        legend: {top: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
+        xAxis: {type: 'category', data: labels, axisLabel: {color: axisColor, fontSize: 10, rotate: labels.length > 8 ? 35 : 0}, axisLine: {lineStyle: {color: gridColor}}},
+        yAxis: yAxes,
+        series: seriesSpec,
+      };
+    }
+    inst.setOption(option, true);
+  }
+
+  // ── Pie chart builder ──────────────────────────────────────────────────
+  // Builds an ECharts option for a pie/donut chart from snap data.
+  // Pastel Pop multi-color palette matches the card_renderer_js.html renderPieChart.
+  function buildPieOption(card, axisColor){
+    var snap = card.snap || {};
+    var cfg = snap.chart_config || {};
+    var rows = snap.rows || [];
+    var cols = snap.columns || [];
+    var isDonut = cfg.donut === true || (cfg.type || '').toLowerCase() === 'donut';
+    var showLegend = cfg.show_legend !== false;
+
+    // Determine label column (first non-numeric or explicit x) and value column
+    var numericCols = F.numericColsOf ? F.numericColsOf(cols, rows) : cols.filter(function(c){
+      return rows.slice(0,5).every(function(r){ var v = String(r[c]||'').replace(/,/g,''); return v && !isNaN(parseFloat(v)); });
+    });
+    var labelCol = cfg.x || cols.find(function(c){ return numericCols.indexOf(c) === -1; }) || cols[0];
+    var valCol = (cfg.series && cfg.series[0] && cfg.series[0].col) || numericCols[0] || cols[1] || cols[0];
+
+    var data = rows.map(function(r){
+      return {name: String(r[labelCol] == null ? '' : r[labelCol]), value: toNum(r[valCol])};
+    });
+
+    return {
+      tooltip: {trigger: 'item', formatter: function(p){ return p.name + ': ' + (F.fmtNum ? F.fmtNum(p.value) : p.value) + ' (' + p.percent + '%)'; }},
+      legend: showLegend ? {bottom: 0, textStyle: {color: axisColor, fontSize: 11}} : {show: false},
+      color: ['#6366f1','#10b981','#f59e0b','#ec4899','#14b8a6','#8b5cf6','#ef4444'],
+      series: [{
+        type: 'pie',
+        radius: isDonut ? ['45%','70%'] : '70%',
+        data: data,
+        label: {color: axisColor, fontSize: 11},
+        itemStyle: {borderColor: 'var(--surface)', borderWidth: 2},
+        emphasis: {itemStyle: {shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.5)'}},
+      }],
+    };
+  }
+
+  F.buildPieOption = buildPieOption;
+
+  // ── Entry point ────────────────────────────────────────────────────────
+  F.mountCharts = function(cards, gridEl){
+    Object.values(_instances).forEach(function(c){ try { c.dispose(); } catch(e){} });
+    _instances = {};
+    if (typeof echarts === 'undefined') {
+      if (!F.mountCharts._retry) {
+        F.mountCharts._retry = true;
+        var wait = function(){
+          if (typeof echarts !== 'undefined') { F.mountCharts._retry = false; F.mountCharts(cards, gridEl); }
+          else { setTimeout(wait, 50); }
+        };
+        setTimeout(wait, 50);
+      }
+      return;
+    }
+
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var theme = isDark ? 'dark' : null;
+    var axisColor = isDark ? '#9ca3af' : '#6b7280';
+    var gridColor = isDark ? '#374151' : '#e5e7eb';
+    var pal = palette(isDark);
+    var root = gridEl || document;
+
+    cards.forEach(function(card){
+      var els = root.querySelectorAll('[data-card-id="' + card.id + '"] [data-chart]');
+      els.forEach(function(el){
+        var kind = el.getAttribute('data-chart');
+        var inst = echarts.init(el, theme, {renderer: 'canvas'});
+
+        if (kind === 'pie') {
+          // New-style pie card rendered by renderPieChart in card_renderer_js.html
+          inst.setOption(buildPieOption(card, axisColor), true);
+        } else if (kind === 'custom') {
+          // Bar/line card — use chart_config if it has explicit series; otherwise auto-detect
+          var customCfg = (card.snap||{}).chart_config || {};
+          if (customCfg.series && customCfg.series.length) {
+            configuredChart(inst, card, customCfg, axisColor, gridColor, pal);
+          } else {
+            autoTableChart(inst, card, axisColor, gridColor, pal);
+          }
+        } else if (kind === 'table') {
+          // Legacy TABLE card with auto-chart. If it has chart_config override, honor it.
+          var cfg = (card.snap||{}).chart_config;
+          if (cfg && cfg.series && cfg.series.length) {
+            configuredChart(inst, card, cfg, axisColor, gridColor, pal);
+          } else {
+            autoTableChart(inst, card, axisColor, gridColor, pal);
+          }
+        } else if (kind === 'audit-gauge') {
+          var score = parseInt(el.getAttribute('data-score'), 10) || 0;
+          var color = score >= 70 ? '#10b981' : (score >= 40 ? '#f59e0b' : '#ef4444');
+          inst.setOption({
+            series: [{
+              type: 'gauge', startAngle: 180, endAngle: 0, min: 0, max: 100,
+              progress: {show: true, width: 14, itemStyle: {color: color}},
+              axisLine: {lineStyle: {width: 14, color: [[1, gridColor]]}},
+              axisTick: {show: false}, splitLine: {show: false}, axisLabel: {show: false}, pointer: {show: false},
+              detail: {valueAnimation: true, fontSize: 22, fontWeight: 700, offsetCenter: [0, '-5%'], color: color, formatter: '{value}'},
+              data: [{value: score}],
+            }],
+          });
+        }
+
+        _instances[card.id + ':' + (el.getAttribute('data-chart')||'')] = inst;
+      });
+    });
+
+    window.addEventListener('resize', function(){
+      Object.values(_instances).forEach(function(c){ try { c.resize(); } catch(e){} });
+    }, {once: true});
+  };
+
+  // Back-compat alias for older templates that call the bare mountCharts().
+  window.mountCharts = F.mountCharts;
+})();
+</script>

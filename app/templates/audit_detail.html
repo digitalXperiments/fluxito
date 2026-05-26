@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}Audit — {{ row.tool_name }} — Fluxito{% endblock %}
+{% set active = 'audit' %}
+
+{% block main %}
+<main class="app-main">
+
+  {# ── Back link ── #}
+  <div class="breadcrumbs">
+    <a href="/activity-log">← Back to audit trail</a>
+  </div>
+
+  {# ── Call header ── #}
+  <div class="ad-card" style="padding:26px 28px;margin-bottom:18px">
+    <div class="ad-head">
+      <div class="ad-head-main">
+        <span class="label">Tool call</span>
+        <h1 class="ad-title">{{ row.tool_name }}</h1>
+        {% if row.platform %}
+        <div class="ad-platform">Platform · {{ row.platform }}</div>
+        {% endif %}
+      </div>
+      <div class="ad-head-flags">
+        {% if row.status == 'success' %}
+        <span class="t-flag ad-flag-ok">success</span>
+        {% elif row.status == 'denied' %}
+        <span class="t-flag ad-flag-warn">denied</span>
+        {% else %}
+        <span class="t-flag ad-flag-err">error</span>
+        {% endif %}
+        {% if row.is_write %}
+        <span class="t-flag ad-flag-write">WRITE</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="ad-meta-grid">
+      <div class="ad-meta">
+        <div class="ad-meta-label">When</div>
+        <div class="ad-meta-val">{{ row.created_at[:19].replace('T',' ') if row.created_at else '—' }}</div>
+      </div>
+      <div class="ad-meta">
+        <div class="ad-meta-label">Source client</div>
+        <div class="ad-meta-val">{{ row.source_client or '—' }}</div>
+      </div>
+      <div class="ad-meta">
+        <div class="ad-meta-label">Latency</div>
+        <div class="ad-meta-val" style="font-variant-numeric:tabular-nums">{% if row.duration_ms is not none %}{{ row.duration_ms }} ms{% else %}—{% endif %}</div>
+      </div>
+      <div class="ad-meta">
+        <div class="ad-meta-label">Summary</div>
+        <div class="ad-meta-val">{{ row.response_summary or '—' }}</div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Error banner ── #}
+  {% if row.error_message %}
+  <div class="ad-error">
+    <div class="ad-error-label">Error</div>
+    <div class="ad-error-msg">{{ row.error_message }}</div>
+  </div>
+  {% endif %}
+
+  {# ── Arguments ── #}
+  <div class="ad-card" style="padding:22px 26px;margin-bottom:18px">
+    <div class="ad-sec-head">
+      <h3>Arguments</h3>
+      <button class="mini-btn" type="button" onclick="Fluxito.audit.copy('argsBlock', this)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>
+    </div>
+    <pre class="ad-code" id="argsBlock">{{ row.arguments | tojson(indent=2) if row.arguments else '{}' }}</pre>
+  </div>
+
+  {# ── Response ── #}
+  <div class="ad-card" style="padding:22px 26px">
+    <div class="ad-sec-head">
+      <h3>
+        Response
+        {% if row.response_truncated %}
+        <span class="t-flag ad-flag-warn" style="margin-left:8px">TRUNCATED</span>
+        {% endif %}
+      </h3>
+      <button class="mini-btn" type="button" onclick="Fluxito.audit.copy('respBlock', this)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>
+    </div>
+    {% if row.response_preview %}
+    <pre class="ad-code ad-code-resp" id="respBlock">{{ row.response_preview }}</pre>
+    {% else %}
+    <div class="ad-empty">No response body captured.</div>
+    {% endif %}
+  </div>
+
+</main>
+
+<style>
+.ad-card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+}
+
+.ad-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 18px; flex-wrap: wrap;
+}
+.ad-head-main { flex: 1; min-width: 260px; }
+.ad-title {
+  font-size: clamp(24px, 3.5vw, 30px);
+  font-weight: 500; letter-spacing: -0.02em;
+  margin: 6px 0 0; color: var(--ink);
+  line-height: 1.15;
+  font-family: var(--mono);
+  word-break: break-all;
+}
+.ad-platform {
+  font-size: 12.5px; color: var(--muted);
+  margin-top: 8px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+
+.ad-head-flags {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: 6px;
+}
+.ad-flag-ok {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+}
+.ad-flag-warn {
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--amber);
+}
+.ad-flag-err {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red);
+}
+.ad-flag-write {
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.ad-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 18px;
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line-2);
+}
+.ad-meta-label {
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.ad-meta-val {
+  font-size: 13.5px; color: var(--ink);
+  margin-top: 4px; line-height: 1.4;
+}
+
+.ad-error {
+  padding: 18px 22px;
+  margin-bottom: 18px;
+  border: 1px solid color-mix(in srgb, var(--red) 30%, var(--line));
+  border-left-width: 3px;
+  background: color-mix(in srgb, var(--red) 5%, transparent);
+  border-radius: var(--r-l);
+}
+.ad-error-label {
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--red);
+  font-family: var(--mono);
+}
+.ad-error-msg {
+  font-size: 13.5px; color: var(--ink);
+  margin-top: 6px; line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.ad-sec-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px;
+}
+.ad-sec-head h3 {
+  font-size: 14px; font-weight: 600;
+  letter-spacing: -0.005em;
+  margin: 0; color: var(--ink);
+}
+
+.ad-code {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  padding: 14px 16px;
+  border-radius: var(--r-m);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ad-code-resp { max-height: 560px; overflow-y: auto; }
+
+.ad-empty {
+  color: var(--muted); font-size: 13.5px;
+  font-style: italic;
+}
+</style>
+
+<script>
+  window.Fluxito = window.Fluxito || {};
+  Fluxito.audit = {
+    copy: function(id, btn) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      navigator.clipboard.writeText(el.textContent || '').then(function() {
+        var prev = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = prev; }, 1200);
+      });
+    }
+  };
+</script>
+{% endblock %}

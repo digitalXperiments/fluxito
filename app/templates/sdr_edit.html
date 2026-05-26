@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Edit SDR — Fluxito{% endblock %}
+{% set active = 'sdr' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css">
+<style>
+  /* ── EasyMDE → Fluxito editorial theme (same as business_context) ── */
+  .EasyMDEContainer { font-family: var(--sans); }
+  .EasyMDEContainer .CodeMirror {
+    background: var(--bg); color: var(--ink);
+    border: 1px solid var(--line); border-radius: var(--r-m);
+    border-top-left-radius: 0; border-top-right-radius: 0;
+    font-family: var(--mono); font-size: 13px; line-height: 1.65;
+    min-height: 560px;
+  }
+  .EasyMDEContainer .CodeMirror-cursor { border-left-color: var(--ink); }
+  .EasyMDEContainer .CodeMirror-selected { background: var(--bg-3) !important; }
+  .EasyMDEContainer .CodeMirror-focused .CodeMirror-selected {
+    background: color-mix(in srgb, var(--blue) 18%, transparent) !important;
+  }
+  .EasyMDEContainer .editor-toolbar {
+    background: var(--bg-2); border: 1px solid var(--line); border-bottom: none;
+    border-top-left-radius: var(--r-m); border-top-right-radius: var(--r-m);
+    opacity: 1; padding: 6px 8px;
+  }
+  .EasyMDEContainer .editor-toolbar button {
+    color: var(--ink-soft) !important; border-radius: 6px;
+    border: 1px solid transparent; width: 30px; height: 30px;
+  }
+  .EasyMDEContainer .editor-toolbar button:hover,
+  .EasyMDEContainer .editor-toolbar button.active {
+    background: var(--bg-3); border-color: var(--line); color: var(--ink) !important;
+  }
+  .EasyMDEContainer .editor-toolbar i.separator {
+    border-left: 1px solid var(--line); border-right: none; margin: 0 4px;
+  }
+  .EasyMDEContainer .editor-statusbar {
+    color: var(--muted); font-size: 11px; padding: 6px 12px 0; font-family: var(--mono);
+  }
+  .EasyMDEContainer .editor-preview,
+  .EasyMDEContainer .editor-preview-side {
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+    padding: 22px 26px; font-size: 14px; line-height: 1.7;
+  }
+  .EasyMDEContainer .editor-preview h1, .EasyMDEContainer .editor-preview h2,
+  .EasyMDEContainer .editor-preview h3, .EasyMDEContainer .editor-preview-side h1,
+  .EasyMDEContainer .editor-preview-side h2, .EasyMDEContainer .editor-preview-side h3 {
+    color: var(--ink); margin-top: 1.2em; letter-spacing: -0.01em;
+  }
+  .EasyMDEContainer .editor-preview code, .EasyMDEContainer .editor-preview-side code {
+    background: var(--bg-2); padding: 2px 6px; border-radius: 4px;
+    font-size: 12px; font-family: var(--mono);
+  }
+  .EasyMDEContainer .CodeMirror-fullscreen,
+  .EasyMDEContainer .editor-toolbar.fullscreen,
+  .EasyMDEContainer .editor-preview-side { background: var(--bg); }
+
+  .sdr-edit-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; gap: 12px;
+  }
+  .sdr-edit-head .title {
+    font-size: 11px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--muted); font-family: var(--mono);
+  }
+  .sdr-edit-status { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .sdr-edit-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 14px; gap: 12px;
+  }
+  .sdr-edit-count { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+</style>
+{% endblock %}
+
+{% block main %}
+<main class="app-main">
+  <div class="page-head">
+    <div>
+      <span class="label">Solution Design Reference</span>
+      <h1>Edit <em class="serif-italic">raw markdown.</em></h1>
+      <p>Direct markdown editing for power users. Changes are saved to the draft and projections are rebuilt automatically.</p>
+    </div>
+    <div>
+      <a href="/solution-design" class="btn">Back to viewer</a>
+    </div>
+  </div>
+
+  <div class="sdr-edit-head">
+    <div class="title">SDR Draft — {{ sdr.name }}</div>
+    <div class="sdr-edit-status" id="editStatus"></div>
+  </div>
+
+  <textarea id="sdrEditor">{{ sdr.markdown_content | e }}</textarea>
+
+  <div class="sdr-edit-foot">
+    <div class="sdr-edit-count"><span id="charCount">0</span> chars · Markdown with YAML frontmatter</div>
+    <div style="display:flex;gap:8px;">
+      <a href="/solution-design" class="btn">Cancel</a>
+      <button id="saveBtn" class="btn primary" type="button">Save draft</button>
+    </div>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.js"></script>
+<script>
+(function() {
+  const ta = document.getElementById('sdrEditor');
+  const saveBtn = document.getElementById('saveBtn');
+  const status = document.getElementById('editStatus');
+  const count = document.getElementById('charCount');
+  const sdrId = {{ sdr.id | tojson }};
+  const projectId = {{ sdr.project_id | tojson }};
+
+  const editor = new EasyMDE({
+    element: ta,
+    autofocus: false,
+    spellChecker: false,
+    status: ['lines', 'words', 'cursor'],
+    minHeight: '560px',
+    indentWithTabs: false,
+    tabSize: 2,
+    forceSync: true,
+    autoDownloadFontAwesome: true,
+    toolbar: [
+      'bold', 'italic', 'strikethrough', '|',
+      'heading-1', 'heading-2', 'heading-3', '|',
+      'unordered-list', 'ordered-list', 'quote', 'code', '|',
+      'link', 'table', 'horizontal-rule', '|',
+      'preview', 'side-by-side', 'fullscreen', '|',
+      { name: 'guide', action: 'https://www.markdownguide.org/basic-syntax/', className: 'fa fa-question-circle', title: 'Markdown guide' },
+    ],
+  });
+
+  function updateCount() { count.textContent = editor.value().length.toLocaleString(); }
+  function markDirty() {
+    status.textContent = 'Unsaved changes';
+    status.style.color = 'var(--amber)';
+  }
+  editor.codemirror.on('change', () => { updateCount(); markDirty(); });
+  updateCount();
+
+  async function save() {
+    saveBtn.disabled = true;
+    const original = saveBtn.textContent;
+    saveBtn.textContent = 'Saving…';
+    try {
+      const res = await fetch(`/api/projects/${projectId}/solution-design`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markdown_content: editor.value() }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Save failed');
+      }
+      status.textContent = 'Saved just now';
+      status.style.color = 'var(--muted)';
+      if (window.Fluxito && Fluxito.toast) Fluxito.toast('SDR draft saved');
+    } catch (e) {
+      alert('Failed to save: ' + e.message);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = original;
+    }
+  }
+
+  saveBtn.addEventListener('click', save);
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); }
+  });
+  editor.codemirror.addKeyMap({ 'Cmd-S': () => save(), 'Ctrl-S': () => save() });
+})();
+</script>
+{% endblock %}

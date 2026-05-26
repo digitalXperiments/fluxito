@@ -1,0 +1,970 @@
+{% extends "base.html" %}
+{% from "partials/platform_icons.html" import platform_icon %}
+{% block title %}Get Started — Fluxito{% endblock %}
+
+{% block nav %}
+{# Minimal nav during tutorial — logo only, no links #}
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="wordmark" style="font-size:20px">
+      <span style="font-family:var(--mono);font-weight:500;letter-spacing:-0.02em">flux</span><em>ito</em><span style="display:inline-block;width:4px;height:4px;border-radius:99px;background:var(--blue);margin-left:3px;vertical-align:middle"></span>
+    </a>
+    <div class="nav-right" style="display:flex;align-items:center;gap:8px;">
+      <a href="/home" class="btn sm" id="tutorialSkip" onclick="fetch('/api/tutorial/complete',{method:'POST',credentials:'same-origin'})">Skip tutorial →</a>
+      <a href="/signout" class="btn sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign out
+      </a>
+    </main>
+  </div>
+</nav>
+{% endblock %}
+
+{% block footer %}{% endblock %}
+
+{% block main %}
+<main class="app-main" style="max-width:720px">
+
+  {# ── Progress stepper ── #}
+  <div class="tut-stepper" id="tutStepper">
+    <div class="tut-step-indicator is-active" data-step="0">
+      <div class="tut-step-dot">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <span class="tut-step-label">Welcome</span>
+    </div>
+    <div class="tut-step-line"></div>
+    <div class="tut-step-indicator" data-step="1">
+      <div class="tut-step-dot">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <span class="tut-step-label">Connect</span>
+    </div>
+    <div class="tut-step-line"></div>
+    <div class="tut-step-indicator" data-step="2">
+      <div class="tut-step-dot">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <span class="tut-step-label">Personalize</span>
+    </div>
+    <div class="tut-step-line"></div>
+    <div class="tut-step-indicator" data-step="3">
+      <div class="tut-step-dot">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <span class="tut-step-label">Set up AI</span>
+    </div>
+    <div class="tut-step-line"></div>
+    <div class="tut-step-indicator" data-step="4">
+      <div class="tut-step-dot">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <span class="tut-step-label">Ask AI</span>
+    </div>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  {# STEP 0 — Welcome                                                   #}
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  <div class="tut-panel is-active" data-panel="0">
+    <div class="tut-intro">
+      <span class="label">Step 1 of 5</span>
+      <h1>Welcome, <em class="serif-italic">{{ (user.display_name or user.email.split('@')[0]) | title }}.</em></h1>
+      <p>Fluxito connects your marketing platforms to AI tools like Claude, ChatGPT, and Cursor — so you can ask questions about your data in natural language.</p>
+    </div>
+
+    <div class="tut-preview-list">
+      <div class="tut-preview-card">
+        <div class="tut-preview-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div>
+          <div class="tut-preview-name">Connect your platforms</div>
+          <div class="tut-preview-desc">GA4, GTM, Google Ads, Meta, TikTok, Snap, BigQuery, and more.</div>
+        </div>
+      </div>
+      <div class="tut-preview-card">
+        <div class="tut-preview-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/><circle cx="12" cy="6" r="2"/></svg>
+        </div>
+        <div>
+          <div class="tut-preview-name">Teach AI your business</div>
+          <div class="tut-preview-desc">Templates, KPI library, and a business context doc so your AI answers in your terms.</div>
+        </div>
+      </div>
+      <div class="tut-preview-card">
+        <div class="tut-preview-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <div>
+          <div class="tut-preview-name">Add to your favourite AI</div>
+          <div class="tut-preview-desc">One URL — works with Claude, ChatGPT, Cursor, and more.</div>
+        </div>
+      </div>
+      <div class="tut-preview-card">
+        <div class="tut-preview-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div>
+          <div class="tut-preview-name">Ask anything about your data</div>
+          <div class="tut-preview-desc">"What were my top landing pages last week?" — just ask.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tut-actions tut-actions-center">
+      <button class="btn primary tut-cta" onclick="tutNext()">
+        Let's get started
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+      <div class="tut-note">Takes about 2 minutes</div>
+    </div>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  {# STEP 1 — Connect a platform                                        #}
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  <div class="tut-panel" data-panel="1">
+    <div class="tut-intro">
+      <span class="label">Step 2 of 5</span>
+      <h1>Connect your <em class="serif-italic">first platform.</em></h1>
+      <p>Start with Google — it covers GA4, GTM, and Google Ads in a single sign-in. You can always add more platforms later.</p>
+    </div>
+
+    <div class="tut-section">
+      <div class="tut-section-label">Recommended</div>
+
+      <div class="tut-connect-card">
+        <div class="tut-connect-row">
+          <div class="tut-connect-icon">{{ platform_icon("google", 24) }}</div>
+          <div class="tut-connect-body">
+            <div class="tut-connect-name">Google Suite</div>
+            <div class="tut-connect-desc">GA4 + GTM + Google Ads — all in one</div>
+          </div>
+          <span class="t-flag tut-popular">Most popular</span>
+        </div>
+        <div class="tut-hint">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>After this tutorial, go to <strong>Connections</strong> to sign in with Google. Choose your GA4 / GTM / Ads services, then authorize access.</span>
+        </div>
+      </div>
+
+      <div class="tut-section-label tut-section-label-spaced">Also supported</div>
+
+      <div class="tut-mini-grid">
+        <div class="tut-mini-card">
+          <div class="tut-connect-icon">{{ platform_icon("meta", 24) }}</div>
+          <div class="tut-mini-name">Meta Ads</div>
+        </div>
+        <div class="tut-mini-card">
+          <div class="tut-connect-icon">{{ platform_icon("tiktok", 24) }}</div>
+          <div class="tut-mini-name">TikTok Ads</div>
+        </div>
+        <div class="tut-mini-card">
+          <div class="tut-connect-icon">{{ platform_icon("bigquery", 24) }}</div>
+          <div class="tut-mini-name">BigQuery</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tut-actions tut-actions-split">
+      <button class="btn" onclick="tutPrev()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+      <button class="btn primary" onclick="tutNext()">
+        Continue
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  {# STEP 2 — Personalize                                              #}
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  <div class="tut-panel" data-panel="2">
+    <div class="tut-intro">
+      <span class="label">Step 3 of 5</span>
+      <h1>Make Fluxito <em class="serif-italic">yours.</em></h1>
+      <p>Every business defines metrics differently. Tell your AI assistant exactly what your KPIs mean and give it the context it needs — then reuse pre-built templates to save hours of setup.</p>
+    </div>
+
+    <div class="tut-feature-list">
+
+      <div class="tut-feature-card">
+        <div class="tut-feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        </div>
+        <div class="tut-feature-body">
+          <div class="tut-feature-name">Templates</div>
+          <div class="tut-feature-desc">Browse the Fluxito library of pre-built dashboard recipes — Ecommerce overview, PPC performance, GTM audit, and more. Deploy one with a single click or ask your AI to set it up.</div>
+          <div class="tut-hint">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>Find it under <strong>Insights → Templates</strong>.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tut-feature-card">
+        <div class="tut-feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/><circle cx="12" cy="6" r="2"/></svg>
+        </div>
+        <div class="tut-feature-body">
+          <div class="tut-feature-name">KPI Library</div>
+          <div class="tut-feature-desc">Define the KPIs that matter to your business — name, description, formula, data source, and owner. Your AI reads this glossary automatically so every answer uses <em>your</em> definitions, not generic ones.</div>
+          <div class="tut-example">
+            <strong>Example:</strong>
+            <code>CAC</code> = "total paid marketing spend ÷ first-time customers, excluding refunds within 30 days." Source: <code>BigQuery.finance.orders</code>. Owner: Marketing team.
+          </div>
+          <div class="tut-hint">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>Find it under <strong>Knowledge → KPI Library</strong>.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tut-feature-card">
+        <div class="tut-feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+        </div>
+        <div class="tut-feature-body">
+          <div class="tut-feature-name">Business Context</div>
+          <div class="tut-feature-desc">A plain-Markdown doc describing your industry, audience, seasonality, internal terminology, and any rules your AI should apply. Loaded on demand whenever you ask an analytics question.</div>
+          <div class="tut-hint">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>Find it under <strong>Knowledge → Business Context</strong>.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="tut-callout">
+      <strong>These are optional</strong> — you can skip them and add them later. But the more context your AI has, the sharper its answers get.
+    </div>
+
+    <div class="tut-actions tut-actions-split">
+      <button class="btn" onclick="tutPrev()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+      <button class="btn primary" onclick="tutNext()">
+        Continue
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  {# STEP 3 — Add to your AI                                           #}
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  <div class="tut-panel" data-panel="3">
+    <div class="tut-intro">
+      <span class="label">Step 4 of 5</span>
+      <h1>Add Fluxito to your <em class="serif-italic">AI tool.</em></h1>
+      <p>Pick the tool you use most. We'll show you exactly where to paste the server URL.</p>
+    </div>
+
+    {# AI tool picker — tabs #}
+    <div class="tut-ai-tabs">
+      <button class="tut-ai-tab is-active" data-tool="claude" onclick="tutSelectTool(this)">
+        <div class="tut-ai-tab-icon" style="background:#d97757;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/></svg>
+        </div>
+        Claude
+      </button>
+      <button class="tut-ai-tab" data-tool="chatgpt" onclick="tutSelectTool(this)">
+        <div class="tut-ai-tab-icon" style="background:#10a37f;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M22.28 9.82a5.98 5.98 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9A6.07 6.07 0 0 0 4.98 4.18a5.98 5.98 0 0 0-4 2.9 6.05 6.05 0 0 0 .74 7.1 5.98 5.98 0 0 0 .51 4.91 6.05 6.05 0 0 0 6.51 2.9A5.98 5.98 0 0 0 13.26 24a6.06 6.06 0 0 0 5.77-4.21 5.99 5.99 0 0 0 4-2.9 6.06 6.06 0 0 0-.75-7.07z"/></svg>
+        </div>
+        ChatGPT
+      </button>
+      <button class="tut-ai-tab" data-tool="cursor" onclick="tutSelectTool(this)">
+        <div class="tut-ai-tab-icon" style="background:#09090b;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"/></svg>
+        </div>
+        Cursor
+      </button>
+    </div>
+
+    {# Instructions per tool #}
+    <div class="tut-ai-instructions">
+      <div class="tut-instruction is-active" data-instruction="claude">
+        <div class="tut-numbered-steps">
+          <div class="tut-numbered-step">
+            <div class="tut-num">1</div>
+            <div class="tut-num-body">
+              <div class="tut-num-title">Open Claude settings</div>
+              <div class="tut-num-desc">In <a href="https://claude.ai" target="_blank">claude.ai</a>, click your profile icon (bottom-left) → <strong>Settings</strong> → <strong>Integrations</strong>.</div>
+            </div>
+          </div>
+          <div class="tut-numbered-step">
+            <div class="tut-num">2</div>
+            <div class="tut-num-body">
+              <div class="tut-num-title">Add a custom integration</div>
+              <div class="tut-num-desc">Click <strong>"Add custom integration"</strong> and paste the server URL below.</div>
+            </div>
+          </div>
+          <div class="tut-numbered-step">
+            <div class="tut-num">3</div>
+            <div class="tut-num-body">
+              <div class="tut-num-title">Authorize</div>
+              <div class="tut-num-desc">Claude will open a sign-in window. Log in with your Fluxito account and approve access.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tut-instruction" data-instruction="chatgpt">
+        <div class="tut-numbered-steps">
+          <div class="tut-numbered-step">
+            <div class="tut-num">1</div>
+            <div class="tut-num-body">
+              <div class="tut-num-title">Open ChatGPT settings</div>
+              <div class="tut-num-desc">In <a href="https://chatgpt.com" target="_blank">chatgpt.com</a>, click your profile icon → <strong>Settings</strong> → <strong>Connected apps</strong>.</div>
+            </div>
+          </div>
+          <div class="tut-numbered-step">
+            <div class="tut-num">2</div>
+            <div class="tut-num-body">
+              <div class="tut-num-title">Add a new MCP server</div>
+              <div class="tut-num-desc">Click <strong>"Add integration"</strong>, choose <strong>"MCP server"</strong>, and paste the URL below.</div>
+            </div>
+          </div>
+          <div class="tut-numbered-step">
+            <div class="tut-num">3</div>
+            <div class="tut-num-body">
+              <div class="tut-num-title">Authorize</div>
+              <div class="tut-num-desc">ChatGPT will open a sign-in window. Log in and approve access.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tut-instruction" data-instruction="cursor">
+        <div class="tut-numbered-steps">
+          <div class="tut-numbered-step">
+            <div class="tut-num">1</div>
+            <div class="tut-num-body">
+              <div class="tut-num-title">Open Cursor settings</div>
+              <div class="tut-num-desc">In Cursor, press <code>Cmd + Shift + J</code> (Mac) or <code>Ctrl + Shift + J</code> (Windows) to open MCP settings.</div>
+            </div>
+          </div>
+          <div class="tut-numbered-step">
+            <div class="tut-num">2</div>
+            <div class="tut-num-body">
+              <div class="tut-num-title">Add a new MCP server</div>
+              <div class="tut-num-desc">Click <strong>"+ Add new MCP Server"</strong>, choose <strong>"SSE"</strong> type, and paste the URL below.</div>
+            </div>
+          </div>
+          <div class="tut-numbered-step">
+            <div class="tut-num">3</div>
+            <div class="tut-num-body">
+              <div class="tut-num-title">Enable the server</div>
+              <div class="tut-num-desc">Toggle the server on. Cursor will connect and list available tools automatically.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# MCP URL copy box #}
+    <div class="tut-url-box">
+      <div class="tut-url-label">Your server URL</div>
+      <div class="tut-url-row">
+        <code id="tutMcpUrl">{{ base_url }}/mcp/sse</code>
+        <button class="btn primary sm" onclick="tutCopyUrl()" id="tutCopyBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+      </div>
+    </div>
+
+    <div class="tut-actions tut-actions-split">
+      <button class="btn" onclick="tutPrev()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+      <button class="btn primary" onclick="tutNext()">
+        Continue
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  {# STEP 4 — Ask your first question                                  #}
+  {# ═══════════════════════════════════════════════════════════════════ #}
+  <div class="tut-panel" data-panel="4">
+    <div class="tut-intro tut-intro-center">
+      <span class="label">Step 5 of 5</span>
+      <h1>You're all <em class="serif-italic">set.</em></h1>
+      <p>Go to your AI tool and try one of these questions. Fluxito will pull the data directly from your connected platforms.</p>
+    </div>
+
+    <div class="tut-prompt-list">
+      <div class="tut-prompt-card" onclick="tutCopyPrompt(this)">
+        <div class="tut-prompt-icon">{{ platform_icon("ga4", 18) }}</div>
+        <div class="tut-prompt-body">
+          <div class="tut-prompt-q">"What were my top 5 landing pages last week?"</div>
+          <div class="tut-prompt-meta">GA4 · Traffic analysis</div>
+        </div>
+        <div class="tut-prompt-copy">Copy</div>
+      </div>
+      <div class="tut-prompt-card" onclick="tutCopyPrompt(this)">
+        <div class="tut-prompt-icon">{{ platform_icon("gtm", 18) }}</div>
+        <div class="tut-prompt-body">
+          <div class="tut-prompt-q">"Audit my GTM container for issues"</div>
+          <div class="tut-prompt-meta">GTM · Container audit</div>
+        </div>
+        <div class="tut-prompt-copy">Copy</div>
+      </div>
+      <div class="tut-prompt-card" onclick="tutCopyPrompt(this)">
+        <div class="tut-prompt-icon">{{ platform_icon("google_ads", 18) }}</div>
+        <div class="tut-prompt-body">
+          <div class="tut-prompt-q">"Compare my Google Ads campaigns — which has the best ROAS?"</div>
+          <div class="tut-prompt-meta">Google Ads · Performance</div>
+        </div>
+        <div class="tut-prompt-copy">Copy</div>
+      </div>
+      <div class="tut-prompt-card" onclick="tutCopyPrompt(this)">
+        <div class="tut-prompt-icon">{{ platform_icon("meta", 18) }}</div>
+        <div class="tut-prompt-body">
+          <div class="tut-prompt-q">"Show me my Meta Ads spend by campaign this month"</div>
+          <div class="tut-prompt-meta">Meta Ads · Spend analysis</div>
+        </div>
+        <div class="tut-prompt-copy">Copy</div>
+      </div>
+    </div>
+
+    <div class="tut-actions tut-actions-finish">
+      <a href="/home" class="btn primary tut-cta" id="tutFinish" onclick="fetch('/api/tutorial/complete',{method:'POST',credentials:'same-origin'})">
+        Go to Dashboard
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+      <div class="tut-note">You'll be able to connect platforms and manage settings from the dashboard.</div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+/* ── Stepper ───────────────────────────────────────────────────── */
+.tut-stepper {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0;
+  padding: 16px 0 36px;
+  margin-bottom: 8px;
+}
+.tut-step-indicator {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 0.25s;
+}
+.tut-step-indicator.is-active,
+.tut-step-indicator.is-done { opacity: 1; }
+.tut-step-dot {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: transparent;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.25s, color 0.25s, border-color 0.25s;
+}
+.tut-step-indicator.is-active .tut-step-dot {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.tut-step-indicator.is-done .tut-step-dot {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+.tut-step-label {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  font-family: var(--mono);
+}
+.tut-step-indicator.is-active .tut-step-label { color: var(--ink); }
+.tut-step-line {
+  flex: 1; max-width: 48px;
+  height: 1px;
+  background: var(--line);
+  margin: 0 8px;
+  transform: translateY(-14px);
+  transition: background 0.25s;
+}
+.tut-step-line.is-done { background: var(--ink); }
+
+/* ── Panels ───────────────────────────────────────────────────── */
+.tut-panel {
+  display: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.25s, transform 0.25s;
+}
+.tut-panel.is-active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+.tut-panel.is-leaving {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.tut-intro {
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--line-2);
+  margin-bottom: 28px;
+}
+.tut-intro-center { text-align: center; border-bottom: none; padding-bottom: 0; }
+.tut-intro h1 {
+  font-size: clamp(26px, 3.5vw, 34px);
+  font-weight: 500; letter-spacing: -0.02em;
+  margin: 8px 0 10px; color: var(--ink);
+  line-height: 1.15;
+}
+.tut-intro p {
+  font-size: 14.5px; color: var(--ink-soft);
+  line-height: 1.65; margin: 0;
+  max-width: 540px;
+}
+.tut-intro-center p { margin: 0 auto; }
+
+/* ── Preview cards (Step 0) ───────────────────────────────────── */
+.tut-preview-list {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-bottom: 32px;
+}
+.tut-preview-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 18px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+}
+.tut-preview-icon {
+  width: 40px; height: 40px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.tut-preview-name {
+  font-size: 14.5px; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.tut-preview-desc {
+  font-size: 12.5px; color: var(--ink-soft);
+  margin-top: 3px; line-height: 1.5;
+}
+
+/* ── Section labels ──────────────────────────────────────────── */
+.tut-section { margin-bottom: 28px; }
+.tut-section-label {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  font-family: var(--mono);
+  margin-bottom: 12px;
+}
+.tut-section-label-spaced { margin-top: 24px; }
+
+/* ── Connect card (Step 1) ───────────────────────────────────── */
+.tut-connect-card {
+  padding: 18px 20px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+}
+.tut-connect-row {
+  display: flex; align-items: center; gap: 16px;
+}
+.tut-connect-icon {
+  width: 48px; height: 48px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.tut-connect-body { flex: 1; min-width: 0; }
+.tut-connect-name {
+  font-size: 15px; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.tut-connect-desc {
+  font-size: 13px; color: var(--ink-soft);
+  margin-top: 3px; line-height: 1.5;
+}
+.tut-popular {
+  background: var(--ink); color: var(--bg);
+  font-size: 10.5px; padding: 4px 10px;
+  letter-spacing: 0.02em;
+}
+
+.tut-mini-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.tut-mini-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px;
+  padding: 16px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  text-align: center;
+}
+.tut-mini-name {
+  font-size: 13.5px; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+@media (max-width: 560px) {
+  .tut-mini-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Hint line ───────────────────────────────────────────────── */
+.tut-hint {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line));
+  border-radius: var(--r-m);
+  font-size: 12.5px; color: var(--ink-soft); line-height: 1.55;
+}
+.tut-hint svg { flex-shrink: 0; margin-top: 2px; color: var(--blue); }
+.tut-hint strong { color: var(--ink); font-weight: 600; }
+
+/* ── Feature cards (Step 2) ──────────────────────────────────── */
+.tut-feature-list {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.tut-feature-card {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 18px 20px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+}
+.tut-feature-icon {
+  width: 40px; height: 40px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.tut-feature-body { flex: 1; min-width: 0; }
+.tut-feature-name {
+  font-size: 14.5px; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.tut-feature-desc {
+  font-size: 13px; color: var(--ink-soft);
+  margin-top: 4px; line-height: 1.6;
+}
+.tut-feature-desc em { font-style: italic; font-family: var(--serif, 'Instrument Serif', serif); }
+
+.tut-example {
+  margin-top: 10px;
+  padding: 11px 13px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-m);
+  font-size: 12.5px; color: var(--ink-soft); line-height: 1.55;
+}
+.tut-example strong { color: var(--ink); font-weight: 600; }
+.tut-example code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--ink);
+}
+
+.tut-callout {
+  margin-top: 20px;
+  padding: 14px 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  font-size: 13px; color: var(--ink-soft); line-height: 1.6;
+}
+.tut-callout strong { color: var(--ink); font-weight: 600; }
+
+/* ── AI tabs (Step 3) ────────────────────────────────────────── */
+.tut-ai-tabs {
+  display: flex; gap: 6px;
+  padding: 4px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  margin-bottom: 20px;
+}
+.tut-ai-tab {
+  flex: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: transparent;
+  border: none; border-radius: calc(var(--r-m) - 2px);
+  font: inherit; font-size: 13px; font-weight: 500;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.tut-ai-tab:hover { color: var(--ink); }
+.tut-ai-tab.is-active {
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.tut-ai-tab-icon {
+  width: 22px; height: 22px;
+  border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.tut-ai-instructions { margin-bottom: 20px; }
+.tut-instruction { display: none; }
+.tut-instruction.is-active { display: block; }
+
+.tut-numbered-steps {
+  display: flex; flex-direction: column; gap: 14px;
+}
+.tut-numbered-step {
+  display: flex; gap: 14px;
+  padding: 16px 18px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+}
+.tut-num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12.5px; font-weight: 600;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+.tut-num-body { flex: 1; min-width: 0; }
+.tut-num-title {
+  font-size: 14px; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.tut-num-desc {
+  font-size: 13px; color: var(--ink-soft);
+  margin-top: 4px; line-height: 1.55;
+}
+.tut-num-desc a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 2px;
+}
+.tut-num-desc a:hover { text-decoration-color: var(--ink); }
+.tut-num-desc strong { color: var(--ink); font-weight: 600; }
+.tut-num-desc code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--bg-2);
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: var(--ink);
+}
+
+/* ── URL box ─────────────────────────────────────────────────── */
+.tut-url-box {
+  padding: 16px 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  margin-bottom: 20px;
+}
+.tut-url-label {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  font-family: var(--mono);
+  margin-bottom: 10px;
+}
+.tut-url-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.tut-url-row code {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  word-break: break-all;
+  letter-spacing: 0.01em;
+}
+
+/* ── Prompt cards (Step 4) ───────────────────────────────────── */
+.tut-prompt-list {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-bottom: 28px;
+}
+.tut-prompt-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.tut-prompt-card:hover {
+  border-color: var(--ink);
+  background: var(--bg-2);
+}
+.tut-prompt-icon {
+  width: 32px; height: 32px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.tut-prompt-body { flex: 1; min-width: 0; }
+.tut-prompt-q {
+  font-size: 13.5px; font-weight: 500;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.tut-prompt-meta {
+  font-size: 11.5px; color: var(--muted);
+  margin-top: 2px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.tut-prompt-copy {
+  font-size: 11.5px; font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  font-family: var(--mono);
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  flex-shrink: 0;
+}
+.tut-prompt-copy.is-copied {
+  background: var(--ink); color: var(--bg); border-color: var(--ink);
+}
+
+/* ── Actions ─────────────────────────────────────────────────── */
+.tut-actions {
+  display: flex;
+  margin-top: 32px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.tut-actions-center {
+  flex-direction: column; align-items: center;
+}
+.tut-actions-split { justify-content: space-between; }
+.tut-actions-finish {
+  flex-direction: column; align-items: center; gap: 12px;
+}
+.tut-cta {
+  padding: 12px 24px;
+  font-size: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tut-actions-finish .tut-cta {
+  width: 100%; max-width: 320px;
+}
+.tut-note {
+  font-size: 12px; color: var(--muted);
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+</style>
+
+<script>
+(function(){
+  'use strict';
+
+  var currentStep = 0;
+  var totalSteps = 5;
+  var panels = document.querySelectorAll('.tut-panel');
+  var indicators = document.querySelectorAll('.tut-step-indicator');
+
+  function showStep(n) {
+    if (n < 0) n = 0;
+    if (n >= totalSteps) n = totalSteps - 1;
+
+    var oldPanel = panels[currentStep];
+    oldPanel.classList.add('is-leaving');
+    oldPanel.classList.remove('is-active');
+
+    currentStep = n;
+
+    indicators.forEach(function(ind, i) {
+      ind.classList.remove('is-active', 'is-done');
+      if (i < n) ind.classList.add('is-done');
+      if (i === n) ind.classList.add('is-active');
+    });
+
+    var lines = document.querySelectorAll('.tut-step-line');
+    lines.forEach(function(line, i) {
+      line.classList.toggle('is-done', i < n);
+    });
+
+    setTimeout(function() {
+      oldPanel.classList.remove('is-leaving');
+      panels[currentStep].classList.add('is-active');
+    }, 200);
+
+    if (n === totalSteps - 1) {
+      fetch('/api/tutorial/complete', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
+    }
+  }
+
+  window.tutNext = function() { showStep(currentStep + 1); };
+  window.tutPrev = function() { showStep(currentStep - 1); };
+
+  window.tutSelectTool = function(btn) {
+    document.querySelectorAll('.tut-ai-tab').forEach(function(t) { t.classList.remove('is-active'); });
+    btn.classList.add('is-active');
+    var tool = btn.dataset.tool;
+    document.querySelectorAll('.tut-instruction').forEach(function(ins) {
+      ins.classList.toggle('is-active', ins.dataset.instruction === tool);
+    });
+  };
+
+  window.tutCopyUrl = function() {
+    var url = document.getElementById('tutMcpUrl').textContent;
+    navigator.clipboard.writeText(url).then(function() {
+      var btn = document.getElementById('tutCopyBtn');
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="margin-right:4px;"><path d="M20 6 9 17l-5-5"/></svg>Copied!';
+      setTimeout(function() {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy';
+      }, 2000);
+    });
+  };
+
+  window.tutCopyPrompt = function(card) {
+    var qEl = card.querySelector('.tut-prompt-q');
+    var text = qEl ? qEl.textContent.replace(/^"|"$/g, '') : '';
+    var copyEl = card.querySelector('.tut-prompt-copy');
+    navigator.clipboard.writeText(text).then(function() {
+      copyEl.textContent = 'Copied!';
+      copyEl.classList.add('is-copied');
+      setTimeout(function() {
+        copyEl.textContent = 'Copy';
+        copyEl.classList.remove('is-copied');
+      }, 2000);
+    });
+  };
+
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,508 @@
+{# Shared JS helpers for rendering dashboard cards.
+   Exports `window.Fluxito` with:
+     - esc(s)                          — HTML-escape
+     - fmtNum(v)                       — compact number formatter (K/M/B)
+     - fmtMetricValue(value, unit)     — unit-aware formatter (%, duration, currency…)
+     - fmtDelta(delta_pct, direction, inverse?) — renders a colored delta pill
+     - renderCard(card)                — returns innerHTML for a card
+   Include this BEFORE any view-specific JS that calls these helpers.
+#}
+<style>
+  .metric-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; width:100%; }
+  .metric-kpi { position:relative; padding:20px 18px 18px; background:var(--bg); border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; }
+  .metric-kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:linear-gradient(180deg,var(--brand,#6c8cff),var(--brand-2,#31d0aa)); opacity:.9; }
+  .metric-kpi .l { font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-subtle); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .metric-kpi .v { font-size:30px; font-weight:700; letter-spacing:-.02em; line-height:1.1; font-variant-numeric:tabular-nums; color:var(--text); }
+  .metric-kpi .delta { display:inline-flex; align-items:center; gap:3px; margin-top:8px; font-size:11.5px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .metric-kpi .delta.pos { color:#059669; }
+  .metric-kpi .delta.neg { color:#dc2626; }
+  .metric-kpi .delta.neu { color:var(--text-subtle); }
+  .big-metric { text-align:center; padding:20px 10px; }
+  .big-metric .metric-value { font-size:34px; line-height:1.1; font-weight:700; font-variant-numeric:tabular-nums; }
+  .big-metric .metric-label { font-size:12px; color:var(--text-subtle); text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+  .big-metric .delta { display:inline-flex; gap:3px; margin-top:10px; font-size:13px; font-weight:600; }
+  .big-metric .delta.pos { color:#059669; }
+  .big-metric .delta.neg { color:#dc2626; }
+  .card-chart { width:100%; height:260px; }
+  .card-chart[data-chart-layout="hbar"] { height:320px; }
+  /* Inline delta pill used inside table cells (compact version of .delta) */
+  .delta-pill {
+    display:inline-flex; align-items:center; gap:3px;
+    padding:2px 7px; border-radius:999px;
+    font-size:11px; font-weight:600; font-variant-numeric:tabular-nums;
+    line-height:1.4; white-space:nowrap;
+  }
+  .delta-pill.pos { color:#047857; background:rgba(16,185,129,.12); }
+  .delta-pill.neg { color:#b91c1c; background:rgba(239,68,68,.12); }
+  .delta-pill.neu { color:var(--text-subtle); background:rgba(148,163,184,.12); }
+  [data-theme="dark"] .delta-pill.pos { color:#34d399; background:rgba(16,185,129,.18); }
+  [data-theme="dark"] .delta-pill.neg { color:#f87171; background:rgba(239,68,68,.18); }
+  /* Wide table cards span the full 12-col grid row */
+  .grid-cards > .data-card.card-wide { grid-column: 1 / -1 !important; }
+
+  /* Pastel Pop scorecard tile */
+  .sc-card {
+    position: relative;
+    padding: 20px 18px 18px;
+    border-radius: var(--r-md, 10px);
+    border: 1.5px solid var(--sc-border, var(--pp-blue-border, #93c5fd));
+    background: var(--sc-bg, var(--pp-blue-bg, #eff6ff));
+    overflow: hidden;
+  }
+  .sc-label {
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--sc-label-color, var(--pp-blue-label, #1d4ed8));
+    margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-family: var(--mono, monospace);
+  }
+  .sc-value {
+    font-size: 30px; font-weight: 700; letter-spacing: -.02em;
+    line-height: 1.1; font-variant-numeric: tabular-nums;
+    color: var(--sc-accent, var(--pp-blue-accent, #1d4ed8));
+  }
+  .sc-delta {
+    display: inline-flex; align-items: center; gap: 3px;
+    margin-top: 8px; font-size: 11.5px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .sc-delta.pos { color: #059669; }
+  .sc-delta.neg { color: #dc2626; }
+  .sc-delta.neu { color: var(--text-subtle); }
+  .sc-sparkline { width: 100%; height: 36px; margin-top: 10px; }
+</style>
+<script>
+(function(){
+  var F = window.Fluxito = window.Fluxito || {};
+  var ICONS = {'ga4':'📊','meta':'📘','tiktok':'🎵','snap':'👻','google':'🎯','gtm':'🏷️','bigquery':'🗄️'};
+
+  // Pastel Pop palette map: scheme name → CSS variable prefix
+  var PP_SCHEMES = ['blue','green','amber','pink','teal','purple','red'];
+
+  F.esc = function(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, function(m){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+    });
+  };
+
+  // Compact number formatter (1.2K, 3.4M, 1.2B)
+  F.fmtNum = function(v){
+    if (v===null||v===undefined||v==='') return '';
+    var n = Number(String(v).replace(/,/g,''));
+    if (isNaN(n)) return F.esc(v);
+    var sign = n < 0 ? '-' : '';
+    var a = Math.abs(n);
+    if (a >= 1e9) return sign + (a/1e9).toFixed(2).replace(/\.00$/,'') + 'B';
+    if (a >= 1e6) return sign + (a/1e6).toFixed(2).replace(/\.00$/,'') + 'M';
+    if (a >= 1e3) return sign + (a/1e3).toFixed(1).replace(/\.0$/,'') + 'K';
+    if (Number.isInteger(n)) return n.toLocaleString();
+    return n.toLocaleString(undefined, {maximumFractionDigits: 2});
+  };
+
+  // Unit-aware metric formatter. Supported units:
+  //   percent | pct | %         → "37%"
+  //   duration_sec | seconds    → "4m 33s" or "1h 2m"
+  //   duration_ms               → same, ms input
+  //   currency (+ currency_code) → "$1.2K"
+  //   bytes                     → "12.4 MB"
+  //   (null/undefined)          → fmtNum
+  F.fmtMetricValue = function(value, unit, opts){
+    if (value===null||value===undefined||value==='') return '';
+    var n = Number(String(value).replace(/,/g,''));
+    if (isNaN(n)) return F.esc(value);
+    var u = String(unit||'').toLowerCase();
+    if (u === 'percent' || u === 'pct' || u === '%') {
+      // If value is already scaled 0-100, show with 1 decimal; if 0-1, scale up.
+      var pct = Math.abs(n) <= 1 && n !== 0 ? n*100 : n;
+      return (Math.round(pct*10)/10).toString().replace(/\.0$/,'') + '%';
+    }
+    if (u === 'duration' || u === 'duration_sec' || u === 'seconds' || u === 'sec') {
+      return formatDuration(n);
+    }
+    if (u === 'duration_ms' || u === 'ms' || u === 'milliseconds') {
+      return formatDuration(n/1000);
+    }
+    if (u === 'currency' || u === '$') {
+      var sym = (opts && opts.currency_code) ? opts.currency_code + ' ' : '$';
+      return sym + F.fmtNum(n);
+    }
+    if (u === 'bytes') {
+      if (n >= 1e9) return (n/1e9).toFixed(2) + ' GB';
+      if (n >= 1e6) return (n/1e6).toFixed(2) + ' MB';
+      if (n >= 1e3) return (n/1e3).toFixed(1) + ' KB';
+      return n + ' B';
+    }
+    return F.fmtNum(n);
+  };
+
+  function formatDuration(sec){
+    if (sec === null || sec === undefined || isNaN(sec)) return '';
+    sec = Math.round(sec);
+    var sign = sec < 0 ? '-' : '';
+    sec = Math.abs(sec);
+    var h = Math.floor(sec/3600);
+    var m = Math.floor((sec%3600)/60);
+    var s = sec % 60;
+    if (h) return sign + h + 'h ' + m + 'm';
+    if (m) return sign + m + 'm ' + s + 's';
+    return sign + s + 's';
+  }
+
+  // Delta pill for KPI tiles.
+  // inverse=true means "lower is better" (bounce_rate, cpc, etc.) so a negative
+  // delta is shown as positive/green.
+  F.fmtDelta = function(delta_pct, direction, inverse){
+    if (delta_pct === null || delta_pct === undefined) return '';
+    var n = Number(delta_pct);
+    if (isNaN(n)) return '';
+    var isPos = n > 0, isNeg = n < 0;
+    var good = inverse ? isNeg : isPos;
+    var bad  = inverse ? isPos : isNeg;
+    var cls = good ? 'pos' : (bad ? 'neg' : 'neu');
+    var arrow = n > 0 ? '▲' : (n < 0 ? '▼' : '•');
+    var pct = (Math.round(Math.abs(n)*10)/10).toString().replace(/\.0$/,'');
+    var suffix = direction ? ' ' + F.esc(direction) : '';
+    return '<span class="delta ' + cls + '">' + arrow + ' ' + pct + '%' + suffix + '</span>';
+  };
+
+  // Column-name heuristic: is this a derived metric (rate/ratio/share/pct/
+  // change)? Used to SKIP these columns in auto charts when absolute peers
+  // exist, so a % doesn't get mixed with raw counts on a shared axis.
+  F.isDerivativeMetric = function(colName){
+    if (!colName) return false;
+    var n = String(colName).toLowerCase();
+    return /(^|_)(pct|rate|ratio|share|index|delta|chg|change|growth|variance|diff)($|_)/.test(n)
+        || /(yoy|mom|wow|qoq|pct_?chg|chg_?pct|_pct$|_rate$|_ratio$|_share$)/.test(n);
+  };
+
+  // Narrower rule: is this specifically a *period-over-period change* metric?
+  // Only THESE get rendered as green/red delta pills in table cells.
+  F.isChangeMetric = function(colName){
+    if (!colName) return false;
+    var n = String(colName).toLowerCase();
+    if (/(^|_)(yoy|mom|wow|qoq)(_|$)/.test(n)) return true;
+    if (/(^|_)(delta|chg|change|growth|variance|diff)(_|$)/.test(n)) return true;
+    if (/(pct_?chg|chg_?pct|pct_?change|change_?pct)/.test(n)) return true;
+    return false;
+  };
+
+  // Inline delta pill for a single numeric cell
+  F.fmtDeltaCell = function(value, inverse){
+    if (value === null || value === undefined || value === '') return '';
+    var n = Number(String(value).replace(/,/g,''));
+    if (isNaN(n)) return F.esc(value);
+    var isPos = n > 0, isNeg = n < 0;
+    var good = inverse ? isNeg : isPos;
+    var bad  = inverse ? isPos : isNeg;
+    var cls = good ? 'pos' : (bad ? 'neg' : 'neu');
+    var arrow = isPos ? '▲' : (isNeg ? '▼' : '•');
+    var abs = Math.abs(n);
+    var txt = (abs >= 100 ? Math.round(abs) : (Math.round(abs*10)/10))
+                .toString().replace(/\.0$/,'') + '%';
+    return '<span class="delta-pill ' + cls + '">' + arrow + ' ' + txt + '</span>';
+  };
+
+  var _MONTH_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function _isDateColName(c){ return /^(date|day|report_date|week|week_start|week_end|period|timestamp|datetime|created_at|updated_at)$/i.test(c); }
+  function _isMonthColName(c){ return /^month(_num(ber)?)?$/i.test(c); }
+  function _isYearColName(c){ return /^year$/i.test(c); }
+  function _isRateCol(c){ var n = c.toLowerCase().replace(/_/g,''); return /rate$/.test(n) || /^ctr$|ctr$|^cvr$|cvr$/.test(n); }
+  function _isDurationCol(c){ var n = c.toLowerCase().replace(/_/g,''); return /duration|timeon|timespent|dwelltime|avgtime/.test(n); }
+
+  function _fmtYYYYMMDD(v){
+    var s = String(v == null ? '' : v).trim();
+    if (/^\d{8}$/.test(s)) {
+      var mo = parseInt(s.slice(4,6), 10) - 1;
+      var d = parseInt(s.slice(6,8), 10);
+      return (_MONTH_S[mo] || s.slice(4,6)) + ' ' + d + ', ' + s.slice(0,4);
+    }
+    return s;
+  }
+
+  function numericColsOf(columns, rows){
+    return columns.filter(function(c){
+      return rows.slice(0,5).every(function(r){
+        var v = String(r[c]==null?'':r[c]).replace(/,/g,'').trim();
+        return v !== '' && !isNaN(parseFloat(v));
+      });
+    });
+  }
+
+  F.numericColsOf = numericColsOf;
+
+  // ── Chart type detection fallback (for old cards without chart_type) ────
+  F.detectChartType = function(snap){
+    var ct = snap.card_type || 'UNKNOWN';
+    if (ct === 'METRIC') return 'scorecard';
+    if (ct === 'AUDIT')  return 'audit';
+    if (ct === 'LIST')   return 'list';
+    if (ct === 'TABLE')  return 'table';
+    if (ct === 'CHART') {
+      var cfg = snap.chart_config || {};
+      var type = (cfg.type || '').toLowerCase();
+      if (type === 'pie' || type === 'donut') return 'pie';
+      if (type === 'line' || type === 'area') return 'line';
+      if (type === 'bar' || type === 'hbar' || type === 'stacked_bar') return 'bar';
+    }
+    return 'table';
+  };
+
+  // ── Scorecard renderer (.sc-card Pastel Pop tiles) ─────────────────────
+  function renderScorecard(snap){
+    var cfg = snap.chart_config || {};
+    var scheme = PP_SCHEMES.indexOf(cfg.color_scheme) >= 0 ? cfg.color_scheme : 'blue';
+    var unit = cfg.unit || snap.unit || 'number';
+    var showSparkline = cfg.sparkline !== false;
+
+    // Try metrics array first (METRIC card), then fall back to rows/columns
+    var metrics = snap.metrics || [];
+    if (metrics.length) {
+      // Multi-metric: render a grid of Pastel Pop tiles
+      var tiles = metrics.map(function(m, i){
+        var s = PP_SCHEMES[i % PP_SCHEMES.length];
+        var v = F.fmtMetricValue(m.value, m.unit || unit, {currency_code: m.currency_code});
+        var d = '';
+        if (m.delta_pct !== null && m.delta_pct !== undefined) {
+          var n = Number(m.delta_pct);
+          if (!isNaN(n)) {
+            var good = m.inverse ? n < 0 : n > 0;
+            var bad  = m.inverse ? n > 0 : n < 0;
+            var dcls = good ? 'pos' : (bad ? 'neg' : 'neu');
+            var arrow = n > 0 ? '▲' : (n < 0 ? '▼' : '•');
+            var dpct = (Math.round(Math.abs(n)*10)/10).toString().replace(/\.0$/,'');
+            d = '<span class="sc-delta ' + dcls + '">' + arrow + ' ' + dpct + '%' + (m.direction ? ' ' + F.esc(m.direction) : '') + '</span>';
+          }
+        }
+        var lbl = m.label || m.key || '';
+        return '<div class="sc-card" style="--sc-border:var(--pp-'+s+'-border);--sc-bg:var(--pp-'+s+'-bg);--sc-accent:var(--pp-'+s+'-accent);--sc-label-color:var(--pp-'+s+'-label);">' +
+          '<div class="sc-label" title="'+F.esc(lbl)+'">'+F.esc(lbl)+'</div>' +
+          '<div class="sc-value">'+F.esc(v)+'</div>' + d + '</div>';
+      });
+      return '<div class="metric-kpi-grid">' + tiles.join('') + '</div>';
+    }
+
+    // Fallback: first numeric value from rows
+    var rows = snap.rows || [];
+    var cols = snap.columns || [];
+    var numCols = numericColsOf(cols, rows);
+    var valCol = numCols[0];
+    var deltaCol = numCols.find(function(c){ return F.isChangeMetric(c); }) || null;
+
+    if (!rows.length || !valCol) {
+      return '<p class="empty">No data to display.</p>';
+    }
+
+    var firstRow = rows[0];
+    var rawVal = firstRow[valCol];
+    var valStr = F.fmtMetricValue(rawVal, unit);
+    var labelCol = cols.find(function(c){ return numCols.indexOf(c) === -1; }) || cols[0];
+    var lbl = labelCol ? F.esc(String(firstRow[labelCol] == null ? valCol : firstRow[labelCol])) : F.esc(valCol);
+
+    var deltaHtml = '';
+    if (deltaCol && firstRow[deltaCol] !== null && firstRow[deltaCol] !== undefined) {
+      var dn = Number(firstRow[deltaCol]);
+      if (!isNaN(dn)) {
+        var dGood = dn > 0, dBad = dn < 0;
+        var dCls = dGood ? 'pos' : (dBad ? 'neg' : 'neu');
+        var dArrow = dn > 0 ? '▲' : (dn < 0 ? '▼' : '•');
+        var dPct = (Math.round(Math.abs(dn)*10)/10).toString().replace(/\.0$/,'');
+        deltaHtml = '<span class="sc-delta ' + dCls + '">' + dArrow + ' ' + dPct + '%</span>';
+      }
+    }
+
+    // Mini sparkline: take last 6 numeric values from series, or equal-height bars
+    var sparkHtml = '';
+    if (showSparkline) {
+      var sparkVals = rows.slice(-6).map(function(r){ return Number(String(r[valCol]||0).replace(/,/g,'')); });
+      if (sparkVals.length < 2) sparkVals = [1,1,1,1,1,1];
+      var sparkMax = Math.max.apply(null, sparkVals) || 1;
+      var barW = Math.floor(100 / sparkVals.length);
+      var bars = sparkVals.map(function(v, i){
+        var h = Math.round((v / sparkMax) * 100);
+        var isLast = i === sparkVals.length - 1;
+        var fill = isLast ? 'var(--sc-accent,#1d4ed8)' : 'var(--sc-border,#93c5fd)';
+        return '<rect x="'+(i*barW+1)+'" y="'+(100-h)+'" width="'+(barW-2)+'" height="'+h+'" fill="'+fill+'" rx="1"/>';
+      }).join('');
+      sparkHtml = '<div class="sc-sparkline"><svg viewBox="0 0 100 100" preserveAspectRatio="none" width="100%" height="100%">' + bars + '</svg></div>';
+    }
+
+    return '<div class="sc-card" style="--sc-border:var(--pp-'+scheme+'-border);--sc-bg:var(--pp-'+scheme+'-bg);--sc-accent:var(--pp-'+scheme+'-accent);--sc-label-color:var(--pp-'+scheme+'-label);">' +
+      '<div class="sc-label">'+lbl+'</div>' +
+      '<div class="sc-value">'+F.esc(valStr)+'</div>' +
+      deltaHtml + sparkHtml + '</div>';
+  }
+
+  // ── Pie / donut renderer (emits data-chart-type for mountCharts) ────────
+  function renderPieChart(snap){
+    var cfg = snap.chart_config || {};
+    var isDonut = cfg.donut === true || (cfg.type || '').toLowerCase() === 'donut';
+    var showLegend = cfg.show_legend !== false;
+    var chartOption = {
+      tooltip: {trigger: 'item'},
+      legend: showLegend ? {bottom: 0, textStyle: {fontSize: 11}} : {show: false},
+      color: ['#6366f1','#10b981','#f59e0b','#ec4899','#14b8a6','#8b5cf6','#ef4444'],
+      series: [{
+        type: 'pie',
+        radius: isDonut ? ['45%','70%'] : '70%',
+        data: [],  // populated by mountCharts from snap.rows/columns
+        label: {fontSize: 11},
+        itemStyle: {borderWidth: 2},
+      }],
+    };
+    var optJson = F.esc(JSON.stringify(chartOption));
+    return '<div class="card-chart" data-chart="pie" data-chart-type="pie" data-card-id="'+F.esc(snap._card_id||'')+'" data-chart-option="'+optJson+'"></div>';
+  }
+
+  // ── Bar chart renderer (emits data-chart for mountCharts) ──────────────
+  function renderBarChart(snap){
+    var cfg = snap.chart_config || {};
+    var scheme = PP_SCHEMES.indexOf(cfg.color_scheme) >= 0 ? cfg.color_scheme : 'blue';
+    var isHoriz = (cfg.orientation === 'horizontal') || (cfg.type || '').toLowerCase() === 'hbar';
+    var rows = snap.rows || [];
+    var layout = isHoriz ? 'hbar' : 'bar';
+    if (!rows.length) return '<p class="empty">No data to chart.</p>';
+    return '<div class="card-chart" data-chart="custom" data-chart-layout="'+layout+'" data-card-id="'+F.esc(snap._card_id||'')+'"></div>';
+  }
+
+  // ── Line chart renderer ────────────────────────────────────────────────
+  function renderLineChart(snap){
+    var rows = snap.rows || [];
+    if (!rows.length) return '<p class="empty">No data to chart.</p>';
+    return '<div class="card-chart" data-chart="custom" data-chart-layout="line" data-card-id="'+F.esc(snap._card_id||'')+'"></div>';
+  }
+
+  // ── Table renderer ────────────────────────────────────────────────────
+  function renderTable(snap){
+    var rows = snap.rows || snap.rows || [];
+    var cols = snap.columns || [];
+    var numericCols = numericColsOf(cols, rows);
+    var labelCol = cols.find(function(c){ return numericCols.indexOf(c) === -1; }) || cols[0];
+    var derivCols = cols.filter(function(c){ return numericCols.indexOf(c) !== -1 && F.isChangeMetric(c); });
+    var isDeriv = function(c){ return derivCols.indexOf(c) !== -1; };
+    var hasChart = numericCols.length >= 1 && rows.length >= 2 && labelCol;
+
+    var tableHtml = '';
+    if (rows.length) {
+      tableHtml = '<div class="table-wrap"><table><thead><tr>' + cols.map(function(c){ return '<th>'+F.esc(c)+'</th>'; }).join('') + '</tr></thead><tbody>' +
+        rows.map(function(r){
+          return '<tr>' + cols.map(function(c){
+            var v = r[c];
+            var isNum = numericCols.indexOf(c) !== -1;
+            var cellHtml;
+            if (isDeriv(c)) {
+              cellHtml = F.fmtDeltaCell(v);
+            } else if (isNum && _isDateColName(c)) {
+              cellHtml = F.esc(_fmtYYYYMMDD(v));
+            } else if (isNum && _isMonthColName(c)) {
+              var mn = parseInt(v, 10);
+              cellHtml = F.esc((mn >= 1 && mn <= 12) ? _MONTH_S[mn-1] : String(v == null ? '' : v));
+            } else if (isNum && _isYearColName(c)) {
+              cellHtml = F.esc(String(v == null ? '' : v));
+            } else if (isNum && _isRateCol(c)) {
+              cellHtml = F.esc(F.fmtMetricValue ? F.fmtMetricValue(v, 'percent') : v + '%');
+            } else if (isNum && _isDurationCol(c)) {
+              cellHtml = F.esc(F.fmtMetricValue ? F.fmtMetricValue(v, 'duration_sec') : v + 's');
+            } else if (isNum) {
+              cellHtml = F.fmtNum(v);
+            } else {
+              cellHtml = F.esc(v);
+            }
+            var isTrueNum = isNum && !_isDateColName(c) && !_isMonthColName(c) && !_isYearColName(c);
+            var alignStyle = isTrueNum ? ' style="text-align:right;font-variant-numeric:tabular-nums;"' : '';
+            return '<td' + alignStyle + '>' + cellHtml + '</td>';
+          }).join('') + '</tr>';
+        }).join('') +
+        '</tbody></table>' + (snap.truncated ? '<p class="truncation-note">Showing '+rows.length+' of '+(snap.total_rows||rows.length)+'</p>' : '') + '</div>';
+    } else {
+      tableHtml = '<p class="empty">No rows to display.</p>';
+    }
+
+    var chartEl = (hasChart && snap._card_id) ? '<div class="card-chart" data-chart="table" data-card-id="'+F.esc(snap._card_id)+'"></div>' : '';
+    return chartEl + tableHtml;
+  }
+
+  // ── Audit renderer ────────────────────────────────────────────────────
+  function renderAudit(snap){
+    var findings = snap.findings || [];
+    var sevClass = function(s){ return ({critical:'badge-danger',error:'badge-danger',high:'badge-warning',warning:'badge-warning',warn:'badge-warning',medium:'badge-warning',low:'badge-success',info:'badge',ok:'badge-success',pass:'badge-success'})[String(s||'info').toLowerCase()] || 'badge'; };
+    var scoreHtml = '';
+    if (snap.score !== null && snap.score !== undefined) {
+      var n = parseInt(snap.score,10)||0;
+      var cls = n>=70?'badge-success':(n>=40?'badge-warning':'badge-danger');
+      var lbl = n>=70?'Good':(n>=40?'Needs attention':'Critical');
+      scoreHtml = '<div class="row mb-3" style="gap:10px;"><span class="audit-score">Score: '+n+'</span><span class="badge '+cls+'">'+lbl+'</span></div>' +
+                  (snap._card_id ? '<div class="card-chart" data-chart="audit-gauge" data-card-id="'+F.esc(snap._card_id)+'" data-score="'+n+'" style="height:140px;"></div>' : '');
+    }
+    var summaryHtml = snap.summary ? '<p class="audit-summary">' + F.esc(snap.summary) + '</p>' : '';
+    var findingsHtml = findings.length
+      ? '<div class="findings-list">' + findings.map(function(f){ return '<div class="finding-row"><span class="finding-badge '+sevClass(f.severity)+'">'+F.esc(String(f.severity||'info').toUpperCase())+'</span><span class="finding-msg">'+F.esc(f.message||'')+(f.context?' <span class="finding-ctx">— '+F.esc(f.context)+'</span>':'')+'</span></div>'; }).join('') +
+        (snap.truncated ? '<p class="truncation-note">Showing '+findings.length+' of '+(snap.total_findings||findings.length)+'</p>' : '') +
+        '</div>'
+      : '<p class="empty">No findings.</p>';
+    return scoreHtml + summaryHtml + findingsHtml;
+  }
+
+  // ── List renderer ─────────────────────────────────────────────────────
+  function renderList(snap){
+    var items = snap.items || [];
+    return items.length
+      ? '<ul class="data-list">' + items.map(function(i){ return '<li class="list-item">'+F.esc(i)+'</li>'; }).join('') +
+        (snap.truncated ? '<p class="truncation-note">Showing '+items.length+' of '+(snap.total_items||items.length)+'</p>' : '') +
+        '</ul>'
+      : '<p class="empty">No items.</p>';
+  }
+
+  // ── Main renderCard — chart_type dispatch ─────────────────────────────
+  F.renderCard = function(card){
+    var snap = card.snap || {};
+    var ct = card.card_type || 'UNKNOWN';
+    var icon = ICONS[card.platform] || '📈';
+
+    // Inject card ID into snap so sub-renderers can emit data-card-id attributes
+    snap._card_id = card.id;
+
+    // chart_type from the new card spec takes precedence; fall back to heuristic
+    var chartType = snap.chart_type || F.detectChartType(snap);
+
+    var body = '';
+    switch (chartType) {
+      case 'scorecard': body = renderScorecard(snap); break;
+      case 'bar':       body = renderBarChart(snap);  break;
+      case 'line':      body = renderLineChart(snap); break;
+      case 'pie':       body = renderPieChart(snap);  break;
+      case 'table':     body = renderTable(snap);     break;
+      case 'audit':     body = renderAudit(snap);     break;
+      case 'list':      body = renderList(snap);      break;
+      default:          body = renderTable(snap);     break;
+    }
+
+    // Keep backward-compat: also handle old ct-based paths for cards without chart_type
+    // (detectChartType already maps old card_type → chart type above, so this is a safety net)
+    if (!snap.chart_type && ct === 'UNKNOWN') {
+      body = '<p class="empty">This card uses an older format. Redeploy it to refresh.</p>';
+    }
+
+    // Determine card width heuristics
+    var autoWide = false;
+    if (snap.layout === 'wide') {
+      autoWide = true;
+    } else if (ct === 'TABLE') {
+      var colsW = (snap.columns || []);
+      var numW = numericColsOf(colsW, snap.rows || []).length;
+      autoWide = (colsW.length >= 6) || (numW >= 5);
+    } else if (ct === 'CHART') {
+      var cfgW = snap.chart_config || {};
+      if ((cfgW.series || []).length >= 4) autoWide = true;
+    } else if (ct === 'METRIC') {
+      if ((snap.metrics || []).length >= 4) autoWide = true;
+    }
+
+    var isKpiTile = (chartType === 'scorecard' && (snap.metrics||[]).length === 1);
+    var cardCls = 'data-card' + (isKpiTile ? ' kpi-tile' : '') + (autoWide ? ' card-wide' : '');
+    return '<div class="' + cardCls + '" data-card-type="' + F.esc(ct) + '" data-card-id="' + F.esc(card.id) + '">' +
+      '<div class="card-header"><div class="card-title"><span>' + icon + '</span><span title="' + F.esc(card.title) + '">' + F.esc(card.title) + '</span>' + (ct!=='UNKNOWN' ? '<span class="type-badge">'+F.esc(ct)+'</span>' : '') + '</div>' +
+      '<div class="row" style="gap:8px;"><span class="card-meta">' + F.esc(String(card.platform||'').toUpperCase()) + '</span></div></div>' +
+      '<div class="card-body">' + body + '</div></div>';
+  };
+})();
+</script>

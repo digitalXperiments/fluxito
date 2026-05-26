@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Setup Tutorials — Fluxito{% endblock %}
+{% set active = 'tutorials' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/tutorials.css?v={{ asset_hash('css/tutorials.css') }}"/>
+{% endblock %}
+
+{% macro tutorial_badge(slug) -%}
+{%- if slug == 'google-cloud-setup' -%}google
+{%- elif slug == 'google-analytics-4' -%}ga4
+{%- elif slug == 'google-tag-manager' -%}gtm
+{%- elif slug == 'google-ads' -%}gads
+{%- elif slug == 'search-console' -%}sc
+{%- elif slug == 'bigquery' -%}bq
+{%- elif slug == 'meta-ads' -%}meta
+{%- elif slug == 'tiktok-ads' -%}tiktok
+{%- elif slug == 'linkedin-ads' -%}linkedin
+{%- elif slug == 'pinterest-ads' -%}pinterest
+{%- elif slug == 'snap-ads' -%}snap
+{%- elif slug == 'snowflake' -%}sf
+{%- elif slug == 'redshift' -%}rs
+{%- elif slug == 'amplitude' -%}amp
+{%- elif slug == 'adobe-analytics' -%}aa
+{%- elif slug == 'adobe-launch' -%}al
+{%- else -%}ghost
+{%- endif -%}
+{%- endmacro %}
+
+{% block main %}
+<main class="app-main tut-main">
+  <div class="page-head">
+    <div>
+      <span class="label">Docs</span>
+      <h1>Setup tutorials.</h1>
+      <p>Step-by-step connection guides for OAuth apps, credentials, permissions, and platform-specific setup.</p>
+    </div>
+    <div class="tut-head-meta" aria-label="Tutorial count">
+      <span>{{ tutorial_count }}</span>
+      <small>Guides</small>
+    </div>
+  </div>
+
+  <a href="/tutorials/google-cloud-setup" class="tut-start-card">
+    <span class="pbadge lg google"><span>GO</span></span>
+    <span class="tut-start-body">
+      <span class="tut-start-kicker">Recommended first</span>
+      <span class="tut-start-title">Google Cloud setup</span>
+      <span class="tut-start-copy">Create the OAuth client used by GA4, Tag Manager, Google Ads, Search Console, and BigQuery.</span>
+    </span>
+    <span class="btn sm">Open guide <span class="arrow">→</span></span>
+  </a>
+
+  <div class="tut-categories">
+    {% for cat in categories %}
+    <section class="tut-category" aria-labelledby="tutorial-category-{{ loop.index }}">
+      <div class="tut-cat-head">
+        <span class="cat-title {% if loop.index == 1 %}analytics{% elif loop.index == 2 %}ads{% elif loop.index == 3 %}warehouse{% else %}tags{% endif %}" id="tutorial-category-{{ loop.index }}">{{ cat.title }}</span>
+        <p class="tut-cat-desc">{{ cat.description }}</p>
+      </div>
+
+      <div class="tut-grid">
+        {% for slug, name, time, note in cat.tutorials %}
+        <a href="/tutorials/{{ slug }}" class="tut-card">
+          <div class="tut-card-head">
+            <span class="pbadge {{ tutorial_badge(slug) }}"><span>{{ name[:2]|upper }}</span></span>
+            <span class="status-pill {% if slug == 'google-cloud-setup' %}live{% endif %}">{{ time }}</span>
+          </div>
+          <h2>{{ name }}</h2>
+          <p>{{ note }}</p>
+          <span class="tut-card-action">Read guide <span>→</span></span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}

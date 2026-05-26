@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Business Context — Fluxito{% endblock %}
+{% set active = 'business_context' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css">
+<style>
+  /* ── EasyMDE → Fluxito editorial theme overrides ─────────────────── */
+  .EasyMDEContainer { font-family: var(--sans); }
+  .EasyMDEContainer .CodeMirror {
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: var(--r-m);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    font-family: var(--mono);
+    font-size: 13px; line-height: 1.65;
+    min-height: 480px;
+  }
+  .EasyMDEContainer .CodeMirror-cursor { border-left-color: var(--ink); }
+  .EasyMDEContainer .CodeMirror-selected { background: var(--bg-3) !important; }
+  .EasyMDEContainer .CodeMirror-focused .CodeMirror-selected {
+    background: color-mix(in srgb, var(--blue) 18%, transparent) !important;
+  }
+  .EasyMDEContainer .editor-toolbar {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-bottom: none;
+    border-top-left-radius: var(--r-m);
+    border-top-right-radius: var(--r-m);
+    opacity: 1; padding: 6px 8px;
+  }
+  .EasyMDEContainer .editor-toolbar button {
+    color: var(--ink-soft) !important;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    width: 30px; height: 30px;
+  }
+  .EasyMDEContainer .editor-toolbar button:hover,
+  .EasyMDEContainer .editor-toolbar button.active {
+    background: var(--bg-3);
+    border-color: var(--line);
+    color: var(--ink) !important;
+  }
+  .EasyMDEContainer .editor-toolbar i.separator {
+    border-left: 1px solid var(--line);
+    border-right: none; margin: 0 4px;
+  }
+  .EasyMDEContainer .editor-statusbar {
+    color: var(--muted); font-size: 11px; padding: 6px 12px 0;
+    font-family: var(--mono);
+  }
+  .EasyMDEContainer .editor-preview,
+  .EasyMDEContainer .editor-preview-side {
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    padding: 22px 26px;
+    font-size: 14px; line-height: 1.7;
+  }
+  .EasyMDEContainer .editor-preview h1,
+  .EasyMDEContainer .editor-preview h2,
+  .EasyMDEContainer .editor-preview h3,
+  .EasyMDEContainer .editor-preview-side h1,
+  .EasyMDEContainer .editor-preview-side h2,
+  .EasyMDEContainer .editor-preview-side h3 {
+    color: var(--ink); margin-top: 1.2em; letter-spacing: -0.01em;
+  }
+  .EasyMDEContainer .editor-preview code,
+  .EasyMDEContainer .editor-preview-side code {
+    background: var(--bg-2); padding: 2px 6px; border-radius: 4px;
+    font-size: 12px; font-family: var(--mono);
+  }
+  .EasyMDEContainer .editor-preview blockquote,
+  .EasyMDEContainer .editor-preview-side blockquote {
+    border-left: 3px solid var(--line); color: var(--ink-soft);
+    padding-left: 12px; margin-left: 0;
+  }
+  .EasyMDEContainer .CodeMirror-fullscreen,
+  .EasyMDEContainer .editor-toolbar.fullscreen,
+  .EasyMDEContainer .editor-preview-side {
+    background: var(--bg);
+  }
+
+  .bc-card {
+    padding: 22px 24px;
+    border: 1px solid var(--line); border-radius: var(--r-l);
+    background: var(--bg);
+  }
+  .bc-card-hd {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .bc-card-hd .title {
+    font-size: 11px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--muted); font-family: var(--mono);
+  }
+  .bc-status { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  .bc-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 16px; gap: 12px;
+  }
+  .bc-count { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  .bc-tip {
+    margin-top: 20px;
+    padding: 16px 20px;
+    background: var(--bg-2); border: 1px solid var(--line);
+    border-radius: var(--r-m);
+    font-size: 13.5px; color: var(--ink-soft); line-height: 1.6;
+  }
+  .bc-tip strong { color: var(--ink); font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block main %}
+<main class="app-main">
+  <div class="page-head">
+    <div>
+      <span class="label">{{ 'Org-wide context' if scope_type == 'organization' else 'Business context' }}</span>
+      <h1>Teach your AI <em class="serif-italic">your business.</em></h1>
+      <p>A plain-Markdown document describing {{ 'your organization' if scope_type == 'organization' else 'your business' }} —
+         industry, audience, goals, seasonality, competitors, anything your AI should know before answering analytics questions.
+         Loaded on demand by Claude, ChatGPT, Cursor, and any MCP-compatible tool, alongside your KPI Library.</p>
+    </div>
+  </div>
+
+  <div class="bc-card">
+    <div class="bc-card-hd">
+      <div class="title">Context document (Markdown)</div>
+      <div class="bc-status" id="bcStatus"></div>
+    </div>
+    <textarea
+      id="bcContent"
+      rows="22"
+      placeholder="# About the business&#10;&#10;## Industry&#10;We sell prescription eyewear online across the GCC region.&#10;&#10;## Audience&#10;- Primary: 25–44 urban professionals in UAE &amp; KSA&#10;- Secondary: Parents buying for children&#10;&#10;## Seasonality&#10;- Ramadan: spend shifts to evening/late-night&#10;- Back-to-school (Aug–Sep): kids frames spike 3x&#10;&#10;## Definitions specific to us&#10;- 'Prescription order' = any order with at least one lens SKU&#10;- 'New customer' = first order in the last 365 days&#10;">{{ content }}</textarea>
+
+    <div class="bc-foot">
+      <div class="bc-count"><span id="bcCharCount">0</span> chars · Markdown supported</div>
+      <button id="bcSaveBtn" class="btn primary" type="button">Save</button>
+    </div>
+  </div>
+
+  <div class="bc-tip">
+    <strong>Tip —</strong> Include things your AI can't infer from raw data: internal terminology, business rules ("we only count paid orders after refund window"), launches, campaigns, and goals. Works the same whether your AI is Claude, ChatGPT, Cursor, or anything else MCP-compatible.
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.js"></script>
+<script>
+(function() {
+  const ta = document.getElementById('bcContent');
+  const saveBtn = document.getElementById('bcSaveBtn');
+  const status = document.getElementById('bcStatus');
+  const count = document.getElementById('bcCharCount');
+
+  const editor = new EasyMDE({
+    element: ta,
+    autofocus: false,
+    spellChecker: false,
+    status: ['lines', 'words', 'cursor'],
+    placeholder: ta.getAttribute('placeholder') || '',
+    minHeight: '480px',
+    indentWithTabs: false,
+    tabSize: 2,
+    forceSync: true,
+    autoDownloadFontAwesome: true,
+    toolbar: [
+      'bold', 'italic', 'strikethrough', '|',
+      'heading-1', 'heading-2', 'heading-3', '|',
+      'unordered-list', 'ordered-list', 'quote', 'code', '|',
+      'link', 'table', 'horizontal-rule', '|',
+      'preview', 'side-by-side', 'fullscreen', '|',
+      { name: 'guide', action: 'https://www.markdownguide.org/basic-syntax/', className: 'fa fa-question-circle', title: 'Markdown guide' },
+    ],
+    shortcuts: {
+      toggleBold: 'Cmd-B', toggleItalic: 'Cmd-I',
+      toggleHeadingSmaller: 'Cmd-H', toggleUnorderedList: 'Cmd-L',
+      togglePreview: 'Cmd-P', toggleSideBySide: 'F9', toggleFullScreen: 'F11',
+    },
+  });
+
+  function currentValue() { return editor.value(); }
+  function updateCount() { count.textContent = currentValue().length.toLocaleString(); }
+  function markDirty() {
+    status.textContent = 'Unsaved changes';
+    status.style.color = 'var(--amber)';
+  }
+
+  editor.codemirror.on('change', () => { updateCount(); markDirty(); });
+  updateCount();
+
+  async function save() {
+    saveBtn.disabled = true;
+    const original = saveBtn.textContent;
+    saveBtn.textContent = 'Saving…';
+    try {
+      const res = await fetch('/api/business-context', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: currentValue() }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      status.textContent = 'Saved just now';
+      status.style.color = 'var(--muted)';
+      if (window.Fluxito && Fluxito.toast) Fluxito.toast('Business context saved');
+    } catch (e) {
+      alert('Failed to save');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = original;
+    }
+  }
+
+  saveBtn.addEventListener('click', save);
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); }
+  });
+  editor.codemirror.addKeyMap({
+    'Cmd-S': () => save(),
+    'Ctrl-S': () => save(),
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}{{ dash.title }} — Fluxito{% endblock %}
+{% set page_loading = true %}
+{% set page_loading_text = 'Loading ' ~ dash.title ~ '…' %}
+{% set active = 'dashboards' %}
+{% block og_title %}{{ dash.title }}{% endblock %}
+{% block description %}{{ dash.description or "Shared marketing analytics dashboard on Fluxito" }}{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js" defer></script>
+<style>
+  .skeleton {
+    background: linear-gradient(90deg, var(--line) 0%, var(--bg) 50%, var(--line) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: var(--r-m);
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  .metric-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; width: 100%; }
+  .metric-kpi {
+    position: relative; padding: 20px 20px 18px;
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: var(--r-m); overflow: hidden;
+  }
+  .metric-kpi::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+    background: var(--ink);
+  }
+  .metric-kpi .l {
+    font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin-bottom: 8px;
+    font-family: var(--mono);
+  }
+  .metric-kpi .v {
+    font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1;
+    font-variant-numeric: tabular-nums; color: var(--ink);
+    font-family: var(--mono);
+  }
+  .big-metric .metric-value { font-size: 34px; line-height: 1.1; }
+  .card-chart { width: 100%; height: 260px; }
+
+  .pv-info-bar {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-m);
+    margin-bottom: 22px; font-size: 12.5px; color: var(--ink-soft);
+  }
+  .pv-info-bar .info-item { display: flex; align-items: center; gap: 6px; }
+  .pv-info-bar .info-label {
+    font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); font-family: var(--mono);
+  }
+  .pv-info-bar .info-value { font-weight: 500; color: var(--ink); }
+
+  .pv-insights {
+    position: relative;
+    background: var(--bg-2);
+    border: 1px solid var(--line); border-left: 3px solid var(--blue);
+    border-radius: var(--r-m);
+    padding: 16px 20px;
+    margin-bottom: 22px;
+  }
+  .pv-insights-label {
+    font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--blue); margin-bottom: 6px; font-family: var(--mono);
+  }
+  .pv-insights-body {
+    font-size: 13.5px; line-height: 1.6; color: var(--ink); white-space: pre-wrap;
+  }
+
+  .pv-footnote {
+    text-align: center; margin-top: 40px;
+    font-size: 12px; color: var(--muted); font-family: var(--mono); letter-spacing: 0.02em;
+  }
+  .pv-footnote a { color: var(--ink); }
+</style>
+{% endblock %}
+
+{% block main %}
+<main class="app-main">
+  <div class="page-head">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap">
+      <div style="flex:1;min-width:0">
+        <span class="label">Shared dashboard{% if dash.owner_name %} · by {{ dash.owner_name }}{% endif %}</span>
+        <h1 style="margin-bottom:8px">{{ dash.title }}</h1>
+        {% if dash.description %}<p>{{ dash.description }}</p>{% endif %}
+        <div class="pv-meta mono" style="font-size:12px;color:var(--muted);letter-spacing:0.02em;margin-top:8px">
+          <span id="cardCountLabel">{{ dash.card_count }}</span> card{{ '' if dash.card_count == 1 else 's' }}
+          {% if dash.updated_at_fmt %} · Captured {{ dash.updated_at_fmt }}{% endif %}
+          {% if dash.shared_at %} · Shared {{ dash.shared_at }}{% endif %}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <span class="status-pill live">Shared</span>
+        {% if is_owner %}<a href="/live-dashboards" class="btn sm">All dashboards</a>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if dash.insights %}
+  <div class="pv-insights" role="note" aria-label="AI-generated insights">
+    <div class="pv-insights-label">★ AI Insights</div>
+    <div class="pv-insights-body">{{ dash.insights }}</div>
+  </div>
+  {% endif %}
+
+  <!-- Read-only info bar — populated from card metadata after data loads -->
+  <div id="dashInfoBar" class="pv-info-bar" style="display:none;"></div>
+
+  <div id="cardGrid" class="grid grid-cards">
+    <!-- skeleton placeholders shown while data loads -->
+  </div>
+
+  <div class="pv-footnote">
+    Shared view — data is served from the owner's most recent cached results.
+    {% if not is_owner %}Powered by <a href="/">Fluxito</a>.{% endif %}
+  </div>
+</main>
+
+{% include "partials/card_renderer_js.html" %}
+{% include "partials/card_charts.html" %}
+
+<script>
+(function(){
+  var SLUG = {{ slug | tojson }};
+  var grid = document.getElementById('cardGrid');
+  var infoBar = document.getElementById('dashInfoBar');
+  var esc = Fluxito.esc;
+  var renderCard = Fluxito.renderCard;
+
+  function buildInfoBar(cards) {
+    var startDates = [], endDates = [], platforms = new Set();
+    cards.forEach(function(c) {
+      var meta = (c.snap || {}).metadata || {};
+      if (meta.start_date) startDates.push(meta.start_date);
+      if (meta.end_date) endDates.push(meta.end_date);
+      if (c.platform) platforms.add(c.platform.toUpperCase());
+    });
+    var items = [];
+    if (platforms.size) {
+      items.push('<div class="info-item"><span class="info-label">Platforms</span><span class="info-value">' + Array.from(platforms).map(esc).join(', ') + '</span></div>');
+    }
+    startDates.sort(); endDates.sort();
+    var earliest = startDates[0];
+    var latest = endDates[endDates.length - 1];
+    if (earliest && latest) {
+      items.push('<div class="info-item"><span class="info-label">Date range</span><span class="info-value">' + esc(earliest) + ' → ' + esc(latest) + '</span></div>');
+    } else if (earliest || latest) {
+      items.push('<div class="info-item"><span class="info-label">Date</span><span class="info-value">' + esc(earliest || latest) + '</span></div>');
+    }
+    items.push('<div class="info-item"><span class="info-label">Cards</span><span class="info-value">' + cards.length + '</span></div>');
+    if (items.length) {
+      infoBar.innerHTML = items.join('');
+      infoBar.style.display = 'flex';
+    }
+  }
+
+  function showSkeleton() {
+    grid.innerHTML = [1,2,3].map(function() {
+      return '<div class="data-card"><div class="card-header"><div class="skeleton" style="height:18px;width:60%;"></div></div><div class="card-body"><div class="skeleton" style="height:120px;width:100%;"></div></div></div>';
+    }).join('');
+  }
+
+  function renderAll(cards) {
+    var countEl = document.getElementById('cardCountLabel');
+    if (countEl) countEl.textContent = cards.length;
+    if (!cards.length) {
+      grid.innerHTML = '<div class="audit-empty" style="grid-column:1/-1;"><h3>This dashboard has no cards</h3><p>Cards are added from your AI chat. Ask to "save this as a card".</p></div>';
+    } else {
+      grid.innerHTML = cards.map(renderCard).join('');
+      buildInfoBar(cards);
+      mountCharts(cards);
+    }
+    if (window.__dismissPageLoader) window.__dismissPageLoader();
+  }
+
+  async function fetchAndRender() {
+    showSkeleton();
+    try {
+      var res = await fetch('/api/d/' + encodeURIComponent(SLUG), { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      renderAll(data.cards || []);
+    } catch (e) {
+      grid.innerHTML = '<div class="audit-empty" style="grid-column:1/-1;"><h3>Failed to load dashboard</h3><p>' + esc(e.message || '') + '</p><button class="btn primary" type="button" onclick="location.reload()" style="margin-top:14px">Reload</button></div>';
+      if (window.__dismissPageLoader) window.__dismissPageLoader();
+    }
+  }
+
+  showSkeleton();
+  fetchAndRender();
+})();
+</script>
+{% endblock %}

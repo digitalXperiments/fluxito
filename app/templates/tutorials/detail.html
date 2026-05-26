@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Fluxito{% endblock %}
+{% set active = 'tutorials' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/tutorials.css?v={{ asset_hash('css/tutorials.css') }}"/>
+{% endblock %}
+
+{% block main %}
+<main class="app-main tut-main">
+  <div class="page-head tut-detail-head">
+    <div>
+      <a href="/tutorials" class="tut-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+        All tutorials
+      </a>
+      <span class="label">{{ current_category.title if current_category else 'Setup guide' }}</span>
+      <h1>{{ title }}</h1>
+      {% if current_tutorial %}
+      <p>{{ current_tutorial[3] }}</p>
+      {% endif %}
+    </div>
+    {% if current_tutorial %}
+    <span class="status-pill">{{ current_tutorial[2] }}</span>
+    {% endif %}
+  </div>
+
+  <div class="tut-detail-layout">
+    <article class="tut-article">
+      {{ tutorial_html | safe }}
+    </article>
+
+    <aside class="tut-aside" aria-label="Tutorial navigation">
+      <div class="tut-aside-card">
+        <span class="tut-aside-label">Setup</span>
+        <a href="/connect" class="tut-aside-link">Connections <span>→</span></a>
+        <a href="/settings/integrations" class="tut-aside-link">Integration settings <span>→</span></a>
+      </div>
+
+      {% if related_tutorials %}
+      <div class="tut-aside-card">
+        <span class="tut-aside-label">Related guides</span>
+        {% for related_slug, related_name, related_time, related_note in related_tutorials %}
+        <a href="/tutorials/{{ related_slug }}" class="tut-related-link">
+          <span>{{ related_name }}</span>
+          <small>{{ related_time }}</small>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</main>
+{% endblock %}

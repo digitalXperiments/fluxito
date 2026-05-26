@@ -1,0 +1,1058 @@
+"""
+MCP Session Manager
+
+Validates MCP Bearer tokens on every tool call.
+Provides:
+  - sha256() helper
+  - UserContext dataclass
+  - require_valid_mcp_token() FastAPI dependency
+  - inject_user_context() ASGI middleware for /mcp prefix
+
+Performance optimizations:
+  - Token validation cached fully in Redis (no DB hit on cache hit)
+  - UserContext cached in Redis with 2-min TTL
+  - last_used_at updates batched via Redis (flushed periodically)
+"""
+
+import asyncio
+import hashlib
+import json
+import logging
+import time
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from fastapi import Request
+from fastapi.exceptions import HTTPException
+from sqlalchemy import select, update
+
+import app.app_state as app_state
+from app.models.bq_connection import BQConnection
+from app.models.connection import OAuthConnection
+from app.models.credential_connection import (
+    AdobeConnection,
+    AmplitudeConnection,
+    RedshiftConnection,
+    SnowflakeConnection,
+)
+from app.models.mcp_session import MCPSession
+from app.models.project import Project, ProjectMember
+from app.models.token import GA4Property, GoogleAdsAccount, GTMContainer, SearchConsoleSite
+from app.models.user import User
+
+logger = logging.getLogger(__name__)
+
+# Semaphore to bound concurrent fire-and-forget DB writes
+_update_semaphore = asyncio.Semaphore(5)
+
+# TTL for cached user context in Redis (seconds)
+_USER_CTX_CACHE_TTL = 120
+_PROJECT_CTX_CACHE_TTL = 120
+
+
+def sha256(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+# Google scope constants for platform detection
+_GA4_SCOPES = frozenset(
+    {
+        "https://www.googleapis.com/auth/analytics.readonly",
+        "https://www.googleapis.com/auth/analytics",
+        "https://www.googleapis.com/auth/analytics.edit",
+    }
+)
+_GTM_SCOPES = frozenset(
+    {
+        "https://www.googleapis.com/auth/tagmanager.readonly",
+        "https://www.googleapis.com/auth/tagmanager.edit.containers",
+        "https://www.googleapis.com/auth/tagmanager.publish",
+        "https://www.googleapis.com/auth/tagmanager.manage.accounts",
+    }
+)
+_ADS_SCOPE = "https://www.googleapis.com/auth/adwords"
+_GSC_SCOPES = frozenset(
+    {
+        "https://www.googleapis.com/auth/webmasters.readonly",
+        "https://www.googleapis.com/auth/webmasters",
+    }
+)
+
+
+def derive_google_platform_flags(google_connections) -> tuple[bool, bool, bool, bool]:
+    """Derive (has_ga4, has_gtm, has_ads, has_gsc) from Google OAuth connections."""
+    all_scopes: set = set()
+    for c in google_connections:
+        for s in c.scopes or []:
+            all_scopes.add(s)
+    has_ga4 = bool(all_scopes & _GA4_SCOPES)
+    has_gtm = bool(all_scopes & _GTM_SCOPES)
+    has_ads = _ADS_SCOPE in all_scopes
+    has_gsc = bool(all_scopes & _GSC_SCOPES)
+    return has_ga4, has_gtm, has_ads, has_gsc
+
+
+@dataclass
+class ConnectionInfo:
+    id: str
+    provider: str
+    google_email: str | None
+    scopes: list[str]
+    connection_status: str
+    access_token_encrypted: str | None = None
+
+
+@dataclass
+class ProjectMembership:
+    """Lightweight summary of a project a user belongs to."""
+
+    project_id: str
+    project_name: str
+    project_slug: str
+    role: str  # 'owner' | 'admin' | 'member'
+    is_active: bool = True
+
+
+@dataclass
+class UserContext:
+    """
+    Identity + project memberships. Loaded once per MCP session.
+
+    Does NOT contain connections — those live in ProjectContext, which is
+    set when the user picks an active project via ``set_active_project``.
+    The legacy ``has_*`` flags and ``connections`` list are still populated
+    for backward compatibility during the migration period — they will
+    reflect the connections of the *active project* once set.
+    """
+
+    user_id: str
+    email: str
+    display_name: str | None
+    # Project memberships
+    projects: list[ProjectMembership] = field(default_factory=list)
+    # Fine-grained Google flags — derived from scopes on the OAuth connection
+    has_ga4: bool = False  # analytics.readonly or analytics scope granted
+    has_gtm: bool = False  # tagmanager scope granted
+    has_ads: bool = False  # adwords scope granted
+    has_gsc: bool = False  # webmasters(.readonly) scope granted
+    # Non-Google platforms
+    has_bq: bool = False
+    has_meta: bool = False
+    has_tiktok: bool = False
+    has_snap: bool = False
+    has_linkedin: bool = False
+    has_pinterest: bool = False
+    has_amplitude: bool = False
+    has_adobe_analytics: bool = False
+    has_adobe_launch: bool = False
+    has_redshift: bool = False
+    has_snowflake: bool = False
+    connections: list[ConnectionInfo] = field(default_factory=list)
+    ga4_properties: list[dict] = field(default_factory=list)
+    gtm_containers: list[dict] = field(default_factory=list)
+    ads_accounts: list[dict] = field(default_factory=list)
+    search_console_sites: list[dict] = field(default_factory=list)
+
+    @property
+    def has_google(self) -> bool:
+        """True if any Google OAuth connection is active (any scope)."""
+        return bool(self.connections)
+
+    def to_cache_dict(self) -> dict:
+        """Serialize to a JSON-safe dict for Redis caching."""
+        d = asdict(self)
+        return d
+
+    @classmethod
+    def from_cache_dict(cls, data: dict) -> "UserContext":
+        """Restore from a cached dict."""
+        conns = [ConnectionInfo(**c) for c in data.pop("connections", [])]
+        projects = [ProjectMembership(**p) for p in data.pop("projects", [])]
+        return cls(connections=conns, projects=projects, **data)
+
+
+@dataclass
+class ProjectContext:
+    """
+    Active project context — loaded when a user calls ``set_active_project``.
+    Contains the project's role and all connections/resources.
+    Tools read this to scope all operations to a single project.
+    """
+
+    project_id: str
+    project_name: str
+    project_slug: str
+    role: str  # caller's role in this project
+    owner_id: str
+    # Platform flags (derived from this project's connections)
+    has_ga4: bool = False
+    has_gtm: bool = False
+    has_ads: bool = False
+    has_gsc: bool = False
+    has_bq: bool = False
+    has_meta: bool = False
+    has_tiktok: bool = False
+    has_snap: bool = False
+    has_linkedin: bool = False
+    has_pinterest: bool = False
+    has_amplitude: bool = False
+    has_adobe_analytics: bool = False
+    has_adobe_launch: bool = False
+    has_redshift: bool = False
+    has_snowflake: bool = False
+    # Connection details
+    connections: list[ConnectionInfo] = field(default_factory=list)
+    ga4_properties: list[dict] = field(default_factory=list)
+    gtm_containers: list[dict] = field(default_factory=list)
+    ads_accounts: list[dict] = field(default_factory=list)
+    search_console_sites: list[dict] = field(default_factory=list)
+
+    @property
+    def has_google(self) -> bool:
+        return any(c.provider == "google" for c in self.connections)
+
+    def to_cache_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_cache_dict(cls, data: dict) -> "ProjectContext":
+        conns = [ConnectionInfo(**c) for c in data.pop("connections", [])]
+        return cls(connections=conns, **data)
+
+
+async def _validate_token(token: str, request: Request) -> MCPSession:
+    """
+    Validate MCP bearer token.
+    Optimized: Redis stores full session metadata so cache hits skip DB entirely.
+    """
+    token_hash = sha256(token)
+    redis = app_state.redis_client
+    cache_key = f"mcp_session:{token_hash}"
+
+    # ── Redis cache check (full session data, not just user_id) ──
+    cached = await redis.get(cache_key)
+    if cached:
+        data = json.loads(cached)
+        # Quick expiry check on cached data
+        expires_at = datetime.fromisoformat(data["expires_at"])
+        if expires_at < datetime.utcnow():
+            await redis.delete(cache_key)
+            raise HTTPException(401, "Token expired")
+        if data.get("is_revoked"):
+            raise HTTPException(401, "Token revoked")
+
+        # Return a lightweight object — no DB hit needed
+        # We create a minimal MCPSession-like object for downstream code
+        session = MCPSession()
+        session.id = UUID(data["session_id"])
+        session.user_id = UUID(data["user_id"])
+        session.access_token_hash = token_hash
+        session.access_token_expires_at = expires_at
+        session.is_revoked = False
+        session.client_id = data.get("client_id")
+
+        # Batch last_used update via Redis (flushed periodically, not per-request)
+        await redis.zadd("mcp:last_used", {str(session.id): time.time()})
+        return session
+
+    # ── DB fallback ──
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(select(MCPSession).where(MCPSession.access_token_hash == token_hash))
+        session = result.scalar_one_or_none()
+
+        if not session:
+            raise HTTPException(401, "Invalid token")
+        if session.is_revoked:
+            raise HTTPException(401, "Token revoked")
+        if session.access_token_expires_at < datetime.utcnow():
+            raise HTTPException(401, "Token expired")
+
+        # Cache FULL session metadata in Redis
+        ttl = int((session.access_token_expires_at - datetime.utcnow()).total_seconds())
+        cache_data = json.dumps(
+            {
+                "session_id": str(session.id),
+                "user_id": str(session.user_id),
+                "client_id": session.client_id,
+                "expires_at": session.access_token_expires_at.isoformat(),
+                "is_revoked": session.is_revoked,
+            }
+        )
+        await redis.setex(cache_key, max(ttl, 1), cache_data)
+
+        # Batch last_used update
+        await redis.zadd("mcp:last_used", {str(session.id): time.time()})
+
+        return session
+
+
+async def _resolve_client_name(client_id: str | None) -> str | None:
+    """
+    Look up a friendly client name from `mcp_clients` for a given client_id.
+    Cached in Redis long-term since client names rarely change. Applies
+    light normalization so "Claude" / "claude-ai" / "ChatGPT" show nicely.
+    """
+    if not client_id:
+        return None
+
+    redis = app_state.redis_client
+    cache_key = f"mcp_client_name:{client_id}"
+
+    try:
+        cached = await redis.get(cache_key)
+    except Exception:
+        cached = None
+    if cached:
+        name = cached.decode() if isinstance(cached, bytes) else cached
+        return name or None
+
+    name: str | None = None
+    try:
+        from app.models.connection import MCPClient
+
+        async with app_state.db_session_factory() as db:
+            result = await db.execute(select(MCPClient).where(MCPClient.client_id == client_id))
+            client = result.scalar_one_or_none()
+            if client and client.client_name:
+                name = client.client_name
+    except Exception:
+        name = None
+
+    # Normalize common patterns so the UI reads nicely
+    if name:
+        low = name.lower()
+        if "claude" in low:
+            name = "Claude"
+        elif "chatgpt" in low or "openai" in low:
+            name = "ChatGPT"
+        elif "cursor" in low:
+            name = "Cursor"
+        elif name.startswith("Dynamic Client") or name.startswith("Auto-registered"):
+            # Fall back to client_id prefix for anonymous dynamic clients
+            name = f"MCP client ({client_id[:8]})"
+
+    # Fallback: derive from client_id itself
+    if not name and client_id:
+        cid_low = client_id.lower()
+        if "claude" in cid_low:
+            name = "Claude"
+        elif "chatgpt" in cid_low or "openai" in cid_low:
+            name = "ChatGPT"
+        elif "cursor" in cid_low:
+            name = "Cursor"
+        else:
+            name = f"MCP client ({client_id[:8]})"
+
+    try:
+        await redis.setex(cache_key, 3600, name or "")
+    except Exception:
+        pass
+    return name
+
+
+_LAST_USED_FLUSH_BATCH = 1000
+
+
+async def flush_last_used_batch():
+    """
+    Flush batched last_used_at updates from Redis to DB.
+    Call this periodically (e.g., every 30s from a background task).
+    """
+    redis = app_state.redis_client
+    try:
+        entries = await redis.zpopmin("mcp:last_used", count=_LAST_USED_FLUSH_BATCH)
+        if not entries:
+            return
+
+        async with app_state.db_session_factory() as db:
+            for session_id_bytes, timestamp in entries:
+                session_id = (
+                    session_id_bytes.decode()
+                    if isinstance(session_id_bytes, bytes)
+                    else str(session_id_bytes)
+                )
+                try:
+                    await db.execute(
+                        update(MCPSession)
+                        .where(MCPSession.id == UUID(session_id))
+                        .values(last_used_at=datetime.utcfromtimestamp(float(timestamp)))
+                    )
+                except Exception:
+                    pass  # Skip invalid entries
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to flush last_used batch: {e}")
+
+
+async def _load_connections_and_resources(
+    db,
+    owner_filter_column,
+    owner_id,
+) -> tuple[
+    list,
+    list,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    list,
+    list,
+    list,
+    list,
+]:
+    """
+    Load connections and Google resources for a user or project.
+    Shared by build_user_context and build_project_context to eliminate duplication.
+
+    Returns: (
+        all_connections_orm, google_connections,
+        has_bq, has_amplitude, has_adobe_analytics, has_adobe_launch,
+        has_redshift, has_snowflake, has_meta, has_tiktok, has_snap,
+        has_linkedin, has_pinterest,
+        has_ga4, has_gtm, has_ads, has_gsc,
+        ga4_props, gtm_cons, ads_accs, gsc_sites
+    )
+    """
+    # Load ALL active connections
+    result = await db.execute(
+        select(OAuthConnection).where(
+            owner_filter_column == owner_id,
+            OAuthConnection.is_active == True,
+        )
+    )
+    all_connections_orm = result.scalars().all()
+
+    # Derive platform flags from connections
+    providers = {c.provider or "google" for c in all_connections_orm}
+    has_meta = "meta" in providers
+    has_tiktok = "tiktok" in providers
+    has_snap = "snap" in providers
+    has_linkedin = "linkedin" in providers
+    has_pinterest = "pinterest" in providers
+
+    # Check credential-based connections
+    result = await db.execute(
+        select(BQConnection).where(owner_filter_column == owner_id, BQConnection.is_active == True).limit(1)
+    )
+    has_bq = result.scalar_one_or_none() is not None
+
+    result = await db.execute(
+        select(AmplitudeConnection)
+        .where(owner_filter_column == owner_id, AmplitudeConnection.is_active == True)
+        .limit(1)
+    )
+    has_amplitude = result.scalar_one_or_none() is not None
+
+    result = await db.execute(
+        select(AdobeConnection).where(owner_filter_column == owner_id, AdobeConnection.is_active == True)
+    )
+    adobe_conns = result.scalars().all()
+    has_adobe_analytics = any(c.has_analytics for c in adobe_conns)
+    has_adobe_launch = any(c.has_launch for c in adobe_conns)
+
+    result = await db.execute(
+        select(RedshiftConnection)
+        .where(owner_filter_column == owner_id, RedshiftConnection.is_active == True)
+        .limit(1)
+    )
+    has_redshift = result.scalar_one_or_none() is not None
+
+    result = await db.execute(
+        select(SnowflakeConnection)
+        .where(owner_filter_column == owner_id, SnowflakeConnection.is_active == True)
+        .limit(1)
+    )
+    has_snowflake = result.scalar_one_or_none() is not None
+
+    # Filter to Google connections for scope-checking and resource loading
+    google_connections = [c for c in all_connections_orm if (c.provider or "google") == "google"]
+
+    ga4_props = []
+    gtm_cons = []
+    ads_accs = []
+    gsc_sites = []
+    has_ga4 = False
+    has_gtm = False
+    has_ads = False
+    has_gsc = False
+
+    if google_connections:
+        google_connection_ids = [c.id for c in google_connections]
+
+        ga4_result = await db.execute(
+            select(GA4Property).where(
+                GA4Property.connection_id.in_(google_connection_ids),
+                GA4Property.is_active == True,
+            )
+        )
+        ga4_props = [
+            {
+                "property_id": p.property_id,
+                "property_name": p.property_name,
+                "account_id": p.account_id,
+                "account_name": p.account_name,
+                "connection_id": str(p.connection_id),
+            }
+            for p in ga4_result.scalars().all()
+        ]
+
+        gtm_result = await db.execute(
+            select(GTMContainer).where(
+                GTMContainer.connection_id.in_(google_connection_ids),
+                GTMContainer.is_active == True,
+            )
+        )
+        gtm_cons = [
+            {
+                "account_id": c.account_id,
+                "container_id": c.container_id,
+                "container_name": c.container_name,
+                "public_id": c.public_id,
+                "connection_id": str(c.connection_id),
+            }
+            for c in gtm_result.scalars().all()
+        ]
+
+        ads_result = await db.execute(
+            select(GoogleAdsAccount).where(
+                GoogleAdsAccount.connection_id.in_(google_connection_ids),
+                GoogleAdsAccount.is_active == True,
+            )
+        )
+        ads_accs = [
+            {
+                "customer_id": a.customer_id,
+                "account_name": a.account_name,
+                "currency_code": a.currency_code,
+                "timezone": a.timezone,
+                "connection_id": str(a.connection_id),
+            }
+            for a in ads_result.scalars().all()
+        ]
+
+        gsc_result = await db.execute(
+            select(SearchConsoleSite).where(
+                SearchConsoleSite.connection_id.in_(google_connection_ids),
+                SearchConsoleSite.is_active == True,
+            )
+        )
+        gsc_sites = [
+            {
+                "site_url": s.site_url,
+                "permission_level": s.permission_level,
+                "is_domain_property": s.is_domain_property,
+                "connection_id": str(s.connection_id),
+            }
+            for s in gsc_result.scalars().all()
+        ]
+
+        has_ga4, has_gtm, has_ads, has_gsc = derive_google_platform_flags(google_connections)
+
+    return (
+        all_connections_orm,
+        google_connections,
+        has_bq,
+        has_amplitude,
+        has_adobe_analytics,
+        has_adobe_launch,
+        has_redshift,
+        has_snowflake,
+        has_meta,
+        has_tiktok,
+        has_snap,
+        has_linkedin,
+        has_pinterest,
+        has_ga4,
+        has_gtm,
+        has_ads,
+        has_gsc,
+        ga4_props,
+        gtm_cons,
+        ads_accs,
+        gsc_sites,
+    )
+
+
+async def count_google_resources_for_connections(db, connection_ids: list) -> dict[str, int]:
+    """Count GA4/GTM/Ads/GSC resources across a set of Google OAuth connections.
+
+    Used by the Connect UI to display "N GA4 properties, M GTM containers"
+    counts without requiring callers to re-duplicate the four SELECTs the
+    session manager already owns. Runs the four queries concurrently.
+    """
+    from sqlalchemy import func as _sqlfunc
+
+    from app.models.token import GA4Property, GoogleAdsAccount, GTMContainer, SearchConsoleSite
+
+    if not connection_ids:
+        return {"ga4": 0, "gtm": 0, "ads": 0, "gsc": 0}
+
+    async def _count(model):
+        res = await db.execute(
+            select(_sqlfunc.count()).select_from(model).where(model.connection_id.in_(connection_ids))
+        )
+        return res.scalar_one() or 0
+
+    ga4_n, gtm_n, ads_n, gsc_n = await asyncio.gather(
+        _count(GA4Property),
+        _count(GTMContainer),
+        _count(GoogleAdsAccount),
+        _count(SearchConsoleSite),
+    )
+    return {"ga4": ga4_n, "gtm": gtm_n, "ads": ads_n, "gsc": gsc_n}
+
+
+async def build_user_context(user_id: str, request: Request = None) -> UserContext:
+    """
+    Load user + their connections/properties into a UserContext.
+    Cached in Redis for 2 minutes to avoid redundant DB queries.
+    """
+    redis = app_state.redis_client
+    cache_key = f"user_ctx:{user_id}"
+
+    # ── Check Redis cache first ──
+    cached = await redis.get(cache_key)
+    if cached:
+        try:
+            return UserContext.from_cache_dict(json.loads(cached))
+        except Exception:
+            await redis.delete(cache_key)  # Clear corrupt cache
+
+    # ── DB queries (consolidated into single session) ──
+    async with app_state.db_session_factory() as db:
+        # Load user
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(401, "User not found")
+
+        # Load project memberships
+        result = await db.execute(
+            select(ProjectMember, Project)
+            .join(Project, ProjectMember.project_id == Project.id)
+            .where(
+                ProjectMember.user_id == user.id,
+                ProjectMember.is_active == True,
+                Project.is_active == True,
+            )
+        )
+        project_memberships = [
+            ProjectMembership(
+                project_id=str(proj.id),
+                project_name=proj.name,
+                project_slug=proj.slug,
+                role=pm.role,
+                is_active=pm.is_active,
+            )
+            for pm, proj in result.all()
+        ]
+
+        # Load connections and resources via shared helper
+        (
+            all_connections_orm,
+            _google_connections,
+            has_bq,
+            has_amplitude,
+            has_adobe_analytics,
+            has_adobe_launch,
+            has_redshift,
+            has_snowflake,
+            has_meta,
+            has_tiktok,
+            has_snap,
+            has_linkedin,
+            has_pinterest,
+            has_ga4,
+            has_gtm,
+            has_ads,
+            has_gsc,
+            ga4_props,
+            gtm_cons,
+            ads_accs,
+            gsc_sites,
+        ) = await _load_connections_and_resources(db, OAuthConnection.user_id, user.id)
+
+        connections = [
+            ConnectionInfo(
+                id=str(c.id),
+                provider=c.provider or "google",
+                google_email=c.google_email,
+                scopes=c.scopes or [],
+                connection_status=c.connection_status,
+                access_token_encrypted=c.access_token_encrypted,
+            )
+            for c in all_connections_orm
+        ]
+
+        ctx = UserContext(
+            user_id=str(user.id),
+            email=user.email,
+            display_name=user.display_name,
+            projects=project_memberships,
+            has_ga4=has_ga4,
+            has_gtm=has_gtm,
+            has_ads=has_ads,
+            has_gsc=has_gsc,
+            has_bq=has_bq,
+            has_meta=has_meta,
+            has_tiktok=has_tiktok,
+            has_snap=has_snap,
+            has_linkedin=has_linkedin,
+            has_pinterest=has_pinterest,
+            has_amplitude=has_amplitude,
+            has_adobe_analytics=has_adobe_analytics,
+            has_adobe_launch=has_adobe_launch,
+            has_redshift=has_redshift,
+            has_snowflake=has_snowflake,
+            connections=connections,
+            ga4_properties=ga4_props,
+            gtm_containers=gtm_cons,
+            ads_accounts=ads_accs,
+            search_console_sites=gsc_sites,
+        )
+
+        # Cache in Redis
+        await redis.setex(cache_key, _USER_CTX_CACHE_TTL, json.dumps(ctx.to_cache_dict()))
+        return ctx
+
+
+async def build_project_context(project_id: str, user_id: str) -> ProjectContext:
+    """
+    Load a project's connections, resources, and the caller's role into
+    a ProjectContext. Cached in Redis for 2 minutes.
+
+    Raises HTTPException(403) if the user is not a member of the project.
+    Raises HTTPException(404) if the project doesn't exist.
+    """
+    redis = app_state.redis_client
+    cache_key = f"project_ctx:{project_id}:{user_id}"
+
+    # ── Check Redis cache first ──
+    cached = await redis.get(cache_key)
+    if cached:
+        try:
+            return ProjectContext.from_cache_dict(json.loads(cached))
+        except Exception:
+            await redis.delete(cache_key)
+
+    async with app_state.db_session_factory() as db:
+        # Load project
+        result = await db.execute(select(Project).where(Project.id == project_id))
+        project = result.scalar_one_or_none()
+        if not project:
+            raise HTTPException(404, "Project not found")
+
+        # Verify membership and get role
+        result = await db.execute(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project.id,
+                ProjectMember.user_id == user_id,
+                ProjectMember.is_active == True,
+            )
+        )
+        membership = result.scalar_one_or_none()
+        if not membership:
+            raise HTTPException(403, "You are not a member of this project")
+
+        # Load connections and resources via shared helper
+        (
+            all_connections_orm,
+            _google_connections,
+            has_bq,
+            has_amplitude,
+            has_adobe_analytics,
+            has_adobe_launch,
+            has_redshift,
+            has_snowflake,
+            has_meta,
+            has_tiktok,
+            has_snap,
+            has_linkedin,
+            has_pinterest,
+            has_ga4,
+            has_gtm,
+            has_ads,
+            has_gsc,
+            ga4_props,
+            gtm_cons,
+            ads_accs,
+            gsc_sites,
+        ) = await _load_connections_and_resources(db, OAuthConnection.project_id, project.id)
+
+        connections = [
+            ConnectionInfo(
+                id=str(c.id),
+                provider=c.provider or "google",
+                google_email=c.google_email,
+                scopes=c.scopes or [],
+                connection_status=c.connection_status,
+                access_token_encrypted=c.access_token_encrypted,
+            )
+            for c in all_connections_orm
+        ]
+
+        ctx = ProjectContext(
+            project_id=str(project.id),
+            project_name=project.name,
+            project_slug=project.slug,
+            role=membership.role,
+            owner_id=str(project.owner_id),
+            has_ga4=has_ga4,
+            has_gtm=has_gtm,
+            has_ads=has_ads,
+            has_gsc=has_gsc,
+            has_bq=has_bq,
+            has_meta=has_meta,
+            has_tiktok=has_tiktok,
+            has_snap=has_snap,
+            has_linkedin=has_linkedin,
+            has_pinterest=has_pinterest,
+            has_amplitude=has_amplitude,
+            has_adobe_analytics=has_adobe_analytics,
+            has_adobe_launch=has_adobe_launch,
+            has_redshift=has_redshift,
+            has_snowflake=has_snowflake,
+            connections=connections,
+            ga4_properties=ga4_props,
+            gtm_containers=gtm_cons,
+            ads_accounts=ads_accs,
+            search_console_sites=gsc_sites,
+        )
+
+        await redis.setex(cache_key, _PROJECT_CTX_CACHE_TTL, json.dumps(ctx.to_cache_dict()))
+        return ctx
+
+
+def invalidate_user_context_cache(user_id: str):
+    """
+    Call this whenever a user's connections change (add/remove platform).
+    Can be called fire-and-forget: asyncio.create_task(invalidate_user_context_cache_async(user_id))
+    """
+    return _invalidate_ctx_cache(user_id)
+
+
+async def _invalidate_ctx_cache(user_id: str):
+    """Async helper to clear cached UserContext."""
+    try:
+        await app_state.redis_client.delete(f"user_ctx:{user_id}")
+    except Exception:
+        pass
+
+
+async def invalidate_project_context_cache(project_id: str):
+    """
+    Call when a project's connections change. Clears all cached
+    ProjectContexts for this project (wildcard on user_id portion).
+    """
+    try:
+        redis = app_state.redis_client
+        # Scan for all keys matching project_ctx:{project_id}:*
+        async for key in redis.scan_iter(f"project_ctx:{project_id}:*"):
+            await redis.delete(key)
+    except Exception:
+        pass
+
+
+async def require_valid_mcp_token(request: Request) -> UserContext:
+    """
+    FastAPI dependency — validates MCP Bearer token and returns UserContext.
+    Use this in route handlers that need auth.
+
+    Side effect: stashes the resolved MCP client_name on
+    ``request.state.mcp_client_name`` so middleware/routes can propagate it
+    into ``app_state.current_client_name_ctx`` for activity logging.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "Missing or invalid Authorization header")
+
+    token = auth_header[7:]
+    session = await _validate_token(token, request)
+
+    # Resolve and stash client name for downstream activity logging
+    try:
+        client_name = await _resolve_client_name(getattr(session, "client_id", None))
+        request.state.mcp_client_name = client_name
+    except Exception:
+        request.state.mcp_client_name = None
+
+    return await build_user_context(str(session.user_id), request)
+
+
+def no_active_project_response() -> dict:
+    """Standard response when no project is active in the MCP session."""
+    return {
+        "error": True,
+        "error_type": "no_active_project",
+        "message": "No active project. Use set_active_project to select a project first.",
+        "action_required": "Call list_my_projects to see your projects, then set_active_project('project name or id') to select one.",
+    }
+
+
+def require_project_ctx() -> Optional["ProjectContext"]:
+    """
+    Helper for tool handlers — returns the active ProjectContext or None.
+    Tools should call this and return no_active_project_response() if None.
+    """
+    return app_state.current_project_ctx.get()
+
+
+def _no_connection(base_url: str, message: str, connect_path: str = "/connect") -> dict:
+    """Factory for standard 'connection_missing' error responses."""
+    return {
+        "error": True,
+        "error_type": "connection_missing",
+        "message": message,
+        "connect_url": f"{base_url}{connect_path}",
+        "action_required": f"Visit {base_url}{connect_path} to connect.",
+    }
+
+
+def no_google_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Google account connected.", "/connect")
+
+
+def no_ga4_response(base_url: str) -> dict:
+    return _no_connection(
+        base_url,
+        "GA4 access not granted. Your Google connection is missing analytics scopes.",
+        "/connect",
+    )
+
+
+def no_gtm_response(base_url: str) -> dict:
+    return _no_connection(
+        base_url,
+        "GTM access not granted. Your Google connection is missing Tag Manager scopes.",
+        "/connect",
+    )
+
+
+def no_ads_response(base_url: str) -> dict:
+    return _no_connection(
+        base_url,
+        "Google Ads access not granted. Your Google connection is missing the adwords scope.",
+        "/connect",
+    )
+
+
+def no_gsc_response(base_url: str) -> dict:
+    return _no_connection(
+        base_url,
+        "Search Console access not granted. Your Google connection is missing the webmasters scope.",
+        "/connect/google",
+    )
+
+
+def no_amplitude_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Amplitude connection found.", "/connect/amplitude")
+
+
+def no_adobe_analytics_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Adobe Analytics connection found.", "/connect/adobe")
+
+
+def no_adobe_launch_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Adobe Launch connection found.", "/connect/adobe")
+
+
+def no_redshift_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Redshift connection found.", "/connect/redshift")
+
+
+def no_snowflake_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Snowflake connection found.", "/connect/snowflake")
+
+
+# ---------------------------------------------------------------------------
+# Dashboard refresh context
+# ---------------------------------------------------------------------------
+#
+# Public dashboard refreshes hit ``POST /api/dashboard-query/{slug}/batch``.
+# There is no MCP session, no bearer token, no authenticated user in the
+# request — but we still need to dispatch through the MCP tool registry so
+# every connector works uniformly. To do that, we synthesize the same
+# ContextVars the ``/mcp`` route would set, using the dashboard's owning
+# user + project as the identity.
+
+
+class RefreshContext:
+    """Async context manager that sets MCP ContextVars for a dashboard refresh.
+
+    Usage::
+
+        ctx = await build_refresh_context(dashboard_id)
+        async with ctx:
+            # MCP tools can now resolve connections via current_user_ctx /
+            # current_project_ctx, just like a normal /mcp request.
+            result = await tool_manager._legacy_tools[name].run({...})
+    """
+
+    __slots__ = ("_tokens", "project_ctx", "user_ctx")
+
+    def __init__(self, user_ctx: "UserContext", project_ctx: "ProjectContext"):
+        self.user_ctx = user_ctx
+        self.project_ctx = project_ctx
+        self._tokens: list = []
+
+    async def __aenter__(self) -> "RefreshContext":
+        self._tokens = [
+            ("user", app_state.current_user_ctx.set(self.user_ctx)),
+            ("project", app_state.current_project_ctx.set(self.project_ctx)),
+            ("source", app_state.tool_call_source_ctx.set("dashboard_refresh")),
+            ("client", app_state.current_client_name_ctx.set("dashboard_refresh")),
+        ]
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        for kind, token in reversed(self._tokens):
+            var = {
+                "user": app_state.current_user_ctx,
+                "project": app_state.current_project_ctx,
+                "source": app_state.tool_call_source_ctx,
+                "client": app_state.current_client_name_ctx,
+            }[kind]
+            try:
+                var.reset(token)
+            except ValueError:
+                # ContextVar may have been set in a different Task; fall back
+                # to clearing so we don't leak identity across requests.
+                var.set(None)
+        self._tokens = []
+
+
+async def build_refresh_context(dashboard_id: str) -> RefreshContext:
+    """Build a synthetic context for a public dashboard refresh.
+
+    Loads the dashboard, resolves its owner + project, and warms both
+    MCP ContextVars using the existing ``build_user_context`` /
+    ``build_project_context`` helpers (which are Redis-cached).
+
+    Raises ``HTTPException(404)`` if the dashboard doesn't exist, or
+    ``HTTPException(409)`` if it's missing ``user_id`` / ``project_id``.
+    """
+    # Local import to avoid circular dep: dashboard model imports from app.models
+    from app.models.dashboard import Dashboard
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(select(Dashboard).where(Dashboard.id == UUID(dashboard_id)))
+        dash = result.scalar_one_or_none()
+
+    if not dash:
+        raise HTTPException(404, "Dashboard not found")
+    if not dash.user_id or not dash.project_id:
+        raise HTTPException(409, "Dashboard is missing owner/project association")
+
+    user_ctx = await build_user_context(str(dash.user_id))
+    project_ctx = await build_project_context(str(dash.project_id), str(dash.user_id))
+
+    return RefreshContext(user_ctx, project_ctx)

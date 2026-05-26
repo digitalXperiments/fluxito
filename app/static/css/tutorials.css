@@ -1,0 +1,517 @@
+/* Tutorials use the app shell primitives from app.css: page-head, cat-title,
+   pbadge, status-pill, and btn. */
+
+.tut-main {
+  max-width: 1180px;
+}
+
+.tut-head-meta {
+  min-width: 112px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--bg);
+  padding: 12px 16px;
+  text-align: right;
+}
+
+.tut-head-meta span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.tut-head-meta small {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tut-start-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 22px;
+  border: 1px solid var(--ink);
+  border-radius: var(--r-m);
+  background: var(--bg);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.tut-start-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(11, 11, 14, 0.08);
+}
+
+.tut-start-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tut-start-kicker,
+.tut-aside-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tut-start-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.tut-start-copy {
+  max-width: 720px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.tut-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 38px;
+  margin-top: 38px;
+}
+
+.tut-cat-head {
+  margin-bottom: 14px;
+}
+
+.tut-cat-head .cat-title {
+  display: inline-block;
+  margin: 0;
+}
+
+.tut-cat-desc {
+  max-width: 680px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tut-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.tut-card {
+  position: relative;
+  display: flex;
+  min-height: 178px;
+  flex-direction: column;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--bg);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.tut-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--ink);
+  box-shadow: 0 8px 22px rgba(11, 11, 14, 0.06);
+}
+
+.tut-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.tut-card .status-pill,
+.tut-detail-head .status-pill {
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tut-card h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.tut-card p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.tut-card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 18px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tut-card-action span {
+  transition: transform 0.15s ease;
+}
+
+.tut-card:hover .tut-card-action {
+  color: var(--ink);
+}
+
+.tut-card:hover .tut-card-action span {
+  transform: translateX(3px);
+}
+
+/* Detail page */
+
+.tut-detail-head {
+  align-items: flex-end;
+}
+
+.tut-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.tut-back:hover {
+  color: var(--ink);
+}
+
+.tut-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 760px) 260px;
+  align-items: start;
+  gap: 44px;
+}
+
+.tut-article {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14.5px;
+  line-height: 1.72;
+}
+
+.tut-article > *:first-child {
+  margin-top: 0;
+}
+
+.tut-article h1 {
+  display: none;
+}
+
+.tut-article h2 {
+  margin: 34px 0 12px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.tut-article h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.tut-article h3 {
+  margin: 22px 0 8px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tut-article p {
+  margin: 0 0 13px;
+  color: var(--ink-soft);
+}
+
+.tut-article strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tut-article a {
+  color: var(--blue, #4285F4);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.tut-article a:hover {
+  text-decoration: underline;
+}
+
+.tut-article hr {
+  height: 1px;
+  margin: 26px 0;
+  border: 0;
+  background: var(--line);
+}
+
+.tut-article ul,
+.tut-article ol {
+  margin: 0 0 16px;
+  padding-left: 22px;
+  color: var(--ink-soft);
+}
+
+.tut-article ul {
+  list-style: disc;
+}
+
+.tut-article ol {
+  list-style: decimal;
+}
+
+.tut-article li {
+  margin-bottom: 6px;
+  padding-left: 2px;
+}
+
+.tut-article code {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg-2);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.tut-article pre {
+  margin: 12px 0 18px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+}
+
+.tut-article pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.tut-article blockquote {
+  margin: 16px 0 18px;
+  padding: 13px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ink);
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+
+.tut-article table {
+  width: 100%;
+  margin: 14px 0 20px;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  font-size: 13px;
+}
+
+.tut-article th,
+.tut-article td {
+  padding: 10px 12px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tut-article tr > :last-child {
+  border-right: 0;
+}
+
+.tut-article tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tut-article th {
+  background: var(--bg-2);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tut-aside {
+  position: sticky;
+  top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tut-aside-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.tut-aside-label {
+  display: block;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-2);
+}
+
+.tut-aside-link,
+.tut-related-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.tut-aside-link:last-child,
+.tut-related-link:last-child {
+  border-bottom: 0;
+}
+
+.tut-aside-link span {
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.tut-aside-link:hover,
+.tut-related-link:hover {
+  background: var(--bg-2);
+}
+
+.tut-aside-link:hover span {
+  transform: translateX(3px);
+}
+
+.tut-related-link {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tut-related-link span {
+  color: var(--ink);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.tut-related-link small {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+@media (max-width: 1100px) {
+  .tut-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .tut-detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tut-aside {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 820px) {
+  .tut-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tut-start-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .tut-start-card .btn {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .tut-head-meta {
+    width: 100%;
+    text-align: left;
+  }
+
+  .tut-start-card,
+  .tut-grid,
+  .tut-aside {
+    grid-template-columns: 1fr;
+  }
+
+  .tut-start-card {
+    align-items: flex-start;
+  }
+
+  .tut-card {
+    min-height: 160px;
+  }
+
+  .tut-detail-head .status-pill {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tut-article {
+    font-size: 14px;
+  }
+
+  .tut-article table {
+    display: block;
+    overflow-x: auto;
+  }
+}

@@ -1,0 +1,368 @@
+/* integrations.css — settings/integrations page styles
+   Uses global tokens from app.css; no new variables introduced. */
+
+/* ── Platform grid ─────────────────────────────────────────────────────── */
+
+.intg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.intg-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Card brand header ─────────────────────────────────────────────────── */
+
+.intg-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Per-platform gradients — match CSS brand vars */
+.intg-head-google    { background: linear-gradient(135deg, #4285F4, #1a6fd8); color: #fff; }
+.intg-head-meta      { background: linear-gradient(135deg, #0866FF, #0052cc); color: #fff; }
+.intg-head-tiktok    { background: linear-gradient(135deg, #FE2C55, #010101); color: #fff; }
+.intg-head-snap      { background: linear-gradient(135deg, #FFFC00, #f5e900); color: #1A1A1A; }
+.intg-head-linkedin  { background: linear-gradient(135deg, #0A66C2, #00438a); color: #fff; }
+.intg-head-pinterest { background: linear-gradient(135deg, #E60023, #ad001a); color: #fff; }
+
+.intg-platform-name {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+/* ── Card body ─────────────────────────────────────────────────────────── */
+
+.intg-card-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+/* ── Status badges ─────────────────────────────────────────────────────── */
+
+.intg-status-row { display: flex; }
+
+.intg-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.intg-badge-db {
+  background: color-mix(in srgb, var(--green, #16a34a) 12%, transparent);
+  color: var(--green, #16a34a);
+  border: 1px solid color-mix(in srgb, var(--green, #16a34a) 25%, transparent);
+}
+
+.intg-badge-env {
+  background: color-mix(in srgb, #d97706 12%, transparent);
+  color: #d97706;
+  border: 1px solid color-mix(in srgb, #d97706 25%, transparent);
+}
+
+.intg-badge-none {
+  background: var(--bg-2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+/* ── Client ID row ─────────────────────────────────────────────────────── */
+
+.intg-id-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.intg-id-label {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.intg-id-value {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.intg-updated {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Card action row ───────────────────────────────────────────────────── */
+
+.intg-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.intg-remove-btn {
+  color: var(--red, #ef4444) !important;
+  border-color: color-mix(in srgb, var(--red, #ef4444) 30%, transparent) !important;
+}
+
+.intg-remove-btn:hover {
+  background: color-mix(in srgb, var(--red, #ef4444) 8%, transparent) !important;
+}
+
+/* ── Env banner ────────────────────────────────────────────────────────── */
+
+.intg-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: color-mix(in srgb, #d97706 8%, transparent);
+  border: 1px solid color-mix(in srgb, #d97706 25%, transparent);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  color: #92400e;
+  margin-top: 8px;
+}
+
+html[data-theme="dark"] .intg-banner { color: #fde68a; }
+
+.intg-banner svg { flex-shrink: 0; margin-top: 1px; }
+
+/* ── Modal overrides ───────────────────────────────────────────────────── */
+
+.intg-modal {
+  max-width: 560px;
+}
+
+.intg-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+}
+
+.intg-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.intg-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.intg-modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+}
+
+.intg-modal-close:hover { opacity: 1; background: rgba(0,0,0,0.1); }
+
+/* ── Steps ─────────────────────────────────────────────────────────────── */
+
+.intg-step {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.intg-step:last-child { border-bottom: none; }
+
+.intg-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  font-family: var(--mono);
+}
+
+.intg-step-content { flex: 1; min-width: 0; }
+
+.intg-step-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+/* ── Redirect URI list ─────────────────────────────────────────────────── */
+
+.intg-uri-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.intg-uri-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+}
+
+.intg-uri-code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: break-all;
+}
+
+.intg-copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  display: flex;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.intg-copy-btn:hover { color: var(--ink); }
+
+/* ── Secret input wrapper ──────────────────────────────────────────────── */
+
+.intg-secret-wrap {
+  position: relative;
+  display: flex;
+}
+
+.intg-secret-wrap .f-input {
+  flex: 1;
+  padding-right: 38px;
+}
+
+.intg-secret-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  display: flex;
+  padding: 2px;
+}
+
+.intg-secret-toggle:hover { color: var(--ink); }
+
+/* ── Form stack ────────────────────────────────────────────────────────── */
+
+.f-stack { display: flex; flex-direction: column; gap: 14px; }
+
+/* ── Modal footer ──────────────────────────────────────────────────────── */
+
+.intg-modal-footer {
+  gap: 8px;
+}
+
+.intg-remove-modal-btn {
+  color: var(--red, #ef4444) !important;
+  border-color: color-mix(in srgb, var(--red, #ef4444) 30%, transparent) !important;
+}
+
+/* ── Test result ───────────────────────────────────────────────────────── */
+
+.intg-test-result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  border: 1px solid var(--line);
+}
+
+.intg-test-loading { color: var(--muted); }
+
+.intg-test-ok {
+  background: color-mix(in srgb, var(--green, #16a34a) 8%, transparent);
+  border-color: color-mix(in srgb, var(--green, #16a34a) 25%, transparent);
+  color: var(--green, #16a34a);
+}
+
+.intg-test-fail {
+  background: color-mix(in srgb, var(--red, #ef4444) 8%, transparent);
+  border-color: color-mix(in srgb, var(--red, #ef4444) 25%, transparent);
+  color: var(--red, #ef4444);
+}
+
+.intg-test-issues {
+  margin: 6px 0 0 16px;
+  padding: 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* ── Guide link in modal ──────────────────────────────────────────────── */
+
+.intg-guide-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--blue, #4285F4) 4%, var(--bg));
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.intg-guide-link a {
+  color: var(--blue, #4285F4);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.intg-guide-link a:hover { text-decoration: underline; }
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .intg-grid { grid-template-columns: 1fr; }
+  .intg-modal { max-width: 100%; }
+}

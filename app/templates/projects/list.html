@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Projects — Fluxito{% endblock %}
+{% set active = 'projects' %}
+
+{% block main %}
+<main class="app-main">
+
+  <div class="page-head">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap">
+      <div style="flex:1;min-width:280px">
+        <span class="label">Workspaces</span>
+        <h1>Your <em class="serif-italic">projects.</em></h1>
+        <p>Each project is an isolated workspace with its own connectors, dashboards, and team.</p>
+      </div>
+      <button class="btn primary" style="white-space:nowrap" onclick="openCreateModal()">+ New project</button>
+    </div>
+  </div>
+
+  {% if projects %}
+  <div class="pj-grid">
+    {% for p in projects %}
+    <a href="/project/{{ p.slug }}" class="pj-card">
+      <div class="pj-head">
+        <div class="pj-mark">{{ p.name[:2] | upper }}</div>
+        <div style="flex:1;min-width:0">
+          <div class="pj-name">{{ p.name }}</div>
+          <div class="pj-slug">{{ p.slug }}</div>
+        </div>
+        <span class="t-flag pj-plan pj-plan-{{ p.plan }}">{{ p.plan | capitalize }}</span>
+      </div>
+      <div class="pj-meta">
+        <span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="vertical-align:-2px;margin-right:4px"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          {{ p.role | capitalize }}
+        </span>
+        {% if p.created_at %}<span>· Created {{ p.created_at[:10] }}</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="audit-empty">
+    <h3>No projects yet</h3>
+    <p>Create your first project to get started with connectors and dashboards.</p>
+    <button class="btn primary" style="margin-top:16px" onclick="openCreateModal()">Create your first project</button>
+  </div>
+  {% endif %}
+
+  {# Create project modal #}
+  <div class="kpi-modal-backdrop" id="createModal">
+    <div class="kpi-modal" style="max-width:520px">
+      <div class="kpi-modal-head">
+        <h3>Create a new project</h3>
+        <button type="button" class="mini-btn" onclick="closeCreateModal()">✕</button>
+      </div>
+      <form id="createForm" class="kpi-form">
+        <div class="kpi-modal-body">
+          <label class="f-field">
+            <span>Project name</span>
+            <input type="text" name="name" class="f-input" placeholder="e.g. Acme Corp" required>
+          </label>
+          <label class="f-field">
+            <span>Description <span style="color:var(--muted);font-weight:400">(optional)</span></span>
+            <input type="text" name="description" class="f-input" placeholder="Brief description…">
+          </label>
+          <div class="pj-tip">
+            Projects are unlimited — add as many connectors, dashboards, and members as you need.
+          </div>
+          <div id="createError" class="pj-err" style="display:none"></div>
+        </div>
+        <div class="kpi-modal-foot">
+          <button type="button" class="btn" onclick="closeCreateModal()">Cancel</button>
+          <button type="submit" class="btn primary" id="createBtn">Create project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</main>
+
+<style>
+.pj-grid {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+.pj-card {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 22px 24px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  text-decoration: none; color: inherit;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.pj-card:hover { border-color: var(--ink); transform: translateY(-1px); }
+
+.pj-head { display: flex; align-items: center; gap: 12px; }
+.pj-mark {
+  width: 40px; height: 40px;
+  border-radius: var(--r-m);
+  background: var(--ink); color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 13.5px;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+.pj-name {
+  font-size: 15px; font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pj-slug {
+  font-size: 11.5px; color: var(--muted);
+  margin-top: 2px;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.pj-plan { flex-shrink: 0; }
+.pj-plan-free { background: var(--bg-3); color: var(--muted); }
+.pj-plan-pro {
+  background: color-mix(in srgb, #8b5cf6 12%, transparent);
+  color: #8b5cf6;
+}
+.pj-plan-team {
+  background: color-mix(in srgb, #ec4899 12%, transparent);
+  color: #ec4899;
+}
+
+.pj-meta {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px; color: var(--muted);
+  font-family: var(--mono); letter-spacing: 0.02em;
+  flex-wrap: wrap;
+}
+
+.pj-tip {
+  padding: 12px 14px;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  font-size: 12.5px; color: var(--ink-soft);
+  line-height: 1.55;
+  border: 1px solid var(--line-2);
+}
+.pj-tip strong { color: var(--ink); font-weight: 600; }
+
+.pj-err {
+  margin-top: 12px; padding: 10px 14px;
+  border-radius: var(--r-m);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  color: var(--red); font-size: 12.5px;
+  border: 1px solid color-mix(in srgb, var(--red) 30%, var(--line));
+}
+</style>
+
+<script>
+function openCreateModal() {
+  document.getElementById('createModal').classList.add('is-open');
+}
+function closeCreateModal() {
+  document.getElementById('createModal').classList.remove('is-open');
+}
+document.getElementById('createModal').addEventListener('click', function(e) {
+  if (e.target === this) closeCreateModal();
+});
+
+document.getElementById('createForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('createBtn');
+  const errEl = document.getElementById('createError');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+
+  const fd = new FormData(this);
+  try {
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name: fd.get('name'),
+        description: fd.get('description'),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || data.message || 'Failed to create project');
+    }
+    if (data.redirect_url) {
+      window.location.href = data.redirect_url;
+    } else {
+      window.location.reload();
+    }
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Create project';
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Templates — Fluxito{% endblock %}
+{% set active = 'templates' %}
+
+{% macro pbadge_class(slug) -%}
+{%- set s = (slug or '')|lower -%}
+{%- if s in ['ga4', 'google-analytics', 'google_analytics'] -%}ga4
+{%- elif s == 'amplitude' -%}amp
+{%- elif s in ['adobe-analytics', 'adobe_analytics', 'adobe'] -%}aa
+{%- elif s == 'gtm' -%}gtm
+{%- elif s in ['adobe-launch', 'adobe_launch'] -%}al
+{%- elif s in ['google-ads', 'google_ads', 'gads'] -%}gads
+{%- elif s == 'meta' -%}meta
+{%- elif s == 'tiktok' -%}tiktok
+{%- elif s in ['snap', 'snapchat'] -%}snap
+{%- elif s == 'bigquery' -%}bq
+{%- elif s == 'redshift' -%}rs
+{%- elif s == 'snowflake' -%}sf
+{%- elif s in ['search-console', 'search_console'] -%}sc
+{%- else -%}ghost
+{%- endif -%}
+{%- endmacro %}
+
+{% macro pbadge_letters(slug) -%}
+{%- set s = (slug or '')|lower -%}
+{%- if s in ['ga4', 'google-analytics', 'google_analytics'] -%}G4
+{%- elif s == 'amplitude' -%}AM
+{%- elif s in ['adobe-analytics', 'adobe_analytics'] -%}AA
+{%- elif s == 'gtm' -%}GT
+{%- elif s in ['adobe-launch', 'adobe_launch', 'adobe'] -%}AL
+{%- elif s in ['google-ads', 'google_ads', 'gads'] -%}GA
+{%- elif s == 'meta' -%}MT
+{%- elif s == 'tiktok' -%}TT
+{%- elif s in ['snap', 'snapchat'] -%}SN
+{%- elif s == 'bigquery' -%}BQ
+{%- elif s == 'redshift' -%}RS
+{%- elif s == 'snowflake' -%}SF
+{%- elif s in ['search-console', 'search_console'] -%}SC
+{%- else -%}··
+{%- endif -%}
+{%- endmacro %}
+
+{% block main %}
+<main class="app-main">
+
+  <div class="page-head">
+    <div>
+      <span class="label">Template library{% if show_mine %} · yours{% endif %}</span>
+      <h1>Ten flagship <em class="serif-italic">recipes.</em></h1>
+      <p>Pre-built dashboard recipes that cross platforms. Deploy in one click, or ask your AI assistant to set one up. Most require two or more connectors.</p>
+    </div>
+  </div>
+
+  {# ── Fluxito library vs My templates toggle ── #}
+  {% if user %}
+  <div class="t-seg">
+    <a href="/templates{% if current_category %}?category={{ current_category }}{% endif %}"
+       class="{% if not show_mine %}is-active{% endif %}">
+      Fluxito Library
+      <span class="t-seg-count">{{ system_count }}</span>
+    </a>
+    <a href="/templates?mine=1{% if current_category %}&category={{ current_category }}{% endif %}"
+       class="{% if show_mine %}is-active{% endif %}">
+      My Templates
+      <span class="t-seg-count">{{ user_count }}</span>
+    </a>
+  </div>
+  {% endif %}
+
+  {# ── Category filters ── #}
+  <div class="t-filters">
+    <a href="/templates{% if show_mine %}?mine=1{% endif %}"
+       class="t-chip-filter {% if not current_category %}is-active{% endif %}">All</a>
+    {% for cat in categories %}
+    <a href="/templates?category={{ cat }}{% if show_mine %}&mine=1{% endif %}"
+       class="t-chip-filter {% if current_category == cat %}is-active{% endif %}">
+      {{ cat | replace('_',' ') | title }}
+    </a>
+    {% endfor %}
+  </div>
+
+  {# ── Template grid ── #}
+  {% if templates %}
+  <div class="t-grid">
+    {% for t in templates %}
+    <a href="/templates/{{ t.slug }}" class="t-card">
+      <div class="t-card-hd">
+        <span class="t-cat t-cat-{{ t.category }}">{{ t.category | replace('_',' ') | title }}</span>
+        {% if t.is_featured %}<span class="t-flag">★ Featured</span>{% endif %}
+        {% if t.type == 'system' %}
+          <span class="t-flag system">Built-in</span>
+        {% else %}
+          <span class="t-flag custom">Custom</span>
+        {% endif %}
+      </div>
+
+      <h3>{{ t.title }}</h3>
+
+      {% if t.description %}
+      <p>{{ t.description[:180] }}{% if t.description|length > 180 %}…{% endif %}</p>
+      {% endif %}
+
+      {% if t.required_platforms %}
+      <div class="t-plats">
+        {% for p in t.required_platforms %}
+        <span class="pbadge sm {{ pbadge_class(p) }}"><span>{{ pbadge_letters(p) }}</span></span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="t-foot">
+        <span>{{ t.step_count }} step{% if t.step_count != 1 %}s{% endif %}
+        {% if t.use_count > 0 %} · {{ t.use_count }} deploy{% if t.use_count != 1 %}s{% endif %}{% endif %}
+        </span>
+        <span class="t-more">View details <span class="arrow">→</span></span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="audit-empty">
+    <h3>
+      {% if show_mine %}No custom templates yet{% elif current_category %}No templates in this category{% else %}No templates yet{% endif %}
+    </h3>
+    <p>
+      {% if show_mine %}Ask your AI assistant: <em>"Save these queries as a template called [name]"</em> — it creates your first custom template.
+      {% elif current_category %}Try <a href="/templates">all templates</a>.
+      {% else %}Templates will appear here once the library is populated.
+      {% endif %}
+    </p>
+    {% if show_mine %}<a href="/templates" class="btn primary" style="margin-top:12px">Browse Fluxito Library</a>{% endif %}
+  </div>
+  {% endif %}
+
+  {# ── Create custom section ── #}
+  {% if user and not show_mine %}
+  <div class="t-create-cta">
+    <div>
+      <h3>Create your own templates</h3>
+      <p>Ask your AI: <span class="mono">"Save these queries as a template called [name]"</span> — your custom templates appear under <em>My Templates.</em></p>
+    </div>
+    <a href="/templates?mine=1" class="btn primary">View my templates <span class="arrow">→</span></a>
+  </div>
+  {% endif %}
+
+</main>
+
+<style>
+/* Segmented control for Library / My templates */
+.t-seg {
+  display: inline-flex; gap: 2px;
+  padding: 3px; background: var(--bg-3); border-radius: var(--r-m);
+  margin-bottom: 20px;
+}
+.t-seg a {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: calc(var(--r-m) - 3px);
+  font-size: 13px; font-weight: 500; color: var(--ink-soft);
+  text-decoration: none; transition: all 0.15s;
+}
+.t-seg a:hover { color: var(--ink); }
+.t-seg a.is-active { background: var(--bg); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.t-seg-count {
+  font-size: 11px; padding: 1px 7px; border-radius: 999px;
+  background: var(--bg-2); color: var(--muted); font-family: var(--mono);
+}
+.t-seg a.is-active .t-seg-count { background: var(--bg-3); color: var(--ink); }
+
+/* Category filter chips */
+.t-filters {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+.t-chip-filter {
+  display: inline-flex; align-items: center;
+  padding: 6px 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 500;
+  background: var(--bg); border: 1px solid var(--line); color: var(--ink-soft);
+  text-decoration: none; transition: all 0.15s;
+}
+.t-chip-filter:hover { border-color: var(--ink); color: var(--ink); }
+.t-chip-filter.is-active {
+  background: var(--ink); color: #fff; border-color: var(--ink);
+}
+
+/* Template grid */
+.t-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.t-card {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 24px 26px;
+  border: 1px solid var(--line); border-radius: 14px;
+  background: var(--bg); text-decoration: none; color: inherit;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+.t-card:hover {
+  border-color: var(--ink);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -6px rgba(11, 11, 14, 0.08);
+}
+
+.t-card-hd { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.t-cat {
+  font-size: 10px; font-weight: 600; font-family: var(--mono);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 3px 9px; border-radius: 6px;
+  background: var(--bg-2); color: var(--ink-soft); border: 1px solid var(--line);
+}
+.t-flag {
+  font-size: 10px; font-weight: 600;
+  padding: 3px 9px; border-radius: 6px;
+  background: var(--bg-3); color: var(--muted);
+}
+.t-flag.system { background: var(--blue-soft); color: var(--blue); }
+.t-flag.custom { background: color-mix(in srgb, var(--amber) 10%, transparent); color: var(--amber); }
+
+.t-card h3 {
+  margin: 0; font-size: 17px; font-weight: 600;
+  letter-spacing: -0.015em; color: var(--ink); line-height: 1.3;
+}
+.t-card p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.6; flex: 1; }
+
+.t-plats { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.t-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 14px; border-top: 1px solid var(--line-2);
+  font-size: 12px; color: var(--muted); font-family: var(--mono); letter-spacing: 0.02em;
+}
+.t-foot .t-more {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px;
+  font-family: var(--sans);
+  font-size: 12px; font-weight: 600;
+  color: var(--bg);
+  background: var(--ink);
+  border-radius: 8px;
+  transition: all 0.15s;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+.t-foot .t-more .arrow { transition: transform 0.15s; }
+.t-card:hover .t-more { opacity: 0.85; }
+.t-card:hover .t-more .arrow { transform: translateX(3px); }
+
+/* Create-your-own CTA */
+.t-create-cta {
+  display: flex; align-items: center; gap: 22px;
+  margin-top: 48px; padding: 28px 32px;
+  border: 1px solid var(--ink); border-radius: var(--r-l);
+  background: var(--bg-2);
+}
+.t-create-cta h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+.t-create-cta p { margin: 0; font-size: 13.5px; color: var(--ink-soft); }
+.t-create-cta .mono { font-family: var(--mono); font-size: 12.5px; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line); }
+.t-create-cta a { flex-shrink: 0; }
+
+@media (max-width: 680px) {
+  .t-grid { grid-template-columns: 1fr; }
+  .t-create-cta { flex-direction: column; align-items: flex-start; }
+  .t-create-cta a { width: 100%; text-align: center; justify-content: center; }
+}
+</style>
+{% endblock %}
