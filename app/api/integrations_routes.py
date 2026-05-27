@@ -245,10 +245,30 @@ TUTORIAL_CATEGORIES = [
         "title": "Start here",
         "description": "Project setup, MCP connection, and the context the AI needs before it operates.",
         "tutorials": [
-            ("projects-and-connections", "Projects and connections", "~8 min", "Create projects and connect accounts"),
-            ("connect-ai-mcp", "Connect an AI with MCP", "~10 min", "Add Fluxito to Claude, ChatGPT, Cursor, or another MCP client"),
-            ("platform-setup-guides", "Platform setup guides", "~10 min", "Pick the right connector guide for each data source"),
-            ("business-context", "Business Context", "~10 min", "Teach the AI your business rules and terminology"),
+            (
+                "projects-and-connections",
+                "Projects and connections",
+                "~8 min",
+                "Create projects and connect accounts",
+            ),
+            (
+                "connect-ai-mcp",
+                "Connect an AI with MCP",
+                "~10 min",
+                "Add Fluxito to Claude, ChatGPT, Cursor, or another MCP client",
+            ),
+            (
+                "platform-setup-guides",
+                "Platform setup guides",
+                "~10 min",
+                "Pick the right connector guide for each data source",
+            ),
+            (
+                "business-context",
+                "Business Context",
+                "~10 min",
+                "Teach the AI your business rules and terminology",
+            ),
         ],
     },
     {
@@ -256,10 +276,25 @@ TUTORIAL_CATEGORIES = [
         "description": "Guides for the core workflows: KPIs, SDRs, dashboards, automations, and audits.",
         "tutorials": [
             ("kpi-library", "KPI Library", "~15 min", "Define metrics, formulas, owners, and targets"),
-            ("sdr-generation", "SDR generation", "~20 min", "Generate and refine your Solution Design Reference"),
-            ("dashboards-and-templates", "Dashboards and templates", "~15 min", "Build live reports and deploy templates"),
+            (
+                "sdr-generation",
+                "SDR generation",
+                "~20 min",
+                "Generate and refine your Solution Design Reference",
+            ),
+            (
+                "dashboards-and-templates",
+                "Dashboards and templates",
+                "~15 min",
+                "Build live reports and deploy templates",
+            ),
             ("automations", "Automations", "~12 min", "Install scheduled AI monitoring workflows"),
-            ("audits-and-activity", "Audits and Activity Log", "~12 min", "Run health checks and review AI tool calls"),
+            (
+                "audits-and-activity",
+                "Audits and Activity Log",
+                "~12 min",
+                "Run health checks and review AI tool calls",
+            ),
         ],
     },
     {
