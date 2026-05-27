@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block main %}
-<main class="app-main">
+<main class="app-main system-settings-page">
   <div class="page-head">
     <div>
       <span class="label">Admin</span>
@@ -16,17 +16,71 @@
     </div>
   </div>
 
-  <div class="sys-categories" id="systemSettingsGrid">
+  {% set summary = namespace(total=0, db=0, env=0, secret=0) %}
+  {% for cat in categories %}
+    {% for item in cat.settings %}
+      {% set summary.total = summary.total + 1 %}
+      {% if item.source == 'db' %}{% set summary.db = summary.db + 1 %}{% endif %}
+      {% if item.source != 'db' %}{% set summary.env = summary.env + 1 %}{% endif %}
+      {% if item.is_secret %}{% set summary.secret = summary.secret + 1 %}{% endif %}
+    {% endfor %}
+  {% endfor %}
+
+  <div class="sys-summary" aria-label="System settings summary">
+    <div class="sys-summary-item">
+      <span class="sys-summary-k">Total settings</span>
+      <strong data-summary-value="total">{{ summary.total }}</strong>
+    </div>
+    <div class="sys-summary-item">
+      <span class="sys-summary-k">DB overrides</span>
+      <strong data-summary-value="db">{{ summary.db }}</strong>
+    </div>
+    <div class="sys-summary-item">
+      <span class="sys-summary-k">Env defaults</span>
+      <strong data-summary-value="env">{{ summary.env }}</strong>
+    </div>
+    <div class="sys-summary-item">
+      <span class="sys-summary-k">Secrets</span>
+      <strong data-summary-value="secret">{{ summary.secret }}</strong>
+    </div>
+  </div>
+
+  <div class="sys-layout">
+    <aside class="sys-rail" aria-label="Settings categories">
+      {% for cat in categories %}
+      <a href="#sys-{{ cat.key }}" class="sys-rail-link">
+        <span class="sys-rail-dot" aria-hidden="true"></span>
+        <span>{{ cat.title }}</span>
+        <small>{{ cat.settings|length }}</small>
+      </a>
+      {% endfor %}
+    </aside>
+
+    <div class="sys-categories" id="systemSettingsGrid">
     {% for cat in categories %}
-    <section class="sys-category">
+    <section class="sys-category" id="sys-{{ cat.key }}">
       <div class="sys-cat-head">
-        <h2 class="sys-cat-title">{{ cat.title }}</h2>
-        <p class="sys-cat-desc">{{ cat.description }}</p>
+        <div class="sys-cat-icon" aria-hidden="true">
+          {% if cat.key == 'email' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 8 7 8-7"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+          {% elif cat.key == 'rate_limiting' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
+          {% elif cat.key == 'observability' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-4 4"/></svg>
+          {% else %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          {% endif %}
+        </div>
+        <div>
+          <h2 class="sys-cat-title">{{ cat.title }}</h2>
+          <p class="sys-cat-desc">{{ cat.description }}</p>
+        </div>
+        <span class="sys-cat-count">{{ cat.settings|length }} settings</span>
       </div>
 
       <div class="sys-card">
         {% for item in cat.settings %}
-        <form class="sys-row {% if not loop.last %}sys-row-border{% endif %}"
+        <form class="sys-row"
               data-key="{{ item.key }}"
               data-secret="{{ '1' if item.is_secret else '0' }}"
               onsubmit="SystemSettings.save(event)">
@@ -39,22 +93,30 @@
             <code class="sys-key">{{ item.key }}</code>
           </div>
           <div class="sys-field">
+            <label class="sys-input-wrap">
+              <span class="sys-input-label">Value</span>
             {% if item.is_secret %}
-            <input class="f-input sys-input" name="value" type="password" autocomplete="new-password"
-                   placeholder="{{ '••••••••' if item.value == '********' else 'Not set' }}"/>
+              <input class="f-input sys-input" name="value" type="password" autocomplete="new-password"
+                     placeholder="{{ '••••••••' if item.value == '********' else 'Not set' }}"/>
             {% elif item.value_type == 'int' %}
-            <input class="f-input sys-input" name="value" type="number" step="1" value="{{ item.value or '' }}"
-                   placeholder="Not set"/>
+              <input class="f-input sys-input" name="value" type="number" step="1" value="{{ item.value if item.value is not none else '' }}"
+                     placeholder="Not set"/>
             {% elif item.value_type == 'float' %}
-            <input class="f-input sys-input" name="value" type="number" step="0.01" value="{{ item.value or '' }}"
-                   placeholder="Not set"/>
+              <input class="f-input sys-input" name="value" type="number" step="0.01" value="{{ item.value if item.value is not none else '' }}"
+                     placeholder="Not set"/>
             {% else %}
-            <input class="f-input sys-input" name="value" type="text" value="{{ item.value or '' }}"
-                   placeholder="Not set"/>
+              <input class="f-input sys-input" name="value" type="text" value="{{ item.value if item.value is not none else '' }}"
+                     placeholder="Not set"/>
             {% endif %}
+            </label>
             <div class="sys-row-actions">
-              <button class="btn primary sm" type="submit">Save</button>
-              <button class="btn ghost sm" type="button" onclick="SystemSettings.reset('{{ item.key }}')">Reset</button>
+              <button class="btn primary sm sys-save" type="submit">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg>
+                <span>Save</span>
+              </button>
+              <button class="btn ghost sm sys-reset" type="button" onclick="SystemSettings.reset('{{ item.key }}')" title="Reset to fallback" aria-label="Reset {{ item.label }} to fallback">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>
+              </button>
             </div>
           </div>
         </form>
@@ -62,6 +124,7 @@
       </div>
     </section>
     {% endfor %}
+    </div>
   </div>
 </main>
 

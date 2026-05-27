@@ -4,7 +4,7 @@
 {% set active = 'home' %}
 
 {% block main %}
-<main class="app-main">
+<main class="app-main home-main">
 
   {# ── Editorial page header ── #}
   <div class="page-head">
@@ -72,7 +72,7 @@
         <span>Add Fluxito to your AI</span>
         <a href="/docs#mcp" class="btn sm">Docs</a>
       </div>
-      <div style="padding:16px 0 0">
+      <div class="home-ai-body">
         {% include "partials/add_to_ai.html" %}
       </div>
     </div>
@@ -106,9 +106,9 @@
   </div>
 
   {# ── Your workspace (quickstart tiles) ── #}
-  <div class="section-head" style="margin-top:40px">
+  <div class="section-head home-section-head">
     <div class="label">Your workspace</div>
-    <h2 style="margin-top:8px">Everything in this <em class="serif-italic">project.</em></h2>
+    <h2>Everything in this <em class="serif-italic">project.</em></h2>
   </div>
 
   <div class="workspace-grid">
@@ -162,11 +162,11 @@
   {# ── Platforms & Connections summary ── #}
   {% set connected_platforms = platforms | selectattr('count') | list + platforms | rejectattr('count') | selectattr('via_google') | list %}
   {% set not_connected_platforms = platforms | rejectattr('count') | rejectattr('via_google') | list %}
-  <div class="section-head" style="margin-top:40px">
-    <div style="display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap">
+  <div class="section-head home-section-head">
+    <div class="section-head-row">
       <div>
         <div class="label">Platforms &amp; Connections</div>
-        <h2 style="margin-top:8px">
+        <h2>
           {{ connected_platforms|length }} connected.
           {% if not_connected_platforms|length > 0 %}<em class="serif-italic">{{ not_connected_platforms|length }} to go.</em>{% endif %}
         </h2>
@@ -212,10 +212,41 @@
 </main>
 
 <style>
+.home-main {
+  --home-gap: 28px;
+  --home-gap-sm: 18px;
+  --home-card-pad-x: 20px;
+}
+
+.home-main .page-head {
+  padding-bottom: 18px;
+  margin-bottom: var(--home-gap);
+}
+
+.home-main .page-head h1 {
+  max-width: 900px;
+}
+
+.home-main .kpi-row {
+  margin: 0;
+}
+
+.home-main .kpi {
+  padding: 20px 22px 22px;
+}
+
+.home-main .kpi .label {
+  margin-bottom: 14px;
+}
+
+.home-main .kpi .meta {
+  margin-top: 10px;
+}
+
 /* Empty-state CTA — editorial take */
 .empty-state {
   display: flex; align-items: center; gap: 22px;
-  padding: 26px 28px; margin: 12px 0 44px;
+  padding: 24px 26px; margin: 0 0 var(--home-gap);
   border: 1px solid var(--ink); border-radius: var(--r-l);
   background: var(--bg-2);
 }
@@ -233,8 +264,59 @@
 }
 
 /* Section head */
-.section-head { margin-bottom: 16px; }
-.section-head h2 { font-size: 28px; font-weight: 500; letter-spacing: -0.02em; color: var(--ink); }
+.home-section-head {
+  margin-top: calc(var(--home-gap) + 6px);
+  margin-bottom: var(--home-gap-sm);
+}
+.home-section-head h2 {
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1.05;
+}
+.section-head-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+/* Above-the-fold panels */
+.home-main .home-split {
+  gap: 24px;
+  margin-top: var(--home-gap);
+}
+
+.home-main .home-card {
+  border-radius: var(--r-m);
+}
+
+.home-main .home-card .hd {
+  min-height: 56px;
+  padding: 10px var(--home-card-pad-x);
+}
+
+.home-ai-body {
+  padding: 18px var(--home-card-pad-x) 0;
+}
+
+.home-ai-body .ai-connect-grid {
+  padding: 0;
+  gap: 12px;
+}
+
+.home-ai-body .mcp-help-link {
+  margin-top: 16px !important;
+  padding-left: 0 !important;
+}
+
+.home-main .next-item {
+  min-height: 76px;
+  padding: 15px var(--home-card-pad-x);
+}
 
 /* Workspace tiles */
 .workspace-grid {
@@ -243,7 +325,8 @@
 }
 .ws-tile {
   display: flex; flex-direction: column; gap: 8px;
-  padding: 18px 20px 20px;
+  min-height: 166px;
+  padding: 18px 20px 19px;
   border: 1px solid var(--line); border-radius: var(--r-m);
   background: var(--bg); text-decoration: none; color: inherit;
   transition: border-color 0.15s ease, transform 0.15s ease;
@@ -252,6 +335,7 @@
 .ws-tile .ws-ico {
   width: 36px; height: 36px; border-radius: var(--r-s);
   display: flex; align-items: center; justify-content: center;
+  margin-bottom: 2px;
 }
 .ws-tile h3 { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
 .ws-tile p { margin: 0; font-size: 13px; color: var(--ink-soft); line-height: 1.45; }
@@ -261,13 +345,14 @@
 
 /* Connection summary panel */
 .conn-summary {
-  padding: 18px 20px;
+  padding: 18px 20px 20px;
   border: 1px solid var(--line); border-radius: var(--r-m);
   background: var(--bg);
 }
 .conn-summary-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  padding-bottom: 16px; border-bottom: 1px dashed var(--line);
+  min-height: 42px;
+  padding-bottom: 18px; border-bottom: 1px dashed var(--line);
 }
 .conn-summary-label {
   color: var(--muted); font-size: 11px; font-weight: 600;
@@ -290,11 +375,12 @@
 
 .conn-stats-grid {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px; padding-top: 16px;
+  gap: 12px; padding-top: 18px;
 }
 .conn-stat-card {
   display: flex; flex-direction: column; gap: 4px;
-  padding: 14px 16px;
+  min-height: 104px;
+  padding: 15px 16px;
   background: var(--bg); border: 1px solid var(--line);
   border-radius: var(--r-m);
   text-decoration: none; color: inherit;
@@ -313,11 +399,32 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .conn-hint {
-  margin-top: 14px; font-size: 13px; color: var(--muted);
+  margin-top: 16px; font-size: 13px; color: var(--muted);
 }
 .conn-hint a { color: var(--ink); font-weight: 500; text-decoration: none; border-bottom: 1px solid var(--line-2); }
 
 @media (max-width: 900px) { .conn-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) {
+  .home-main {
+    --home-gap: 22px;
+    --home-gap-sm: 14px;
+  }
+  .home-main .kpi {
+    padding: 18px 20px;
+  }
+  .home-ai-body {
+    padding: 16px 16px 0;
+  }
+  .home-ai-body .ai-connect-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .section-head-row .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 @media (max-width: 480px) { .conn-stats-grid { grid-template-columns: 1fr; } }
 </style>
 

@@ -31,7 +31,7 @@ _DEFAULT_ASSET_HASH = "dev"
 
 # ---------- Asset fingerprinting -----------------------------------------------
 
-_asset_hash_cache: dict[str, str] = {}
+_asset_hash_cache: dict[str, tuple[float, str]] = {}
 
 
 def _asset_hash(path: str) -> str:
@@ -50,20 +50,19 @@ def _asset_hash(path: str) -> str:
     Returns:
         8-char hex hash for cache-busting URL query param
     """
-    # Return cached hash if available
-    if path in _asset_hash_cache:
-        return _asset_hash_cache[path]
-
     full_path = _STATIC_DIR / path
     try:
-        mtime = str(os.path.getmtime(full_path)).encode()
-        h = hashlib.md5(mtime).hexdigest()[:8]
+        mtime = os.path.getmtime(full_path)
     except OSError:
         logger.debug(f"Asset not found: {path}, using default hash")
-        h = _DEFAULT_ASSET_HASH
+        return _DEFAULT_ASSET_HASH
 
-    # Cache for future lookups
-    _asset_hash_cache[path] = h
+    cached = _asset_hash_cache.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+
+    h = hashlib.md5(str(mtime).encode()).hexdigest()[:8]
+    _asset_hash_cache[path] = (mtime, h)
     return h
 
 

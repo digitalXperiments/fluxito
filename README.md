@@ -2,9 +2,16 @@
 
 **Open-source AI operations layer for marketing analytics. End-to-end — from tracking plan, to tag management implementation, to reporting and dashboards — through a conversation with any MCP-compatible AI.**
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Version: 1.0](https://img.shields.io/badge/version-1.0-green.svg)](CHANGELOG.md)
-[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](Dockerfile)
+[![Version: 1.0.0](https://img.shields.io/badge/version-1.0.0-green.svg)](CHANGELOG.md)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
+[![Python: 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)](pyproject.toml)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-009688.svg)](requirements.txt)
+[![MCP](https://img.shields.io/badge/MCP-compatible-6f42c1.svg)](https://modelcontextprotocol.io)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
+[![Deploy: self-hosted](https://img.shields.io/badge/deploy-self--hosted-0f766e.svg)](docker-compose.yml)
+[![Platforms: 15](https://img.shields.io/badge/platforms-15-orange.svg)](#connecting-your-platforms)
+[![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC.svg)](pyproject.toml)
+[![Code style: Ruff](https://img.shields.io/badge/code_style-Ruff-D7FF64.svg)](pyproject.toml)
 
 ---
 

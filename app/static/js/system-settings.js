@@ -1,6 +1,14 @@
 (function () {
   "use strict";
 
+  function bumpSummary(name, delta) {
+    var el = document.querySelector('[data-summary-value="' + name + '"]');
+    if (!el) return;
+    var current = parseInt(el.textContent || "0", 10);
+    if (Number.isNaN(current)) return;
+    el.textContent = String(Math.max(0, current + delta));
+  }
+
   function save(event) {
     event.preventDefault();
     var form = event.target;
@@ -8,9 +16,10 @@
     var input = form.elements.value;
     var value = input ? input.value : "";
     var saveBtn = form.querySelector('button[type="submit"]');
+    var saveText = saveBtn ? saveBtn.querySelector("span") : null;
     if (saveBtn) {
       saveBtn.disabled = true;
-      saveBtn.textContent = "Saving...";
+      if (saveText) saveText.textContent = "Saving";
     }
 
     fetch("/api/settings/system/" + encodeURIComponent(key), {
@@ -30,10 +39,16 @@
         }
         var badge = form.querySelector(".sys-badge");
         if (badge) {
+          var wasDb = (badge.textContent || "").trim().toLowerCase() === "db";
           badge.textContent = "db";
           badge.classList.add("is-db");
           badge.classList.remove("is-env");
+          if (!wasDb) {
+            bumpSummary("db", 1);
+            bumpSummary("env", -1);
+          }
         }
+        form.classList.remove("is-dirty");
         Fluxito.toast("Setting saved");
       })
       .catch(function (err) {
@@ -42,7 +57,7 @@
       .finally(function () {
         if (saveBtn) {
           saveBtn.disabled = false;
-          saveBtn.textContent = "Save";
+          if (saveText) saveText.textContent = "Save";
         }
       });
   }
@@ -70,4 +85,13 @@
     save: save,
     reset: reset,
   };
+
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".sys-row .sys-input").forEach(function (input) {
+      input.addEventListener("input", function () {
+        var form = input.closest(".sys-row");
+        if (form) form.classList.add("is-dirty");
+      });
+    });
+  });
 })();
