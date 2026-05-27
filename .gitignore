@@ -43,6 +43,7 @@ docs/plans/
 .superpowers
 test_results
 .benchmarks
+.claude
 # Marketing site material lives in parked/ until it moves to its own static-site repo
 parked/
 .commandcode

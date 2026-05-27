@@ -14,7 +14,7 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
         All tutorials
       </a>
-      <span class="label">{{ current_category.title if current_category else 'Setup guide' }}</span>
+      <span class="label">{{ current_category.title if current_category else 'Tutorial' }}</span>
       <h1>{{ title }}</h1>
       {% if current_tutorial %}
       <p>{{ current_tutorial[3] }}</p>
@@ -32,7 +32,8 @@
 
     <aside class="tut-aside" aria-label="Tutorial navigation">
       <div class="tut-aside-card">
-        <span class="tut-aside-label">Setup</span>
+        <span class="tut-aside-label">Workspace</span>
+        <a href="/projects" class="tut-aside-link">Projects <span>→</span></a>
         <a href="/connect" class="tut-aside-link">Connections <span>→</span></a>
         <a href="/settings/integrations" class="tut-aside-link">Integration settings <span>→</span></a>
       </div>

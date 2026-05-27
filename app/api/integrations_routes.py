@@ -231,11 +231,37 @@ def _load_tutorial(slug: str) -> tuple[str, str]:
         "\n".join(lines),
         extensions=["tables", "fenced_code"],
     )
+    html_body = re.sub(
+        r'href="([a-z0-9][a-z0-9\-]{0,60})\.md"',
+        r'href="/tutorials/\1"',
+        html_body,
+    )
     return title, html_body
 
 
 # Tutorial metadata for the index page
 TUTORIAL_CATEGORIES = [
+    {
+        "title": "Start here",
+        "description": "Project setup, MCP connection, and the context the AI needs before it operates.",
+        "tutorials": [
+            ("projects-and-connections", "Projects and connections", "~8 min", "Create projects and connect accounts"),
+            ("connect-ai-mcp", "Connect an AI with MCP", "~10 min", "Add Fluxito to Claude, ChatGPT, Cursor, or another MCP client"),
+            ("platform-setup-guides", "Platform setup guides", "~10 min", "Pick the right connector guide for each data source"),
+            ("business-context", "Business Context", "~10 min", "Teach the AI your business rules and terminology"),
+        ],
+    },
+    {
+        "title": "Use Fluxito features",
+        "description": "Guides for the core workflows: KPIs, SDRs, dashboards, automations, and audits.",
+        "tutorials": [
+            ("kpi-library", "KPI Library", "~15 min", "Define metrics, formulas, owners, and targets"),
+            ("sdr-generation", "SDR generation", "~20 min", "Generate and refine your Solution Design Reference"),
+            ("dashboards-and-templates", "Dashboards and templates", "~15 min", "Build live reports and deploy templates"),
+            ("automations", "Automations", "~12 min", "Install scheduled AI monitoring workflows"),
+            ("audits-and-activity", "Audits and Activity Log", "~12 min", "Run health checks and review AI tool calls"),
+        ],
+    },
     {
         "title": "Google platforms",
         "description": "One OAuth app covers GA4, GTM, Ads, Search Console, and BigQuery.",
@@ -298,6 +324,18 @@ def _tutorial_page_context(slug: str) -> dict:
     }
 
 
+def _top_level_tutorials() -> list[tuple[str, str, str, str]]:
+    return [item for category in TUTORIAL_CATEGORIES[:2] for item in category["tutorials"]]
+
+
+def _platform_tutorial_categories() -> list[dict]:
+    return TUTORIAL_CATEGORIES[2:]
+
+
+def _platform_tutorials() -> list[tuple[str, str, str, str]]:
+    return [item for category in _platform_tutorial_categories() for item in category["tutorials"]]
+
+
 @router.get("/tutorials", response_class=HTMLResponse)
 async def tutorials_index(request: Request):
     """Tutorials index page — categorized list of all setup guides."""
@@ -311,8 +349,8 @@ async def tutorials_index(request: Request):
         "tutorials/index.html",
         {
             "user": user_view,
-            "categories": TUTORIAL_CATEGORIES,
-            "tutorial_count": sum(len(category["tutorials"]) for category in TUTORIAL_CATEGORIES),
+            "tutorials": _top_level_tutorials(),
+            "tutorial_count": len(_top_level_tutorials()),
             "active": "tutorials",
         },
     )
@@ -323,10 +361,24 @@ async def tutorial_page(request: Request, slug: str):
     """Render a single tutorial as an HTML page."""
     from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
 
-    title, html_body = _load_tutorial(slug)
-
     user_ctx = await _resolve_user_ctx(request)
     user_view = await _load_user_view(user_ctx) if user_ctx else None
+
+    if slug == "platform-setup-guides":
+        return render(
+            request,
+            "tutorials/platforms.html",
+            {
+                "user": user_view,
+                "title": "Platform Setup Guides",
+                "platform_categories": _platform_tutorial_categories(),
+                "platform_tutorials": _platform_tutorials(),
+                "tutorial_count": len(_platform_tutorials()),
+                "active": "tutorials",
+            },
+        )
+
+    title, html_body = _load_tutorial(slug)
 
     return render(
         request,

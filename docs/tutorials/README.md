@@ -1,13 +1,45 @@
-# Platform Tutorials
+# Fluxito Tutorials
 
-Step-by-step setup guides for every connector supported by Fluxito. Written for marketing analysts and growth leads who have admin access to their company's marketing platforms and want to get credentials into Fluxito quickly.
+Step-by-step guides for using Fluxito end to end: projects, MCP connection, Business Context, KPI Library, SDR generation, dashboards, automations, audits, and platform setup.
 
-**Recommended reading order for new self-hosters:**
-1. Start with [Google Cloud setup](google-cloud-setup.md) if you plan to use any Google connector — all five share one OAuth client.
-2. Proceed to platform-specific tutorials in the order relevant to your stack.
-3. Credential connectors (Snowflake, Redshift, Amplitude, Adobe) can be set up in any order independently.
+Written for marketing analysts, growth leads, and analytics operators who want to connect their stack and let an MCP-compatible AI operate Fluxito safely.
+
+**Recommended reading order for new users:**
+1. Start with [Projects and connections](projects-and-connections.md).
+2. Connect your AI with [Connect an AI Client with MCP](connect-ai-mcp.md).
+3. Use [Platform Setup Guides](platform-setup-guides.md) for each connector you need.
+4. Add [Business Context](business-context.md) and [KPI Library](kpi-library.md).
+5. Generate your [Solution Design Reference](sdr-generation.md).
+6. Build [dashboards](dashboards-and-templates.md), install [automations](automations.md), and run [audits](audits-and-activity.md).
 
 ---
+
+## Start here
+
+| Tutorial | What it covers | Time |
+|---|---|---|
+| [projects-and-connections.md](projects-and-connections.md) | Create projects, configure platform apps, connect accounts, and keep active project scope clear. | ~8 min |
+| [connect-ai-mcp.md](connect-ai-mcp.md) | Add Fluxito to Claude, ChatGPT, Cursor, Windsurf, or any MCP-compatible AI client. | ~10 min |
+| [platform-setup-guides.md](platform-setup-guides.md) | Hub for Google, paid media, warehouse, analytics, and tag-manager connector setup. | ~10 min |
+| [business-context.md](business-context.md) | Write the Markdown context document the AI uses to understand your business rules. | ~10 min |
+
+---
+
+## How to use Fluxito features
+
+| Tutorial | What it covers | Time |
+|---|---|---|
+| [kpi-library.md](kpi-library.md) | Define metrics, formulas, aliases, owners, targets, and executable KPI inputs. | ~15 min |
+| [sdr-generation.md](sdr-generation.md) | Generate, refine, approve, and use a Solution Design Reference for tracking audits. | ~20 min |
+| [dashboards-and-templates.md](dashboards-and-templates.md) | Build live dashboards, deploy templates, manage scopes, share, schedule, and export. | ~15 min |
+| [automations.md](automations.md) | Install scheduled AI monitoring workflows and save custom automation prompts. | ~12 min |
+| [audits-and-activity.md](audits-and-activity.md) | Run platform audits and review every AI tool call in the Activity Log. | ~12 min |
+
+---
+
+## Platform setup guides
+
+Use these after you know which data sources a project needs.
 
 ## Google platforms — shared OAuth app
 
@@ -63,6 +95,9 @@ No OAuth app required.
 
 ## Cross-references
 
+- **AI clients use MCP:** complete [connect-ai-mcp.md](connect-ai-mcp.md), then use platform setup guides to give the AI real data access.
+- **Business Context + KPI Library come before reporting:** complete [business-context.md](business-context.md) and [kpi-library.md](kpi-library.md) before building executive dashboards or automations.
+- **SDR drives tracking audits:** complete [sdr-generation.md](sdr-generation.md) before asking for GA4/GTM implementation drift checks.
 - **Google connectors share one OAuth client:** once you complete [google-cloud-setup.md](google-cloud-setup.md) and connect a Google account, that single connection covers GA4, GTM, Google Ads, Search Console, and BigQuery (OAuth mode).
 - **Adobe Analytics and Adobe Launch share one Adobe I/O project:** complete [adobe-analytics.md](adobe-analytics.md) first, then [adobe-launch.md](adobe-launch.md) reuses the same three credentials with one additional Admin Console step.
 - **BigQuery service account vs Google OAuth:** BigQuery is the only Google connector with an alternative credential mode. See [bigquery.md](bigquery.md) for both options.

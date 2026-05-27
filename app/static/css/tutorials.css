@@ -111,6 +111,10 @@
   gap: 16px;
 }
 
+.tut-grid-flat {
+  margin-top: 8px;
+}
+
 .tut-card {
   position: relative;
   display: flex;
@@ -137,6 +141,27 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 20px;
+}
+
+.tut-guide-badge {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.tut-guide-badge span {
+  line-height: 1;
 }
 
 .tut-card .status-pill,

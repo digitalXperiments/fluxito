@@ -33,7 +33,7 @@ async def _email_config() -> dict:
         "port": int(getattr(settings, "SMTP_PORT", 587)),
         "username": getattr(settings, "SMTP_USERNAME", ""),
         "password": getattr(settings, "SMTP_PASSWORD", ""),
-        "from_email": getattr(settings, "SMTP_FROM_EMAIL", "noreply@fluxito.ai"),
+        "from_email": getattr(settings, "SMTP_FROM_EMAIL", "noreply@example.com"),
         "from_name": getattr(settings, "SMTP_FROM_NAME", "Fluxito"),
     }
     session_factory = getattr(app_state, "db_session_factory", None)
@@ -70,7 +70,7 @@ async def send_email(
     Send an email. Uses SMTP if configured, otherwise logs to console.
     """
     cfg = await _email_config()
-    from_email = cfg["from_email"] or "noreply@fluxito.ai"
+    from_email = cfg["from_email"] or "noreply@example.com"
     from_name = cfg["from_name"] or "Fluxito"
 
     if not (cfg["host"] and from_email):

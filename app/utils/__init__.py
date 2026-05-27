@@ -4,7 +4,7 @@ import uuid as _uuid
 
 from starlette.requests import Request
 
-DEFAULT_BASE_URL = "https://fluxito.ai"
+DEFAULT_BASE_URL = "http://localhost:8000"  # Overridden by APP_BASE_URL in production
 LOCALHOST_INDICATORS = frozenset(["localhost", "127.", "::1"])
 
 

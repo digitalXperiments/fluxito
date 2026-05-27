@@ -1,0 +1,121 @@
+# Connect an AI Client with MCP
+
+Fluxito is an MCP server. After you connect an AI client, the AI can call Fluxito tools against the project you authorize: read analytics, generate an SDR, build dashboards, run audits, and use your KPI Library and Business Context.
+
+Use this guide after the Fluxito server is running and you have created your first project.
+
+## What you need
+
+- A signed-in Fluxito account.
+- At least one Fluxito project.
+- A public URL for your Fluxito server.
+- An MCP-compatible AI client, such as Claude, ChatGPT, Cursor, Windsurf, or another client that supports remote MCP servers.
+
+For local testing, `localhost` usually is not reachable by the AI client. Use ngrok or a real domain.
+
+## 1. Confirm the MCP URL
+
+Your MCP endpoint is:
+
+```text
+https://your-fluxito-domain.example.com/mcp
+```
+
+For local Docker Compose through ngrok, it looks like:
+
+```text
+https://abc123.ngrok-free.app/mcp
+```
+
+The domain must match `APP_BASE_URL`. If `APP_BASE_URL` still points to `http://localhost:8000`, OAuth redirects from external AI clients will fail.
+
+## 2. Add Fluxito inside your AI client
+
+Open your AI client's connector, integrations, or MCP server settings.
+
+Add a custom MCP server with:
+
+| Field | Value |
+|---|---|
+| Name | Fluxito |
+| URL | `https://your-fluxito-domain.example.com/mcp` |
+| Auth | OAuth / browser authorization, if the client asks |
+
+When the client opens Fluxito in a browser, sign in and approve access.
+
+## 3. Pick the active project
+
+Fluxito tools are project-scoped. If you have more than one project, ask your AI:
+
+```text
+Show my Fluxito projects and set the active project to <project name>.
+```
+
+After the project is active, the AI can use only that project's connections, SDR, KPI Library, Business Context, dashboards, and activity log.
+
+## 4. First prompts to verify the connection
+
+Try these in order:
+
+```text
+List my connected Fluxito platforms.
+```
+
+```text
+Read my business context and KPI library, then summarize what you know about this project.
+```
+
+```text
+List the Fluxito tools you can use and group them by analytics, tracking, reporting, and knowledge.
+```
+
+If you have GA4 connected:
+
+```text
+Show the GA4 properties available in this project.
+```
+
+## 5. Local testing with ngrok
+
+Start Fluxito first:
+
+```bash
+docker compose up -d
+```
+
+Start ngrok in a second terminal:
+
+```bash
+ngrok http 8000
+```
+
+Copy the HTTPS forwarding URL, then update `.env`:
+
+```text
+APP_BASE_URL=https://abc123.ngrok-free.app
+```
+
+Restart the app:
+
+```bash
+docker compose restart app
+```
+
+Use `https://abc123.ngrok-free.app/mcp` in your AI client.
+
+## Common issues
+
+| Symptom | Fix |
+|---|---|
+| AI client cannot connect | Confirm the URL ends in `/mcp` and is publicly reachable. |
+| OAuth redirects to localhost | Update `APP_BASE_URL` and restart the app. |
+| Token gets 401 | Re-authorize the connector in the AI client. |
+| AI cannot see data | Connect a platform under `/connect` and make sure the active project is correct. |
+| Streaming stalls behind a proxy | Disable proxy buffering on `/mcp`. |
+
+## What to do next
+
+- Add Business Context so answers use your business rules.
+- Add KPI definitions so the AI uses your formulas.
+- Connect Google first if you want GA4, GTM, Google Ads, Search Console, or BigQuery.
+- Ask the AI to generate your first SDR.

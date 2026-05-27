@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = "noreply@fluxito.ai"
+    SMTP_FROM_EMAIL: str = "noreply@example.com"  # Change this in Settings → System after first admin login
     SMTP_FROM_NAME: str = "Fluxito"
 
     # CORS

@@ -117,7 +117,7 @@ async def send_verification_email(email: str, user_id: str, base_url: str):
     <div style="font-family: Inter, -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 0;">
       <div style="text-align: center; margin-bottom: 32px;">
         <span style="font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: #1c1917;">
-          [ <span style="color: #b47800;">Fluxito.AI</span> ]
+          [ Fluxito ]
         </span>
       </div>
 
@@ -183,7 +183,7 @@ async def send_reset_email(email: str, user_id: str, base_url: str):
     <div style="font-family: Inter, -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 0;">
       <div style="text-align: center; margin-bottom: 32px;">
         <span style="font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: #1c1917;">
-          [ <span style="color: #b47800;">Fluxito.AI</span> ]
+          [ Fluxito ]
         </span>
       </div>
 

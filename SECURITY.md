@@ -16,7 +16,7 @@ Please do **not** open a public GitHub issue for security vulnerabilities.
 Report privately by opening a GitHub Security Advisory at:
 https://github.com/digitalXperiments/fluxito/security/advisories/new
 
-You can also email **security@fluxito.ai** if you prefer not to use the GitHub advisory flow.
+Please open a GitHub Security Advisory for private disclosure. If you must email, use a temporary address or reach out via the repo's issues first.
 
 You can expect:
 

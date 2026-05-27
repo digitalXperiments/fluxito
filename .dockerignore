@@ -74,6 +74,7 @@ desktop.ini
 # ── Documentation ────────────────────────────────────────────────────────────
 *.md
 !README.md
+!docs/tutorials/*.md
 
 # ── Deployment & tooling ──────────────────────────────────────────────────
 fly.toml
