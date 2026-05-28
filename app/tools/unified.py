@@ -216,6 +216,11 @@ KNOWLEDGE_ROUTES: dict[str, tuple[str, str | None]] = {
 # to the legacy tool unchanged.
 TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
     "generate": ("generate_sdr", None),
+    "save": ("save_sdr", None),
+    "refresh_sources": ("refresh_sdr_sources", None),
+    "capture_intake": ("capture_sdr_intake", None),
+    "get_intake": ("get_sdr_intake", None),
+    "list_sources": ("list_sdr_sources", None),
     "refine": ("refine_sdr", None),
 }
 
@@ -595,36 +600,75 @@ for the current value.
 """
 
 TRACKING_PLAN_DOC = """
-Create and refine a tracking plan — the project's Solution Design
-Reference (SDR). The tracking plan is a markdown doc describing the event
-taxonomy, destinations, and tracking contract for the product.
+Create, refine, and maintain a tracking plan — the project's Solution Design
+Reference (SDR): a markdown doc describing the event taxonomy, destinations,
+and tracking contract for the product.
+
+In v2 the server gathers high-fidelity facts and YOU (the model) do the
+synthesis. Typical first-time flow:
+  1. generate (no intake_answers) → returns 6 business-intake questions. Ask
+     the user conversationally, one or two at a time.
+  2. generate (with intake_answers) → scans connected sources and returns
+     structured facts + a parse-valid `markdown_skeleton` + an
+     `instructions_for_claude` synthesis playbook. NOTHING is written yet.
+  3. Synthesize the full SDR markdown by editing the skeleton per the playbook.
+  4. save → persist your markdown. Then optionally refine.
+Incremental flow when a new connector is added: refresh_sources → review
+deltas with the user → refine(action='apply_source_delta').
 
 Actions:
-  generate — Bootstrap a tracking plan from live GA4 / GTM / Ads config.
-             Reads connected platforms, merges with an industry template,
-             and produces a draft in Markdown.
+  generate — Gather data for an SDR (does not write the doc).
              params:
                project_id (optional, defaults to active project)
                name (optional, defaults to "<project> SDR")
-               sources_ga4 (bool, default True)
-               sources_gtm (bool, default True)
-               sources_ads (bool, default True)
+               intake_answers (dict of the 6 keys: business_model,
+                   primary_kpis, conversion_definition, key_journeys,
+                   privacy_consent, ownership_complexity [+ anything_else]).
+                   Omit to receive the questions to ask first.
+               sources (optional list, e.g. ["ga4","gtm","google_ads"])
                business_type_hint (ecommerce | saas | lead_gen | media |
                                    app | marketplace)
-               regenerate (bool, default False — overwrite existing draft)
+               phase ("auto" | "interview" | "scan"), regenerate (bool)
+             returns: intake, scans, industry_template, connected_sources
+                   (incl. connected_but_unsupported), markdown_skeleton,
+                   and instructions_for_claude (the synthesis playbook).
 
-  refine   — Conversationally edit sections of an existing tracking plan
-             through a resumable state machine.
+  save     — Persist a model-authored SDR markdown draft.
+             params:
+               markdown (required — the full SDR document you synthesized)
+               intake_snapshot (the `intake` object from generate)
+               source_snapshot (the `scans` object from generate)
+               sdr_id (optional — update an existing draft), name (optional)
+
+  refresh_sources — Re-scan connectors and return structured deltas (added /
+             missing / destination / parameter changes) without writing.
+             params: sdr_id (required), connector_filter (optional list),
+                     reuse_intake (bool, default True)
+
+  capture_intake — Validate / persist the 6 intake answers on their own.
+             params: intake_answers (required), sdr_id (optional)
+
+  get_intake — Re-surface the persisted intake answers for an SDR.
+             params: sdr_id (required)
+
+  list_sources — Report supported, currently-scannable, and
+             connected-but-unsupported sources for the project / SDR.
+             params: sdr_id (optional)
+
+  refine   — Conversationally edit sections of an existing SDR through a
+             resumable state machine.
              params:
                sdr_id (required)
                action (resume | goto_section | submit_answer |
                        accept_proposed | reject_proposed | skip_section |
-                       show_status | finalize | start_new_draft)
+                       show_status | apply_source_delta | finalize |
+                       start_new_draft)
                  NOTE: this `action` is the refinement state-machine action
                  and lives INSIDE params. The dispatcher-level `action`
                  above must be "refine".
                section (e.g. "event_catalog.purchase" — for goto_section)
                user_input (for submit_answer)
+               source_delta (the refresh_sources payload — for apply_source_delta)
                changelog_note (required for finalize on versions >= 1.1)
 """
 
@@ -898,6 +942,11 @@ def rewire_unified_surface(mcp_server) -> None:
         "compute_kpi",
         # SDR / tracking plan
         "generate_sdr",
+        "save_sdr",
+        "refresh_sdr_sources",
+        "capture_sdr_intake",
+        "get_sdr_intake",
+        "list_sdr_sources",
         "refine_sdr",
         # automation
         "automation_browse",

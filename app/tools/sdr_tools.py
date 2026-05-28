@@ -7,16 +7,20 @@ unified tool (via ``app/tools/unified.py``), operating on SDR markdown documents
 and using existing connectors for bootstrap data.
 
 Architecture:
-  - generate_sdr: Bootstrap a draft SDR from live GA4/GTM/Ads config + templates
+  - generate_sdr: Capture intake and gather structured source data for synthesis
     (dispatched via tracking_plan(action="generate", params={...}))
+  - save_sdr: Persist Claude-authored markdown after synthesis
+    (dispatched via tracking_plan(action="save", params={...}))
+  - refresh_sdr_sources: Re-scan connectors and return structured deltas
+    (dispatched via tracking_plan(action="refresh_sources", params={...}))
   - refine_sdr: Section-by-section conversational refinement state machine
     (dispatched via tracking_plan(action="refine", params={...}))
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import re
 import uuid as _uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -30,11 +34,30 @@ from app.auth.mcp_session_manager import (
 )
 from app.models.sdr import (
     SDR,
+    SDRIntake,
     SDRRefinementState,
     SDRVersion,
 )
+from app.tools.sdr_bootstrap.intake import (
+    INTAKE_VERSION,
+    build_intake_snapshot,
+    get_intake_questions,
+    intake_interview_instructions,
+    missing_required_answers,
+)
+from app.tools.sdr_bootstrap.registry import (
+    SUPPORTED_SOURCE_NAMES,
+    compute_source_fingerprint,
+    connected_but_unsupported,
+    connected_sources_summary,
+    get_available_sources,
+    merge_scan_events,
+    reproducibility_info,
+    scan_sources,
+    scan_summary,
+    scans_to_dict,
+)
 from app.tools.sdr_parser import (
-    ParsedDestination,
     ParsedEvent,
     ParsedSDR,
     compute_gaps,
@@ -82,15 +105,19 @@ def register_sdr_tools(mcp_server: Any) -> None:
         sources_gtm: bool = True,
         sources_ads: bool = True,
         business_type_hint: str | None = None,
+        intake_answers: dict[str, str] | None = None,
+        sources: list[str] | None = None,
+        phase: str = "auto",
         regenerate: bool = False,
     ) -> dict:
         """
-        Bootstrap a Solution Design Reference (SDR) from live platform config.
+        Gather source data for a Solution Design Reference (SDR).
 
-        Reads your connected GA4 properties, GTM containers, and Google Ads
-        accounts to discover existing events, tags, and conversions. Merges
-        with an industry template to produce a comprehensive draft SDR in
-        Markdown format.
+        In v2 this tool is the data gatherer, not the markdown writer. Without
+        intake answers it returns the fixed intake questions. With intake
+        answers it scans supported connected sources and returns structured
+        facts, template guidance, reproducibility metadata, and synthesis
+        instructions. Persist Claude-authored markdown with save_sdr.
 
         Args:
             project_id: Target project (defaults to active project).
@@ -103,224 +130,76 @@ def register_sdr_tools(mcp_server: Any) -> None:
             regenerate: If True, overwrite existing draft. If False, return
                 existing SDR if one exists.
 
-        Returns a summary with gap analysis and instructions for refinement.
+        Returns interview questions or a structured data-gathering result.
         """
-        # --- Auth & project context ---
-        project_ctx = require_project_ctx()
-        if not project_ctx:
-            return no_active_project_response()
+        return await _generate_sdr_v2(
+            project_id=project_id,
+            name=name,
+            sources_ga4=sources_ga4,
+            sources_gtm=sources_gtm,
+            sources_ads=sources_ads,
+            business_type_hint=business_type_hint,
+            intake_answers=intake_answers,
+            sources=sources,
+            phase=phase,
+            regenerate=regenerate,
+        )
 
-        user_ctx = state.current_user_ctx.get()
-        if not user_ctx:
-            return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+    @mcp_server.tool("capture_sdr_intake")
+    async def capture_sdr_intake(
+        sdr_id: str | None = None,
+        intake_answers: dict[str, str] | None = None,
+    ) -> dict:
+        """Validate and optionally persist SDR intake answers."""
+        return await _capture_sdr_intake(sdr_id=sdr_id, intake_answers=intake_answers)
 
-        target_project_id = project_id or project_ctx.project_id
-        project_name = project_ctx.project_name
-        sdr_name = name or f"{project_name} SDR"
+    @mcp_server.tool("save_sdr")
+    async def save_sdr(
+        markdown: str,
+        name: str | None = None,
+        sdr_id: str | None = None,
+        intake_snapshot: dict | None = None,
+        source_snapshot: dict | None = None,
+        source_snapshot_id: str | None = None,
+        create_initial_refinement_state: bool = True,
+    ) -> dict:
+        """Persist a Claude-authored SDR markdown draft.
 
-        # --- Check existing SDR ---
-        db_factory = state.db_session_factory
-        async with db_factory() as db:
-            existing = await db.execute(select(SDR).where(SDR.project_id == _uuid.UUID(target_project_id)))
-            existing_sdr = existing.scalar_one_or_none()
+        Pass the `intake` and `scans` objects returned by generate_sdr as
+        `intake_snapshot` and `source_snapshot` for full reproducibility.
+        """
+        return await _save_sdr_v2(
+            markdown=markdown,
+            name=name,
+            sdr_id=sdr_id,
+            intake_snapshot=intake_snapshot,
+            source_snapshot=source_snapshot,
+            source_snapshot_id=source_snapshot_id,
+            create_initial_refinement_state=create_initial_refinement_state,
+        )
 
-            if existing_sdr and not regenerate:
-                parsed = parse_sdr_markdown(existing_sdr.markdown_content)
-                gaps = compute_gaps(parsed)
-                return {
-                    "sdr_id": str(existing_sdr.id),
-                    "status": existing_sdr.status,
-                    "message": 'An SDR already exists for this project. Set regenerate=true to overwrite, or use tracking_plan(action="refine") to continue editing.',
-                    "summary": {
-                        "events_discovered": len(parsed.events),
-                        "todo_count": len(parsed.todo_markers),
-                    },
-                    "gaps": gaps[:10],
-                    "instructions_for_claude": (
-                        f'An SDR already exists for project "{project_name}" with '
-                        f"{len(parsed.events)} events. Ask the user if they want to "
-                        "continue refining it (call tracking_plan with action='refine' and params={'sdr_id': '<id>', 'action': 'resume'}) "
-                        "or regenerate from scratch (call tracking_plan with action='generate' and params={'regenerate': true})."
-                    ),
-                }
+    @mcp_server.tool("get_sdr_intake")
+    async def get_sdr_intake(sdr_id: str) -> dict:
+        """Re-surface the persisted intake answers used to synthesize an SDR."""
+        return await _get_sdr_intake(sdr_id=sdr_id)
 
-            # --- Bootstrap: gather data from connectors ---
-            discovered_events: list[ParsedEvent] = []
-            gtm_tags_mapped = 0
-            ga4_custom_events = 0
-            ads_conversions = 0
-            user_properties_count = 0
-            consent_detected = False
-            partial_sources: list[str] = []
+    @mcp_server.tool("list_sdr_sources")
+    async def list_sdr_sources(sdr_id: str | None = None) -> dict:
+        """List which sources are supported, connected, and were last scanned."""
+        return await _list_sdr_sources(sdr_id=sdr_id)
 
-            # Fetch all three sources in parallel — each is independent network I/O
-            _bootstrap_tasks: list = []
-            _bootstrap_keys: list[str] = []
-            if sources_ga4 and project_ctx.has_ga4:
-                _bootstrap_tasks.append(_bootstrap_ga4(project_ctx))
-                _bootstrap_keys.append("ga4")
-            if sources_gtm and project_ctx.has_gtm:
-                _bootstrap_tasks.append(_bootstrap_gtm(project_ctx))
-                _bootstrap_keys.append("gtm")
-            if sources_ads and project_ctx.has_ads:
-                _bootstrap_tasks.append(_bootstrap_ads(project_ctx))
-                _bootstrap_keys.append("ads")
-
-            _bootstrap_results: dict = {}
-            if _bootstrap_tasks:
-                _outcomes = await asyncio.gather(*_bootstrap_tasks, return_exceptions=True)
-                _bootstrap_results = dict(zip(_bootstrap_keys, _outcomes, strict=False))
-
-            # Merge in order: GA4 → GTM → Ads (GTM/Ads merge into the GA4 base)
-            if "ga4" in _bootstrap_results:
-                _r = _bootstrap_results["ga4"]
-                if isinstance(_r, Exception):
-                    logger.warning(f"GA4 bootstrap partial failure: {_r}")
-                    partial_sources.append(f"GA4: {_r}")
-                else:
-                    ga4_events, ga4_dims, ga4_convs = _r
-                    discovered_events.extend(ga4_events)
-                    ga4_custom_events = len(ga4_events)
-                    user_properties_count = len(ga4_dims)
-
-            if "gtm" in _bootstrap_results:
-                _r = _bootstrap_results["gtm"]
-                if isinstance(_r, Exception):
-                    logger.warning(f"GTM bootstrap partial failure: {_r}")
-                    partial_sources.append(f"GTM: {_r}")
-                else:
-                    gtm_events, gtm_consent = _r
-                    discovered_events = _merge_events(discovered_events, gtm_events)
-                    gtm_tags_mapped = len(gtm_events)
-                    consent_detected = gtm_consent
-
-            if "ads" in _bootstrap_results:
-                _r = _bootstrap_results["ads"]
-                if isinstance(_r, Exception):
-                    logger.warning(f"Ads bootstrap partial failure: {_r}")
-                    partial_sources.append(f"Google Ads: {_r}")
-                else:
-                    ads_events = _r
-                    discovered_events = _merge_events(discovered_events, ads_events)
-                    ads_conversions = len(ads_events)
-
-            # --- Apply industry template ---
-            btype = business_type_hint or _infer_business_type(discovered_events)
-            template_events = get_industry_template(btype)
-            discovered_events = _merge_with_template(discovered_events, template_events)
-
-            # --- Determine confidence ---
-            total_events = len(discovered_events)
-            todo_events = sum(1 for e in discovered_events if not e.purpose or "[TODO" in (e.purpose or ""))
-            if total_events == 0 or todo_events / max(total_events, 1) > 0.5:
-                confidence = "low"
-            elif todo_events / max(total_events, 1) > 0.2:
-                confidence = "medium"
-            else:
-                confidence = "high"
-
-            # --- Generate markdown ---
-            markdown = generate_sdr_markdown(
-                project_name=project_name,
-                project_id=target_project_id,
-                business_type=btype,
-                events=discovered_events,
-            )
-
-            # --- Save to DB ---
-            user_id = _uuid.UUID(str(user_ctx.user_id))
-
-            if existing_sdr and regenerate:
-                existing_sdr.name = sdr_name
-                existing_sdr.markdown_content = markdown
-                existing_sdr.status = "draft"
-                existing_sdr.updated_at = datetime.now(UTC)
-                sdr = existing_sdr
-            else:
-                sdr = SDR(
-                    project_id=_uuid.UUID(target_project_id),
-                    name=sdr_name,
-                    status="draft",
-                    markdown_content=markdown,
-                    created_by=user_id,
-                )
-                db.add(sdr)
-
-            await db.flush()
-
-            # Rebuild projections
-            await rebuild_projections_async(db, sdr)
-
-            # Create initial refinement state
-            existing_ref = await db.execute(
-                select(SDRRefinementState).where(SDRRefinementState.sdr_id == sdr.id)
-            )
-            ref_state = existing_ref.scalar_one_or_none()
-            if ref_state:
-                ref_state.current_section = "business_context"
-                ref_state.sections_completed = []
-                ref_state.pending_proposed_changes = None
-                ref_state.last_activity_at = datetime.now(UTC)
-            else:
-                ref_state = SDRRefinementState(
-                    sdr_id=sdr.id,
-                    current_section="business_context",
-                    sections_completed=[],
-                    last_activity_at=datetime.now(UTC),
-                )
-                db.add(ref_state)
-
-            await db.commit()
-
-            # --- Compute gaps ---
-            parsed = parse_sdr_markdown(markdown)
-            gaps = compute_gaps(parsed)
-
-            # --- Build response ---
-            preview = markdown[:1000] + ("..." if len(markdown) > 1000 else "")
-
-            gap_summary = []
-            for g in gaps[:10]:
-                gap_summary.append(
-                    {
-                        "category": g["category"],
-                        "description": g["description"],
-                        "suggested_section": g["suggested_section"],
-                    }
-                )
-
-            instructions = _build_generate_instructions(
-                project_name=project_name,
-                sdr_id=str(sdr.id),
-                total_events=total_events,
-                gtm_tags_mapped=gtm_tags_mapped,
-                ga4_custom_events=ga4_custom_events,
-                ads_conversions=ads_conversions,
-                confidence=confidence,
-                gaps=gap_summary,
-                partial_sources=partial_sources,
-            )
-
-            return {
-                "sdr_id": str(sdr.id),
-                "version": "0.1-draft",
-                "status": "draft",
-                "summary": {
-                    "events_discovered": total_events,
-                    "gtm_tags_mapped": gtm_tags_mapped,
-                    "ga4_custom_events": ga4_custom_events,
-                    "ads_conversions": ads_conversions,
-                    "user_properties": user_properties_count,
-                    "consent_behavior_detected": consent_detected,
-                    "confidence": confidence,
-                    "gaps": gap_summary,
-                },
-                "document_preview": preview,
-                "needs_refinement": True,
-                "recommended_next_action": f"tracking_plan(action='refine', params={{'sdr_id': '{sdr.id}', 'action': 'resume'}})",
-                "instructions_for_claude": instructions,
-                "partial_sources": partial_sources if partial_sources else None,
-            }
+    @mcp_server.tool("refresh_sdr_sources")
+    async def refresh_sdr_sources(
+        sdr_id: str,
+        connector_filter: list[str] | None = None,
+        reuse_intake: bool = True,
+    ) -> dict:
+        """Scan connected SDR sources and return structured deltas without writing."""
+        return await _refresh_sdr_sources_v2(
+            sdr_id=sdr_id,
+            connector_filter=connector_filter,
+            reuse_intake=reuse_intake,
+        )
 
     # ==================================================================
     # refine_sdr
@@ -332,6 +211,7 @@ def register_sdr_tools(mcp_server: Any) -> None:
         action: str = "resume",
         section: str | None = None,
         user_input: str | None = None,
+        source_delta: dict | None = None,
         changelog_note: str | None = None,
     ) -> dict:
         """
@@ -350,10 +230,12 @@ def register_sdr_tools(mcp_server: Any) -> None:
                 reject_proposed — user wants different changes
                 skip_section    — skip current section
                 show_status     — return state without advancing
+                apply_source_delta — turn refresh_sdr_sources output into pending proposed changes
                 finalize        — snapshot as new approved version (admin only)
                 start_new_draft — begin editing after approval
             section: Target section for goto_section (e.g., "event_catalog.purchase").
             user_input: Natural language user response for submit_answer.
+            source_delta: Output payload from refresh_sdr_sources for apply_source_delta.
             changelog_note: Required for finalize on versions >= 1.1.
 
         Returns instructions_for_claude, progress, proposed changes, and user options.
@@ -375,6 +257,7 @@ def register_sdr_tools(mcp_server: Any) -> None:
             "reject_proposed",
             "skip_section",
             "show_status",
+            "apply_source_delta",
             "finalize",
             "start_new_draft",
         }
@@ -441,6 +324,11 @@ def register_sdr_tools(mcp_server: Any) -> None:
             elif action == "skip_section":
                 result = _handle_skip_section(sdr, ref_state)
 
+            elif action == "apply_source_delta":
+                if not source_delta:
+                    return {"error": True, "message": "source_delta parameter required for apply_source_delta."}
+                result = _handle_apply_source_delta(sdr, ref_state, source_delta)
+
             elif action == "finalize":
                 if project_ctx.role not in _ADMIN_ROLES:
                     return {
@@ -472,234 +360,887 @@ def register_sdr_tools(mcp_server: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bootstrap helpers
+# SDR v2 tool helpers
 # ---------------------------------------------------------------------------
 
 
-async def _bootstrap_ga4(project_ctx: Any) -> tuple[list[ParsedEvent], list[dict], list[dict]]:
-    """Bootstrap events from GA4 connector."""
-    ga4 = state.ga4_connector
-    conn_id = None
-    for c in project_ctx.connections:
-        if c.provider == "google":
-            conn_id = c.id
-            break
-    if not conn_id:
-        return [], [], []
+async def _generate_sdr_v2(
+    *,
+    project_id: str | None,
+    name: str | None,
+    sources_ga4: bool,
+    sources_gtm: bool,
+    sources_ads: bool,
+    business_type_hint: str | None,
+    intake_answers: dict[str, str] | None,
+    sources: list[str] | None,
+    phase: str,
+    regenerate: bool,
+) -> dict:
+    project_ctx = require_project_ctx()
+    if not project_ctx:
+        return no_active_project_response()
 
-    events: list[ParsedEvent] = []
-    custom_dims: list[dict] = []
-    conversions: list[dict] = []
+    if not state.current_user_ctx.get():
+        return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
 
-    # Get GA4 properties for this project
-    for prop in project_ctx.ga4_properties:
-        prop_id = prop.get("property_id") or prop.get("id")
-        if not prop_id:
+    project_name = project_ctx.project_name
+    target_project_id = project_id or project_ctx.project_id
+    phase = (phase or "auto").lower()
+
+    if not intake_answers and phase != "scan":
+        return {
+            "status": "awaiting_intake",
+            "intake_version": INTAKE_VERSION,
+            "questions": get_intake_questions(),
+            "message": "Business intake is required before generating a high-fidelity SDR scan.",
+            "instructions_for_claude": intake_interview_instructions(project_name),
+            "next_action": "tracking_plan(action='generate', params={'intake_answers': {...}})",
+        }
+
+    if intake_answers:
+        missing = missing_required_answers(intake_answers)
+        if missing and phase != "scan":
+            return {
+                "error": True,
+                "error_type": "incomplete_intake",
+                "missing_required_keys": missing,
+                "questions": get_intake_questions(),
+                "instructions_for_claude": (
+                    "Ask only for the missing required intake answers, then call generate again with the complete "
+                    "intake_answers payload."
+                ),
+            }
+
+    requested_sources = _normalize_requested_sources(sources, sources_ga4, sources_gtm, sources_ads)
+    intake_snapshot = build_intake_snapshot(intake_answers or {})
+    scans = await scan_sources(project_ctx, requested_sources)
+    scan_events = merge_scan_events(scans)
+    business_type = business_type_hint or _infer_business_type_from_intake(intake_snapshot["answers"]) or _infer_business_type(scan_events)
+    template_events = get_industry_template(business_type)
+
+    existing_sdr_id: str | None = None
+    db_factory = state.db_session_factory
+    async with db_factory() as db:
+        existing = await db.execute(select(SDR).where(SDR.project_id == _uuid.UUID(target_project_id)))
+        existing_sdr = existing.scalar_one_or_none()
+        if existing_sdr:
+            existing_sdr_id = str(existing_sdr.id)
+
+    industry_template = {
+        "business_type": business_type,
+        "events": [_event_to_dict(event) for event in template_events],
+        "rationale": _template_rationale(business_type, intake_snapshot["answers"], len(scan_events)),
+    }
+
+    connected = connected_sources_summary(project_ctx, scans)
+    merged_events = _merge_scan_with_template(scan_events, template_events)
+    skeleton = _build_markdown_skeleton(
+        project_name=project_name,
+        project_id=target_project_id,
+        business_type=business_type,
+        events=merged_events,
+        intake_answers=intake_snapshot["answers"],
+    )
+
+    return {
+        "sdr_id": existing_sdr_id,
+        "status": "data_gathered",
+        "name": name or f"{project_name} SDR",
+        "intake": intake_snapshot,
+        "connected_sources": connected,
+        "scans": scans_to_dict(scans),
+        "industry_template": industry_template,
+        "scan_summary": scan_summary(scans),
+        "reproducibility": reproducibility_info(project_ctx),
+        "regenerate_requested": regenerate,
+        # A fully-structured, parse-valid SDR seeded with live events + template
+        # gaps + intake context. Claude elevates this in place — it guarantees the
+        # saved markdown round-trips through parse_sdr_markdown into projections.
+        "markdown_skeleton": skeleton,
+        "instructions_for_claude": _build_synthesis_playbook(
+            project_name=project_name,
+            business_type=business_type,
+            sdr_id=existing_sdr_id,
+            scanned_event_count=len(scan_events),
+            template_event_count=len(template_events),
+            connected=connected,
+        ),
+    }
+
+
+async def _capture_sdr_intake(
+    *,
+    sdr_id: str | None,
+    intake_answers: dict[str, str] | None,
+) -> dict:
+    project_ctx = require_project_ctx()
+    if not project_ctx:
+        return no_active_project_response()
+
+    user_ctx = state.current_user_ctx.get()
+    if not user_ctx:
+        return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+
+    missing = missing_required_answers(intake_answers)
+    if missing:
+        return {
+            "error": True,
+            "error_type": "incomplete_intake",
+            "missing_required_keys": missing,
+            "questions": get_intake_questions(),
+            "instructions_for_claude": "Ask for the missing intake answers before capture.",
+        }
+
+    snapshot = build_intake_snapshot(intake_answers or {})
+    if not sdr_id:
+        return {
+            "status": "captured",
+            "intake": snapshot,
+            "instructions_for_claude": "Use this intake snapshot in the next generate_sdr or save_sdr call.",
+        }
+
+    db_factory = state.db_session_factory
+    async with db_factory() as db:
+        sdr_result = await db.execute(select(SDR).where(SDR.id == _uuid.UUID(sdr_id)))
+        sdr = sdr_result.scalar_one_or_none()
+        if not sdr:
+            return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
+        if str(sdr.project_id) != project_ctx.project_id:
+            return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+        await _persist_intake(db, sdr, snapshot, _uuid.UUID(str(user_ctx.user_id)))
+        await db.commit()
+
+    return {
+        "sdr_id": sdr_id,
+        "status": "captured",
+        "intake": snapshot,
+        "instructions_for_claude": "The intake is now persisted and can be reused for refreshes or re-generation.",
+    }
+
+
+async def _save_sdr_v2(
+    *,
+    markdown: str,
+    name: str | None,
+    sdr_id: str | None,
+    intake_snapshot: dict | None,
+    source_snapshot: dict | None = None,
+    source_snapshot_id: str | None,
+    create_initial_refinement_state: bool,
+) -> dict:
+    project_ctx = require_project_ctx()
+    if not project_ctx:
+        return no_active_project_response()
+
+    user_ctx = state.current_user_ctx.get()
+    if not user_ctx:
+        return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+    if not markdown or not markdown.strip():
+        return {"error": True, "error_type": "invalid_markdown", "message": "markdown is required."}
+
+    user_id = _uuid.UUID(str(user_ctx.user_id))
+    target_project_id = _uuid.UUID(project_ctx.project_id)
+    now = datetime.now(UTC)
+    normalized_intake = _normalize_intake_snapshot(intake_snapshot)
+    source_fingerprint = (
+        _extract_source_fingerprint(intake_snapshot)
+        or _extract_source_fingerprint(source_snapshot)
+        or compute_source_fingerprint(project_ctx)
+    )
+    parsed = parse_sdr_markdown(markdown)
+
+    db_factory = state.db_session_factory
+    async with db_factory() as db:
+        sdr: SDR | None = None
+        if sdr_id:
+            result = await db.execute(select(SDR).where(SDR.id == _uuid.UUID(sdr_id)))
+            sdr = result.scalar_one_or_none()
+            if not sdr:
+                return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
+            if str(sdr.project_id) != project_ctx.project_id:
+                return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+        else:
+            result = await db.execute(select(SDR).where(SDR.project_id == target_project_id))
+            sdr = result.scalar_one_or_none()
+
+        if sdr:
+            sdr.name = name or sdr.name
+            sdr.markdown_content = markdown
+            sdr.status = "draft"
+            sdr.updated_at = now
+            sdr.draft_version = _next_draft_version(sdr.draft_version)
+        else:
+            sdr = SDR(
+                project_id=target_project_id,
+                name=name or f"{project_ctx.project_name} SDR",
+                status="draft",
+                markdown_content=markdown,
+                created_by=user_id,
+                draft_version="1.0-draft-1",
+            )
+            db.add(sdr)
+
+        if normalized_intake:
+            sdr.intake_answers = normalized_intake["answers"]
+            sdr.intake_version = normalized_intake["intake_version"]
+        sdr.last_full_source_scan_at = now
+        sdr.source_fingerprint = source_fingerprint
+        if source_snapshot is not None:
+            sdr.last_source_scan = source_snapshot
+        await db.flush()
+
+        if normalized_intake:
+            await _persist_intake(db, sdr, normalized_intake, user_id)
+
+        await rebuild_projections_async(db, sdr)
+
+        completed_sections: list[str] = []
+        if create_initial_refinement_state:
+            completed_sections = await _seed_refinement_state(db, sdr, parsed)
+
+        await db.commit()
+
+        gaps = compute_gaps(parsed)
+        remaining = [s for s in SECTION_ORDER if s not in completed_sections]
+        return {
+            "sdr_id": str(sdr.id),
+            "status": "draft_saved",
+            "draft_version": sdr.draft_version,
+            "source_snapshot_id": source_snapshot_id,
+            "source_snapshot_saved": source_snapshot is not None,
+            "sections_completed": completed_sections,
+            "sections_remaining": remaining,
+            "summary": {
+                "events": len(parsed.events),
+                "todo_count": len(parsed.todo_markers),
+                "gaps": len(gaps),
+                "intake_version": sdr.intake_version,
+            },
+            "recommended_next_action": f"tracking_plan(action='refine', params={{'sdr_id': '{sdr.id}', 'action': 'resume'}})",
+            "instructions_for_claude": _build_save_confirmation_instructions(
+                str(sdr.id), len(parsed.events), len(gaps), remaining
+            ),
+        }
+
+
+async def _refresh_sdr_sources_v2(
+    *,
+    sdr_id: str,
+    connector_filter: list[str] | None,
+    reuse_intake: bool,
+) -> dict:
+    project_ctx = require_project_ctx()
+    if not project_ctx:
+        return no_active_project_response()
+    if not state.current_user_ctx.get():
+        return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+
+    db_factory = state.db_session_factory
+    async with db_factory() as db:
+        sdr_result = await db.execute(select(SDR).where(SDR.id == _uuid.UUID(sdr_id)))
+        sdr = sdr_result.scalar_one_or_none()
+        if not sdr:
+            return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
+        if str(sdr.project_id) != project_ctx.project_id:
+            return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+        parsed = parse_sdr_markdown(sdr.markdown_content)
+        intake = (
+            {"intake_version": sdr.intake_version, "answers": sdr.intake_answers or {}}
+            if reuse_intake and sdr.intake_answers
+            else None
+        )
+        previous_fingerprint = sdr.source_fingerprint
+
+    requested = _normalize_source_names(connector_filter) if connector_filter else None
+    scans = await scan_sources(project_ctx, requested)
+    scanned_events = merge_scan_events(scans)
+    deltas = _compute_source_deltas(parsed.events, scanned_events)
+    current_fingerprint = compute_source_fingerprint(project_ctx)
+
+    return {
+        "sdr_id": sdr_id,
+        "status": "delta_ready",
+        "reuse_intake": reuse_intake,
+        "intake": intake,
+        "connected_sources": connected_sources_summary(project_ctx, scans),
+        "scans": scans_to_dict(scans),
+        "deltas": deltas,
+        "reproducibility": {
+            "previous_source_fingerprint": previous_fingerprint,
+            "current_source_fingerprint": current_fingerprint,
+            "scan_timestamp": datetime.now(UTC).isoformat(),
+        },
+        "instructions_for_claude": _build_delta_review_playbook(sdr_id, deltas),
+    }
+
+
+async def _get_sdr_intake(*, sdr_id: str) -> dict:
+    project_ctx = require_project_ctx()
+    if not project_ctx:
+        return no_active_project_response()
+    if not state.current_user_ctx.get():
+        return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+
+    db_factory = state.db_session_factory
+    async with db_factory() as db:
+        sdr_result = await db.execute(select(SDR).where(SDR.id == _uuid.UUID(sdr_id)))
+        sdr = sdr_result.scalar_one_or_none()
+        if not sdr:
+            return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
+        if str(sdr.project_id) != project_ctx.project_id:
+            return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+
+        intakes = await db.execute(
+            select(SDRIntake).where(SDRIntake.sdr_id == sdr.id).order_by(SDRIntake.answered_at.desc())
+        )
+        history = [row.to_dict() for row in intakes.scalars().all()]
+
+    if not sdr.intake_answers and not history:
+        return {
+            "sdr_id": sdr_id,
+            "status": "no_intake",
+            "instructions_for_claude": (
+                "This SDR has no captured intake. Offer to run the 6-question intake via "
+                "tracking_plan(action='capture_intake') so future refreshes and audits have business context."
+            ),
+        }
+
+    return {
+        "sdr_id": sdr_id,
+        "status": "intake_found",
+        "intake": {
+            "intake_version": sdr.intake_version,
+            "answers": sdr.intake_answers or {},
+        },
+        "history": history,
+        "instructions_for_claude": (
+            "Use these persisted intake answers as ground truth for business context, KPIs, conversion "
+            "definition, journeys, consent, and ownership when synthesizing or refining this SDR."
+        ),
+    }
+
+
+async def _list_sdr_sources(*, sdr_id: str | None) -> dict:
+    project_ctx = require_project_ctx()
+    if not project_ctx:
+        return no_active_project_response()
+    if not state.current_user_ctx.get():
+        return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+
+    last_scan_sources: list[str] = []
+    last_scanned_at: str | None = None
+    if sdr_id:
+        db_factory = state.db_session_factory
+        async with db_factory() as db:
+            sdr_result = await db.execute(select(SDR).where(SDR.id == _uuid.UUID(sdr_id)))
+            sdr = sdr_result.scalar_one_or_none()
+            if not sdr:
+                return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
+            if str(sdr.project_id) != project_ctx.project_id:
+                return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+            if isinstance(sdr.last_source_scan, dict):
+                last_scan_sources = sorted(sdr.last_source_scan.keys())
+            if sdr.last_full_source_scan_at:
+                last_scanned_at = sdr.last_full_source_scan_at.isoformat()
+
+    return {
+        "sdr_id": sdr_id,
+        "supported_sources": list(SUPPORTED_SOURCE_NAMES),
+        "available_now": get_available_sources(project_ctx),
+        "connected_but_unsupported": connected_but_unsupported(project_ctx),
+        "last_scan_sources": last_scan_sources,
+        "last_full_source_scan_at": last_scanned_at,
+        "instructions_for_claude": (
+            "Report which sources are supported, currently scannable, and connected-but-not-yet-covered. "
+            "If a connected source is unsupported, be explicit that the SDR does not yet reflect it."
+        ),
+    }
+
+
+async def _persist_intake(db: Any, sdr: SDR, snapshot: dict, user_id: _uuid.UUID) -> None:
+    version = snapshot.get("intake_version") or INTAKE_VERSION
+    answers = snapshot.get("answers") or {}
+    sdr.intake_answers = answers
+    sdr.intake_version = version
+    existing = await db.execute(
+        select(SDRIntake).where(SDRIntake.sdr_id == sdr.id, SDRIntake.intake_version == version)
+    )
+    intake = existing.scalar_one_or_none()
+    if intake:
+        intake.answers = answers
+        intake.answered_by = user_id
+        intake.answered_at = datetime.now(UTC)
+    else:
+        db.add(
+            SDRIntake(
+                sdr_id=sdr.id,
+                project_id=sdr.project_id,
+                intake_version=version,
+                answers=answers,
+                answered_by=user_id,
+            )
+        )
+
+
+def _section_is_filled(text: str | None) -> bool:
+    """True when a section has substantive content and no unresolved TODO.
+
+    Conservative on purpose: a false "complete" skips a section the user still
+    needs, which is worse than re-walking a section that is already good. Any
+    remaining ``[TODO]`` / ``[TODO: ...]`` marker means the section is not done.
+    """
+    if not text or not text.strip():
+        return False
+    if re.search(r"\[TODO", text, flags=re.IGNORECASE):
+        return False
+    meaningful: list[str] = []
+    for line in text.splitlines():
+        stripped_line = line.strip()
+        if not stripped_line:
             continue
-
-        # Custom events / conversion events
-        try:
-            conv_result = await ga4.get_conversion_events(conn_id, prop_id)
-            conv_events = conv_result.get("conversion_events") or conv_result.get("events") or []
-            for ce in conv_events:
-                event_name = ce.get("event_name") or ce.get("name", "")
-                if event_name:
-                    events.append(
-                        ParsedEvent(
-                            name=event_name,
-                            purpose=f"GA4 conversion event (auto-discovered from property {prop_id})",
-                            status="implemented",
-                            destinations=[
-                                ParsedDestination(
-                                    platform="ga4",
-                                    platform_account_id=str(prop_id),
-                                    dest_event_name=event_name,
-                                )
-                            ],
-                        )
-                    )
-                    conversions.append(ce)
-        except Exception as e:
-            logger.debug(f"GA4 conversion list failed for {prop_id}: {e}")
-
-        # Custom dimensions
-        try:
-            dims_result = await ga4.list_custom_dimensions(conn_id, prop_id)
-            dims = dims_result.get("custom_dimensions") or dims_result.get("dimensions") or []
-            custom_dims.extend(dims)
-        except Exception as e:
-            logger.debug(f"GA4 custom dimensions failed for {prop_id}: {e}")
-
-    return events, custom_dims, conversions
-
-
-async def _bootstrap_gtm(project_ctx: Any) -> tuple[list[ParsedEvent], bool]:
-    """Bootstrap events from GTM connector."""
-    gtm = state.gtm_connector
-    conn_id = None
-    for c in project_ctx.connections:
-        if c.provider == "google":
-            conn_id = c.id
-            break
-    if not conn_id:
-        return [], False
-
-    events: list[ParsedEvent] = []
-    consent_detected = False
-
-    for container in project_ctx.gtm_containers:
-        account_id = container.get("account_id")
-        container_id = container.get("container_id")
-        if not account_id or not container_id:
+        # Skip markdown table separator / empty-cell rows.
+        if re.fullmatch(r"\|[\s\-|]*\|?", stripped_line):
             continue
-
-        try:
-            tags_result = await gtm.list_tags(conn_id, account_id, container_id)
-            tags = tags_result.get("tags") or []
-
-            triggers_result = await gtm.list_triggers(conn_id, account_id, container_id)
-            triggers = triggers_result.get("triggers") or []
-            trigger_map = {t.get("triggerId"): t for t in triggers if t.get("triggerId")}
-
-            for tag in tags:
-                tag_name = tag.get("name", "")
-                tag_type = tag.get("type", "")
-
-                # Skip built-in / consent tags
-                if tag_type in ("cvt_", "consent") or "consent" in tag_name.lower():
-                    consent_detected = True
-                    continue
-
-                # Infer event name from tag
-                event_name = _infer_event_name_from_tag(tag)
-                if not event_name:
-                    continue
-
-                # Infer trigger type
-                trigger_type = "custom"
-                trigger_config = {}
-                firing_ids = tag.get("firingTriggerId") or []
-                for tid in firing_ids:
-                    trig = trigger_map.get(tid)
-                    if trig:
-                        trig_type = trig.get("type", "").lower()
-                        if "pageview" in trig_type:
-                            trigger_type = "pageview"
-                        elif "click" in trig_type:
-                            trigger_type = "click"
-                        elif "form" in trig_type:
-                            trigger_type = "form_submit"
-                        elif "custom" in trig_type or "event" in trig_type:
-                            trigger_type = "datalayer_event"
-                        trigger_config["trigger_name"] = trig.get("name")
-                        break
-
-                # Determine destination platform
-                dest_platform = "ga4"
-                if (
-                    "ads" in tag_type.lower()
-                    or "awct" in tag_type.lower()
-                    or "floodlight" in tag_type.lower()
-                ):
-                    dest_platform = "google_ads"
-
-                events.append(
-                    ParsedEvent(
-                        name=event_name,
-                        purpose=f"Discovered from GTM tag '{tag_name}' (type: {tag_type})",
-                        trigger_type=trigger_type,
-                        trigger_config=trigger_config if trigger_config else None,
-                        status="implemented",
-                        destinations=[
-                            ParsedDestination(
-                                platform=dest_platform,
-                                dest_event_name=event_name,
-                            )
-                        ],
-                    )
-                )
-        except Exception as e:
-            logger.debug(f"GTM bootstrap failed for container {container_id}: {e}")
-
-    return events, consent_detected
+        content = stripped_line.replace("|", " ").strip()
+        if content:
+            meaningful.append(content)
+    return len(" ".join(meaningful)) >= 12
 
 
-async def _bootstrap_ads(project_ctx: Any) -> list[ParsedEvent]:
-    """Bootstrap conversion events from Google Ads connector."""
-    events: list[ParsedEvent] = []
+def _synthesis_completed_sections(parsed: ParsedSDR) -> list[str]:
+    """Infer which refinement sections a synthesized draft already satisfies.
 
-    try:
-        ads = state.ads_connector
-        if not ads:
-            return events
-    except (AttributeError, LookupError):
-        return events
-
-    conn_id = None
-    for c in project_ctx.connections:
-        if c.provider == "google":
-            conn_id = c.id
-            break
-    if not conn_id:
-        return events
-
-    for acct in project_ctx.ads_accounts:
-        customer_id = acct.get("customer_id")
-        if not customer_id:
-            continue
-
-        try:
-            conv_result = await ads.get_conversion_actions(conn_id, customer_id)
-            conv_actions = conv_result.get("conversion_actions") or conv_result.get("conversions") or []
-            for conv in conv_actions:
-                conv_name = conv.get("name", "")
-                if conv_name:
-                    event_name = conv_name.lower().replace(" ", "_").replace("-", "_")
-                    events.append(
-                        ParsedEvent(
-                            name=event_name,
-                            purpose=f"Google Ads conversion action '{conv_name}'",
-                            status="implemented",
-                            destinations=[
-                                ParsedDestination(
-                                    platform="google_ads",
-                                    platform_account_id=str(customer_id),
-                                    dest_event_name=conv_name,
-                                )
-                            ],
-                        )
-                    )
-        except Exception as e:
-            logger.debug(f"Ads bootstrap failed for {customer_id}: {e}")
-
-    return events
+    Lets save_sdr land the user on the first genuine gap (or review) instead of
+    re-walking every section that Claude already wrote well.
+    """
+    event_done = any(
+        e.purpose and "[TODO" not in (e.purpose or "") and (e.status or "") != "planned"
+        for e in parsed.events
+    )
+    section_filled = {
+        "business_context": _section_is_filled(parsed.business_context),
+        "user_journeys": _section_is_filled(parsed.user_journeys),
+        "data_layer_schema": _section_is_filled(parsed.data_layer_schema),
+        "event_catalog": event_done,
+        "user_properties": _section_is_filled(parsed.user_properties),
+        "destinations_matrix": _section_is_filled(parsed.destinations_matrix),
+        "consent_and_privacy": _section_is_filled(parsed.consent_and_privacy),
+        "ownership": _section_is_filled(parsed.ownership),
+    }
+    return [s for s in SECTION_ORDER if section_filled.get(s)]
 
 
-def _infer_event_name_from_tag(tag: dict) -> str | None:
-    """Try to extract a clean event name from a GTM tag config."""
-    tag_name = tag.get("name", "")
+async def _seed_refinement_state(db: Any, sdr: SDR, parsed: ParsedSDR) -> list[str]:
+    """Create/reset refinement state, marking already-synthesized sections complete.
 
-    # Check parameters for event_name / eventName
-    params = tag.get("parameter") or []
-    for p in params:
-        key = p.get("key", "")
-        val = p.get("value", "")
-        if key in ("eventName", "event_name", "event") and val:
-            return val.lower().replace(" ", "_")
+    Returns the list of sections marked complete. The current section becomes the
+    first genuine gap, or review_and_finalize when the draft is comprehensive.
+    """
+    completed = _synthesis_completed_sections(parsed)
+    current = next((s for s in SECTION_ORDER if s not in completed), "review_and_finalize")
 
-    # Fallback: derive from tag name
-    # "GA4 - Purchase Event" → "purchase_event"
-    name = tag_name
-    # Strip common prefixes
-    for prefix in ("GA4 -", "GA4-", "GA4:", "UA -", "UA-", "Ads -", "Ads:"):
-        if name.startswith(prefix):
-            name = name[len(prefix) :]
-            break
-    name = name.strip().lower().replace(" ", "_").replace("-", "_")
-    # Skip very generic names
-    if name in ("", "tag", "pixel", "script", "html", "custom_html"):
+    existing_ref = await db.execute(select(SDRRefinementState).where(SDRRefinementState.sdr_id == sdr.id))
+    ref_state = existing_ref.scalar_one_or_none()
+    if ref_state:
+        ref_state.current_section = current
+        ref_state.sections_completed = completed
+        ref_state.pending_proposed_changes = None
+        ref_state.last_activity_at = datetime.now(UTC)
+    else:
+        db.add(
+            SDRRefinementState(
+                sdr_id=sdr.id,
+                current_section=current,
+                sections_completed=completed,
+                last_activity_at=datetime.now(UTC),
+            )
+        )
+    return completed
+
+
+def _normalize_requested_sources(
+    sources: list[str] | None,
+    sources_ga4: bool,
+    sources_gtm: bool,
+    sources_ads: bool,
+) -> list[str] | None:
+    if sources is not None:
+        return _normalize_source_names(sources)
+    requested = []
+    if sources_ga4:
+        requested.append("ga4")
+    if sources_gtm:
+        requested.append("gtm")
+    if sources_ads:
+        requested.append("google_ads")
+    return requested
+
+
+def _normalize_source_names(sources: list[str] | None) -> list[str] | None:
+    if sources is None:
         return None
-    return name
+    aliases = {"ads": "google_ads", "googleads": "google_ads", "google_ads": "google_ads"}
+    normalized = []
+    for source in sources:
+        key = source.strip().lower()
+        normalized.append(aliases.get(key, key))
+    return normalized
+
+
+def _normalize_intake_snapshot(snapshot: dict | None) -> dict | None:
+    if not snapshot:
+        return None
+    answers = snapshot.get("answers") or snapshot.get("intake_answers") or {}
+    if not answers:
+        return None
+    return {
+        "intake_version": snapshot.get("intake_version") or INTAKE_VERSION,
+        "answered_at": snapshot.get("answered_at") or datetime.now(UTC).isoformat(),
+        "answers": answers,
+    }
+
+
+def _extract_source_fingerprint(snapshot: dict | None) -> str | None:
+    if not snapshot:
+        return None
+    repro = snapshot.get("reproducibility") if isinstance(snapshot.get("reproducibility"), dict) else {}
+    return snapshot.get("source_fingerprint") or repro.get("source_fingerprint")
+
+
+def _next_draft_version(current: str | None) -> str:
+    if not current or "-draft-" not in current:
+        return "1.0-draft-1"
+    prefix, _, suffix = current.rpartition("-draft-")
+    try:
+        return f"{prefix}-draft-{int(suffix) + 1}"
+    except ValueError:
+        return "1.0-draft-1"
+
+
+def _event_to_dict(event: ParsedEvent) -> dict:
+    return {
+        "name": event.name,
+        "purpose": event.purpose,
+        "trigger_type": event.trigger_type,
+        "trigger_config": event.trigger_config,
+        "status": event.status,
+        "parameters": [p.__dict__ for p in event.parameters],
+        "destinations": [d.__dict__ for d in event.destinations],
+    }
+
+
+def _infer_business_type_from_intake(answers: dict[str, str]) -> str | None:
+    text = " ".join(str(v).lower() for v in answers.values())
+    if any(term in text for term in ("saas", "subscription", "trial", "freemium")):
+        return "saas"
+    if any(term in text for term in ("ecommerce", "shop", "cart", "checkout", "retail")):
+        return "ecommerce"
+    if any(term in text for term in ("lead", "demo", "quote", "form")):
+        return "lead_gen"
+    if any(term in text for term in ("content", "publisher", "media", "article")):
+        return "media"
+    if "marketplace" in text:
+        return "marketplace"
+    if "app" in text or "mobile" in text:
+        return "app"
+    return None
+
+
+def _template_rationale(business_type: str, answers: dict[str, str], scanned_event_count: int) -> str:
+    model = answers.get("business_model")
+    if model:
+        return f"Selected '{business_type}' from intake business model and {scanned_event_count} scanned events."
+    return f"Selected '{business_type}' from scanned event signals; intake did not provide a stronger business model clue."
+
+
+def _compute_source_deltas(current_events: list[ParsedEvent], scanned_events: list[ParsedEvent]) -> dict:
+    """Diff a live source scan against the events already in the SDR.
+
+    The SDR legitimately contains ``planned`` and template events that no
+    connector will ever return, so "missing from scan" is scoped to events the
+    SDR marks as live (``implemented``/``verified``). Only those disappearing is
+    a real signal worth surfacing — everything else would be deletion noise.
+    """
+    current_by_name = {event.name: event for event in current_events}
+    scanned_by_name = {event.name: event for event in scanned_events}
+
+    added = [event for name, event in scanned_by_name.items() if name not in current_by_name]
+
+    live_statuses = {"implemented", "verified"}
+    missing = [
+        event
+        for name, event in current_by_name.items()
+        if name not in scanned_by_name and (event.status or "").lower() in live_statuses
+    ]
+
+    destination_changes: list[dict] = []
+    parameter_changes: list[dict] = []
+    for name, event in scanned_by_name.items():
+        current = current_by_name.get(name)
+        if current is None:
+            continue
+        current_platforms = {d.platform for d in current.destinations}
+        scanned_platforms = {d.platform for d in event.destinations}
+        new_platforms = sorted(scanned_platforms - current_platforms)
+        if new_platforms:
+            destination_changes.append({"event": name, "added_destinations": new_platforms})
+
+        current_params = {p.name for p in current.parameters}
+        scanned_params = {p.name for p in event.parameters}
+        added_params = sorted(scanned_params - current_params)
+        if added_params:
+            parameter_changes.append({"event": name, "added_parameters": added_params})
+
+    proposals: list[dict] = []
+    if added:
+        proposals.append(
+            {
+                "section_path": "event_catalog",
+                "change_type": "append",
+                "to_value": "\n".join(
+                    f"- `{event.name}` — discovered in connected source(s); confirm purpose and destinations."
+                    for event in added
+                ),
+                "rationale": f"{len(added)} new event(s) appeared in connected sources since the last scan.",
+            }
+        )
+    if missing:
+        proposals.append(
+            {
+                "section_path": "event_catalog",
+                "change_type": "append",
+                "to_value": "\n".join(
+                    f"- `{event.name}` was marked live but no longer appears in any scan — verify it was intentionally removed."
+                    for event in missing
+                ),
+                "rationale": f"{len(missing)} previously-live event(s) are missing from the latest scan.",
+            }
+        )
+
+    return {
+        "added_events": [_event_to_dict(event) for event in added],
+        "removed_or_missing_from_scan": [_event_to_dict(event) for event in missing],
+        "destination_changes": destination_changes,
+        "parameter_changes": parameter_changes,
+        "proposals": proposals,
+    }
+
+
+# The exact markdown contract Claude must follow. It mirrors
+# app.tools.sdr_parser.generate_sdr_markdown / parse_sdr_markdown so that the
+# saved document round-trips into sdr_events / sdr_parameters / sdr_destinations.
+# Drift here = events silently not projected = broken audits downstream.
+_SDR_MARKDOWN_SCHEMA = """\
+The document MUST use this exact structure so it parses into the event database.
+
+YAML frontmatter first, then one H1 title, then these H2 sections IN ORDER, each
+followed by a `---` separator line:
+
+  ## Business Context
+  ## User Journeys
+  ## Data Layer Schema
+  ## Event Catalog
+  ## User Properties / Custom Dimensions
+  ## Destinations Matrix
+  ## Consent & Privacy
+  ## Ownership & Governance
+  ## Changelog
+
+Each event in the Event Catalog is an H3 block in EXACTLY this shape (the parser
+keys off these literal labels — keep them verbatim):
+
+  ### `event_name`
+
+  *Status:* `implemented` | *Last verified:* `never`
+
+  **Business Purpose:** <one or two sentences tying the event to a KPI/journey>
+
+  **Triggers:**
+  - Type: `datalayer_event`        (one of: pageview, click, form_submit, datalayer_event, scroll, timer, custom)
+  - Configuration: <where/how it fires>
+  - Conditions: <edge cases — refunds, renewals, internal traffic — when relevant>
+
+  **Parameters:**
+
+  | Name | Type | Required | Source | Example | Validation |
+  |---|---|---|---|---|---|
+  | `transaction_id` | string | yes | dataLayer.ecommerce.transaction_id | `T-12345` | unique per order |
+
+  **Destinations:**
+
+  - **GA4**: event name `purchase`
+  - **GOOGLE_ADS** (`AW-123`): event name `purchase`
+  - **META**: event name `Purchase`
+
+  **Consent Requirements:** `analytics_storage` | `ad_storage`
+
+  **Owners:** Business: <team> · Technical: <team>
+
+  **Related KPIs:** <comma-separated KPI names from the intake>
+
+  **Edge Cases & Notes:** <anything a smart analyst would want flagged>
+
+Status values: planned | implemented | verified | deprecated. Mark an event
+`implemented` only when a live source scan actually showed it; otherwise `planned`.
+Leave a `[TODO: ...]` marker anywhere you genuinely lack information — do NOT invent
+facts to remove a TODO."""
+
+
+def _build_synthesis_playbook(
+    project_name: str,
+    business_type: str,
+    sdr_id: str | None,
+    *,
+    scanned_event_count: int = 0,
+    template_event_count: int = 0,
+    connected: dict | None = None,
+) -> str:
+    connected = connected or {}
+    save_target = (
+        f"the existing draft (pass sdr_id='{sdr_id}')" if sdr_id else "a new draft (omit sdr_id)"
+    )
+    unsupported = connected.get("connected_but_unsupported") or []
+    failures = connected.get("partial_failures") or []
+
+    coverage_note = ""
+    if unsupported:
+        coverage_note += (
+            f"\nHONESTY ON COVERAGE: these platforms are connected but the scanner cannot read them yet: "
+            f"{', '.join(unsupported)}. Do NOT claim they were analysed — add an explicit "
+            "'Not yet covered' note for each in the relevant section.\n"
+        )
+    if failures:
+        failed_names = ", ".join(f.get("source", "?") for f in failures)
+        coverage_note += (
+            f"\nPARTIAL/FAILED SCANS: {failed_names} returned errors or partial data. State the caveat "
+            "in the SDR and base nothing on missing data.\n"
+        )
+
+    ecommerce_extra = ""
+    if business_type in ("ecommerce", "marketplace"):
+        ecommerce_extra = (
+            "\nECOMMERCE GOLD-STANDARD CHECKLIST (this is an ecommerce property):\n"
+            "- Model the full GA4 funnel: view_item_list → select_item → view_item → add_to_cart → "
+            "view_cart → begin_checkout → add_shipping_info → add_payment_info → purchase, plus refund.\n"
+            "- `purchase` MUST carry transaction_id (unique), value (>0), currency (ISO 4217) and an items[] array; "
+            "flag deduplication (transaction_id) and whether refunds/renewals fire it.\n"
+            "- Map revenue events cross-platform with the platform's own names: Meta uses ViewContent / AddToCart / "
+            "InitiateCheckout / AddPaymentInfo / Purchase; Google Ads uses conversion actions.\n"
+            "- Tie every event to a Business Context KPI (revenue, AOV, conversion rate, ROAS) and to a User Journey.\n"
+        )
+
+    return f"""You are now the senior analytics architect for "{project_name}". You have the raw \
+source scans, the intake answers, the '{business_type}' industry template, and a parse-valid \
+`markdown_skeleton` in this same response. Your job is to turn that material into an \
+industry gold-standard Solution Design Reference. The server gathered the facts; the intelligence is yours.
+
+WORKFLOW:
+1. Start from `markdown_skeleton` — it already has the correct structure, the {scanned_event_count} \
+live-scanned event(s), and {template_event_count} template event(s) as `planned` gaps. Edit it in place; do not restructure it.
+2. Cross-reference relentlessly. The point of this tool is synthesis the server cannot do:
+   - "Intake says the primary conversion is X, but no scanned event carries the parameters that prove X — that is the most important gap."
+   - "GTM fires `purchase` but the GA4 property has no matching conversion event / no value parameter — data-quality gap."
+   - Reconcile the same event seen from multiple sources into one authoritative entry.
+3. Use the intake answers as ground truth for Business Context, Primary KPIs, conversion definition, key journeys, \
+consent posture, and ownership. Prefer the user's real words over generic template prose.
+4. Prioritise: conversion + revenue events first, then the events on the stated key journeys, then everything else.
+5. Be honest. Mark events `implemented` only if a scan proved them; otherwise `planned`. Keep `[TODO: ...]` where you truly lack info.
+{coverage_note}{ecommerce_extra}
+MARKDOWN CONTRACT (non-negotiable — the document is parsed back into the event database):
+{_SDR_MARKDOWN_SCHEMA}
+
+WHEN DONE:
+Call save_sdr(markdown=<full document>, intake_snapshot=<the `intake` object from this response>, \
+source_snapshot=<the `scans` object from this response>) to persist {save_target}. Then offer the user a \
+walkthrough of remaining TODOs/gaps via tracking_plan(action='refine')."""
+
+
+def _build_save_confirmation_instructions(
+    sdr_id: str, event_count: int, gap_count: int, remaining_sections: list[str] | None = None
+) -> str:
+    remaining = remaining_sections or []
+    landing = remaining[0] if remaining else "review_and_finalize"
+    return (
+        f"The SDR draft was saved as {sdr_id} with {event_count} parsed events and {gap_count} gaps/TODOs. "
+        f"Sections Claude already completed are marked done; refinement will resume at '{landing}'. "
+        "Tell the user the draft is saved, summarize the headline gaps, then offer to continue. "
+        f"If they agree, call tracking_plan(action='refine', params={{'sdr_id': '{sdr_id}', 'action': 'resume'}})."
+    )
+
+
+def _build_delta_review_playbook(sdr_id: str, deltas: dict) -> str:
+    return (
+        "Review this source refresh as a senior analytics architect. Lead with material additions, destination changes, and anything that affects "
+        "the persisted intake conversion definition or primary KPIs. Do not auto-write the SDR. Ask the user to accept, reject, or adjust the proposed "
+        f"changes. If they accept the generated proposals, call tracking_plan(action='refine', params={{'sdr_id': '{sdr_id}', "
+        "'action': 'apply_source_delta', 'source_delta': <delta payload>}}). "
+        f"Delta counts: {len(deltas.get('added_events', []))} added events, "
+        f"{len(deltas.get('destination_changes', []))} destination changes, "
+        f"{len(deltas.get('parameter_changes', []))} parameter changes."
+    )
+
+
+def _merge_scan_with_template(
+    scan_events: list[ParsedEvent], template_events: list[ParsedEvent]
+) -> list[ParsedEvent]:
+    """Combine live-scanned events with template events.
+
+    Scanned events win (they are real, status ``implemented``); template events
+    not present in the scan are appended as ``planned`` so the skeleton models the
+    full ideal funnel while making clear which parts are aspirational.
+    """
+    by_name: dict[str, ParsedEvent] = {e.name: e for e in scan_events}
+    merged: list[ParsedEvent] = list(scan_events)
+    for tmpl in template_events:
+        if tmpl.name not in by_name:
+            tmpl.status = tmpl.status or "planned"
+            merged.append(tmpl)
+            by_name[tmpl.name] = tmpl
+    return merged
+
+
+def _build_markdown_skeleton(
+    *,
+    project_name: str,
+    project_id: str,
+    business_type: str,
+    events: list[ParsedEvent],
+    intake_answers: dict[str, str],
+) -> str:
+    """Produce a parse-valid SDR skeleton seeded with events + intake context.
+
+    Reuses generate_sdr_markdown so the structure is guaranteed to round-trip.
+    Intake answers pre-seed the prose sections; missing pieces stay as [TODO]
+    markers for Claude to resolve during synthesis.
+    """
+    answers = intake_answers or {}
+
+    business_context = None
+    model = (answers.get("business_model") or "").strip()
+    conversion = (answers.get("conversion_definition") or "").strip()
+    if model or conversion:
+        parts = []
+        if model:
+            parts.append(model)
+        if conversion:
+            parts.append(f"*Conversion definition (from intake):* {conversion}")
+        business_context = "\n\n".join(parts)
+
+    user_journeys = (answers.get("key_journeys") or "").strip() or None
+    consent_md = (answers.get("privacy_consent") or "").strip() or None
+    ownership_md = (answers.get("ownership_complexity") or "").strip() or None
+
+    return generate_sdr_markdown(
+        project_name=project_name,
+        project_id=project_id,
+        business_type=business_type,
+        events=events,
+        business_context=business_context,
+        user_journeys=user_journeys,
+        consent_md=consent_md,
+        ownership_md=ownership_md,
+    )
 
 
 def _infer_business_type(events: list[ParsedEvent]) -> str:
@@ -720,108 +1261,6 @@ def _infer_business_type(events: list[ParsedEvent]) -> str:
 
     best = max(scores, key=scores.get)  # type: ignore
     return best if scores[best] > 0 else "ecommerce"  # default to ecommerce
-
-
-def _merge_events(existing: list[ParsedEvent], new: list[ParsedEvent]) -> list[ParsedEvent]:
-    """Merge two event lists, combining events with the same name."""
-    by_name: dict[str, ParsedEvent] = {e.name: e for e in existing}
-
-    for event in new:
-        if event.name in by_name:
-            # Merge destinations
-            existing_platforms = {d.platform for d in by_name[event.name].destinations}
-            for d in event.destinations:
-                if d.platform not in existing_platforms:
-                    by_name[event.name].destinations.append(d)
-            # Merge trigger info if missing
-            if not by_name[event.name].trigger_type and event.trigger_type:
-                by_name[event.name].trigger_type = event.trigger_type
-                by_name[event.name].trigger_config = event.trigger_config
-            # Merge parameters
-            existing_params = {p.name for p in by_name[event.name].parameters}
-            for p in event.parameters:
-                if p.name not in existing_params:
-                    by_name[event.name].parameters.append(p)
-        else:
-            by_name[event.name] = event
-
-    return list(by_name.values())
-
-
-def _merge_with_template(discovered: list[ParsedEvent], template: list[ParsedEvent]) -> list[ParsedEvent]:
-    """Merge template events with discovered events. Template fills gaps."""
-    discovered_names = {e.name for e in discovered}
-
-    for tmpl_event in template:
-        if tmpl_event.name not in discovered_names:
-            # Template event not found in live config — add with TODO markers
-            tmpl_event.status = "planned"
-            tmpl_event.purpose = (
-                f"[TODO: confirm] {tmpl_event.purpose or ''} "
-                "(added from industry template — not found in live implementation)"
-            )
-            discovered.append(tmpl_event)
-        else:
-            # Found in live config — enrich with template data where missing
-            for d in discovered:
-                if d.name == tmpl_event.name:
-                    if not d.parameters and tmpl_event.parameters:
-                        d.parameters = tmpl_event.parameters
-                    if not d.purpose or "[TODO" in d.purpose:
-                        d.purpose = tmpl_event.purpose
-                    break
-
-    return discovered
-
-
-# ---------------------------------------------------------------------------
-# generate_sdr instructions builder
-# ---------------------------------------------------------------------------
-
-
-def _build_generate_instructions(
-    *,
-    project_name: str,
-    sdr_id: str,
-    total_events: int,
-    gtm_tags_mapped: int,
-    ga4_custom_events: int,
-    ads_conversions: int,
-    confidence: str,
-    gaps: list[dict],
-    partial_sources: list[str],
-) -> str:
-    """Build the instructions_for_claude field for generate_sdr response."""
-    parts = [
-        f'The SDR draft has been generated for project "{project_name}".',
-        "",
-        "Summary to share with the user:",
-        f"- Discovered {total_events} events across {gtm_tags_mapped} GTM tags + "
-        f"{ga4_custom_events} GA4 custom events + {ads_conversions} Ads conversions",
-        f"- Confidence: {confidence}",
-    ]
-
-    if partial_sources:
-        parts.append(f"- Note: some sources had issues: {'; '.join(partial_sources)}")
-
-    if gaps:
-        parts.append("")
-        parts.append("Surface these gaps to the user and recommend starting refinement:")
-        for i, gap in enumerate(gaps[:5], 1):
-            parts.append(f"{i}. {gap['description']} (section: {gap['suggested_section']})")
-
-    parts.extend(
-        [
-            "",
-            f"Say: \"I've drafted your SDR from your live setup. Found {total_events} events "
-            f"with {confidence} confidence. There are {len(gaps)} gaps that need your input — "
-            'want me to walk through them? I can also start with business context if you prefer."',
-            "",
-            f"If user agrees to continue, call: tracking_plan(action='refine', params={{'sdr_id': '{sdr_id}', 'action': 'resume'}})",
-        ]
-    )
-
-    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -997,6 +1436,66 @@ def _handle_submit_answer(sdr: SDR, ref_state: SDRRefinementState, user_input: s
             {"label": "Accept changes", "action_args": {"action": "accept_proposed"}},
             {"label": "Reject & try again", "action_args": {"action": "reject_proposed"}},
             {"label": "Skip this section", "action_args": {"action": "skip_section"}},
+        ],
+    }
+
+
+def _handle_apply_source_delta(sdr: SDR, ref_state: SDRRefinementState, source_delta: dict) -> dict:
+    """Turn a refresh_sdr_sources delta into the normal accept/reject loop."""
+    deltas = source_delta.get("deltas") if "deltas" in source_delta else source_delta
+    proposals = deltas.get("proposals") or []
+    if not proposals:
+        added = deltas.get("added_events") or []
+        proposals = [
+            {
+                "section_path": "event_catalog",
+                "change_type": "append",
+                "to_value": "\n".join(f"- Add `{event.get('name')}` from refreshed sources." for event in added),
+                "rationale": "New events were discovered by refresh_sdr_sources.",
+            }
+        ] if added else []
+    if not proposals:
+        return {
+            "sdr_id": str(sdr.id),
+            "current_section": ref_state.current_section,
+            "progress": _build_progress(ref_state),
+            "status_after_call": "in_progress",
+            "proposed_changes": [],
+            "instructions_for_claude": "The source refresh did not produce any concrete proposed SDR changes. Summarize that no write is needed.",
+            "user_options": _get_section_options(str(sdr.id), ref_state.current_section),
+        }
+
+    ref_state.pending_proposed_changes = {
+        "section": "source_delta",
+        "user_input": "Source refresh delta",
+        "changes": [
+            {
+                "section_path": proposal.get("section_path", "event_catalog"),
+                "change_type": proposal.get("change_type", "append"),
+                "to_value": proposal.get("to_value", ""),
+                "rationale": proposal.get("rationale", "Accepted source refresh change."),
+            }
+            for proposal in proposals
+        ],
+    }
+    ref_state.current_section = "event_catalog"
+
+    return {
+        "sdr_id": str(sdr.id),
+        "current_section": ref_state.current_section,
+        "progress": _build_progress(ref_state),
+        "status_after_call": "awaiting_user_input",
+        "can_finalize": _can_finalize(ref_state, sdr),
+        "can_skip": True,
+        "proposed_changes": proposals,
+        "instructions_for_claude": (
+            "Source-refresh proposals are now staged in the normal SDR refinement accept/reject flow. "
+            f"Show the user the proposed changes and, if approved, call tracking_plan(action='refine', "
+            f"params={{'sdr_id': '{sdr.id!s}', 'action': 'accept_proposed'}})."
+        ),
+        "user_options": [
+            {"label": "Accept changes", "action_args": {"action": "accept_proposed"}},
+            {"label": "Reject & try again", "action_args": {"action": "reject_proposed"}},
         ],
     }
 
@@ -1571,6 +2070,7 @@ you call goto_section("event_catalog.[event_name]")."""
 
 
 def _instructions_user_properties(sdr_id: str, parsed: ParsedSDR) -> str:
+    existing_props = parsed.user_properties or ""
     return f"""SECTION: User Properties / Custom Dimensions
 
 Document the custom user properties and dimensions tracked across platforms. These \
@@ -1924,44 +2424,89 @@ def _generate_proposed_changes(
     return changes
 
 
-def _apply_change_to_markdown(markdown: str, section_path: str, new_content: str, change_type: str) -> str:
-    """Apply a change to the SDR markdown document."""
-    section_headers = {
-        "business_context": "## Business Context",
-        "user_journeys": "## User Journeys",
-        "data_layer_schema": "## Data Layer Schema",
-        "user_properties": "## User Properties",
-        "destinations_matrix": "## Destinations Matrix",
-        "consent_and_privacy": "## Consent & Privacy",
-        "ownership": "## Ownership & Governance",
-    }
+# Canonical H2 headers, keyed by refinement section. Must stay aligned with the
+# headers emitted by app.tools.sdr_parser.generate_sdr_markdown and recognised by
+# parse_sdr_markdown — otherwise applied changes silently fail to round-trip.
+_SECTION_H2 = {
+    "business_context": "## Business Context",
+    "user_journeys": "## User Journeys",
+    "data_layer_schema": "## Data Layer Schema",
+    "event_catalog": "## Event Catalog",
+    "user_properties": "## User Properties",
+    "destinations_matrix": "## Destinations Matrix",
+    "consent_and_privacy": "## Consent & Privacy",
+    "ownership": "## Ownership & Governance",
+}
 
-    base_section = section_path.split(".")[0]
-    header = section_headers.get(base_section)
 
-    if not header:
-        return markdown  # Can't apply without knowing the section
-
+def _find_section_body_span(markdown: str, header: str) -> tuple[int, int] | None:
+    """Return (body_start, body_end) for an H2 section, excluding any trailing
+    ``---`` separator and the next H2. Returns None if the header is absent."""
     idx = markdown.find(header)
     if idx == -1:
+        return None
+    body_start = markdown.find("\n", idx) + 1
+    next_h2 = markdown.find("\n## ", body_start)
+    next_sep = markdown.find("\n---", body_start)
+    candidates = [pos for pos in (next_h2, next_sep) if pos != -1]
+    body_end = min(candidates) if candidates else len(markdown)
+    return body_start, body_end
+
+
+def _find_event_block_span(catalog_body: str, event_name: str) -> tuple[int, int] | None:
+    """Locate an ``### `event_name` `` block within an event-catalog body."""
+    name = event_name.strip().strip("`")
+    pattern = re.compile(r"^### +`?([^`\n]+)`?\s*$", re.MULTILINE)
+    matches = list(pattern.finditer(catalog_body))
+    for i, match in enumerate(matches):
+        if match.group(1).strip() == name:
+            start = match.start()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(catalog_body)
+            return start, end
+    return None
+
+
+def _apply_change_to_markdown(markdown: str, section_path: str, new_content: str, change_type: str) -> str:
+    """Apply a structured change to the SDR markdown document.
+
+    Honours ``change_type`` ("modify"/"replace", "append", "prepend") and supports
+    targeting a single event via ``event_catalog.<event_name>``. Returns the
+    document unchanged only when the target section genuinely cannot be located.
+    """
+    base_section = section_path.split(".")[0]
+    header = _SECTION_H2.get(base_section)
+    if not header:
         return markdown
 
-    # Find the content between this header and the next H2 or ---
-    header_end = markdown.find("\n", idx) + 1
-    next_h2 = markdown.find("\n## ", header_end)
-    # Also look for --- separator
-    next_sep = markdown.find("\n---", header_end)
+    span = _find_section_body_span(markdown, header)
+    if span is None:
+        return markdown
+    body_start, body_end = span
+    body = markdown[body_start:body_end]
+    change_type = (change_type or "modify").lower()
 
-    if next_h2 == -1:
-        end_idx = len(markdown)
-    elif next_sep != -1 and next_sep < next_h2:
-        end_idx = next_sep
-    else:
-        end_idx = next_h2
+    # Event-scoped edit: event_catalog.<event_name>
+    if base_section == "event_catalog" and "." in section_path:
+        event_name = section_path.split(".", 1)[1]
+        block_span = _find_event_block_span(body, event_name)
+        if block_span is not None and change_type in ("modify", "replace"):
+            bs, be = block_span
+            new_body = body[:bs] + new_content.strip() + "\n\n" + body[be:].lstrip("\n")
+            return markdown[:body_start] + new_body.rstrip("\n") + "\n" + markdown[body_end:]
+        # New event (or append/prepend on a known one) → fall through to section append.
+        change_type = "append"
 
-    # Replace the section content
-    new_markdown = markdown[:header_end] + "\n" + new_content + "\n\n" + markdown[end_idx:]
-    return new_markdown
+    stripped = body.strip()
+    placeholder_only = stripped == "" or (stripped.startswith("[TODO") and stripped.endswith("]"))
+
+    if change_type == "append" and not placeholder_only:
+        new_body = body.rstrip("\n") + "\n\n" + new_content.strip() + "\n"
+    elif change_type == "prepend" and not placeholder_only:
+        new_body = "\n" + new_content.strip() + "\n\n" + body.lstrip("\n")
+    else:  # modify / replace, or writing over a placeholder
+        new_body = "\n" + new_content.strip() + "\n"
+
+    return markdown[:body_start] + new_body + "\n" + markdown[body_end:]
 
 
 def _next_section_after(current: str) -> str:

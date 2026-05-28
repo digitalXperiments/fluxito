@@ -69,6 +69,13 @@ class SDR(Base):
         nullable=True,
     )
     markdown_content: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    intake_answers: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    intake_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_full_source_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_fingerprint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    draft_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Raw structured source scans used for the current draft (reproducibility).
+    last_source_scan: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     parsed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -94,6 +101,11 @@ class SDR(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    intakes: Mapped[list["SDRIntake"]] = relationship(
+        "SDRIntake",
+        back_populates="sdr",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         CheckConstraint("status IN ('draft', 'approved', 'archived')", name="ck_sdr_status"),
@@ -107,6 +119,12 @@ class SDR(Base):
             "name": self.name,
             "status": self.status,
             "current_version_id": str(self.current_version_id) if self.current_version_id else None,
+            "intake_version": self.intake_version,
+            "last_full_source_scan_at": self.last_full_source_scan_at.isoformat()
+            if self.last_full_source_scan_at
+            else None,
+            "source_fingerprint": self.source_fingerprint,
+            "draft_version": self.draft_version,
             "parsed_at": self.parsed_at.isoformat() if self.parsed_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
@@ -114,6 +132,7 @@ class SDR(Base):
         }
         if include_markdown:
             d["markdown_content"] = self.markdown_content
+            d["intake_answers"] = self.intake_answers
         return d
 
     def to_full_dict(self) -> dict:
@@ -163,6 +182,39 @@ class SDRVersion(Base):
             "changelog": self.changelog,
             "approved_by": str(self.approved_by),
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
+        }
+
+
+class SDRIntake(Base):
+    """Versioned intake answers used to synthesize an SDR draft."""
+
+    __tablename__ = "sdr_intakes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sdr_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sdrs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    intake_version: Mapped[str] = mapped_column(Text, nullable=False)
+    answers: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    answered_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+
+    sdr: Mapped["SDR"] = relationship("SDR", back_populates="intakes")
+
+    __table_args__ = (UniqueConstraint("sdr_id", "intake_version", name="uq_sdr_intake_version"),)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": str(self.id),
+            "sdr_id": str(self.sdr_id),
+            "project_id": str(self.project_id),
+            "intake_version": self.intake_version,
+            "answers": self.answers,
+            "answered_by": str(self.answered_by) if self.answered_by else None,
+            "answered_at": self.answered_at.isoformat() if self.answered_at else None,
         }
 
 

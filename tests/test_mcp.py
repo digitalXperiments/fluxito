@@ -216,7 +216,15 @@ async def test_unknown_action_returns_structured_error(tool_manager):
     result = await tracking_plan(action="bogus", params={})
     assert result.get("error") is True
     assert result.get("error_type") == "unknown_action"
-    assert set(result.get("available_actions", [])) == {"generate", "refine"}
+    assert set(result.get("available_actions", [])) == {
+        "capture_intake",
+        "generate",
+        "get_intake",
+        "list_sources",
+        "refine",
+        "refresh_sources",
+        "save",
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════

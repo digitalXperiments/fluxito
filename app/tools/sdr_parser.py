@@ -387,9 +387,13 @@ def _parse_destinations(body: str) -> list[ParsedDestination]:
         return dests
 
     # Pattern: - **GA4** (property `G-XXX`): event name `purchase`, ...
-    # Or simpler: - **GA4**: ...
+    # The account-id parenthetical is optional and the leading keyword
+    # (property/customer/pixel/account) is also optional, so all of these parse:
+    #   - **GA4**: event name `purchase`
+    #   - **GOOGLE_ADS** (`AW-123`): event name `purchase`
+    #   - **GOOGLE_ADS** (customer `AW-123`): event name `purchase`
     pattern = re.compile(
-        r"-\s*\*\*(.+?)\*\*\s*(?:\((?:property|customer|pixel|account)\s*`?([^)]*?)`?\))?\s*:\s*(.+)",
+        r"-\s*\*\*(.+?)\*\*\s*(?:\((?:property|customer|pixel|account)?\s*`?([^)`]*?)`?\))?\s*:\s*(.+)",
         re.IGNORECASE,
     )
 
@@ -422,12 +426,16 @@ def _parse_destinations(body: str) -> list[ParsedDestination]:
 
 
 def _normalize_platform(raw: str) -> str:
-    """Normalize a platform name to our canonical form."""
-    raw = raw.lower().strip()
+    """Normalize a platform name to our canonical form.
+
+    Tolerant of underscores/case so the generator's own ``GOOGLE_ADS`` upper-cased
+    output round-trips back to ``google_ads`` (not ``custom``).
+    """
+    raw = raw.lower().strip().replace("_", " ")
+    if "google ads" in raw or "gads" in raw or "adwords" in raw:
+        return "google_ads"
     if "ga4" in raw or "google analytics" in raw:
         return "ga4"
-    if "google ads" in raw or "gads" in raw:
-        return "google_ads"
     if "meta" in raw or "facebook" in raw:
         return "meta"
     if "tiktok" in raw:
