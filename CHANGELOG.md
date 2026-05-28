@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-05-28
+
 ### Added
 - DB-backed System Settings screen at `/settings/system` for post-bootstrap runtime settings, including SMTP, rate limits, Sentry, CORS, GCS, and tool flags.
+- Public demo infrastructure with automated deployment and MCP access restrictions.
+- Multi-arch Docker image builds (AMD64 + ARM64) via QEMU.
 
 ### Changed
 - `.env.example` is now a minimal bootstrap contract: database, Redis, signing/encryption keys, public URL/MCP redirects, and the special-case Google OAuth app only.
 - SMTP and rate-limit reads now prefer DB-backed system settings and fall back to deprecated env/default values.
+- CI split into fast SHA-based image builds and stable release-triggered demo image publishing.
+
+### Fixed
+- Release workflow now uses `semantic-release version` (was incorrectly using `publish --tag` which never created GitHub Releases).
 
 ## [1.0.1] — 2026-05-25
 
@@ -59,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Platform-admin panel and the `admin_role` user column.
 - Fly.io-specific deployment configuration.
 
-[Unreleased]: https://github.com/digitalXperiments/fluxito/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/digitalXperiments/fluxito/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/digitalXperiments/fluxito/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/digitalXperiments/fluxito/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/digitalXperiments/fluxito/releases/tag/v1.0.0
