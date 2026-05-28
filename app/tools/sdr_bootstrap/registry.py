@@ -14,6 +14,14 @@ import app.app_state as state
 from app.auth.mcp_session_manager import ProjectContext
 from app.tools.sdr_parser import ParsedDestination, ParsedEvent
 
+# Capability roles a data source can fill. The diagnostic engine reasons about
+# these roles, never about named platforms — so GTM↔GA4, Adobe Launch↔Adobe
+# Analytics, or tags↔warehouse all diagnose through the same logic.
+ROLE_TAG_INVENTORY = "tag_inventory"        # is the event configured to collect?
+ROLE_EVENT_VOLUME = "event_volume"          # is the event actually flowing?
+ROLE_CONVERSION_CONFIG = "conversion_config"  # is it set up for activation/ROAS?
+DIAGNOSTIC_ROLES: tuple[str, ...] = (ROLE_TAG_INVENTORY, ROLE_EVENT_VOLUME, ROLE_CONVERSION_CONFIG)
+
 
 @dataclass
 class SDRSourceScan:
@@ -24,6 +32,7 @@ class SDRSourceScan:
     resource_count: int = 0
     duration_ms: int = 0
     errors: list[str] = field(default_factory=list)
+    roles: frozenset[str] = field(default_factory=frozenset)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -34,6 +43,7 @@ class SDRSourceScan:
             "resource_count": self.resource_count,
             "duration_ms": self.duration_ms,
             "errors": list(self.errors),
+            "roles": sorted(self.roles),
         }
 
 
@@ -41,6 +51,7 @@ class SDRSourceScan:
 class SDRDataSource(Protocol):
     name: str
     display_name: str
+    provides: frozenset[str]
 
     async def is_available(self, project_ctx: ProjectContext) -> bool:
         ...
@@ -52,6 +63,7 @@ class SDRDataSource(Protocol):
 class GA4DataSource:
     name = "ga4"
     display_name = "Google Analytics 4"
+    provides = frozenset({ROLE_EVENT_VOLUME, ROLE_CONVERSION_CONFIG})
 
     async def is_available(self, project_ctx: ProjectContext) -> bool:
         return bool(getattr(project_ctx, "has_ga4", False) and getattr(project_ctx, "ga4_properties", []))
@@ -101,6 +113,23 @@ class GA4DataSource:
             except Exception as exc:
                 errors.append(f"Property {prop_id} custom dimensions: {exc}")
 
+        # Event volumes — the signal that proves "configured but never fires".
+        event_volumes: dict[str, int] = {}
+        for prop in getattr(project_ctx, "ga4_properties", []) or []:
+            prop_id = prop.get("property_id") or prop.get("id")
+            if not prop_id:
+                continue
+            try:
+                vol = await asyncio.wait_for(
+                    ga4.list_events(conn_id, prop_id, "30daysAgo", "today"), timeout=timeout_s
+                )
+                for ev in vol.get("events", []):
+                    name = ev.get("event_name")
+                    if name:
+                        event_volumes[name] = event_volumes.get(name, 0) + int(ev.get("event_count", 0))
+            except Exception as exc:
+                errors.append(f"Property {prop_id} event volumes: {exc}")
+
         status = "partial" if errors and events else "failed" if errors and not events else "success"
         return _scan_result(
             self.name,
@@ -109,13 +138,18 @@ class GA4DataSource:
             events=events,
             resource_count=len(getattr(project_ctx, "ga4_properties", []) or []),
             errors=errors,
-            raw_metadata={"custom_dimensions": custom_dims, "conversion_events": conversions},
+            raw_metadata={
+                "custom_dimensions": custom_dims,
+                "conversion_events": conversions,
+                "event_volumes": event_volumes,
+            },
         )
 
 
 class GTMDataSource:
     name = "gtm"
     display_name = "Google Tag Manager"
+    provides = frozenset({ROLE_TAG_INVENTORY})
 
     async def is_available(self, project_ctx: ProjectContext) -> bool:
         return bool(getattr(project_ctx, "has_gtm", False) and getattr(project_ctx, "gtm_containers", []))
@@ -187,6 +221,7 @@ class GTMDataSource:
 class GoogleAdsDataSource:
     name = "google_ads"
     display_name = "Google Ads"
+    provides = frozenset({ROLE_CONVERSION_CONFIG})
 
     async def is_available(self, project_ctx: ProjectContext) -> bool:
         return bool(getattr(project_ctx, "has_ads", False) and getattr(project_ctx, "ads_accounts", []))
@@ -378,10 +413,13 @@ def merge_scan_events(scans: dict[str, SDRSourceScan]) -> list[ParsedEvent]:
 
 
 async def _scan_one(source: SDRDataSource, project_ctx: ProjectContext, timeout_s: float) -> SDRSourceScan:
+    roles = getattr(source, "provides", frozenset())
     try:
-        return await asyncio.wait_for(source.scan(project_ctx, timeout_s), timeout=timeout_s + 1)
+        result = await asyncio.wait_for(source.scan(project_ctx, timeout_s), timeout=timeout_s + 1)
+        result.roles = roles
+        return result
     except Exception as exc:
-        return SDRSourceScan(source=source.name, status="failed", errors=[str(exc)])
+        return SDRSourceScan(source=source.name, status="failed", errors=[str(exc)], roles=roles)
 
 
 def _scan_result(
