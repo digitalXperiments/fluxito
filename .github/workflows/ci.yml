@@ -195,6 +195,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # QEMU is required for multi-arch builds (arm64 on the amd64 GitHub runners).
+      # This lets us produce a single image that runs on both x86 servers and Apple Silicon (M1/M2/M3 Macs).
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -215,11 +220,12 @@ jobs:
             type=raw,value=latest
             type=sha,prefix=sha-,format=short
 
-      - name: Build and push
+      - name: Build and push (multi-arch)
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
