@@ -58,6 +58,47 @@ def test_registry_reports_unavailable_sources_without_raising():
     assert get_available_sources(ctx) == []
 
 
+def test_business_type_defaults_to_general_not_ecommerce():
+    from app.tools.sdr_tools import _infer_business_type
+
+    # No recognizable signals → must NOT assume ecommerce
+    assert _infer_business_type([]) == "general"
+
+
+def test_generate_response_includes_findings_and_readiness():
+    import app.tools.sdr_tools as t
+    from app.tools.sdr_bootstrap.registry import (
+        ROLE_EVENT_VOLUME,
+        ROLE_TAG_INVENTORY,
+        SDRSourceScan,
+    )
+    from app.tools.sdr_parser import ParsedEvent
+
+    scans = {
+        "gtm": SDRSourceScan(
+            source="gtm", status="success",
+            events=[ParsedEvent(name="purchase")], roles=frozenset({ROLE_TAG_INVENTORY}),
+        ),
+        "ga4": SDRSourceScan(
+            source="ga4", status="success",
+            raw_metadata={"event_volumes": {"purchase": 0}}, roles=frozenset({ROLE_EVENT_VOLUME}),
+        ),
+    }
+    block = t._diagnostics_block(scans, {"conversion_definition": "purchase"}, ["purchase"])
+    assert "findings" in block and "readiness" in block
+    assert any(f["type"] == "tag_configured_but_no_data" for f in block["findings"])
+
+
+def test_synthesis_playbook_renders_findings():
+    from app.tools.sdr_tools import _build_synthesis_playbook
+
+    findings = [{"type": "tag_configured_but_no_data", "severity": "critical",
+                 "summary": "`purchase` configured but no data", "fix_location": "website"}]
+    pb = _build_synthesis_playbook("X", "general", None, findings=findings)
+    assert "DIAGNOSTIC FINDINGS" in pb
+    assert "purchase" in pb
+
+
 def test_tracking_plan_exposes_sdr_v2_actions():
     from app.tools.unified import TRACKING_PLAN_ROUTES
 

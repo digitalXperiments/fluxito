@@ -38,6 +38,7 @@ from app.models.sdr import (
     SDRRefinementState,
     SDRVersion,
 )
+from app.tools.sdr_bootstrap.diagnostics import diagnose
 from app.tools.sdr_bootstrap.intake import (
     INTAKE_VERSION,
     build_intake_snapshot,
@@ -442,6 +443,9 @@ async def _generate_sdr_v2(
         events=merged_events,
         intake_answers=intake_snapshot["answers"],
     )
+    diagnostics = _diagnostics_block(
+        scans, intake_snapshot["answers"], [e.name for e in merged_events]
+    )
 
     return {
         "sdr_id": existing_sdr_id,
@@ -452,6 +456,10 @@ async def _generate_sdr_v2(
         "scans": scans_to_dict(scans),
         "industry_template": industry_template,
         "scan_summary": scan_summary(scans),
+        # Server-computed cross-reference diagnosis — Claude must address these
+        # before concluding the implementation is healthy.
+        "findings": diagnostics["findings"],
+        "readiness": diagnostics["readiness"],
         "reproducibility": reproducibility_info(project_ctx),
         "regenerate_requested": regenerate,
         # A fully-structured, parse-valid SDR seeded with live events + template
@@ -465,6 +473,7 @@ async def _generate_sdr_v2(
             scanned_event_count=len(scan_events),
             template_event_count=len(template_events),
             connected=connected,
+            findings=diagnostics["findings"],
         ),
     }
 
@@ -954,6 +963,16 @@ def _template_rationale(business_type: str, answers: dict[str, str], scanned_eve
     return f"Selected '{business_type}' from scanned event signals; intake did not provide a stronger business model clue."
 
 
+def _diagnostics_block(scans, intake_answers, current_event_names):
+    """Run the diagnostic engine over scan results.
+
+    Accepts SDRSourceScan objects or already-serialized dicts; returns
+    {"findings": [...], "readiness": {...}}.
+    """
+    scan_dicts = {k: (v if isinstance(v, dict) else v.to_dict()) for k, v in scans.items()}
+    return diagnose(scan_dicts, intake_answers or {}, current_event_names)
+
+
 def _compute_source_deltas(current_events: list[ParsedEvent], scanned_events: list[ParsedEvent]) -> dict:
     """Diff a live source scan against the events already in the SDR.
 
@@ -1095,6 +1114,7 @@ def _build_synthesis_playbook(
     scanned_event_count: int = 0,
     template_event_count: int = 0,
     connected: dict | None = None,
+    findings: list | None = None,
 ) -> str:
     connected = connected or {}
     save_target = (
@@ -1102,6 +1122,18 @@ def _build_synthesis_playbook(
     )
     unsupported = connected.get("connected_but_unsupported") or []
     failures = connected.get("partial_failures") or []
+
+    findings_note = ""
+    top_findings = [f for f in (findings or []) if f.get("severity") in ("critical", "high")]
+    if top_findings:
+        lines = "\n".join(
+            f"  - [{f['severity'].upper()}] {f['summary']} (fix: {f.get('fix_location', '?')})"
+            for f in top_findings[:8]
+        )
+        findings_note = (
+            "\nDIAGNOSTIC FINDINGS — address these FIRST and write them into the SDR's data-quality "
+            f"section; do NOT call the implementation healthy while any critical finding stands:\n{lines}\n"
+        )
 
     coverage_note = ""
     if unsupported:
@@ -1146,7 +1178,7 @@ live-scanned event(s), and {template_event_count} template event(s) as `planned`
 consent posture, and ownership. Prefer the user's real words over generic template prose.
 4. Prioritise: conversion + revenue events first, then the events on the stated key journeys, then everything else.
 5. Be honest. Mark events `implemented` only if a scan proved them; otherwise `planned`. Keep `[TODO: ...]` where you truly lack info.
-{coverage_note}{ecommerce_extra}
+{findings_note}{coverage_note}{ecommerce_extra}
 MARKDOWN CONTRACT (non-negotiable — the document is parsed back into the event database):
 {_SDR_MARKDOWN_SCHEMA}
 
@@ -1260,7 +1292,8 @@ def _infer_business_type(events: list[ParsedEvent]) -> str:
     }
 
     best = max(scores, key=scores.get)  # type: ignore
-    return best if scores[best] > 0 else "ecommerce"  # default to ecommerce
+    # Default: no template overlay — derive from intake via the skill's method.
+    return best if scores[best] > 0 else "general"
 
 
 # ---------------------------------------------------------------------------
