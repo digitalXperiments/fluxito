@@ -13,6 +13,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      demo_tag:
+        description: 'Tag value to publish as :demo (and :latest) when manually releasing a stable demo image. Default: demo'
+        required: false
+        default: 'demo'
+  schedule:
+    # Optional nightly stable demo image (03:00 UTC).
+    # Remove this block if you only want manual/tag-driven releases.
+    - cron: '0 3 * * *'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -183,11 +193,13 @@ jobs:
             -c "import app.main; print('✓ app imports successfully')"
 
   # ---------------------------------------------------------------------------
-  publish-image:
-    name: Publish Docker image to GHCR
+  # Fast per-commit images (for debugging / pinning). Runs on every main push.
+  # Only produces sha-xxx tags (fast). No :demo tag here.
+  # ---------------------------------------------------------------------------
+  publish-sha:
+    name: Publish SHA image (fast, every main)
     runs-on: ubuntu-latest
     needs: [lint, typecheck, test]
-    # Only publish on pushes to main (not PRs)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
@@ -195,8 +207,62 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # QEMU is required for multi-arch builds (arm64 on the amd64 GitHub runners).
-      # This lets us produce a single image that runs on both x86 servers and Apple Silicon (M1/M2/M3 Macs).
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            # Optional: uncomment if you want a rolling "main" tag for latest commit
+            # type=raw,value=main
+
+      - name: Build and push (sha only - fast path)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # For maximum speed on every commit you can reduce to linux/amd64 only.
+          # Keep both if you want M1 users to be able to `docker pull` specific shas without local build.
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Stable demo image. Only runs on intentional "stable" triggers.
+  # This is the only job that produces the :demo tag your Mac cron pulls.
+  # Expensive multi-arch is acceptable here because it is rare.
+  # ---------------------------------------------------------------------------
+  publish-demo:
+    name: Publish stable Demo image (multi-arch)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    # Only on:
+    # - Git tags starting with v or demo/stable-
+    # - Manual "Run workflow" in GitHub UI
+    # - Nightly schedule (optional)
+    if: |
+      (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/demo/stable'))) ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -216,11 +282,13 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=demo
+            # The stable demo tag (what your Mac cron pulls)
+            type=raw,value=${{ github.event.inputs.demo_tag || 'demo' }}
             type=raw,value=latest
-            type=sha,prefix=sha-,format=short
+            # Also tag with the actual git tag when triggered by a tag push
+            type=ref,event=tag
 
-      - name: Build and push (multi-arch)
+      - name: Build and push (stable demo - multi-arch)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -235,7 +303,7 @@ jobs:
   notify-telegram:
     name: Notify Telegram
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, build, publish-image]
+    needs: [lint, typecheck, test, build, publish-sha, publish-demo]
     # Run on main-branch pushes only (skip PR noise), regardless of outcome.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:

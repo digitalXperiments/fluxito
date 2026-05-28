@@ -27,6 +27,23 @@ classifiers = [
 urls = {Homepage = "https://github.com/digitalXperiments/fluxito", Repository = "https://github.com/digitalXperiments/fluxito", Issues = "https://github.com/digitalXperiments/fluxito/issues"}
 
 # ---------------------------------------------------------------------------
+# python-semantic-release (gated to stable releases only)
+# Run via .github/workflows/release.yml on v*/demo/stable-* tags, workflow_dispatch, or schedule.
+# This keeps version bumps + CHANGELOG updates intentional and tied to "stable" demo releases.
+# ---------------------------------------------------------------------------
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+changelog_file = "CHANGELOG.md"
+changelog_pattern = "^## \\[Unreleased\\]"
+commit_parser = "conventional"
+major_on_zero = false
+allow_zero_version = true
+tag_format = "v{version}"
+build_command = "python -m build"
+upload_to_pypi = false
+upload_to_release = true
+
+# ---------------------------------------------------------------------------
 # Pytest
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]

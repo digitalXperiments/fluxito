@@ -5,6 +5,11 @@
 # This script is meant to run on your Mac (the demo host).
 # It pulls the latest published image from GHCR and restarts the demo stack.
 #
+# IMPORTANT POLICY (as of May 2026):
+# The :demo tag is ONLY updated on stable releases (git tags starting with v/demo/stable-,
+# manual "Publish stable Demo image" workflow, or the optional nightly schedule).
+# Normal pushes to main only produce sha-xxx tags and do NOT move the public demo.
+#
 # Recommended usage:
 #   - Manual: ./update-demo.sh
 #   - Cron (every 15-30 min):

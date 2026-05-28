@@ -1,0 +1,44 @@
+name: Release (version bump + CHANGELOG)
+
+# This workflow runs python-semantic-release ONLY on stable triggers.
+# It is intentionally gated so that version bumps and CHANGELOG updates
+# only happen when you decide the code is ready for a release
+# (same philosophy as the :demo Docker image).
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'demo/stable-*'
+  workflow_dispatch:
+  schedule:
+    # Optional nightly "stable" release (03:00 UTC).
+    # Remove this block if you only want manual/tag-driven releases.
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # semantic-release needs full history
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install python-semantic-release build
+
+      - name: Run semantic-release (version + CHANGELOG + tag + GitHub Release)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release publish --strict

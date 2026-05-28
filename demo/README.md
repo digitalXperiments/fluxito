@@ -64,31 +64,61 @@ All demo deployment artifacts live in this single top-level `demo/` folder for c
 
 ## Daily / CI-driven updates
 
-The demo is updated by pulling a new Docker image built by GitHub Actions (see `.github/workflows/ci.yml` for the publish job).
+**Important policy change (May 2026):**  
+The `:demo` tag (the one your `update-demo.sh` pulls) is **only updated on stable releases**, not on every merge to `main`.
 
-Run the updater manually after a merge:
+This keeps the public demo reliable and prevents WIP code from reaching visitors.
+
+### When the `:demo` tag gets updated (stable triggers only)
+
+- Git tags starting with `v` or `demo/stable-` (example: `git tag demo/stable-2026-05-28 && git push --tags`)
+- Manual trigger in GitHub UI (Actions → "Publish stable Demo image" → Run workflow)
+- Optional nightly schedule (03:00 UTC) — can be disabled in the workflow file
+
+Every normal push to `main` still produces fast `sha-xxx` tags (for debugging/pinning), but those do **not** move the public `:demo` tag.
+
+### How to trigger a new public demo image
+
+**Option A — Git tag (recommended when you certify it's stable)**
+```bash
+git tag demo/stable-2026-05-28
+git push origin demo/stable-2026-05-28
+```
+
+**Option B — GitHub UI (no git needed)**
+1. Go to your repo → **Actions** tab.
+2. In the left sidebar click **"Publish stable Demo image"**.
+3. Click **"Run workflow"**.
+4. (Optional) Fill in the `demo_tag` field with a custom value (e.g. `demo/stable-may-28`).
+5. Click **"Run workflow"**.
+
+The job will build the full multi-arch image and push `:demo` (plus `:latest` and your chosen tag).
+
+**Option C — Nightly (set and forget)**
+The workflow has a scheduled run at 03:00 UTC. It will only produce a new `:demo` image if the schedule is left enabled.
+
+### Running the updater on your Mac
+
 ```bash
 cd ~/fluxito-demo
 ./update-demo.sh
 ```
 
-Or install a cron (recommended every 15–30 minutes):
+Or via cron (example: every 20 minutes):
 ```bash
 crontab -e
-# Add:
+# Add this line:
 */20 * * * * cd ~/fluxito-demo && ./update-demo.sh >> ~/fluxito-demo/update.log 2>&1
 ```
 
-The script:
-- Pulls the latest `:demo` tag (or whatever `FLUXITO_IMAGE` you set)
-- Restarts the stack cleanly
-- Waits for `/api/health` to return 200
-- Exits non-zero and can notify you (via Telegram) on failure
+The script pulls the latest `:demo` image (whatever the stable pipeline last published), restarts the stack, and waits for `/api/health`.
 
-You can also pin to a specific image for testing:
+You can also force a specific image:
 ```bash
 FLUXITO_IMAGE=ghcr.io/digitalxperiments/fluxito:sha-abc1234 ./update-demo.sh
 ```
+
+The script exits non-zero on failure and can send a Telegram notification if you set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in the cron environment.
 
 ## Important notes
 
