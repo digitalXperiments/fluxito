@@ -99,6 +99,7 @@ desktop.ini
 .claude/
 .aider*
 .cursor/
+.codex/
 
 # ── Docker / local data volumes ──────────────────────────────────────────
 postgres_data/
