@@ -437,13 +437,36 @@ def test_generator_destination_round_trips():
     assert "custom" not in platforms
 
 
+def test_skill_example_sdrs_round_trip_through_parser():
+    """Anti-drift: every shipped skill example SDR must parse cleanly with no gaps."""
+    import glob
+    import os
+
+    from app.tools.sdr_parser import compute_gaps, parse_sdr_markdown
+
+    root = os.path.join(os.path.dirname(__file__), "..", "fluxito-skills")
+    examples = glob.glob(os.path.join(root, "**", "examples", "*.md"), recursive=True)
+    assert examples, "no skill example SDRs found"
+    for path in examples:
+        with open(path) as fh:
+            parsed = parse_sdr_markdown(fh.read())
+        assert parsed.events, f"{path}: no events parsed"
+        assert compute_gaps(parsed) == [], f"{path}: unresolved TODO markers"
+        purchase = next((e for e in parsed.events if e.name == "purchase"), None)
+        if purchase:
+            assert {d.platform for d in purchase.destinations} >= {"ga4"}
+
+
 def test_bmk_example_sdr_is_gold_standard():
     """The shipped reference SDR must parse cleanly into projections with no gaps."""
     import os
 
     from app.tools.sdr_parser import compute_gaps, parse_sdr_markdown
 
-    path = os.path.join(os.path.dirname(__file__), "..", "docs", "examples", "bmk-eco-farms-sdr.md")
+    path = os.path.join(
+        os.path.dirname(__file__), "..",
+        "fluxito-skills", "fluxito-solution-design", "examples", "bmk-eco-farms-sdr.md",
+    )
     if not os.path.exists(path):
         import pytest
 
