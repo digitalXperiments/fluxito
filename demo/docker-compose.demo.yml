@@ -15,6 +15,23 @@ name: fluxito-demo
 #   docker compose -f docker-compose.demo.yml up -d --remove-orphans
 
 services:
+  # One-shot helper: copies the static assets baked into the published app
+  # image into the `static_assets` volume so nginx can serve them directly.
+  # Runs on every `up` (and is recreated on every image pull), so updated
+  # CSS/JS propagates to the demo instead of going stale. Exits 0 when done.
+  static-sync:
+    container_name: fluxito-demo-static-sync
+    image: ${FLUXITO_IMAGE:-ghcr.io/digitalxperiments/fluxito:demo}
+    # Run as root: the published image runs as the non-root `app` user, but a
+    # fresh named volume is owned by root, so the copy needs write access here.
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    # Clear the volume (catches removed files on update), then copy fresh.
+    command: ["find /static-out -mindepth 1 -delete 2>/dev/null; cp -a /app/app/static/. /static-out/ && echo 'static assets synced'"]
+    volumes:
+      - static_assets:/static-out
+    restart: "no"
+
   nginx:
     container_name: fluxito-demo-nginx
     image: nginx:alpine
@@ -22,9 +39,12 @@ services:
       - "8010:80"   # Change if you need a different host port
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - static_assets:/app/app/static:ro   # Served directly by nginx (see nginx.conf)
     depends_on:
       app:
         condition: service_healthy
+      static-sync:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/api/health"]
@@ -116,3 +136,4 @@ services:
 volumes:
   demo_postgres_data:
   demo_redis_data:
+  static_assets:

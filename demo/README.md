@@ -9,7 +9,7 @@ All demo deployment artifacts live in this single top-level `demo/` folder for c
 - `docker-compose.demo.yml` — The demo stack (nginx + app + Postgres + Redis). Uses a published GHCR image, not a local build.
 - `.env.demo.example` — Template for your secrets and demo settings. Copy to `.env.demo`.
 - `update-demo.sh` — Pulls the latest image and restarts the stack with health verification. Safe to run from cron.
-- `nginx.conf` — (You must copy this from the repo root when setting up.)
+- `nginx.conf` — Demo reverse-proxy config. Ships in this folder — use it as-is, do NOT copy the repo-root `nginx.conf`. It serves `/static/` directly off the `static_assets` volume, which the `static-sync` service populates from the published image (no source checkout needed on the host).
 
 ## One-time setup on your Mac
 
@@ -20,29 +20,27 @@ All demo deployment artifacts live in this single top-level `demo/` folder for c
    ```
 
 2. Copy the files from this folder (or clone the repo and copy `demo/*`).
+   The folder is self-contained — it ships its own `nginx.conf`. Do NOT copy
+   the repo-root `nginx.conf`; static assets are served from a volume the
+   stack populates from the published image, so no source checkout is needed.
 
-3. Copy the nginx config (required):
-   ```bash
-   cp /path/to/your/fluxito/nginx.conf ~/fluxito-demo/nginx.conf
-   ```
-
-4. Create your env file:
+3. Create your env file:
    ```bash
    cp .env.demo.example .env.demo
    ```
 
-5. Edit `.env.demo`:
+4. Edit `.env.demo`:
    - Generate `APP_SECRET_KEY` and `TOKEN_ENCRYPTION_KEY` (see comments in the file).
    - Set `DEMO_VIEWER_EMAIL=demo@fluxito.local` (or whatever email you choose for the public login).
    - Set `APP_BASE_URL=https://demo.yourdomain.com` (your public demo hostname).
    - Adjust `POSTGRES_PASSWORD` if you want something stronger.
 
-6. Start the stack for the first time:
+5. Start the stack for the first time:
    ```bash
    docker compose -f docker-compose.demo.yml up -d
    ```
 
-7. Do the initial admin setup (this is you, the real owner):
+6. Do the initial admin setup (this is you, the real owner):
    - Visit `https://demo.yourdomain.com`
    - Go through `/setup` and create **your** real admin account (not the demo one).
    - Log in as yourself.
@@ -51,7 +49,7 @@ All demo deployment artifacts live in this single top-level `demo/` folder for c
    - Connect real platforms (Google, etc.) while logged in as yourself.
    - Build nice dashboards, SDRs, add audit history, etc. This becomes the public experience.
 
-8. Add the Cloudflare Tunnel ingress rule (in your `cloudflared` config):
+7. Add the Cloudflare Tunnel ingress rule (in your `cloudflared` config):
    ```yaml
    ingress:
      - hostname: demo.fluxito.yourdomain.com
@@ -60,7 +58,7 @@ All demo deployment artifacts live in this single top-level `demo/` folder for c
    ```
    Reload `cloudflared`.
 
-9. Add the service to Hermes (or your supervisor of choice) so it starts on boot.
+8. Add the service to Hermes (or your supervisor of choice) so it starts on boot.
 
 ## Daily / CI-driven updates
 

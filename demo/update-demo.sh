@@ -46,6 +46,27 @@ if ! docker compose -f docker-compose.demo.yml pull --quiet 2>&1; then
     exit 1
 fi
 
+# 1b. Drop & recreate the static-assets volume.
+#
+# The demo serves /static/ (CSS/JS) directly from nginx off the
+# `static_assets` named volume, which the `static-sync` service populates
+# from the freshly pulled image. Dropping the volume here guarantees a clean
+# slate so a new image's assets fully replace the old ones with zero chance
+# of stale files lingering.
+#
+# IMPORTANT: this targets ONLY the static-assets volume. The Postgres and
+# Redis data volumes (demo_postgres_data / demo_redis_data) are NEVER touched,
+# so demo content and accounts survive every update.
+#
+# The volume name is "<project>_<volume>". The project name is pinned via
+# `name: fluxito-demo` in docker-compose.demo.yml.
+STATIC_VOLUME="fluxito-demo_static_assets"
+echo "==> Recreating static-assets volume ($STATIC_VOLUME)..."
+# Remove the containers that mount it first; otherwise `volume rm` refuses.
+# `|| true` so a fresh install (nothing to remove yet) doesn't abort the script.
+docker compose -f docker-compose.demo.yml rm --stop --force nginx static-sync >/dev/null 2>&1 || true
+docker volume rm "$STATIC_VOLUME" >/dev/null 2>&1 || true
+
 # 2. Restart stack (remove orphans in case services were renamed)
 echo "==> Restarting stack..."
 if ! docker compose -f docker-compose.demo.yml up -d --remove-orphans 2>&1; then
