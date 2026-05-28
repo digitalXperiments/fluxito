@@ -96,6 +96,10 @@ class Settings(BaseSettings):
         default="all", description="Comma-separated list of tool domains to load (e.g., 'bq,gtm,ga4,ads')"
     )
 
+    # Demo mode — set to the demo viewer's email to block MCP access for that
+    # account while allowing full web UI browsing. Leave empty to disable.
+    DEMO_VIEWER_EMAIL: str = ""
+
     @property
     def mcp_allowed_redirect_uris_list(self) -> list[str]:
         return [uri.strip() for uri in self.MCP_ALLOWED_REDIRECT_URIS.split(",")]

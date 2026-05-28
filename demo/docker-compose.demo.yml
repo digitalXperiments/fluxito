@@ -1,0 +1,118 @@
+name: fluxito-demo
+
+# Dedicated demo deployment for the public Fluxito instance.
+# This runs a published image (ghcr.io/digitalxperiments/fluxito:demo or sha-...)
+# with its own isolated Postgres + Redis volumes.
+#
+# Usage on your Mac:
+#   1. Copy this folder to ~/fluxito-demo/
+#   2. cp .env.demo.example .env.demo
+#   3. Edit .env.demo (generate secrets, set APP_BASE_URL and DEMO_VIEWER_EMAIL)
+#   4. docker compose -f docker-compose.demo.yml up -d
+#
+# Update flow (via update-demo.sh or cron):
+#   docker compose -f docker-compose.demo.yml pull
+#   docker compose -f docker-compose.demo.yml up -d --remove-orphans
+
+services:
+  nginx:
+    container_name: fluxito-demo-nginx
+    image: nginx:alpine
+    ports:
+      - "8010:80"   # Change if you need a different host port
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  app:
+    container_name: fluxito-demo-app
+    image: ${FLUXITO_IMAGE:-ghcr.io/digitalxperiments/fluxito:demo}
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/fluxito
+      - REDIS_URL=redis://redis:6379/0
+      - APP_ENV=production
+      - APP_BASE_URL=${APP_BASE_URL:-http://localhost:8010}
+      - DEMO_VIEWER_EMAIL=${DEMO_VIEWER_EMAIL:-demo@fluxito.local}
+    env_file:
+      - .env.demo
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          memory: 384M
+
+  db:
+    container_name: fluxito-demo-db
+    image: postgres:15
+    environment:
+      POSTGRES_DB: fluxito
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    command: >
+      postgres
+        -c max_connections=80
+        -c shared_buffers=128MB
+        -c effective_cache_size=256MB
+        -c work_mem=4MB
+        -c log_min_duration_statement=2000
+    volumes:
+      - demo_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fluxito"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  redis:
+    container_name: fluxito-demo-redis
+    image: redis:7-alpine
+    command: >
+      redis-server
+        --appendonly yes
+        --appendfsync everysec
+        --maxmemory 512mb
+        --maxmemory-policy volatile-ttl
+    volumes:
+      - demo_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  demo_postgres_data:
+  demo_redis_data:

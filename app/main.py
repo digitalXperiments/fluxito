@@ -772,6 +772,33 @@ class _MCPASGIApp:
             await send({"type": "http.response.body", "body": b'{"detail":"Unauthorized"}'})
             return
 
+        # ── Demo viewer MCP block ────────────────────────────────────
+        # When DEMO_VIEWER_EMAIL is set, that account can browse the
+        # full web UI but cannot use the MCP endpoint.
+        _demo_email = settings.DEMO_VIEWER_EMAIL
+        if _demo_email and getattr(user_ctx, "email", "") == _demo_email:
+            import json as _json
+
+            body = _json.dumps(
+                {
+                    "error": True,
+                    "error_type": "demo_restricted",
+                    "message": (
+                        "MCP / AI connections are disabled on the public demo. "
+                        "Self-host Fluxito to use the full MCP experience."
+                    ),
+                }
+            ).encode()
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 403,
+                    "headers": [(b"content-type", b"application/json")],
+                }
+            )
+            await send({"type": "http.response.body", "body": body})
+            return
+
         user_token = app_state.current_user_ctx.set(user_ctx)
         client_token = app_state.current_client_name_ctx.set(state.get("mcp_client_name"))
         project_token = app_state.current_project_ctx.set(None)

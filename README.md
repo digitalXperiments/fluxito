@@ -61,6 +61,26 @@ You're describing the outcome. The AI decides which tools to call, in what order
 
 ---
 
+## Live Demo
+
+You can try Fluxito right now with a real admin-like experience:
+
+**URL:** https://fluxito-demo.insaneanalytics.co.in  
+**Public login:** `demo@fluxito.local` / (password published on the demo page or ask the maintainer)
+
+The demo runs the latest `main` build on a static curated dataset. You can browse:
+- Dashboards and cards with real platform data
+- SDRs with version history
+- Audit logs and automation runs
+- Settings, Integrations, and Connect pages (full admin UI chrome)
+
+**Important restriction:** The public demo login cannot connect an AI or use the MCP endpoint (tool calling is disabled for security and cost reasons).  
+When logged in as the real maintainer account on the same instance, full MCP + platform writes work normally.
+
+To use the complete product (including connecting your own AI via MCP), [self-host Fluxito](#how-to-start-recommended-first-path).
+
+---
+
 ## How to Start (Recommended First Path)
 
 This is the shortest, highest-leverage way to get Fluxito running and connected to an AI.
