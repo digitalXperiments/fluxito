@@ -107,6 +107,7 @@ def test_tracking_plan_exposes_sdr_v2_actions():
     assert TRACKING_PLAN_ROUTES["capture_intake"] == ("capture_sdr_intake", None)
     assert TRACKING_PLAN_ROUTES["get_intake"] == ("get_sdr_intake", None)
     assert TRACKING_PLAN_ROUTES["list_sources"] == ("list_sdr_sources", None)
+    assert TRACKING_PLAN_ROUTES["diagnose"] == ("diagnose_sdr", None)
 
 
 # ───────────────────────────────────────────────────────────────────────────

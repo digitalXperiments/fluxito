@@ -218,6 +218,7 @@ async def test_unknown_action_returns_structured_error(tool_manager):
     assert result.get("error_type") == "unknown_action"
     assert set(result.get("available_actions", [])) == {
         "capture_intake",
+        "diagnose",
         "generate",
         "get_intake",
         "list_sources",

@@ -189,6 +189,11 @@ def register_sdr_tools(mcp_server: Any) -> None:
         """List which sources are supported, connected, and were last scanned."""
         return await _list_sdr_sources(sdr_id=sdr_id)
 
+    @mcp_server.tool("diagnose_sdr")
+    async def diagnose_sdr(sdr_id: str | None = None, connector_filter: list[str] | None = None) -> dict:
+        """Re-scan connected sources and return a cross-referenced diagnosis (findings + readiness)."""
+        return await _diagnose_sdr_v2(sdr_id=sdr_id, connector_filter=connector_filter)
+
     @mcp_server.tool("refresh_sdr_sources")
     async def refresh_sdr_sources(
         sdr_id: str,
@@ -612,6 +617,11 @@ async def _save_sdr_v2(
 
         gaps = compute_gaps(parsed)
         remaining = [s for s in SECTION_ORDER if s not in completed_sections]
+        readiness = None
+        if isinstance(sdr.last_source_scan, dict) and sdr.last_source_scan:
+            readiness = diagnose(
+                sdr.last_source_scan, sdr.intake_answers or {}, [e.name for e in parsed.events]
+            )["readiness"]
         return {
             "sdr_id": str(sdr.id),
             "status": "draft_saved",
@@ -620,6 +630,7 @@ async def _save_sdr_v2(
             "source_snapshot_saved": source_snapshot is not None,
             "sections_completed": completed_sections,
             "sections_remaining": remaining,
+            "readiness": readiness,
             "summary": {
                 "events": len(parsed.events),
                 "todo_count": len(parsed.todo_markers),
@@ -681,6 +692,45 @@ async def _refresh_sdr_sources_v2(
             "scan_timestamp": datetime.now(UTC).isoformat(),
         },
         "instructions_for_claude": _build_delta_review_playbook(sdr_id, deltas),
+    }
+
+
+async def _diagnose_sdr_v2(*, sdr_id: str | None, connector_filter: list[str] | None) -> dict:
+    project_ctx = require_project_ctx()
+    if not project_ctx:
+        return no_active_project_response()
+    if not state.current_user_ctx.get():
+        return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+
+    intake_answers: dict = {}
+    current_names: list[str] = []
+    if sdr_id:
+        db_factory = state.db_session_factory
+        async with db_factory() as db:
+            sdr_result = await db.execute(select(SDR).where(SDR.id == _uuid.UUID(sdr_id)))
+            sdr = sdr_result.scalar_one_or_none()
+            if not sdr:
+                return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
+            if str(sdr.project_id) != project_ctx.project_id:
+                return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+            intake_answers = sdr.intake_answers or {}
+            current_names = [e.name for e in parse_sdr_markdown(sdr.markdown_content).events]
+
+    requested = _normalize_source_names(connector_filter) if connector_filter else None
+    scans = await scan_sources(project_ctx, requested)
+    diagnostics = _diagnostics_block(scans, intake_answers, current_names)
+    return {
+        "sdr_id": sdr_id,
+        "status": "diagnosis_ready",
+        "connected_sources": connected_sources_summary(project_ctx, scans),
+        "findings": diagnostics["findings"],
+        "readiness": diagnostics["readiness"],
+        "instructions_for_claude": (
+            "Present the findings to the user ordered by severity, starting with critical. For each, state "
+            "what's wrong, the evidence, and where the fix lives (website / tag layer / connector / config). "
+            "Do not conclude the implementation is healthy if any critical finding is unresolved. "
+            "If this maps to SDR changes, offer tracking_plan(action='refine')."
+        ),
     }
 
 

@@ -221,6 +221,7 @@ TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
     "capture_intake": ("capture_sdr_intake", None),
     "get_intake": ("get_sdr_intake", None),
     "list_sources": ("list_sdr_sources", None),
+    "diagnose": ("diagnose_sdr", None),
     "refine": ("refine_sdr", None),
 }
 
@@ -630,8 +631,15 @@ Actions:
                                    app | marketplace)
                phase ("auto" | "interview" | "scan"), regenerate (bool)
              returns: intake, scans, industry_template, connected_sources
-                   (incl. connected_but_unsupported), markdown_skeleton,
+                   (incl. connected_but_unsupported), **findings** + **readiness**
+                   (server-computed cross-reference diagnosis), markdown_skeleton,
                    and instructions_for_claude (the synthesis playbook).
+
+  diagnose — Re-scan connectors and return a cross-referenced diagnosis
+             (findings + readiness) without writing. Use for "why aren't my
+             conversions firing?". Findings are platform-agnostic (works for
+             GA4, Adobe, Amplitude, warehouse — whatever fills each role).
+             params: sdr_id (optional), connector_filter (optional list)
 
   save     — Persist a model-authored SDR markdown draft.
              params:
@@ -947,6 +955,7 @@ def rewire_unified_surface(mcp_server) -> None:
         "capture_sdr_intake",
         "get_sdr_intake",
         "list_sdr_sources",
+        "diagnose_sdr",
         "refine_sdr",
         # automation
         "automation_browse",
