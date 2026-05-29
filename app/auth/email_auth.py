@@ -12,6 +12,7 @@ Handles:
 import hashlib
 import hmac
 import logging
+import secrets
 import time
 import uuid
 from datetime import UTC, datetime
@@ -51,6 +52,11 @@ def verify_password(password: str, hashed: str) -> bool:
         return bcrypt.verify(password, hashed)
     except Exception:
         return False
+
+
+def generate_temp_password() -> str:
+    """Generate a strong, URL-safe temporary password for invited users."""
+    return secrets.token_urlsafe(12)
 
 
 # ---------------------------------------------------------------------------
@@ -240,20 +246,29 @@ async def register_user(
     Register a new user with email/password.
 
     Returns (user, error). On success error is None; on failure user is None.
-    If the email is already taken by a Google user, returns an error suggesting
-    Google sign-in instead.
+    If a real (password-set) account already owns the email, returns an error.
+    A password-less placeholder (e.g. an invited user or a Google stub) is
+    claimed in place — the existing row gets the chosen password rather than
+    being orphaned by a brand-new user.
     """
     async with app_state.db_session_factory() as db:
         result = await db.execute(select(User).where(User.email == email))
         existing = result.scalar_one_or_none()
 
-        if existing:
-            if existing.auth_provider == "google":
-                return (
-                    None,
-                    "This email is already registered with Google sign-in. Please use Google to sign in, or link a password from your profile.",
-                )
-            return None, "An account with this email already exists. Try signing in instead."
+        if existing is not None:
+            if existing.password_hash:
+                # A real account already owns this email.
+                return None, "An account with this email already exists. Try signing in instead."
+            # Password-less placeholder (e.g. invited or Google-stub) — claim it.
+            existing.password_hash = hash_password(password)
+            if not existing.display_name and display_name:
+                existing.display_name = display_name
+            existing.email_verified = True
+            existing.email_verified_at = datetime.utcnow()
+            existing.auth_provider = "both" if existing.auth_provider == "google" else "email"
+            await db.commit()
+            await db.refresh(existing)
+            return existing, None
 
         user = User(
             email=email,
@@ -265,6 +280,7 @@ async def register_user(
         db.add(user)
         await db.flush()
         await db.commit()
+        await db.refresh(user)
 
     return user, None
 
