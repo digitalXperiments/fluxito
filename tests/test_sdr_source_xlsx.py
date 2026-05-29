@@ -106,9 +106,10 @@ async def _seed_user_project(db_session_factory, pid):
 
 @pytest.mark.asyncio
 async def test_download_source_xlsx_endpoint(_patch_db, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
     import httpx
     from httpx import ASGITransport
-    from unittest.mock import AsyncMock, patch
 
     from app.auth.csrf import _generate_csrf_token
     from app.main import app
@@ -140,9 +141,10 @@ async def test_download_source_xlsx_endpoint(_patch_db, db_session_factory):
 
 @pytest.mark.asyncio
 async def test_download_source_xlsx_sanitizes_filename(_patch_db, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
     import httpx
     from httpx import ASGITransport
-    from unittest.mock import AsyncMock, patch
 
     from app.auth.csrf import _generate_csrf_token
     from app.main import app
@@ -183,9 +185,10 @@ async def test_download_source_xlsx_sanitizes_filename(_patch_db, db_session_fac
 
 @pytest.mark.asyncio
 async def test_download_source_xlsx_404_when_none(_patch_db, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
     import httpx
     from httpx import ASGITransport
-    from unittest.mock import AsyncMock, patch
 
     from app.auth.csrf import _generate_csrf_token
     from app.main import app
