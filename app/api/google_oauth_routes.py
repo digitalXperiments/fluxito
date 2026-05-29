@@ -1445,6 +1445,14 @@ async def initiate_google_oauth(
     """Start the Google data OAuth flow with per-product scope selection."""
     user_ctx = await _resolve_user_ctx(request)
 
+    # Connecting a data source must be tied to the logged-in user. If we let
+    # the flow start anonymously, the callback has no choice but to guess the
+    # account from the Google email it gets back — which silently switches the
+    # browser session into whatever Google account was used to connect. Refuse
+    # up front instead. (Mirrors /connect/meta, /connect/tiktok, /connect/snap.)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/google", status_code=302)
+
     # Legacy tier support
     if tier and tier in SCOPE_MAP:
         scopes = SCOPE_MAP[tier]
@@ -1462,13 +1470,9 @@ async def initiate_google_oauth(
 
     oauth_state = secrets.token_urlsafe(32)
 
-    # Get user_id from session if authenticated
-    user_id = None
-    try:
-        user_ctx = await require_valid_mcp_token(request)
-        user_id = user_ctx.user_id
-    except Exception:
-        pass
+    # The connection is always bound to the already-authenticated user
+    # resolved above (covers both MCP bearer and signed uid cookie sessions).
+    user_id = user_ctx.user_id
 
     from app.utils import base_url_from_request
 
@@ -1593,20 +1597,28 @@ async def google_data_callback(
     from app.models.user import User
 
     user_id = state_data.get("user_id")
-    project_id = state_data.get("project_id")  # May be None for legacy flows
+    project_id = state_data.get("project_id")
+
+    # The connect flow always records the logged-in user in the OAuth state
+    # (see initiate_google_oauth). A missing user_id means the flow wasn't
+    # started from an authenticated session — refuse, rather than resolving
+    # the account from the Google email, which would attach the connection
+    # to (and below, log the browser in as) whatever Google account was used.
+    if not user_id:
+        return HTMLResponse(
+            "<h2>Your session expired. Please <a href='/signin'>sign in</a> and connect again.</h2>",
+            status_code=401,
+        )
 
     db_session = app_state.db_session_factory()
     async with db_session as db:
-        if user_id:
-            result = await db.execute(select(User).where(User.id == user_id))
-            user = result.scalar_one_or_none()
-        else:
-            result = await db.execute(select(User).where(User.email == google_email))
-            user = result.scalar_one_or_none()
-            if not user:
-                user = User(email=google_email, display_name=userinfo.get("name"))
-                db.add(user)
-                await db.flush()
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            return HTMLResponse(
+                "<h2>Your session expired. Please <a href='/signin'>sign in</a> and connect again.</h2>",
+                status_code=401,
+            )
 
         # Create / update OAuthConnection — scoped to project
         existing_stmt = select(OAuthConnection).where(
@@ -1757,16 +1769,11 @@ async def google_data_callback(
         )
     )
 
-    response = RedirectResponse(url="/home?toast=google_connected", status_code=302)
-    response.set_cookie(
-        "uid",
-        sign_uid(str(user.id)),
-        max_age=30 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=settings.APP_ENV == "production",
-    )
-    return response
+    # Do NOT touch the uid session cookie here. The user is already
+    # authenticated (initiate_google_oauth requires it); re-issuing the
+    # session on a data-connect callback is what allowed connecting a
+    # different Google account to hijack the session.
+    return RedirectResponse(url="/home?toast=google_connected", status_code=302)
 
 
 @router.get("/api/connections")
@@ -2394,16 +2401,8 @@ async def meta_callback(
         )
     )
 
-    response = RedirectResponse(url="/home?toast=meta_connected", status_code=302)
-    response.set_cookie(
-        "uid",
-        sign_uid(str(user_id)),
-        max_age=30 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=settings.APP_ENV == "production",
-    )
-    return response
+    # Already-authenticated connect flow — never re-issue the uid session cookie.
+    return RedirectResponse(url="/home?toast=meta_connected", status_code=302)
 
 
 @router.delete("/api/connections/meta/{conn_id}")
@@ -2666,16 +2665,8 @@ async def tiktok_callback(
         )
     )
 
-    response = RedirectResponse(url="/home?toast=tiktok_connected", status_code=302)
-    response.set_cookie(
-        "uid",
-        sign_uid(str(user_id)),
-        max_age=30 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=settings.APP_ENV == "production",
-    )
-    return response
+    # Already-authenticated connect flow — never re-issue the uid session cookie.
+    return RedirectResponse(url="/home?toast=tiktok_connected", status_code=302)
 
 
 @router.delete("/api/connections/tiktok/{conn_id}")
@@ -2955,16 +2946,8 @@ async def snap_callback(
         )
     )
 
-    response = RedirectResponse(url="/home?toast=snap_connected", status_code=302)
-    response.set_cookie(
-        "uid",
-        sign_uid(str(user_id)),
-        max_age=30 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=settings.APP_ENV == "production",
-    )
-    return response
+    # Already-authenticated connect flow — never re-issue the uid session cookie.
+    return RedirectResponse(url="/home?toast=snap_connected", status_code=302)
 
 
 @router.delete("/api/connections/snap/{conn_id}")
