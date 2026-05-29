@@ -51,3 +51,21 @@ async def test_access_request_model_persists(_patch_db, db_session_factory):
         r = (await db.execute(select(AccessRequest).where(AccessRequest.id == rid))).scalar_one()
         assert r.status == "pending"
         assert r.email == "jane@example.com"
+
+
+@pytest.mark.asyncio
+async def test_load_user_view_includes_is_superadmin(_patch_db, db_session_factory):
+    from types import SimpleNamespace
+
+    from app.api.google_oauth_routes import _load_user_view
+    from app.models.user import User
+
+    async with db_session_factory() as db:
+        u = User(email="boss@example.com", is_superadmin=True)
+        db.add(u)
+        await db.flush()
+        uid = str(u.id)
+        await db.commit()
+
+    view = await _load_user_view(SimpleNamespace(user_id=uid, email="boss@example.com"))
+    assert view["is_superadmin"] is True

@@ -53,8 +53,9 @@ router = APIRouter()
 
 
 async def _load_user_view(user_ctx) -> dict:
-    """Load a lightweight user view for templates (email, display_name)."""
+    """Load a lightweight user view for templates (email, display_name, is_superadmin)."""
     display_name = None
+    is_superadmin = False
     try:
         db_session = app_state.db_session_factory()
         async with db_session as db:
@@ -62,12 +63,14 @@ async def _load_user_view(user_ctx) -> dict:
             u = result.scalar_one_or_none()
             if u:
                 display_name = u.display_name
+                is_superadmin = bool(u.is_superadmin)
     except Exception:
         pass
     return {
         "id": user_ctx.user_id,
         "email": user_ctx.email,
         "display_name": display_name,
+        "is_superadmin": is_superadmin,
     }
 
 
