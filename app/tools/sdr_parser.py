@@ -730,6 +730,20 @@ def generate_sdr_markdown(
     lines.append(f"# {project_name} — Solution Design Reference")
     lines.append("")
 
+    # Executive Summary
+    lines.append("## Executive Summary")
+    lines.append("")
+    lines.append("| Property | Value |")
+    lines.append("|---|---|")
+    lines.append("| GTM Container | [TODO] |")
+    lines.append("| Platforms in scope | [TODO] |")
+    lines.append(f"| Audit date | {now[:10]} |")
+    lines.append("")
+    lines.append("[TODO: Add a short narrative summary of audit scope and headline findings]")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
     # Business Context
     lines.append("## Business Context")
     lines.append("")
@@ -784,6 +798,16 @@ def generate_sdr_markdown(
     lines.append("---")
     lines.append("")
 
+    # Conversion Audit
+    lines.append("## Conversion Audit")
+    lines.append("")
+    lines.append("| GA4 key event | 90d count | Unique converters | Fires? | Verdict / action |")
+    lines.append("|---|---|---|---|---|")
+    lines.append("| [TODO] | | | | |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
     # User Properties
     lines.append("## User Properties / Custom Dimensions")
     lines.append("")
@@ -815,6 +839,26 @@ def generate_sdr_markdown(
         lines.append(consent_md)
     else:
         lines.append("[TODO: Document consent management platform, categories, gating rules]")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # Gap Register
+    lines.append("## Gap Register")
+    lines.append("")
+    lines.append("| # | Severity | Finding | Evidence | Business impact | Recommended fix | Fix location | Owner |")
+    lines.append("|---|---|---|---|---|---|---|---|")
+    lines.append("| [TODO] | | | | | | | |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # Remediation Roadmap
+    lines.append("## Remediation Roadmap")
+    lines.append("")
+    lines.append("| Phase | Action | Resolves | Effort | Impact | Owner |")
+    lines.append("|---|---|---|---|---|---|")
+    lines.append("| [TODO] | | | | | |")
     lines.append("")
     lines.append("---")
     lines.append("")
