@@ -400,6 +400,20 @@
 {% endblock %}
 
 {% block main %}
+{% macro render_audit_table(table) %}
+  {% if table and table.rows %}
+  <table class="sdr-table">
+    <thead><tr>{% for h in table.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in table.rows %}
+      <tr>{% for cell in row %}<td class="cell-mono">{{ cell }}</td>{% endfor %}</tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="text-align:center;padding:48px 20px;color:var(--text-muted)">Not documented yet.</div>
+  {% endif %}
+{% endmacro %}
 <main class="app-main">
   <div class="page-head">
     <div>
@@ -586,6 +600,9 @@
 
   {# Tab bar #}
   <div class="sdr-tabs" id="sdrTabs">
+    {% if parsed_meta.get('executive_summary_table') or parsed_meta.get('executive_summary') %}
+    <button class="sdr-tab" data-tab="overview" onclick="switchSdrTab('overview')">Overview</button>
+    {% endif %}
     <button class="sdr-tab is-active" data-tab="events" onclick="switchSdrTab('events')">
       Event Catalog <span class="tab-count">{{ total_events }}</span>
     </button>
@@ -598,6 +615,18 @@
     <button class="sdr-tab" data-tab="userprops" onclick="switchSdrTab('userprops')">
       User Properties
     </button>
+    {% if parsed_meta.get('conversion_audit_table') %}
+    <button class="sdr-tab" data-tab="conversion" onclick="switchSdrTab('conversion')">Conversion Audit</button>
+    {% endif %}
+    {% if parsed_meta.get('gap_register_table') %}
+    <button class="sdr-tab" data-tab="gaps" onclick="switchSdrTab('gaps')">Gap Register</button>
+    {% endif %}
+    {% if parsed_meta.get('consent_table') %}
+    <button class="sdr-tab" data-tab="consent" onclick="switchSdrTab('consent')">Consent</button>
+    {% endif %}
+    {% if parsed_meta.get('remediation_roadmap_table') %}
+    <button class="sdr-tab" data-tab="roadmap" onclick="switchSdrTab('roadmap')">Roadmap</button>
+    {% endif %}
     <button class="sdr-tab" data-tab="context" onclick="switchSdrTab('context')">
       Business Context
     </button>
@@ -913,6 +942,32 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="sdr-sheet-wrap" id="panel-overview" style="display:none">
+    <div class="sdr-table-scroll" style="padding:20px">
+      {% set est = parsed_meta.get('executive_summary_table') %}
+      {% if est and est.rows %}
+      <table class="sdr-table"><tbody>
+        {% for row in est.rows %}<tr>{% for cell in row %}<td class="cell-mono">{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+      </tbody></table>
+      {% endif %}
+      {% if parsed_meta.get('executive_summary') %}
+      <div style="margin-top:16px;white-space:pre-wrap;font-size:13px;line-height:1.6;color:var(--text)">{{ parsed_meta.get('executive_summary') }}</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="sdr-sheet-wrap" id="panel-conversion" style="display:none">
+    <div class="sdr-table-scroll" style="padding:20px">{{ render_audit_table(parsed_meta.get('conversion_audit_table')) }}</div>
+  </div>
+  <div class="sdr-sheet-wrap" id="panel-gaps" style="display:none">
+    <div class="sdr-table-scroll" style="padding:20px">{{ render_audit_table(parsed_meta.get('gap_register_table')) }}</div>
+  </div>
+  <div class="sdr-sheet-wrap" id="panel-consent" style="display:none">
+    <div class="sdr-table-scroll" style="padding:20px">{{ render_audit_table(parsed_meta.get('consent_table')) }}</div>
+  </div>
+  <div class="sdr-sheet-wrap" id="panel-roadmap" style="display:none">
+    <div class="sdr-table-scroll" style="padding:20px">{{ render_audit_table(parsed_meta.get('remediation_roadmap_table')) }}</div>
   </div>
 
   {% endif %}
