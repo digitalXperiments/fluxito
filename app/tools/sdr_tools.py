@@ -165,6 +165,8 @@ def register_sdr_tools(mcp_server: Any) -> None:
         source_snapshot_id: str | None = None,
         create_initial_refinement_state: bool = True,
         force: bool = False,
+        source_xlsx_base64: str | None = None,
+        source_filename: str | None = None,
     ) -> dict:
         """Persist a Claude-authored SDR markdown draft.
 
@@ -172,6 +174,8 @@ def register_sdr_tools(mcp_server: Any) -> None:
         `intake_snapshot` and `source_snapshot` for full reproducibility. The
         markdown is validated against the contract before persisting; pass
         force=True only to override structural validation errors intentionally.
+        If you generated a source .xlsx, base64-encode it and pass `source_xlsx_base64`
+        (+ `source_filename`) so users can download the original (max 2 MB).
         """
         return await _save_sdr_v2(
             markdown=markdown,
@@ -182,6 +186,8 @@ def register_sdr_tools(mcp_server: Any) -> None:
             source_snapshot_id=source_snapshot_id,
             create_initial_refinement_state=create_initial_refinement_state,
             force=force,
+            source_xlsx_base64=source_xlsx_base64,
+            source_filename=source_filename,
         )
 
     @mcp_server.tool("get_sdr_intake")
@@ -538,6 +544,38 @@ async def _capture_sdr_intake(
     }
 
 
+_MAX_SOURCE_XLSX_BYTES = 2 * 1024 * 1024  # 2 MB — SDR workbooks are tabular/text
+
+
+def _store_source_xlsx(sdr, source_xlsx_base64: str | None, source_filename: str | None) -> tuple[bool, str | None]:
+    """Validate + attach a base64-encoded source .xlsx to an SDR row.
+
+    Returns (stored, error). Does not commit. No-op (False, None) when no payload.
+    """
+    if not source_xlsx_base64:
+        return False, None
+    import base64 as _b64
+    from io import BytesIO as _BytesIO
+
+    try:
+        raw = _b64.b64decode(source_xlsx_base64, validate=True)
+    except Exception:
+        return False, "source_xlsx_base64 is not valid base64."
+    if len(raw) > _MAX_SOURCE_XLSX_BYTES:
+        return False, f"source xlsx exceeds the 2 MB size limit ({len(raw)} bytes)."
+    try:
+        from openpyxl import load_workbook
+
+        load_workbook(_BytesIO(raw), read_only=True)
+    except Exception:
+        return False, "source file is not a valid .xlsx workbook."
+
+    sdr.source_xlsx = raw
+    sdr.source_xlsx_filename = (source_filename or "source.xlsx")[:255]
+    sdr.source_xlsx_at = datetime.now(UTC)
+    return True, None
+
+
 async def _save_sdr_v2(
     *,
     markdown: str,
@@ -548,6 +586,8 @@ async def _save_sdr_v2(
     source_snapshot_id: str | None,
     create_initial_refinement_state: bool,
     force: bool = False,
+    source_xlsx_base64: str | None = None,
+    source_filename: str | None = None,
 ) -> dict:
     project_ctx = require_project_ctx()
     if not project_ctx:
@@ -623,6 +663,10 @@ async def _save_sdr_v2(
         sdr.source_fingerprint = source_fingerprint
         if source_snapshot is not None:
             sdr.last_source_scan = source_snapshot
+        if source_xlsx_base64:
+            stored, xlsx_err = _store_source_xlsx(sdr, source_xlsx_base64, source_filename)
+            if not stored and xlsx_err:
+                logger.warning("save_sdr: source xlsx not stored: %s", xlsx_err)
         await db.flush()
 
         if normalized_intake:
