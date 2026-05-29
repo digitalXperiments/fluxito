@@ -45,10 +45,10 @@
     {# Invite bar (owner/admin only) #}
     {% if membership.role in ('owner', 'admin') %}
     <div class="ps-card" style="padding:18px 20px;margin-bottom:18px">
-      <form id="inviteForm" class="ps-invite">
+      <form id="inviteForm" class="ps-invite" novalidate>
         <label class="f-field" style="flex:1;min-width:220px">
           <span>Invite by email</span>
-          <input type="email" name="email" class="f-input" placeholder="colleague@example.com" required>
+          <input type="email" name="email" class="f-input" placeholder="colleague@example.com" autocomplete="off">
         </label>
         <label class="f-field" style="min-width:140px">
           <span>Role</span>
@@ -834,6 +834,16 @@ if (inviteForm) {
     var msg = document.getElementById('inviteMsg');
     btn.disabled = true; btn.textContent = 'Inviting…';
     msg.style.display = 'none';
+    var emailVal = (this.email.value || '').trim();
+    if (!emailVal) {
+      msg.textContent = 'Enter an email address.';
+      msg.style.background = 'color-mix(in srgb, var(--red) 10%, transparent)';
+      msg.style.color = 'var(--red)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+      msg.style.display = 'inline-block';
+      btn.disabled = false; btn.textContent = 'Invite';
+      return;
+    }
     var fd = new FormData(this);
     try {
       var res = await fetch('/api/project/{{ project.slug }}/members', {
