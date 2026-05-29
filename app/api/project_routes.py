@@ -570,11 +570,11 @@ async def invite_member(request: Request, slug: str):
         result = await db.execute(select(User).where(User.email == invite_email))
         invited_user = result.scalar_one_or_none()
 
-        from app.auth.email_auth import generate_temp_password, hash_password
-
-        temp_password = generate_temp_password()
         if not invited_user:
             # No SMTP yet: create the user with a temp password to hand over.
+            from app.auth.email_auth import generate_temp_password, hash_password
+
+            temp_password = generate_temp_password()
             invited_user = User(
                 email=invite_email,
                 password_hash=hash_password(temp_password),
@@ -584,13 +584,9 @@ async def invite_member(request: Request, slug: str):
             )
             db.add(invited_user)
             await db.flush()
-        elif not invited_user.password_hash:
-            # Existing password-less stub (e.g. Google-only) — issue a temp password.
-            invited_user.password_hash = hash_password(temp_password)
-            invited_user.email_verified = True
-            invited_user.auth_provider = "both" if invited_user.auth_provider == "google" else "email"
         else:
-            # Real account already has a password — don't reset it on invite.
+            # Existing account (real or Google-only): never touch their credentials.
+            # They log in with their existing method; we only add the membership.
             temp_password = None
 
         # Check if already a member

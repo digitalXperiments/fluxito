@@ -157,3 +157,60 @@ async def test_invite_returns_temp_password_and_member_can_login(
     user, err = await authenticate_user("newhire@example.com", data["temp_password"])
     assert err is None
     assert user is not None
+
+
+@pytest.mark.asyncio
+async def test_invite_existing_password_account_not_reset(_http_client, db_session_factory):
+    """Inviting an existing real account must NOT reset its password or return one."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.auth.email_auth import authenticate_user, hash_password
+    from app.models.user import User
+
+    owner_id, owner_email, slug = await _seed_owner_and_project(db_session_factory, slug="acme2")
+    async with db_session_factory() as db:
+        db.add(User(email="real@example.com", password_hash=hash_password("orig-pass-1!"),
+                    email_verified=True, auth_provider="email"))
+        await db.commit()
+
+    owner_ctx = {"user_id": owner_id, "email": owner_email}
+    with patch("app.api.project_routes._resolve_user", new=AsyncMock(return_value=owner_ctx)):
+        resp = await _http_client.post(
+            f"/api/project/{slug}/members", json={"email": "real@example.com", "role": "member"}
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("temp_password") is None
+    # Original password still works (not reset).
+    user, err = await authenticate_user("real@example.com", "orig-pass-1!")
+    assert err is None and user is not None
+
+
+@pytest.mark.asyncio
+async def test_invite_existing_google_user_not_hijacked(_http_client, db_session_factory):
+    """Inviting an existing Google-only user must NOT set a password or return one."""
+    from unittest.mock import AsyncMock, patch
+
+    from sqlalchemy import select
+
+    from app.models.user import User
+
+    owner_id, owner_email, slug = await _seed_owner_and_project(db_session_factory, slug="acme3")
+    async with db_session_factory() as db:
+        g = User(email="googler@example.com", auth_provider="google", email_verified=True)
+        db.add(g)
+        await db.flush()
+        gid = g.id
+        await db.commit()
+
+    owner_ctx = {"user_id": owner_id, "email": owner_email}
+    with patch("app.api.project_routes._resolve_user", new=AsyncMock(return_value=owner_ctx)):
+        resp = await _http_client.post(
+            f"/api/project/{slug}/members", json={"email": "googler@example.com", "role": "member"}
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("temp_password") is None
+    # Credentials untouched: still no password, still google.
+    async with db_session_factory() as db:
+        row = (await db.execute(select(User).where(User.id == gid))).scalar_one()
+        assert row.password_hash is None
+        assert row.auth_provider == "google"

@@ -857,12 +857,33 @@ if (inviteForm) {
       var data = await res.json();
       if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
       if (data.temp_password) {
-        msg.innerHTML =
-          '<div style="font-weight:600;margin-bottom:6px">Invited ' + emailVal + '</div>' +
-          '<div style="margin-bottom:6px">No invite email is sent (SMTP not configured). Share these credentials:</div>' +
-          '<div style="font-family:var(--font-mono,monospace);font-size:13px">Email: ' + emailVal + '<br>Password: <span id="tmpPw">' + data.temp_password + '</span></div>' +
-          '<button type="button" class="btn sm" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById(\'tmpPw\').textContent)">Copy password</button>' +
-          '<div style="margin-top:6px;color:var(--text-subtle);font-size:12px">⚠ This password is shown only once — copy it now, it won\'t be displayed again.</div>';
+        msg.textContent = '';
+        var h = document.createElement('div');
+        h.style.fontWeight = '600'; h.style.marginBottom = '6px';
+        h.textContent = 'Invited ' + emailVal;
+        var info = document.createElement('div');
+        info.style.marginBottom = '6px';
+        info.textContent = 'No invite email is sent (SMTP not configured). Share these credentials:';
+        var creds = document.createElement('div');
+        creds.style.fontFamily = 'var(--font-mono,monospace)'; creds.style.fontSize = '13px';
+        var emailLine = document.createElement('div');
+        emailLine.textContent = 'Email: ' + emailVal;
+        var pwLine = document.createElement('div');
+        pwLine.appendChild(document.createTextNode('Password: '));
+        var pwSpan = document.createElement('span');
+        pwSpan.id = 'tmpPw';
+        pwSpan.textContent = data.temp_password;
+        pwLine.appendChild(pwSpan);
+        creds.appendChild(emailLine); creds.appendChild(pwLine);
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button'; copyBtn.className = 'btn sm';
+        copyBtn.style.marginTop = '8px';
+        copyBtn.textContent = 'Copy password';
+        copyBtn.onclick = function(){ navigator.clipboard.writeText(pwSpan.textContent); };
+        var warn = document.createElement('div');
+        warn.style.marginTop = '6px'; warn.style.color = 'var(--text-subtle)'; warn.style.fontSize = '12px';
+        warn.textContent = '⚠ This password is shown only once — copy it now, it won\'t be displayed again.';
+        msg.appendChild(h); msg.appendChild(info); msg.appendChild(creds); msg.appendChild(copyBtn); msg.appendChild(warn);
       } else {
         msg.textContent = data.message || 'Invited!';
       }
