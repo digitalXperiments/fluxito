@@ -130,3 +130,59 @@ async def test_admin_users_unauthenticated_401(_http_client, db_session_factory)
     with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=None)):
         resp = await _http_client.get("/api/admin/users")
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_revoke_last_superadmin(_http_client, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
+    sid = await _make_user(db_session_factory, "solo-super@example.com", is_superadmin=True)
+    ctx = type("C", (), {"user_id": sid, "email": "solo-super@example.com"})()
+    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=ctx)):
+        resp = await _http_client.patch(f"/api/admin/users/{sid}/superadmin", json={"is_superadmin": False})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_deactivate_self(_http_client, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
+    sid = await _make_user(db_session_factory, "self@example.com", is_superadmin=True)
+    ctx = type("C", (), {"user_id": sid, "email": "self@example.com"})()
+    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=ctx)):
+        resp = await _http_client.patch(f"/api/admin/users/{sid}/active", json={"is_active": False})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_admin_can_deactivate_other_user(_http_client, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+    from sqlalchemy import select
+    from app.models.user import User
+
+    sid = await _make_user(db_session_factory, "s2@example.com", is_superadmin=True)
+    tid = await _make_user(db_session_factory, "victim@example.com", is_superadmin=False)
+    ctx = type("C", (), {"user_id": sid, "email": "s2@example.com"})()
+    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=ctx)):
+        resp = await _http_client.patch(f"/api/admin/users/{tid}/active", json={"is_active": False})
+    assert resp.status_code == 200
+    async with db_session_factory() as db:
+        u = (await db.execute(select(User).where(User.id == uuid.UUID(tid)))).scalar_one()
+        assert u.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_admin_can_grant_superadmin(_http_client, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+    from sqlalchemy import select
+    from app.models.user import User
+
+    sid = await _make_user(db_session_factory, "granter@example.com", is_superadmin=True)
+    tid = await _make_user(db_session_factory, "promote@example.com", is_superadmin=False)
+    ctx = type("C", (), {"user_id": sid, "email": "granter@example.com"})()
+    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=ctx)):
+        resp = await _http_client.patch(f"/api/admin/users/{tid}/superadmin", json={"is_superadmin": True})
+    assert resp.status_code == 200
+    async with db_session_factory() as db:
+        u = (await db.execute(select(User).where(User.id == uuid.UUID(tid)))).scalar_one()
+        assert u.is_superadmin is True

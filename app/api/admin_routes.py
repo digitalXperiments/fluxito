@@ -7,7 +7,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 import app.app_state as app_state
 from app.api.google_oauth_routes import _resolve_user_ctx
@@ -50,3 +50,43 @@ async def admin_list_users(request: Request):
             for u in rows
         ]
     return JSONResponse({"users": users})
+
+
+@router.patch("/api/admin/users/{user_id}/active")
+async def admin_set_active(request: Request, user_id: str):
+    me = await require_superadmin(request)
+    body = await request.json()
+    is_active = bool(body.get("is_active"))
+    if user_id == me["id"] and not is_active:
+        raise HTTPException(400, "You cannot deactivate your own account.")
+    async with app_state.db_session_factory() as db:
+        u = await db.get(User, uuid.UUID(user_id))
+        if not u:
+            raise HTTPException(404, "User not found")
+        if u.is_superadmin and not is_active:
+            count = await db.scalar(
+                select(func.count()).select_from(User).where(User.is_superadmin == True, User.is_active == True)
+            )
+            if count is not None and count <= 1:
+                raise HTTPException(400, "Cannot deactivate the last active super-admin.")
+        u.is_active = is_active
+        await db.commit()
+    return JSONResponse({"success": True})
+
+
+@router.patch("/api/admin/users/{user_id}/superadmin")
+async def admin_set_superadmin(request: Request, user_id: str):
+    me = await require_superadmin(request)
+    body = await request.json()
+    is_superadmin = bool(body.get("is_superadmin"))
+    async with app_state.db_session_factory() as db:
+        u = await db.get(User, uuid.UUID(user_id))
+        if not u:
+            raise HTTPException(404, "User not found")
+        if u.is_superadmin and not is_superadmin:
+            count = await db.scalar(select(func.count()).select_from(User).where(User.is_superadmin == True))
+            if count is not None and count <= 1:
+                raise HTTPException(400, "Cannot remove the last super-admin.")
+        u.is_superadmin = is_superadmin
+        await db.commit()
+    return JSONResponse({"success": True})
