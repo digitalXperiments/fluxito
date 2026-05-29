@@ -829,6 +829,14 @@ async def signin_callback(
         await db.commit()
         user_id = str(user.id)
 
+    if is_new_user:
+        try:
+            from app.api.project_routes import ensure_default_project
+
+            await ensure_default_project(user_id, display_name, email)
+        except Exception:
+            logger.warning("ensure_default_project failed for new Google user", exc_info=True)
+
     # Redirect new users (or those who haven't finished) to tutorial
     redirect_url = next_url
     if needs_tutorial and next_url in ("/home", "/onboard", "/connect"):

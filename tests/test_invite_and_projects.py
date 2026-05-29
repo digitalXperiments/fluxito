@@ -47,3 +47,50 @@ async def test_register_rejects_existing_password_account(_patch_db, db_session_
     user, error = await register_user("taken@example.com", "SecondPass1!", "Second")
     assert user is None
     assert error and "already exists" in error.lower()
+
+
+@pytest.mark.asyncio
+async def test_ensure_default_project_creates_when_none(_patch_db, db_session_factory):
+    from sqlalchemy import select
+
+    from app.api.project_routes import ensure_default_project
+    from app.models.project import ProjectMember
+    from app.models.user import User
+
+    async with db_session_factory() as db:
+        u = User(email="solo@example.com", display_name="Solo")
+        db.add(u)
+        await db.flush()
+        uid = u.id
+        await db.commit()
+
+    created = await ensure_default_project(uid, "Solo", "solo@example.com")
+    assert created is True
+
+    async with db_session_factory() as db:
+        memberships = (
+            await db.execute(select(ProjectMember).where(ProjectMember.user_id == uid))
+        ).scalars().all()
+    assert len(memberships) == 1
+    assert memberships[0].role == "owner"
+
+
+@pytest.mark.asyncio
+async def test_ensure_default_project_noop_when_member(_patch_db, db_session_factory):
+    from app.api.project_routes import ensure_default_project
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    async with db_session_factory() as db:
+        u = User(email="hasproj@example.com")
+        db.add(u)
+        await db.flush()
+        p = Project(name="X", slug="x-existing", owner_id=u.id)
+        db.add(p)
+        await db.flush()
+        db.add(ProjectMember(project_id=p.id, user_id=u.id, role="owner"))
+        uid = u.id
+        await db.commit()
+
+    created = await ensure_default_project(uid, None, "hasproj@example.com")
+    assert created is False

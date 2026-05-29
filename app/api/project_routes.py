@@ -331,6 +331,50 @@ async def create_project(request: Request):
     )
 
 
+async def ensure_default_project(
+    user_id: "uuid.UUID | str",
+    display_name: str | None,
+    email: str,
+) -> bool:
+    """Create a personal project for *user_id* iff they belong to none.
+
+    Returns True if a project was created, False if the user already had one.
+    Safe to call on every login — it is a no-op for existing members.
+    """
+    uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+
+    async with app_state.db_session_factory() as db:
+        count = await db.scalar(
+            select(func.count())
+            .select_from(ProjectMember)
+            .where(ProjectMember.user_id == uid, ProjectMember.is_active == True)
+        )
+        if count and count > 0:
+            return False
+
+        base = (display_name or (email.split("@")[0] if email else "My")).strip()
+        name = f"{base}'s Project"
+        slug = f"{_slugify(name)}-{uuid.uuid4().hex[:6]}"  # suffix avoids slug collisions
+
+        project = Project(name=name, slug=slug, owner_id=uid)
+        db.add(project)
+        await db.flush()
+        db.add(
+            ProjectMember(
+                project_id=project.id,
+                user_id=uid,
+                role=ROLE_OWNER,
+                joined_at=datetime.utcnow(),
+            )
+        )
+        await db.commit()
+
+    from app.auth.mcp_session_manager import invalidate_user_context_cache
+
+    await invalidate_user_context_cache(str(uid))
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Project settings
 # ---------------------------------------------------------------------------
