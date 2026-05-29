@@ -445,7 +445,7 @@ def test_skill_example_sdrs_round_trip_through_parser():
     from app.tools.sdr_parser import compute_gaps, parse_sdr_markdown
 
     root = os.path.join(os.path.dirname(__file__), "..", "fluxito-skills")
-    examples = glob.glob(os.path.join(root, "**", "examples", "*.md"), recursive=True)
+    examples = glob.glob(os.path.join(root, "**", "examples", "**", "*.md"), recursive=True)
     assert examples, "no skill example SDRs found"
     for path in examples:
         with open(path) as fh:
@@ -465,7 +465,7 @@ def test_bmk_example_sdr_is_gold_standard():
 
     path = os.path.join(
         os.path.dirname(__file__), "..",
-        "fluxito-skills", "fluxito-solution-design", "examples", "bmk-eco-farms-sdr.md",
+        "fluxito-skills", "fluxito", "examples", "sdr", "bmk-eco-farms-sdr.md",
     )
     if not os.path.exists(path):
         import pytest
