@@ -14,6 +14,13 @@ back into a database, so it must follow the contract exactly.
 7. Self-check against `quality-rubric.md` and the `readiness` gate.
 8. `tracking_plan(action="save", params={"markdown": ..., "intake_snapshot": <the intake object>, "source_snapshot": <the scans object>})`. If `save` returns validation `errors`, fix the markdown and retry. Then offer `tracking_plan(action="refine")`.
 
+   **Attach the source spreadsheet (optional).** If you generated a `.xlsx` for this SDR,
+   read the file, base64-encode its bytes, and pass them to `save_sdr` as
+   `source_xlsx_base64` along with `source_filename` (e.g. `"VAST_Data_SDR.xlsx"`). Fluxito
+   stores it so the user can download the original from the Solution Design page. Keep the
+   file under 2 MB (SDR workbooks are tabular and well under this). The markdown remains the
+   source of truth — the xlsx is preserved only as an "as-submitted" artifact.
+
 ## Diagnose ("why aren't my conversions working?")
 `tracking_plan(action="diagnose", params={"sdr_id": ...})`. Present findings by
 severity, starting with critical. For each, state what's wrong, the evidence, and
