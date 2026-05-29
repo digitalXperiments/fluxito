@@ -378,6 +378,49 @@ def _parse_parameters_table(body: str) -> list[ParsedParameter]:
     return params
 
 
+def parse_markdown_table(text: str | None) -> dict | None:
+    """Parse the first GFM pipe table in *text* into headers + rows.
+
+    Returns ``{"headers": [...], "rows": [[...], ...]}`` or ``None`` when no
+    table is present. Cells are stripped of surrounding whitespace and
+    backticks. Display-only helper — does not validate column names.
+    """
+    if not text:
+        return None
+
+    table_lines = [
+        line.strip()
+        for line in text.split("\n")
+        if line.strip().startswith("|")
+    ]
+    if len(table_lines) < 2:
+        return None
+
+    def cells(line: str) -> list[str]:
+        parts = [c.strip().strip("`").strip() for c in line.strip().strip("|").split("|")]
+        return parts
+
+    headers = cells(table_lines[0])
+    rows: list[list[str]] = []
+    for line in table_lines[1:]:
+        # Skip the |---|---| separator row
+        if re.match(r"^\|[\s\-:|]+\|?$", line):
+            continue
+        row = cells(line)
+        if not any(row):
+            continue
+        # Pad/truncate to header width so the template can zip safely
+        if len(row) < len(headers):
+            row = row + [""] * (len(headers) - len(row))
+        else:
+            row = row[: len(headers)]
+        rows.append(row)
+
+    if not rows:
+        return None
+    return {"headers": headers, "rows": rows}
+
+
 def _parse_destinations(body: str) -> list[ParsedDestination]:
     """Parse destination list items from an event section."""
     dests: list[ParsedDestination] = []
