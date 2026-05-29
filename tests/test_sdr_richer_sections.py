@@ -105,3 +105,32 @@ def test_unrelated_headings_not_misrouted():
     assert parsed.gap_register is None
     # 'Technical Roadmap' must NOT be captured as Remediation Roadmap
     assert parsed.remediation_roadmap is None
+
+
+def test_export_includes_new_sheets():
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from app.tools.sdr_excel_export import generate_sdr_xlsx
+
+    xlsx = generate_sdr_xlsx(SAMPLE, "Demo SDR")
+    wb = load_workbook(BytesIO(xlsx))
+    for name in ["Executive Summary", "Gap Register", "Conversion Audit",
+                 "Consent & Privacy", "Remediation Roadmap"]:
+        assert name in wb.sheetnames, f"missing sheet {name}"
+    ws = wb["Gap Register"]
+    assert ws.cell(row=1, column=1).value == "#"
+    assert ws.cell(row=2, column=3).value == "No primary conversion"
+
+
+def test_export_omits_absent_sections():
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from app.tools.sdr_excel_export import generate_sdr_xlsx
+
+    minimal = "# X\n\n## Event Catalog\n\n### `e`\n\n*Status:* `planned`\n\n**Business Purpose:** x\n\n**Triggers:**\n- Type: `click`\n"
+    wb = load_workbook(BytesIO(generate_sdr_xlsx(minimal, "X")))
+    assert "Gap Register" not in wb.sheetnames

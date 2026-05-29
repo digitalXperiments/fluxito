@@ -410,6 +410,31 @@ def _build_business_context(wb: Workbook, parsed: ParsedSDR) -> None:
     ws.column_dimensions["B"].width = 80
 
 
+def _build_table_sheet(wb: Workbook, sheet_title: str, raw_markdown: str | None) -> None:
+    """Generic sheet: render a markdown table section as headers + rows.
+
+    No-op (no sheet created) when the section is absent or has no table — keeps
+    the workbook free of empty sheets.
+    """
+    from app.tools.sdr_parser import parse_markdown_table
+
+    table = parse_markdown_table(raw_markdown)
+    if not table or not table.get("rows"):
+        return
+
+    ws = wb.create_sheet(sheet_title)
+    _write_header(ws, table["headers"])
+    ws.freeze_panes = "A2"
+    for line in table["rows"]:
+        row = ws.max_row + 1
+        for col, val in enumerate(line, 1):
+            cell = ws.cell(row=row, column=col, value=val)
+            cell.font = _CELL_FONT
+            cell.border = _THIN_BORDER
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+    _auto_width(ws)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -425,10 +450,15 @@ def generate_sdr_xlsx(markdown_content: str, sdr_name: str = "SDR") -> bytes:
 
     wb = Workbook()
 
+    _build_table_sheet(wb, "Executive Summary", parsed.executive_summary)
     _build_event_catalog(wb, parsed)
     _build_parameters(wb, parsed)
-    _build_destinations_matrix(wb, parsed)
+    _build_table_sheet(wb, "Conversion Audit", parsed.conversion_audit)
     _build_user_properties(wb, parsed)
+    _build_destinations_matrix(wb, parsed)
+    _build_table_sheet(wb, "Consent & Privacy", parsed.consent_and_privacy)
+    _build_table_sheet(wb, "Gap Register", parsed.gap_register)
+    _build_table_sheet(wb, "Remediation Roadmap", parsed.remediation_roadmap)
     _build_business_context(wb, parsed)
 
     # Write to bytes
