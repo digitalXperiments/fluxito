@@ -17,35 +17,25 @@ def _patch_db(db_session_factory):
 
 
 @pytest.mark.asyncio
-async def test_register_claims_passwordless_placeholder(_patch_db, db_session_factory):
-    """An invited placeholder (no password_hash) gets claimed, not orphaned."""
-    from sqlalchemy import select
-
+async def test_register_does_not_claim_passwordless_account(_patch_db, db_session_factory):
+    """A password-less existing account (Google user or invited stub) must NOT be
+    silently claimed by registration — that would be an account-takeover vector."""
     from app.auth.email_auth import authenticate_user, register_user
     from app.models.user import User
 
-    # Seed a placeholder like invite_member creates (no password, default provider).
+    # Seed a password-less row (auth_provider defaults to "google" via server_default).
     async with db_session_factory() as db:
         placeholder = User(email="invitee@example.com")
         db.add(placeholder)
-        await db.flush()
-        placeholder_id = placeholder.id
         await db.commit()
 
     user, error = await register_user("invitee@example.com", "Sup3rSecret!", "Invitee")
-    assert error is None
-    assert user is not None
-    # Same row claimed, not a new user
-    assert user.id == placeholder_id
+    assert user is None
+    assert error is not None  # rejected, not claimed
 
-    async with db_session_factory() as db:
-        rows = (await db.execute(select(User).where(User.email == "invitee@example.com"))).scalars().all()
-    assert len(rows) == 1
-
-    # And they can now log in with the chosen password
+    # The password was NOT set on the existing account.
     authed, auth_err = await authenticate_user("invitee@example.com", "Sup3rSecret!")
-    assert auth_err is None
-    assert authed.id == placeholder_id
+    assert authed is None
 
 
 @pytest.mark.asyncio
