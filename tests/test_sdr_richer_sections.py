@@ -90,3 +90,18 @@ def test_new_sections_parse_into_tables():
     assert gap["rows"][0][2] == "No primary conversion"
     roadmap = parse_markdown_table(parsed.remediation_roadmap)
     assert roadmap["headers"] == ["Phase", "Action", "Resolves", "Effort", "Impact", "Owner"]
+
+
+def test_unrelated_headings_not_misrouted():
+    md = (
+        "# X\n\n"
+        "## Key Findings\n\nsome prose\n\n---\n\n"
+        "## Technical Roadmap\n\nmore prose\n\n---\n\n"
+        "## Event Catalog\n\n### `e`\n\n*Status:* `planned`\n\n"
+        "**Business Purpose:** x\n\n**Triggers:**\n- Type: `click`\n"
+    )
+    parsed = parse_sdr_markdown(md)
+    # 'Key Findings' must NOT be captured as the structured Gap Register
+    assert parsed.gap_register is None
+    # 'Technical Roadmap' must NOT be captured as Remediation Roadmap
+    assert parsed.remediation_roadmap is None

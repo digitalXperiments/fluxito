@@ -169,9 +169,9 @@ def parse_sdr_markdown(markdown_text: str) -> ParsedSDR:
             result.destinations_matrix = body
         elif "consent" in heading_lower:
             result.consent_and_privacy = body
-        elif "gap register" in heading_lower or "findings" in heading_lower:
+        elif "gap register" in heading_lower:
             result.gap_register = body
-        elif "remediation roadmap" in heading_lower or "roadmap" in heading_lower:
+        elif "remediation roadmap" in heading_lower:
             result.remediation_roadmap = body
         elif "ownership" in heading_lower or "governance" in heading_lower:
             result.ownership = body
