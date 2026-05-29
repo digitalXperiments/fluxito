@@ -123,6 +123,9 @@
           <span class="t-flag ps-conn-status ps-conn-{{ c.status }}">{{ c.status | capitalize }}</span>
         </div>
         <div class="ps-conn-email">{{ c.google_email }}</div>
+        {% if c.connected_by_count and c.connected_by_count > 1 %}
+        <div class="ps-conn-email" style="color:var(--text-subtle);font-size:12px">Connected by {{ c.connected_by_count }} members</div>
+        {% endif %}
         {% if c.status == 'disconnected' %}
         <div class="ps-warn">
           The user who connected this platform was removed. An admin needs to reconnect.

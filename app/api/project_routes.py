@@ -72,6 +72,26 @@ async def _resolve_user(request: Request) -> dict | None:
     return None
 
 
+def dedupe_connections(rows: list[dict]) -> list[dict]:
+    """Collapse per-user connection rows into one card per (provider, email).
+
+    Migration 042 made connections per-user, so the same external account can
+    appear once per member. For display we show a single card; ``active`` wins
+    over ``disconnected`` and we surface how many members connected it.
+    """
+    by_key: dict[tuple, dict] = {}
+    for r in rows:
+        key = (r["provider"], r["google_email"])
+        card = by_key.get(key)
+        if card is None:
+            by_key[key] = {**r, "connected_by_count": 1}
+        else:
+            card["connected_by_count"] += 1
+            if r["status"] == "active":
+                card["status"] = "active"
+    return list(by_key.values())
+
+
 def get_active_project_id(request: Request) -> str | None:
     """Read the active project ID from the browser cookie.
 
@@ -365,7 +385,7 @@ async def project_settings_page(request: Request, slug: str):
                 OAuthConnection.is_active == True,
             )
         )
-        connections = [
+        raw_connections = [
             {
                 "id": str(c.id),
                 "provider": c.provider,
@@ -374,6 +394,7 @@ async def project_settings_page(request: Request, slug: str):
             }
             for c in conn_result.scalars().all()
         ]
+        connections = dedupe_connections(raw_connections)
 
     # Load email senders + Slack webhooks for the Notifications tab.
     # Owner/admin only — for member/viewer we pass empty lists so the
