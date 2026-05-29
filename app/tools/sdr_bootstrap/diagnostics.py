@@ -24,7 +24,7 @@ _SEV_ORDER = {CRITICAL: 0, HIGH: 1, MEDIUM: 2}
 # vertical without assuming ecommerce.
 _CONVERSION_HINTS = (
     ("purchase", "order", "checkout", "transaction", "buy"),
-    ("subscrib", "membership", "plan"),
+    ("subscri", "membership", "recurring", "plan"),  # subscribe / subscription / subscriber
     ("lead", "form", "demo", "quote", "contact", "signup", "sign_up", "register"),
     ("book", "reserv", "appointment"),
     ("donat", "pledge", "contribut"),
