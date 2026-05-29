@@ -1620,31 +1620,39 @@ async def google_data_callback(
                 status_code=401,
             )
 
-        # Create / update OAuthConnection — scoped to project
+        # Create / update OAuthConnection. The row is owned by the *project*
+        # and keyed by (project_id, provider, google_email) — the same tuple
+        # as the uq_project_provider_email unique constraint. We MUST look it
+        # up by that key, not by user_id: the same Google account reconnected
+        # under a different Fluxito user (e.g. a phantom row left by the old
+        # session-hijack bug) would otherwise miss the existing row and try
+        # to INSERT a duplicate, violating the constraint.
         existing_stmt = select(OAuthConnection).where(
-            OAuthConnection.user_id == user.id,
+            OAuthConnection.provider == "google",
             OAuthConnection.google_email == google_email,
+            OAuthConnection.project_id == project_id,
         )
-        if project_id:
-            existing_stmt = existing_stmt.where(OAuthConnection.project_id == project_id)
         result = await db.execute(existing_stmt)
         existing = result.scalar_one_or_none()
 
         encrypted_refresh = _encrypt(refresh_token)
 
         if existing:
+            # Re-authentication: the signed-in user becomes the new token
+            # owner for this project-scoped connection.
+            existing.user_id = user.id
+            existing.provider = "google"
             existing.refresh_token_encrypted = encrypted_refresh
             existing.access_token_encrypted = _encrypt(access_token)
             existing.scopes = state_data["scopes"]
             existing.connection_status = "active"
             existing.is_active = True
-            if project_id:
-                existing.project_id = project_id
             conn = existing
         else:
             conn = OAuthConnection(
                 user_id=user.id,
                 project_id=project_id,  # Scope to active project (None for legacy)
+                provider="google",
                 google_email=google_email,
                 access_token_encrypted=_encrypt(access_token),
                 refresh_token_encrypted=encrypted_refresh,

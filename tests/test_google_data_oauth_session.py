@@ -246,3 +246,129 @@ async def test_data_callback_does_not_switch_session(monkeypatch):
 
 async def _empty():
     return []
+
+
+@pytest.mark.asyncio
+async def test_data_callback_reuses_project_connection_owned_by_other_user(monkeypatch):
+    """
+    The connection record is owned by the *project*, keyed by
+    (project_id, provider, google_email). Reconnecting the same Google
+    account — even one whose existing row is owned by a *different* user
+    (e.g. a phantom row left over from the old hijack bug) — must UPDATE
+    that row (reassigning the token owner to the signed-in user) rather than
+    INSERT a duplicate and trip uq_project_provider_email.
+    """
+    redis = FakeRedis()
+    state_token = "state-token-456"
+    await redis.setex(
+        f"google_oauth_state:{state_token}",
+        600,
+        json.dumps(
+            {
+                "products": "ga4",
+                "scopes": ["openid", "email", "https://www.googleapis.com/auth/analytics.readonly"],
+                "user_id": USER_A,
+                "project_id": "pppppppp-pppp-4ppp-8ppp-pppppppppppp",
+                "base_url": "http://testserver",
+            }
+        ),
+    )
+
+    added = []
+    # Pre-existing connection row owned by a DIFFERENT (phantom) user.
+    existing_conn = SimpleNamespace(
+        id="cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        user_id="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        google_email=EMAIL_B,
+        provider="google",
+        project_id="pppppppp-pppp-4ppp-8ppp-pppppppppppp",
+    )
+
+    class FakeResult:
+        def __init__(self, val):
+            self._val = val
+
+        def scalar_one_or_none(self):
+            return self._val
+
+    class FakeSession:
+        def __init__(self):
+            self._calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def execute(self, stmt):
+            self._calls += 1
+            if self._calls == 1:
+                return FakeResult(SimpleNamespace(id=USER_A, email="me@example.com"))
+            if self._calls == 2:
+                return FakeResult(existing_conn)  # existing project connection
+            return FakeResult(None)
+
+        def add(self, obj):
+            added.append(obj)
+
+        async def flush(self):
+            pass
+
+        async def commit(self):
+            pass
+
+    monkeypatch.setattr(google_oauth_routes.app_state, "redis_client", redis)
+    monkeypatch.setattr(google_oauth_routes.app_state, "db_session_factory", lambda: FakeSession())
+    monkeypatch.setattr(
+        "app.auth.oauth_app_credentials.get_oauth_app_credentials", _fake_get_creds
+    )
+
+    class FakeResp:
+        def __init__(self, status, payload):
+            self.status_code = status
+            self._payload = payload
+            self.text = json.dumps(payload)
+
+        def json(self):
+            return self._payload
+
+    class FakeHttpClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, data=None, **kw):
+            return FakeResp(200, {"access_token": "at", "refresh_token": "rt"})
+
+        async def get(self, url, headers=None, **kw):
+            if "userinfo" in url:
+                return FakeResp(200, {"email": EMAIL_B, "name": "Account B"})
+            return FakeResp(404, {})
+
+    monkeypatch.setattr(google_oauth_routes.httpx, "AsyncClient", lambda *a, **k: FakeHttpClient())
+    monkeypatch.setattr(
+        google_oauth_routes.app_state,
+        "ga4_connector",
+        SimpleNamespace(list_all_properties_raw=lambda token: _empty()),
+    )
+
+    async def _noop(*a, **k):
+        return None
+
+    monkeypatch.setattr(google_oauth_routes, "invalidate_user_context_cache", _noop)
+    monkeypatch.setattr("app.notifications.create_notification", _noop)
+
+    request = SimpleNamespace(headers={"host": "testserver", "x-forwarded-proto": "http"})
+    resp = await google_oauth_routes.google_data_callback(
+        request, code="auth-code", state=state_token, error=None
+    )
+
+    assert resp.status_code in (302, 307)
+    # No new OAuthConnection inserted — the existing project row was reused.
+    assert not [c for c in added if c.__class__.__name__ == "OAuthConnection"]
+    # The existing row was updated and its token owner reassigned to user A.
+    assert str(existing_conn.user_id) == USER_A
+    assert existing_conn.connection_status == "active"
