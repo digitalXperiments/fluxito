@@ -139,6 +139,49 @@ async def test_download_source_xlsx_endpoint(_patch_db, db_session_factory):
 
 
 @pytest.mark.asyncio
+async def test_download_source_xlsx_sanitizes_filename(_patch_db, db_session_factory):
+    import httpx
+    from httpx import ASGITransport
+    from unittest.mock import AsyncMock, patch
+
+    from app.auth.csrf import _generate_csrf_token
+    from app.main import app
+    from app.models.sdr import SDR
+    from app.tools.sdr_tools import _store_source_xlsx
+
+    pid = uuid.uuid4()
+    uid = await _seed_user_project(db_session_factory, pid)
+    async with db_session_factory() as db:
+        sdr = SDR(project_id=pid, name="X", markdown_content="# X", created_by=uid)
+        _store_source_xlsx(sdr, _xlsx_b64(), 'ev"il\nname.xlsx')
+        db.add(sdr)
+        await db.commit()
+
+    csrf = _generate_csrf_token()
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver",
+        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+    ) as client:
+        with patch(
+            "app.api.sdr_routes._require_user_and_project",
+            new=AsyncMock(return_value=(None, None, pid)),
+        ):
+            resp = await client.get(f"/api/projects/{pid}/solution-design/source.xlsx")
+    assert resp.status_code == 200, resp.text
+    cd = resp.headers.get("content-disposition", "")
+    # Extract the filename value between the surrounding double-quotes.
+    # Header looks like: attachment; filename="<value>"
+    assert "filename=" in cd
+    after_eq = cd.split("filename=", 1)[1]
+    # Strip the outer quotes to get the bare sanitized name.
+    inner = after_eq.strip('"')
+    # The sanitized name must contain no embedded double-quote or newline.
+    assert '"' not in inner, f"Embedded quote leaked into Content-Disposition: {cd!r}"
+    assert "\n" not in inner, f"Newline leaked into Content-Disposition: {cd!r}"
+    assert "\r" not in inner, f"CR leaked into Content-Disposition: {cd!r}"
+
+
+@pytest.mark.asyncio
 async def test_download_source_xlsx_404_when_none(_patch_db, db_session_factory):
     import httpx
     from httpx import ASGITransport
