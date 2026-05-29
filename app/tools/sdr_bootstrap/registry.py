@@ -114,21 +114,24 @@ class GA4DataSource:
                 errors.append(f"Property {prop_id} custom dimensions: {exc}")
 
         # Event volumes — the signal that proves "configured but never fires".
+        # Two windows so the diagnostic can spot "recently stopped" (30d > 0, 7d == 0).
         event_volumes: dict[str, int] = {}
-        for prop in getattr(project_ctx, "ga4_properties", []) or []:
-            prop_id = prop.get("property_id") or prop.get("id")
-            if not prop_id:
-                continue
-            try:
-                vol = await asyncio.wait_for(
-                    ga4.list_events(conn_id, prop_id, "30daysAgo", "today"), timeout=timeout_s
-                )
-                for ev in vol.get("events", []):
-                    name = ev.get("event_name")
-                    if name:
-                        event_volumes[name] = event_volumes.get(name, 0) + int(ev.get("event_count", 0))
-            except Exception as exc:
-                errors.append(f"Property {prop_id} event volumes: {exc}")
+        event_volumes_recent: dict[str, int] = {}
+        for window, sink in (("30daysAgo", event_volumes), ("7daysAgo", event_volumes_recent)):
+            for prop in getattr(project_ctx, "ga4_properties", []) or []:
+                prop_id = prop.get("property_id") or prop.get("id")
+                if not prop_id:
+                    continue
+                try:
+                    vol = await asyncio.wait_for(
+                        ga4.list_events(conn_id, prop_id, window, "today"), timeout=timeout_s
+                    )
+                    for ev in vol.get("events", []):
+                        name = ev.get("event_name")
+                        if name:
+                            sink[name] = sink.get(name, 0) + int(ev.get("event_count", 0))
+                except Exception as exc:
+                    errors.append(f"Property {prop_id} event volumes ({window}): {exc}")
 
         status = "partial" if errors and events else "failed" if errors and not events else "success"
         return _scan_result(
@@ -142,6 +145,7 @@ class GA4DataSource:
                 "custom_dimensions": custom_dims,
                 "conversion_events": conversions,
                 "event_volumes": event_volumes,
+                "event_volumes_recent": event_volumes_recent,
             },
         )
 

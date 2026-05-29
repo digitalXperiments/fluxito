@@ -72,11 +72,18 @@ def diagnose(
         configured.update(e["name"] for e in s.get("events", []) if e.get("name"))
 
     volumes: dict[str, int] = {}
+    recent_volumes: dict[str, int] = {}
     has_volume = False
+    has_recent = False
     for s in _scans_for_role(scans, ROLE_EVENT_VOLUME):
         has_volume = True
-        for name, cnt in ((s.get("raw_metadata", {}) or {}).get("event_volumes") or {}).items():
+        meta = s.get("raw_metadata", {}) or {}
+        for name, cnt in (meta.get("event_volumes") or {}).items():
             volumes[name] = max(volumes.get(name, 0), int(cnt))
+        if "event_volumes_recent" in meta:
+            has_recent = True
+            for name, cnt in (meta.get("event_volumes_recent") or {}).items():
+                recent_volumes[name] = max(recent_volumes.get(name, 0), int(cnt))
 
     conversion_events: set[str] = set()
     has_conv = False
@@ -106,14 +113,34 @@ def diagnose(
             )
 
     if has_volume:
+        max_volume = max(volumes.values(), default=0)
+        low_floor = max(5, int(0.005 * max_volume))  # peer-relative "suspiciously low"
         for name in sorted(configured):
-            if volumes.get(name, 0) == 0:
+            vol = volumes.get(name, 0)
+            if vol == 0:
                 findings.append(
                     _f("tag_configured_but_no_data", CRITICAL if is_primary(name) else MEDIUM,
                        f"`{name}` is configured to collect but shows 0 events in the analytics platform.",
                        "configured in tag layer; 0 events in last window", [name],
                        "Verify the site/app actually fires this event (dataLayer push / SDK call).",
                        "website")
+                )
+                continue
+            # Recently stopped: had volume over 30d but nothing in the recent window.
+            if has_recent and recent_volumes.get(name, 0) == 0:
+                findings.append(
+                    _f("event_recently_stopped", CRITICAL if is_primary(name) else MEDIUM,
+                       f"`{name}` fired over the last 30 days but 0 times in the recent window — it likely broke recently.",
+                       f"30d: {vol}; recent: 0", [name],
+                       "Check for a recent site/app or tag deploy that stopped this event.", "website")
+                )
+            # Suspiciously low volume for an important event (e.g. fires ~monthly).
+            elif (is_primary(name) or name in conversion_events) and 0 < vol < low_floor:
+                findings.append(
+                    _f("low_volume", HIGH if is_primary(name) else MEDIUM,
+                       f"`{name}` fires far below peers ({vol} in 30d vs peak {max_volume}) — likely partially broken.",
+                       f"30d: {vol}; floor: {low_floor}", [name],
+                       "Verify this event fires on every relevant interaction, not just edge cases.", "website")
                 )
         known = configured | set(current_event_names or [])
         for name, cnt in sorted(volumes.items(), key=lambda kv: -kv[1]):

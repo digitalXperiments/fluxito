@@ -59,13 +59,18 @@ def test_ga4_scan_captures_event_volumes(monkeypatch):
 # ── diagnostic engine ───────────────────────────────────────────────────────
 
 
-def _scan(source, roles, events=None, volumes=None, status="success", errors=None):
+def _scan(source, roles, events=None, volumes=None, recent=None, status="success", errors=None):
+    meta = {}
+    if volumes is not None:
+        meta["event_volumes"] = volumes
+    if recent is not None:
+        meta["event_volumes_recent"] = recent
     return {
         "source": source,
         "status": status,
         "roles": list(roles),
         "events": [{"name": n} for n in (events or [])],
-        "raw_metadata": ({"event_volumes": volumes} if volumes is not None else {}),
+        "raw_metadata": meta,
         "errors": errors or [],
     }
 
@@ -112,6 +117,37 @@ def test_diagnose_reports_connector_errors_and_unfilled_roles():
     assert any(f["type"] == "connector_error" for f in out["findings"])
     assert "tag_inventory" in out["readiness"]["unfilled_roles"]
     assert "event_volume" in out["readiness"]["unfilled_roles"]
+
+
+def test_diagnose_flags_event_recently_stopped():
+    from app.tools.sdr_bootstrap.diagnostics import diagnose
+
+    scans = {
+        "gtm": _scan("gtm", ["tag_inventory"], events=["purchase"]),
+        "ga4": _scan(
+            "ga4", ["event_volume"],
+            volumes={"purchase": 1500}, recent={"purchase": 0},
+        ),
+    }
+    out = diagnose(scans, {"conversion_definition": "purchase"})
+    rs = next((f for f in out["findings"] if f["type"] == "event_recently_stopped"), None)
+    assert rs is not None and rs["severity"] == "critical"
+
+
+def test_diagnose_flags_low_volume_for_important_event():
+    from app.tools.sdr_bootstrap.diagnostics import diagnose
+
+    scans = {
+        "gtm": _scan("gtm", ["tag_inventory"], events=["purchase", "page_view"]),
+        "ga4": _scan(
+            "ga4", ["event_volume"],
+            volumes={"page_view": 100000, "purchase": 3},
+            recent={"page_view": 9000, "purchase": 1},
+        ),
+    }
+    out = diagnose(scans, {"conversion_definition": "purchase"})
+    lv = next((f for f in out["findings"] if f["type"] == "low_volume"), None)
+    assert lv is not None and "purchase" in lv["affected_events"]
 
 
 def test_diagnose_degrades_without_volume_provider():
