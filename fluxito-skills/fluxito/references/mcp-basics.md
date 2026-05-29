@@ -1,10 +1,10 @@
-# Fluxito / Metrix Mind MCP — basics (shared)
+# Fluxito MCP — basics (shared)
 
 Shared knowledge for every Fluxito feature. Keep this lean; feature methodology
 lives in the feature's own reference.
 
 ## Connection + project
-- The user connects the **Fluxito / Metrix Mind MCP** connector in their AI tool
+- The user connects the **Fluxito MCP** connector in their AI tool
   and must have an **active project** selected.
 - `tracking_plan(action="list_sources")` confirms what's connected and surfaces
   `connected_but_unsupported` sources (connected platforms the scanner can't read

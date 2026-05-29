@@ -1,7 +1,7 @@
 ---
 name: fluxito
 description: >-
-  Use for any task that operates the Fluxito / Metrix Mind MCP: creating,
+  Use for any task that operates the Fluxito MCP: creating,
   auditing, refreshing, or diagnosing a Solution Design Reference (SDR / tracking
   plan) for ANY business and ANY analytics stack. Triggers: "create/build a
   tracking plan or SDR", "audit my tracking", "why aren't my conversions firing",
@@ -12,11 +12,11 @@ description: >-
 
 # Fluxito
 
-The operating manual for the Fluxito / Metrix Mind MCP. The MCP gives you hands
+The operating manual for the Fluxito MCP. The MCP gives you hands
 and facts; this skill gives you the method. Load only the reference you need.
 
 ## Prerequisite (always check first)
-The Fluxito / Metrix Mind MCP must be connected with an active project. See
+The Fluxito MCP must be connected with an active project. See
 `references/mcp-basics.md`. If tool calls fail or no project is active, tell the
 user to connect the MCP and pick a project before continuing.
 

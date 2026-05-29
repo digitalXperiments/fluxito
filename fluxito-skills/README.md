@@ -1,7 +1,7 @@
 # Fluxito Skills
 
 A portable [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills)
-that teaches an AI agent how to operate the **Fluxito / Metrix Mind MCP** well.
+that teaches an AI agent how to operate the **Fluxito MCP** well.
 The MCP gives the agent hands + facts; the skill gives it the operating manual.
 
 It is **one hub skill** (`fluxito`) with per-feature references loaded on demand —
@@ -10,7 +10,7 @@ features (audits, dashboards) get their own `references/<feature>/` folder.
 
 ## Prerequisite
 
-Connect the **Fluxito / Metrix Mind MCP** connector in your tool and select an
+Connect the **Fluxito MCP** connector in your tool and select an
 active project. The skill drives the MCP's `tracking_plan` tool; without the
 connector it has nothing to operate.
 
