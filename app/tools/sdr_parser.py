@@ -80,12 +80,16 @@ class ParsedSDR:
     last_approved_at: str | None = None
 
     # Sections (raw markdown)
+    executive_summary: str | None = None
     business_context: str | None = None
     user_journeys: str | None = None
     data_layer_schema: str | None = None
     user_properties: str | None = None
     destinations_matrix: str | None = None
     consent_and_privacy: str | None = None
+    gap_register: str | None = None
+    conversion_audit: str | None = None
+    remediation_roadmap: str | None = None
     ownership: str | None = None
     changelog: str | None = None
 
@@ -147,7 +151,9 @@ def parse_sdr_markdown(markdown_text: str) -> ParsedSDR:
     # Map sections
     for heading, body in sections.items():
         heading_lower = heading.lower().strip()
-        if "business context" in heading_lower:
+        if "executive summary" in heading_lower:
+            result.executive_summary = body
+        elif "business context" in heading_lower:
             result.business_context = body
         elif "user journeys" in heading_lower or "user journey" in heading_lower:
             result.user_journeys = body
@@ -155,12 +161,18 @@ def parse_sdr_markdown(markdown_text: str) -> ParsedSDR:
             result.data_layer_schema = body
         elif "event catalog" in heading_lower:
             result.events = _parse_event_catalog(body)
+        elif "conversion audit" in heading_lower:
+            result.conversion_audit = body
         elif "user properties" in heading_lower or "custom dimensions" in heading_lower:
             result.user_properties = body
         elif "destinations matrix" in heading_lower or "destination matrix" in heading_lower:
             result.destinations_matrix = body
         elif "consent" in heading_lower:
             result.consent_and_privacy = body
+        elif "gap register" in heading_lower or "findings" in heading_lower:
+            result.gap_register = body
+        elif "remediation roadmap" in heading_lower or "roadmap" in heading_lower:
+            result.remediation_roadmap = body
         elif "ownership" in heading_lower or "governance" in heading_lower:
             result.ownership = body
         elif "changelog" in heading_lower:
