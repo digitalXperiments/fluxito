@@ -7,742 +7,100 @@
   <div class="page-head">
     <div>
       <span class="label">Admin</span>
-      <h1>Platform <em class="serif-italic">overview.</em></h1>
-      <p>
-        Users, projects, usage &amp; platform health.
-        {% if user.admin_role == 'super_admin' %}
-          <span class="t-flag" style="margin-left:8px;background:var(--ink);color:var(--bg);">Super Admin</span>
-        {% else %}
-          <span class="t-flag" style="margin-left:8px;">Admin</span>
-        {% endif %}
-      </p>
+      <h1>Instance <em class="serif-italic">administration.</em></h1>
+      <p>Manage users and access requests. <span class="t-flag" style="margin-left:8px;background:var(--ink);color:var(--bg);">Super Admin</span></p>
     </div>
   </div>
 
-  {# ── Stat cards ────────────────────────────────────────────────── #}
-  {% if stats %}
-  <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-    <div class="stat-card">
-      <div class="stat-label">Total users</div>
-      <div class="stat-value">{{ stats.total_users | fmt_number }}</div>
-      <div class="stat-sub">{{ stats.active_users | fmt_number }} active</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Projects</div>
-      <div class="stat-value">{{ stats.total_projects | fmt_number }}</div>
-      <div class="stat-sub">{{ stats.pro_projects | fmt_number }} Pro · {{ stats.team_projects | fmt_number }} Team · {{ stats.free_projects | fmt_number }} Free</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">New users</div>
-      <div class="stat-value">{{ stats.new_30d | fmt_number }}</div>
-      <div class="stat-sub">30d · {{ stats.new_7d | fmt_number }} last 7d</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Tool calls (MTD)</div>
-      <div class="stat-value">{{ stats.tool_calls_mtd | fmt_number }}</div>
-      <div class="stat-sub">This month</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Connections</div>
-      <div class="stat-value">{{ stats.total_connections | fmt_number }}</div>
-      <div class="stat-sub">Active integrations</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">MCP sessions</div>
-      <div class="stat-value">{{ stats.active_sessions | fmt_number }}</div>
-      <div class="stat-sub">Currently active</div>
-    </div>
-  </div>
-  {% endif %}
-
-  {# ── Main tabs ─────────────────────────────────────────────────── #}
   <div class="tabs" style="margin-bottom:24px;">
-    <button class="tab is-active" data-tab="users" onclick="switchTab('users')">Users</button>
-    <button class="tab" data-tab="orgs" onclick="switchTab('orgs')">Projects</button>
-    <button class="tab" data-tab="audit" onclick="switchTab('audit')">Audit log</button>
-    <button class="tab" data-tab="announcements" onclick="switchTab('announcements')">Announcements</button>
-    <button class="tab" data-tab="observability" onclick="switchTab('observability')">Observability</button>
-    <button class="tab" data-tab="ratelimits" onclick="switchTab('ratelimits')">Rate limits</button>
-    {% if user.admin_role == 'super_admin' %}
-    <button class="tab" data-tab="system" onclick="switchTab('system')">System</button>
-    {% endif %}
+    <button class="tab is-active" data-tab="users" onclick="adminTab('users')">Users</button>
+    <button class="tab" data-tab="requests" onclick="adminTab('requests')">Access Requests</button>
   </div>
 
-  {# ══════════════════════════════════════════════════════════════════
-     Tab: USERS
-     ══════════════════════════════════════════════════════════════════ #}
-  <div class="tab-panel" id="panel-users">
-    <div class="row-between mb-4" style="flex-wrap:wrap;gap:12px;">
-      <div style="display:flex;gap:6px;">
-        <button class="btn btn-sm btn-primary" id="subAll" onclick="filterUserType('all')">All ({{ users|length }})</button>
-        <button class="btn btn-sm btn-ghost" id="subClient" onclick="filterUserType('client')">Clients ({{ users|selectattr('user_type','equalto','client')|list|length }})</button>
-        <button class="btn btn-sm btn-ghost" id="subTeam" onclick="filterUserType('team')">Team ({{ users|selectattr('user_type','equalto','team')|list|length }})</button>
-      </div>
-      <input type="search" class="input" id="userSearch" placeholder="Search by email or name…" oninput="searchUsers(this.value)" style="max-width:280px;"/>
-    </div>
+  <section data-panel="users">
+    <table class="ps-table"><thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Super-admin</th><th></th></tr></thead>
+      <tbody id="usersBody"><tr><td colspan="5">Loading…</td></tr></tbody>
+    </table>
+  </section>
 
-    <div class="card">
-      <div class="table-wrap">
-        <table id="userTable">
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Projects</th>
-              <th>Platform role</th>
-              <th>Usage (MTD)</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for u in users %}
-          <tr data-email="{{ u.email|lower }}" data-name="{{ (u.display_name or '')|lower }}" data-type="{{ u.user_type }}" data-id="{{ u.id }}">
-            <td data-label="User">
-              <div><strong>{{ u.email }}</strong></div>
-              {% if u.display_name %}<div class="text-muted" style="font-size:12px;">{{ u.display_name }}</div>{% endif %}
-            </td>
-            <td data-label="Projects">
-              {% if u.projects %}
-                {% for p in u.projects %}
-                <div style="display:flex;align-items:center;gap:6px;{% if not loop.first %}margin-top:4px;{% endif %}">
-                  <span style="font-size:13px;">{{ p.project_name }}</span>
-                  {% if p.project_plan == 'pro' %}
-                    <span class="badge badge-accent" style="font-size:9px;padding:1px 5px;">Pro</span>
-                  {% elif p.project_plan == 'team' %}
-                    <span class="badge badge-info" style="font-size:9px;padding:1px 5px;">Team</span>
-                  {% else %}
-                    <span class="badge" style="font-size:9px;padding:1px 5px;">Free</span>
-                  {% endif %}
-                  <span class="text-muted" style="font-size:11px;">{{ p.project_role }}</span>
-                </div>
-                {% endfor %}
-              {% else %}
-                <span class="text-muted">No projects</span>
-              {% endif %}
-            </td>
-            <td data-label="Platform role">
-              {% if u.admin_role == 'super_admin' %}
-                <span class="badge badge-warning">Super admin</span>
-              {% elif u.admin_role == 'admin' %}
-                <span class="badge badge-accent">Admin</span>
-              {% else %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-            <td data-label="Usage (MTD)">
-              <span>{{ u.usage_mtd | fmt_number }}</span>
-            </td>
-            <td data-label="Status">
-              {% if u.is_active %}
-                <span class="badge badge-success badge-dot">Active</span>
-              {% else %}
-                <span class="badge badge-danger badge-dot">Disabled</span>
-              {% endif %}
-            </td>
-            <td class="text-right admin-manage-cell">
-              <button class="btn btn-ghost btn-sm" onclick="openUserMenu('{{ u.id }}', '{{ u.email }}', '{{ u.admin_role }}', {{ 'true' if u.is_active else 'false' }})">
-                Manage ▾
-              </button>
-            </td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="text-muted" style="font-size:12px;margin-top:8px;" id="userCount">Showing {{ users|length }} users</div>
-  </div>
-
-  {# ══════════════════════════════════════════════════════════════════
-     Tab: PROJECTS — plan management lives here
-     ══════════════════════════════════════════════════════════════════ #}
-  <div class="tab-panel" id="panel-orgs" style="display:none;">
-    <div class="row-between mb-4">
-      <h2>Projects</h2>
-    </div>
-
-    {% if projects %}
-    <div class="card">
-      <div class="table-wrap">
-        <table id="projectTable">
-          <thead>
-            <tr>
-              <th>Project</th>
-              <th>Owner</th>
-              <th>Plan</th>
-              <th>Members</th>
-              <th>Calls (MTD)</th>
-              <th>Connections</th>
-              <th>Dashboards</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for p in projects %}
-          <tr>
-            <td data-label="Project">
-              <div><strong>{{ p.name }}</strong></div>
-              <div class="text-muted" style="font-size:11px;font-family:var(--font-mono);">{{ p.slug }}</div>
-            </td>
-            <td data-label="Owner">{{ p.owner_email }}</td>
-            <td data-label="Plan">
-              {% if p.plan == 'pro' %}
-                <span class="badge badge-accent">PRO</span>
-              {% elif p.plan == 'team' %}
-                <span class="badge badge-info">TEAM</span>
-              {% else %}
-                <span class="badge">FREE</span>
-              {% endif %}
-            </td>
-            <td data-label="Members">{{ p.member_count }}</td>
-            <td data-label="Calls (MTD)">{{ p.tool_calls_mtd | fmt_number }}</td>
-            <td data-label="Connections">{{ p.connections }}</td>
-            <td data-label="Dashboards">{{ p.dashboards }}</td>
-            <td data-label="Status">
-              {% if p.is_active %}
-                <span class="badge badge-success badge-dot">Active</span>
-              {% else %}
-                <span class="badge badge-danger badge-dot">Inactive</span>
-              {% endif %}
-            </td>
-            <td data-label="Created" class="text-muted">{{ p.created_at | fmt_date }}</td>
-            <td class="text-right admin-manage-cell">
-              <button class="btn btn-ghost btn-sm" onclick="openProjectMenu('{{ p.id }}', '{{ p.name }}', '{{ p.plan }}')">
-                Manage ▾
-              </button>
-            </td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    {% else %}
-    <div class="card">
-      <div class="card-body" style="text-align:center;padding:40px;color:var(--text-muted);">
-        No projects yet.
-      </div>
-    </div>
-    {% endif %}
-  </div>
-
-  {# ══════════════════════════════════════════════════════════════════
-     Tab: AUDIT LOG
-     ══════════════════════════════════════════════════════════════════ #}
-  <div class="tab-panel" id="panel-audit" style="display:none;">
-    <div class="row-between mb-4">
-      <h2>Audit log</h2>
-      <input type="search" class="input" placeholder="Filter by action…" oninput="filterAudit(this.value)" style="max-width:260px;"/>
-    </div>
-    <div class="card">
-      <div class="table-wrap">
-        <table id="auditTable">
-          <thead>
-            <tr><th>Time</th><th>Admin</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th></tr>
-          </thead>
-          <tbody>
-          {% if audit_logs %}
-            {% for log in audit_logs %}
-            <tr data-action="{{ log.action|lower }}">
-              <td data-label="Time" class="text-muted" style="white-space:nowrap;">{{ log.created_at | fmt_datetime }}</td>
-              <td data-label="Admin">{{ log.admin_email }}</td>
-              <td data-label="Action"><span class="badge">{{ log.action }}</span></td>
-              <td data-label="Target">{{ log.target_email }}</td>
-              <td data-label="Details" class="text-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ log.details }}">
-                {% if log.details %}{{ log.details }}{% else %}—{% endif %}
-              </td>
-              <td data-label="IP" class="text-muted" style="font-family:var(--font-mono);font-size:11px;">{{ log.ip_address or '—' }}</td>
-            </tr>
-            {% endfor %}
-          {% else %}
-            <tr><td colspan="6" class="text-muted" style="text-align:center;padding:32px;">No audit entries yet.</td></tr>
-          {% endif %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  {# ══════════════════════════════════════════════════════════════════
-     Tab: ANNOUNCEMENTS
-     ══════════════════════════════════════════════════════════════════ #}
-  <div class="tab-panel" id="panel-announcements" style="display:none;">
-    <div class="row-between mb-4">
-      <h2>Announcements</h2>
-      {% if user.admin_role == 'super_admin' %}
-      <button class="btn btn-primary btn-sm" onclick="createAnnouncement()">New announcement</button>
-      {% endif %}
-    </div>
-    {% if announcements %}
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      {% for a in announcements %}
-      <div class="card" style="border-left:3px solid {{ 'var(--danger)' if a.severity == 'critical' else ('var(--warning)' if a.severity == 'warning' else 'var(--accent)') }};">
-        <div class="card-body" style="padding:16px 20px;">
-          <div class="row-between" style="gap:12px;">
-            <div style="flex:1;min-width:0;">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
-                <strong>{{ a.title }}</strong>
-                <span class="badge {{ 'badge-danger' if a.severity == 'critical' else ('badge-warning' if a.severity == 'warning' else 'badge-info') }}">{{ a.severity }}</span>
-                {% if not a.is_active %}<span class="badge">Inactive</span>{% endif %}
-                <span class="badge">{{ a.target_tier }}</span>
-              </div>
-              <p class="text-muted" style="margin:0;font-size:13px;">{{ a.body }}</p>
-              <div class="text-muted" style="font-size:11px;margin-top:6px;">Created {{ a.created_at | fmt_datetime }}{% if a.expires_at %} · Expires {{ a.expires_at | fmt_datetime }}{% endif %}</div>
-            </div>
-            {% if user.admin_role == 'super_admin' %}
-            <div style="display:flex;gap:6px;flex-shrink:0;">
-              <button class="btn btn-ghost btn-sm" onclick="toggleAnnouncement('{{ a.id }}', {{ 'false' if a.is_active else 'true' }})">{{ 'Deactivate' if a.is_active else 'Activate' }}</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteAnnouncement('{{ a.id }}')">Delete</button>
-            </div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--text-muted);">No announcements.</div></div>
-    {% endif %}
-  </div>
-
-  {# ══════════════════════════════════════════════════════════════════
-     Tab: SYSTEM (super_admin only)
-     ══════════════════════════════════════════════════════════════════ #}
-  {% if user.admin_role == 'super_admin' %}
-  <div class="tab-panel" id="panel-system" style="display:none;">
-    <h2 class="mb-4">System operations</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;">
-      <div class="card">
-        <div class="card-header"><div class="card-title">Cache management</div></div>
-        <div class="card-body">
-          <p class="text-muted" style="margin-bottom:16px;font-size:13px;">Flush Redis caches when users report stale data.</p>
-          <div style="display:flex;flex-direction:column;gap:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="flushCache('plans')">Flush plan caches</button>
-            <button class="btn btn-secondary btn-sm" onclick="flushCache('usage')">Flush usage counters</button>
-            <button class="btn btn-secondary btn-sm" onclick="flushCache('sessions')">Flush session caches</button>
-            <button class="btn btn-danger btn-sm" onclick="flushCache('all')">Flush all caches</button>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><div class="card-title">Tool usage (this month)</div></div>
-        <div class="card-body" id="toolUsageBody">
-          <button class="btn btn-secondary btn-sm" onclick="loadToolUsage()">Load breakdown</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><div class="card-title">Quick actions</div></div>
-        <div class="card-body">
-          <div style="display:flex;flex-direction:column;gap:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="refreshStats()">Refresh stats</button>
-            <a href="/api-docs" target="_blank" class="btn btn-secondary btn-sm" style="text-align:center;">API docs</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  {# ══════════════════════════════════════════════════════════════════
-     Tab: OBSERVABILITY
-     ══════════════════════════════════════════════════════════════════ #}
-  <div class="tab-panel" id="panel-observability" style="display:none;">
-    <div class="row-between mb-4">
-      <h2>Observability</h2>
-      <button class="btn btn-secondary btn-sm" onclick="loadObservability()">Refresh</button>
-    </div>
-
-    <div id="obsContent">
-      <div class="card"><div class="card-body" style="text-align:center;padding:40px;">
-        <button class="btn btn-primary" onclick="loadObservability()">Load metrics</button>
-      </div></div>
-    </div>
-  </div>
-
-  {# ══════════════════════════════════════════════════════════════════
-     Tab: RATE LIMITS
-     ══════════════════════════════════════════════════════════════════ #}
-  <div class="tab-panel" id="panel-ratelimits" style="display:none;">
-    <div class="row-between mb-4">
-      <h2>Rate limits</h2>
-      <p class="text-muted" style="font-size:13px;">Per-user request limits by plan tier. Changes take effect within 60 seconds.</p>
-    </div>
-
-    <div id="rlContent">
-      <div class="card"><div class="card-body" style="text-align:center;padding:40px;">
-        <button class="btn primary" onclick="loadRateLimits()">Load current limits</button>
-      </div></div>
-    </div>
-  </div>
-
-</div>
-
-{# ── User action modal ──────────────────────────────────────────── #}
-<div id="userModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);" onclick="if(event.target===this)closeModal('userModal')">
-  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:28px;width:420px;max-width:90vw;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg);">
-    <h3 style="margin-bottom:4px;" id="modalTitle">Manage user</h3>
-    <p class="text-muted" style="font-size:13px;margin-bottom:20px;" id="modalEmail"></p>
-    <div id="modalActions" style="display:flex;flex-direction:column;gap:8px;"></div>
-    <div style="margin-top:16px;text-align:right;">
-      <button class="btn btn-ghost btn-sm" onclick="closeModal('userModal')">Cancel</button>
-    </div>
-  </div>
-</div>
-
-{# ── Project action modal ────────────────────────────────────────── #}
-<div id="projectModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);" onclick="if(event.target===this)closeModal('projectModal')">
-  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:28px;width:420px;max-width:90vw;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg);">
-    <h3 style="margin-bottom:4px;" id="projModalTitle">Manage project</h3>
-    <p class="text-muted" style="font-size:13px;margin-bottom:20px;" id="projModalName"></p>
-    <div id="projModalActions" style="display:flex;flex-direction:column;gap:8px;"></div>
-    <div style="margin-top:16px;text-align:right;">
-      <button class="btn btn-ghost btn-sm" onclick="closeModal('projectModal')">Cancel</button>
-    </div>
-  </div>
+  <section data-panel="requests" style="display:none">
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <input type="checkbox" id="gateToggle" onchange="toggleGate(this.checked)">
+      Require access approval (gate open sign-up)
+    </label>
+    <div id="reqMsg" class="ps-msg" style="display:none"></div>
+    <table class="ps-table"><thead><tr><th>Name</th><th>Email</th><th>Use case</th><th></th></tr></thead>
+      <tbody id="reqBody"><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+  </section>
 </main>
 
+<style>
+.ps-msg {
+  padding: 8px 14px; border-radius: var(--r-m);
+  font-size: 12.5px; line-height: 1.5;
+  display: inline-block; margin-bottom: 16px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-2); color: var(--ink-soft);
+}
+.ps-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.ps-table thead tr { border-bottom: 1px solid var(--line); }
+.ps-table th {
+  text-align: left; padding: 14px 18px;
+  font-weight: 600; font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); font-family: var(--mono);
+}
+.ps-table tbody tr { border-bottom: 1px solid var(--line-2); }
+.ps-table tbody tr:last-child { border-bottom: none; }
+.ps-table td { padding: 14px 18px; vertical-align: middle; }
+.btn.sm.danger-outline { border-color: var(--red, crimson); color: var(--red, crimson); }
+</style>
 
 <script>
-const isSuperAdmin = {{ 'true' if user.admin_role == 'super_admin' else 'false' }};
-let _currentFilter = 'all';
-
-/* ── Tab switching ─────────────────────────────────────────────── */
-function switchTab(tab) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
-  document.querySelectorAll('.tabs > .tab').forEach(t => t.classList.remove('is-active'));
-  const panel = document.getElementById('panel-' + tab);
-  if (panel) panel.style.display = '';
-  document.querySelector('.tabs > [data-tab="'+tab+'"]')?.classList.add('is-active');
+function adminTab(t){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('is-active', b.dataset.tab===t));
+  document.querySelectorAll('[data-panel]').forEach(p=>p.style.display = p.dataset.panel===t ? '' : 'none');
 }
-
-/* ── User sub-tabs (client / team / all) ───────────────────────── */
-function filterUserType(type) {
-  _currentFilter = type;
-  const searchVal = document.getElementById('userSearch').value.trim().toLowerCase();
-  let count = 0;
-  document.querySelectorAll('#userTable tbody tr').forEach(tr => {
-    const matchesType = type === 'all' || tr.dataset.type === type;
-    const matchesSearch = !searchVal || tr.dataset.email.includes(searchVal) || (tr.dataset.name || '').includes(searchVal);
-    const show = matchesType && matchesSearch;
-    tr.style.display = show ? '' : 'none';
-    if (show) count++;
-  });
-  document.getElementById('userCount').textContent = 'Showing ' + count + ' users';
-  document.getElementById('subAll').className = 'btn btn-sm ' + (type === 'all' ? 'btn-primary' : 'btn-ghost');
-  document.getElementById('subClient').className = 'btn btn-sm ' + (type === 'client' ? 'btn-primary' : 'btn-ghost');
-  document.getElementById('subTeam').className = 'btn btn-sm ' + (type === 'team' ? 'btn-primary' : 'btn-ghost');
-}
-
-function searchUsers(q) {
-  filterUserType(_currentFilter);
-}
-
-/* ── Audit filter ──────────────────────────────────────────────── */
-function filterAudit(q) {
-  q = q.trim().toLowerCase();
-  document.querySelectorAll('#auditTable tbody tr').forEach(tr => {
-    tr.style.display = (tr.dataset.action || '').includes(q) ? '' : 'none';
+async function api(url, opts){ const r = await fetch(url, opts); const d = await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.detail||d.error||d.message||'Failed'); return d; }
+async function loadUsers(){
+  const {users} = await api('/api/admin/users');
+  const tbody = document.getElementById('usersBody'); tbody.innerHTML='';
+  users.forEach(u=>{
+    const tr=document.createElement('tr');
+    [u.email, u.display_name||'', u.is_active?'Active':'Inactive', u.is_superadmin?'Yes':'No'].forEach(v=>{const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);});
+    const act=document.createElement('td'); act.style.textAlign='right';
+    const b1=document.createElement('button'); b1.className='btn sm'; b1.textContent=u.is_active?'Deactivate':'Activate'; b1.onclick=()=>setActive(u.id,!u.is_active);
+    const b2=document.createElement('button'); b2.className='btn sm'; b2.style.marginLeft='6px'; b2.textContent=u.is_superadmin?'Revoke admin':'Make admin'; b2.onclick=()=>setSuper(u.id,!u.is_superadmin);
+    act.appendChild(b1); act.appendChild(b2); tr.appendChild(act); tbody.appendChild(tr);
   });
 }
-
-/* ── Modal helpers ─────────────────────────────────────────────── */
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-
-function sectionLabel(text) {
-  const d = document.createElement('div');
-  d.style.cssText = 'font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-top:8px;';
-  d.textContent = text;
-  return d;
-}
-
-function btn(label, onClick, cls) {
-  const b = document.createElement('button');
-  b.className = 'btn btn-sm ' + cls;
-  b.style.width = '100%';
-  b.textContent = label;
-  b.onclick = onClick;
-  return b;
-}
-
-/* ── User management modal (no plan — plans live on projects) ──── */
-function openUserMenu(id, email, role, isActive) {
-  document.getElementById('modalTitle').textContent = 'Manage user';
-  document.getElementById('modalEmail').textContent = email;
-  const acts = document.getElementById('modalActions');
-  acts.innerHTML = '';
-
-  // Quota
-  acts.appendChild(sectionLabel('Usage'));
-  acts.appendChild(btn('Reset monthly usage', () => resetQuota(id), 'btn-secondary'));
-
-  // Account status
-  acts.appendChild(sectionLabel('Account'));
-  if (isActive) acts.appendChild(btn('Deactivate account', () => toggleActive(id, false), 'btn-ghost'));
-  else acts.appendChild(btn('Activate account', () => toggleActive(id, true), 'btn-secondary'));
-
-  // Platform admin role (super_admin only)
-  if (isSuperAdmin) {
-    acts.appendChild(sectionLabel('Platform admin'));
-    if (role !== 'super_admin') acts.appendChild(btn('Grant Super Admin', () => setRole(id, 'super_admin'), 'btn-secondary'));
-    if (role !== 'admin') acts.appendChild(btn('Grant Admin', () => setRole(id, 'admin'), 'btn-secondary'));
-    if (role !== 'user') acts.appendChild(btn('Remove admin access', () => setRole(id, 'user'), 'btn-ghost'));
-    acts.appendChild(sectionLabel('Danger zone'));
-    acts.appendChild(btn('Delete user permanently', () => deleteUser(id), 'btn-danger'));
-  }
-
-  document.getElementById('userModal').style.display = '';
-}
-
-/* ── Project management modal (plan changes live here) ─────────── */
-function openProjectMenu(id, name, plan) {
-  document.getElementById('projModalTitle').textContent = 'Manage project';
-  document.getElementById('projModalName').textContent = name;
-  const acts = document.getElementById('projModalActions');
-  acts.innerHTML = '';
-
-  // Plan management
-  acts.appendChild(sectionLabel('Plan'));
-  if (plan !== 'pro') acts.appendChild(btn('Upgrade to Pro', () => setProjectPlan(id, 'pro'), 'btn-primary'));
-  if (plan !== 'team') acts.appendChild(btn('Set to Team', () => setProjectPlan(id, 'team'), 'btn-secondary'));
-  if (plan !== 'free') acts.appendChild(btn('Downgrade to Free', () => setProjectPlan(id, 'free'), 'btn-ghost'));
-
-  // Danger zone
-  {% if user.admin_role == 'super_admin' %}
-  acts.appendChild(sectionLabel('Danger zone'));
-  acts.appendChild(btn('Delete project', () => deleteProject(id, name), 'btn-danger'));
-  {% endif %}
-
-  document.getElementById('projectModal').style.display = '';
-}
-
-/* ── API helpers ───────────────────────────────────────────────── */
-async function apiCall(url, method, body) {
-  try {
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
-    if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(url, opts);
-    const data = await res.json();
-    if (data.error) { Fluxito.toast(data.error, 'error'); return null; }
-    return data;
-  } catch (e) { Fluxito.toast('Request failed', 'error'); return null; }
-}
-
-function reload() { setTimeout(() => location.reload(), 400); }
-
-async function setProjectPlan(id, tier) {
-  if (!confirm('Change project plan to "' + tier + '"?')) return;
-  const data = await apiCall('/api/admin/projects/' + id + '/plan', 'PATCH', { tier });
-  if (data) { Fluxito.toast('Plan → ' + tier); closeModal('projectModal'); reload(); }
-}
-async function deleteProject(id, name) {
-  if (!confirm('Delete project "' + name + '"? This will deactivate the project, all connections, and member access.')) return;
-  if (!confirm('This cannot be undone. Are you absolutely sure?')) return;
-  const data = await apiCall('/api/admin/projects/' + id, 'DELETE');
-  if (data) { Fluxito.toast('Project deleted'); closeModal('projectModal'); reload(); }
-}
-async function resetQuota(id) {
-  if (!confirm('Reset monthly usage to 0?')) return;
-  const data = await apiCall('/api/admin/users/' + id + '/reset-quota', 'POST');
-  if (data) { Fluxito.toast('Cleared ' + data.cleared_calls + ' calls'); closeModal('userModal'); reload(); }
-}
-async function toggleActive(id, active) {
-  const data = await apiCall('/api/admin/users/' + id + '/active', 'PATCH', { is_active: active });
-  if (data) { Fluxito.toast(active ? 'Activated' : 'Deactivated'); closeModal('userModal'); reload(); }
-}
-async function setRole(id, role) {
-  if (!confirm('Set platform admin role to "' + role + '"?')) return;
-  const data = await apiCall('/api/admin/users/' + id + '/role', 'PATCH', { admin_role: role });
-  if (data) { Fluxito.toast('Role → ' + role); closeModal('userModal'); reload(); }
-}
-async function deleteUser(id) {
-  if (!confirm('Permanently delete this user and ALL data?')) return;
-  if (!confirm('Are you absolutely sure?')) return;
-  const data = await apiCall('/api/admin/users/' + id, 'DELETE');
-  if (data) { Fluxito.toast('User deleted'); closeModal('userModal'); reload(); }
-}
-
-/* ── Announcements ─────────────────────────────────────────────── */
-async function createAnnouncement() {
-  const title = prompt('Announcement title:');
-  if (!title) return;
-  const body = prompt('Announcement body:');
-  if (!body) return;
-  const severity = prompt('Severity (info / warning / critical):', 'info') || 'info';
-  const tier = prompt('Target tier (leave empty for all, or: free / pro / team):', '') || null;
-  const data = await apiCall('/api/admin/announcements', 'POST', { title, body, severity, target_tier: tier });
-  if (data) { Fluxito.toast('Announcement created'); reload(); }
-}
-async function toggleAnnouncement(id, active) {
-  const data = await apiCall('/api/admin/announcements/' + id, 'PATCH', { is_active: active });
-  if (data) { Fluxito.toast(active ? 'Activated' : 'Deactivated'); reload(); }
-}
-async function deleteAnnouncement(id) {
-  if (!confirm('Delete this announcement?')) return;
-  const data = await apiCall('/api/admin/announcements/' + id, 'DELETE');
-  if (data) { Fluxito.toast('Deleted'); reload(); }
-}
-
-/* ── System ────────────────────────────────────────────────────── */
-async function flushCache(target) {
-  if (!confirm('Flush ' + target + ' cache?')) return;
-  const data = await apiCall('/api/admin/cache/flush', 'POST', { target });
-  if (data) Fluxito.toast('Flushed: ' + (data.flushed || []).join(', '));
-}
-async function loadToolUsage() {
-  const data = await apiCall('/api/admin/tools-usage', 'GET');
-  if (!data) return;
-  const c = document.getElementById('toolUsageBody');
-  let html = '';
-  if (data.by_tool && data.by_tool.length) {
-    html += '<div style="margin-bottom:12px;"><strong style="font-size:12px;text-transform:uppercase;color:var(--text-muted);">By tool</strong></div>';
-    data.by_tool.forEach(t => { html += '<div class="row-between" style="font-size:13px;padding:3px 0;"><span>'+t.tool+'</span><span class="badge">'+t.calls+'</span></div>'; });
-  }
-  if (data.by_platform && data.by_platform.length) {
-    html += '<div style="margin:16px 0 12px;"><strong style="font-size:12px;text-transform:uppercase;color:var(--text-muted);">By platform</strong></div>';
-    data.by_platform.forEach(p => { html += '<div class="row-between" style="font-size:13px;padding:3px 0;"><span>'+p.platform+'</span><span class="badge">'+p.calls+'</span></div>'; });
-  }
-  if (!html) html = '<div class="text-muted">No usage this month.</div>';
-  c.innerHTML = html;
-}
-function refreshStats() { Fluxito.toast('Refreshing…'); reload(); }
-
-/* ── Observability ────────────────────────────────────────────── */
-async function loadObservability() {
-  const c = document.getElementById('obsContent');
-  c.innerHTML = '<div class="text-muted" style="text-align:center;padding:20px;">Loading metrics…</div>';
-  const data = await apiCall('/api/admin/observability', 'GET');
-  if (!data) { c.innerHTML = '<div class="text-muted" style="text-align:center;padding:20px;">Failed to load metrics.</div>'; return; }
-
-  let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">';
-
-  /* Error rate card */
-  const er = data.error_rate_1h || {};
-  const errColor = er.error_pct > 5 ? 'var(--danger)' : (er.error_pct > 1 ? 'var(--warning)' : 'var(--success, #22c55e)');
-  html += '<div class="card"><div class="card-header"><div class="card-title">Error rate (1h)</div></div><div class="card-body">';
-  html += '<div style="font-size:28px;font-weight:700;color:'+errColor+';">'+er.error_pct+'%</div>';
-  html += '<div class="text-muted" style="font-size:13px;">'+er.error_calls+' errors / '+er.total_calls+' total calls</div>';
-  html += '</div></div>';
-
-  /* Response times card */
-  const rt = data.response_times_1h || {};
-  html += '<div class="card"><div class="card-header"><div class="card-title">Response times (1h)</div></div><div class="card-body">';
-  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;">';
-  html += '<div><div style="font-size:20px;font-weight:600;">'+(rt.p50_ms||0)+'ms</div><div class="text-muted" style="font-size:11px;">p50</div></div>';
-  html += '<div><div style="font-size:20px;font-weight:600;">'+(rt.p95_ms||0)+'ms</div><div class="text-muted" style="font-size:11px;">p95</div></div>';
-  html += '<div><div style="font-size:20px;font-weight:600;">'+(rt.p99_ms||0)+'ms</div><div class="text-muted" style="font-size:11px;">p99</div></div>';
-  html += '</div>';
-  html += '<div class="text-muted" style="font-size:12px;margin-top:8px;">avg '+Math.round(rt.avg_ms||0)+'ms · '+rt.count+' calls</div>';
-  html += '</div></div>';
-
-  /* Redis card */
-  const rd = data.redis || {};
-  html += '<div class="card"><div class="card-header"><div class="card-title">Redis</div></div><div class="card-body">';
-  if (rd.error) { html += '<div class="text-muted">'+rd.error+'</div>'; }
-  else {
-    html += '<div style="font-size:13px;display:grid;gap:4px;">';
-    html += '<div class="row-between"><span>Memory used</span><span class="badge">'+rd.used_memory_human+'</span></div>';
-    html += '<div class="row-between"><span>Peak memory</span><span class="badge">'+rd.used_memory_peak_human+'</span></div>';
-    html += '<div class="row-between"><span>Connected clients</span><span class="badge">'+rd.connected_clients+'</span></div>';
-    html += '<div class="row-between"><span>Rate limit keys</span><span class="badge">'+rd.rate_limit_keys+'</span></div>';
-    html += '</div>';
-  }
-  html += '</div></div>';
-
-  html += '</div>'; /* close grid */
-
-  /* Connections by platform */
-  const conns = data.connections_by_platform || [];
-  if (conns.length) {
-    html += '<div class="card" style="margin-top:16px;"><div class="card-header"><div class="card-title">Active connections by platform</div></div><div class="card-body">';
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;">';
-    conns.forEach(function(c) {
-      html += '<div class="row-between" style="font-size:13px;padding:4px 8px;background:var(--bg);border-radius:var(--r-md);">';
-      html += '<span>'+c.platform+'</span><span class="badge">'+c.count+'</span></div>';
-    });
-    html += '</div></div></div>';
-  }
-
-  /* Top errors (24h) */
-  const errs = data.top_errors_24h || [];
-  if (errs.length) {
-    html += '<div class="card" style="margin-top:16px;"><div class="card-header"><div class="card-title">Top errors (24h)</div></div><div class="card-body">';
-    html += '<div style="display:flex;flex-direction:column;gap:4px;">';
-    errs.forEach(function(e) {
-      html += '<div class="row-between" style="font-size:13px;padding:4px 0;">';
-      html += '<span><span class="badge badge-danger" style="font-size:10px;">'+e.count+'</span> '+e.tool+(e.platform?' <span class="text-muted">('+e.platform+')</span>':'')+'</span>';
-      html += '</div>';
-    });
-    html += '</div></div></div>';
-  }
-
-  c.innerHTML = html;
-}
-
-/* ── Rate Limits ──────────────────────────────────────────────── */
-let _rateLimits = null;
-
-async function loadRateLimits() {
-  const c = document.getElementById('rlContent');
-  c.innerHTML = '<div class="text-muted" style="text-align:center;padding:20px;">Loading…</div>';
-  const data = await apiCall('/api/admin/rate-limits', 'GET');
-  if (!data) { c.innerHTML = '<div class="text-muted" style="text-align:center;">Failed to load.</div>'; return; }
-  _rateLimits = data;
-  renderRateLimits();
-}
-
-function renderRateLimits() {
-  const c = document.getElementById('rlContent');
-  const d = _rateLimits;
-  if (!d) return;
-
-  const tiers = [
-    {key:'free', label:'Free', color:'var(--text-muted)', desc:'Non-paying users'},
-    {key:'pro', label:'Pro', color:'var(--accent)', desc:'$25/mo plans'},
-    {key:'team', label:'Team', color:'var(--info, #3b82f6)', desc:'$45/mo plans'},
-  ];
-
-  let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;">';
-  tiers.forEach(function(t) {
-    const lim = d[t.key] || {};
-    html += '<div class="card" style="border-top:3px solid '+t.color+';">';
-    html += '<div class="card-header"><div class="card-title">'+t.label+'</div><div class="text-muted" style="font-size:12px;">'+t.desc+'</div></div>';
-    html += '<div class="card-body">';
-    html += '<div style="display:grid;gap:12px;">';
-    html += '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Requests / minute</label>';
-    html += '<input type="number" class="input" id="rl_'+t.key+'_min" value="'+lim.per_min+'" min="1" style="width:100%;"/></div>';
-    html += '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Requests / hour</label>';
-    html += '<input type="number" class="input" id="rl_'+t.key+'_hour" value="'+lim.per_hour+'" min="1" style="width:100%;"/></div>';
-    html += '</div>';
-    html += '</div></div>';
+async function setActive(id,v){ try{ await api(`/api/admin/users/${id}/active`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_active:v})}); loadUsers(); }catch(e){ alert(e.message);} }
+async function setSuper(id,v){ try{ await api(`/api/admin/users/${id}/superadmin`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_superadmin:v})}); loadUsers(); }catch(e){ alert(e.message);} }
+async function loadRequests(){
+  const {requests} = await api('/api/admin/access-requests?status=pending');
+  const tbody=document.getElementById('reqBody'); tbody.innerHTML='';
+  if(!requests.length){ const tr=document.createElement('tr'); const td=document.createElement('td'); td.colSpan=4; td.textContent='No pending requests.'; tr.appendChild(td); tbody.appendChild(tr); return; }
+  requests.forEach(r=>{
+    const tr=document.createElement('tr');
+    [r.name, r.email, r.use_case||''].forEach(v=>{const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);});
+    const act=document.createElement('td'); act.style.textAlign='right';
+    const b1=document.createElement('button'); b1.className='btn sm primary'; b1.textContent='Approve'; b1.onclick=()=>approve(r.id);
+    const b2=document.createElement('button'); b2.className='btn sm danger-outline'; b2.style.marginLeft='6px'; b2.textContent='Reject'; b2.onclick=()=>reject(r.id);
+    act.appendChild(b1); act.appendChild(b2); tr.appendChild(act); tbody.appendChild(tr);
   });
-  html += '</div>';
-
-  {% if user.admin_role == 'super_admin' %}
-  html += '<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">';
-  html += '<button class="btn btn-ghost btn-sm" onclick="loadRateLimits()">Reset</button>';
-  html += '<button class="btn btn-primary btn-sm" onclick="saveRateLimits()">Save rate limits</button>';
-  html += '</div>';
-  {% endif %}
-
-  c.innerHTML = html;
 }
-
-async function saveRateLimits() {
-  const body = {};
-  ['free','pro','team'].forEach(function(t) {
-    body[t] = {
-      per_min: parseInt(document.getElementById('rl_'+t+'_min').value) || 1,
-      per_hour: parseInt(document.getElementById('rl_'+t+'_hour').value) || 1,
-    };
-  });
-  const data = await apiCall('/api/admin/rate-limits', 'PATCH', body);
-  if (data) {
-    _rateLimits = data.limits;
-    Fluxito.toast('Rate limits saved');
-    renderRateLimits();
-  }
+async function approve(id){
+  try{
+    const d=await api(`/api/admin/access-requests/${id}/approve`,{method:'POST'});
+    const m=document.getElementById('reqMsg'); m.textContent = d.temp_password
+      ? `Approved ${d.email}. Share these credentials (shown once): ${d.email} / ${d.temp_password}`
+      : `Approved ${d.email} (existing account — no new password).`;
+    m.style.display='block'; loadRequests();
+  }catch(e){ alert(e.message); }
 }
+async function reject(id){ try{ await api(`/api/admin/access-requests/${id}/reject`,{method:'POST'}); loadRequests(); }catch(e){ alert(e.message);} }
+async function toggleGate(v){ try{ await api('/api/admin/settings/require-access-approval',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:v})}); }catch(e){ alert(e.message); document.getElementById('gateToggle').checked=!v;} }
+loadUsers(); loadRequests();
 </script>
 {% endblock %}

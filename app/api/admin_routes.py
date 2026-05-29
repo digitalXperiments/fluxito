@@ -7,15 +7,27 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import func, select
 
 import app.app_state as app_state
 from app.api.google_oauth_routes import _resolve_user_ctx
 from app.models.user import User
+from app.templating import render
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    """Super-admin instance panel (page enforces 401/403)."""
+    await require_superadmin(request)
+    from app.api.google_oauth_routes import _load_user_view
+
+    user_ctx = await _resolve_user_ctx(request)
+    user_view = await _load_user_view(user_ctx)
+    return render(request, "admin.html", {"user": user_view, "active": "admin"})
 
 
 async def require_superadmin(request: Request) -> dict:

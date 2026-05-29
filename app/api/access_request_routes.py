@@ -5,15 +5,26 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import select
 
 import app.app_state as app_state
 from app.models.access_request import AccessRequest
 from app.models.user import User
+from app.templating import render
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.get("/request-access", response_class=HTMLResponse)
+async def request_access_page(request: Request):
+    """Public request-access page (no auth required)."""
+    return render(
+        request,
+        "request_access.html",
+        {"gated": request.query_params.get("gated") == "1"},
+    )
 
 
 @router.post("/request-access")
