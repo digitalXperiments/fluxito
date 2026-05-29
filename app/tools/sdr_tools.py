@@ -164,11 +164,14 @@ def register_sdr_tools(mcp_server: Any) -> None:
         source_snapshot: dict | None = None,
         source_snapshot_id: str | None = None,
         create_initial_refinement_state: bool = True,
+        force: bool = False,
     ) -> dict:
         """Persist a Claude-authored SDR markdown draft.
 
         Pass the `intake` and `scans` objects returned by generate_sdr as
-        `intake_snapshot` and `source_snapshot` for full reproducibility.
+        `intake_snapshot` and `source_snapshot` for full reproducibility. The
+        markdown is validated against the contract before persisting; pass
+        force=True only to override structural validation errors intentionally.
         """
         return await _save_sdr_v2(
             markdown=markdown,
@@ -178,6 +181,7 @@ def register_sdr_tools(mcp_server: Any) -> None:
             source_snapshot=source_snapshot,
             source_snapshot_id=source_snapshot_id,
             create_initial_refinement_state=create_initial_refinement_state,
+            force=force,
         )
 
     @mcp_server.tool("get_sdr_intake")
@@ -543,6 +547,7 @@ async def _save_sdr_v2(
     source_snapshot: dict | None = None,
     source_snapshot_id: str | None,
     create_initial_refinement_state: bool,
+    force: bool = False,
 ) -> dict:
     project_ctx = require_project_ctx()
     if not project_ctx:
@@ -564,6 +569,21 @@ async def _save_sdr_v2(
         or compute_source_fingerprint(project_ctx)
     )
     parsed = parse_sdr_markdown(markdown)
+
+    # Contract validation gate — reject markdown that won't round-trip before any
+    # DB write, so a malformed SDR can never be persisted silently.
+    validation = _validate_sdr_for_save(markdown, parsed)
+    if validation["errors"] and not force:
+        return {
+            "error": True,
+            "error_type": "validation_failed",
+            "validation": validation,
+            "instructions_for_claude": (
+                "The SDR markdown failed contract validation and was NOT saved. Fix each error below, "
+                "then call save again. The contract is in references/sdr/markdown-schema.md. "
+                "Pass force=true only to override intentionally.\nErrors: " + "; ".join(validation["errors"])
+            ),
+        }
 
     db_factory = state.db_session_factory
     async with db_factory() as db:
@@ -632,6 +652,7 @@ async def _save_sdr_v2(
             "sections_completed": completed_sections,
             "sections_remaining": remaining,
             "readiness": readiness,
+            "validation": validation,
             "summary": {
                 "events": len(parsed.events),
                 "todo_count": len(parsed.todo_markers),
@@ -1012,6 +1033,37 @@ def _template_rationale(business_type: str, answers: dict[str, str], scanned_eve
     if model:
         return f"Selected '{business_type}' from intake business model and {scanned_event_count} scanned events."
     return f"Selected '{business_type}' from scanned event signals; intake did not provide a stronger business model clue."
+
+
+def _validate_sdr_for_save(markdown: str, parsed: ParsedSDR) -> dict:
+    """Validate authored SDR markdown against the contract before persisting.
+
+    `errors` block the save (the document won't round-trip into the event DB).
+    `warnings` are surfaced but do not block legitimate work-in-progress drafts.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    if not parsed.events:
+        if "## Event Catalog" in markdown:
+            errors.append(
+                "Event Catalog section is present but no events parsed — the event blocks don't match "
+                "the contract (### `name`, *Status:*, **Business Purpose:**, etc.)."
+            )
+        else:
+            errors.append("SDR has no Event Catalog / events — an SDR must document at least one event.")
+
+    for header in _SECTION_H2.values():
+        if header not in markdown:
+            warnings.append(f"Missing recommended section: {header}")
+    if "## Changelog" not in markdown:
+        warnings.append("Missing recommended section: ## Changelog")
+
+    no_dest = [e.name for e in parsed.events if not e.destinations]
+    if no_dest:
+        warnings.append(f"Events with no destinations mapped: {', '.join(no_dest[:10])}")
+
+    return {"errors": errors, "warnings": warnings}
 
 
 def _diagnostics_block(scans, intake_answers, current_event_names):

@@ -437,6 +437,33 @@ def test_generator_destination_round_trips():
     assert "custom" not in platforms
 
 
+def test_save_validation_blocks_unparseable_event_catalog():
+    from app.tools.sdr_parser import parse_sdr_markdown
+    from app.tools.sdr_tools import _validate_sdr_for_save
+
+    # Has the header but the event block uses the wrong shape → 0 events parse.
+    md = "## Event Catalog\n\nWe track purchase and add_to_cart.\n"
+    result = _validate_sdr_for_save(md, parse_sdr_markdown(md))
+    assert result["errors"], "should flag a contract violation"
+    assert any("no events parsed" in e for e in result["errors"])
+
+
+def test_save_validation_passes_for_gold_standard_example():
+    import os
+
+    from app.tools.sdr_parser import parse_sdr_markdown
+    from app.tools.sdr_tools import _validate_sdr_for_save
+
+    path = os.path.join(
+        os.path.dirname(__file__), "..",
+        "fluxito-skills", "fluxito", "examples", "sdr", "bmk-eco-farms-sdr.md",
+    )
+    with open(path) as fh:
+        md = fh.read()
+    result = _validate_sdr_for_save(md, parse_sdr_markdown(md))
+    assert result["errors"] == []
+
+
 def test_skill_schema_matches_canonical_contract():
     """The skill's markdown-schema.md must embed the canonical contract verbatim."""
     import os
