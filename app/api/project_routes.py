@@ -354,7 +354,7 @@ async def ensure_default_project(
 
         base = (display_name or (email.split("@")[0] if email else "My")).strip()
         name = f"{base}'s Project"
-        slug = f"{_slugify(name)}-{uuid.uuid4().hex[:6]}"  # suffix avoids slug collisions
+        slug = _slugify(name)
 
         project = Project(name=name, slug=slug, owner_id=uid)
         db.add(project)
