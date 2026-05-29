@@ -815,27 +815,22 @@
      ═══════════════════════════════════════════════════════════════ #}
   <div class="sdr-sheet-wrap" id="panel-userprops" style="display:none">
     <div class="sdr-table-scroll" style="padding:20px">
-      {% set uprops = parsed_meta.get('user_properties', '') or '' %}
-      {% if uprops and '[TODO' not in uprops %}
+      {% set uptable = parsed_meta.get('user_properties_table') %}
+      {% if uptable and uptable.rows %}
       <table class="sdr-table" id="table-userprops">
         <thead>
           <tr>
-            <th>Property Name</th>
-            <th>Scope</th>
-            <th>Source</th>
-            <th>Example</th>
-            <th>Platforms</th>
+            {% for h in uptable.headers %}<th>{{ h }}</th>{% endfor %}
           </tr>
         </thead>
         <tbody>
+          {% for row in uptable.rows %}
           <tr>
-            <td colspan="5" style="text-align:center;color:var(--text-muted);padding:32px">
-              User properties parsed from markdown. Refine via Claude to populate structured rows.
-            </td>
+            {% for cell in row %}<td class="cell-mono">{{ cell }}</td>{% endfor %}
           </tr>
+          {% endfor %}
         </tbody>
       </table>
-      <div style="margin-top:16px;padding:14px 18px;background:var(--surface-2);border-radius:var(--r-md);font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--text)">{{ uprops }}</div>
       {% else %}
       <div style="text-align:center;padding:48px 20px;color:var(--text-muted)">
         <div style="font-size:14px;margin-bottom:8px">No user properties documented yet</div>

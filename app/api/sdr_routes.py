@@ -44,6 +44,7 @@ from app.models.sdr import SDR, SDREvent, SDRVersion
 from app.templating import render
 from app.tools.sdr_parser import (
     compute_gaps,
+    parse_markdown_table,
     parse_sdr_markdown,
     rebuild_projections_async,
 )
@@ -171,6 +172,7 @@ async def sdr_home_page(request: Request):
                     "user_journeys": parsed.user_journeys,
                     "data_layer_schema": parsed.data_layer_schema,
                     "user_properties": parsed.user_properties,
+                    "user_properties_table": parse_markdown_table(parsed.user_properties),
                     "destinations_matrix": parsed.destinations_matrix,
                     "consent_and_privacy": parsed.consent_and_privacy,
                     "ownership": parsed.ownership,
