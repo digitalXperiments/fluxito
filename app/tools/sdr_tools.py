@@ -2509,13 +2509,17 @@ def _generate_proposed_changes(
 # headers emitted by app.tools.sdr_parser.generate_sdr_markdown and recognised by
 # parse_sdr_markdown — otherwise applied changes silently fail to round-trip.
 _SECTION_H2 = {
+    "executive_summary": "## Executive Summary",
     "business_context": "## Business Context",
     "user_journeys": "## User Journeys",
     "data_layer_schema": "## Data Layer Schema",
     "event_catalog": "## Event Catalog",
+    "conversion_audit": "## Conversion Audit",
     "user_properties": "## User Properties",
     "destinations_matrix": "## Destinations Matrix",
     "consent_and_privacy": "## Consent & Privacy",
+    "gap_register": "## Gap Register",
+    "remediation_roadmap": "## Remediation Roadmap",
     "ownership": "## Ownership & Governance",
 }
 

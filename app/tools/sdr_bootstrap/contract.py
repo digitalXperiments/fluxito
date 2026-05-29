@@ -17,13 +17,17 @@ The document MUST use this exact structure so it parses into the event database.
 YAML frontmatter first, then one H1 title, then these H2 sections IN ORDER, each
 followed by a `---` separator line:
 
+  ## Executive Summary
   ## Business Context
   ## User Journeys
   ## Data Layer Schema
   ## Event Catalog
+  ## Conversion Audit
   ## User Properties / Custom Dimensions
   ## Destinations Matrix
   ## Consent & Privacy
+  ## Gap Register
+  ## Remediation Roadmap
   ## Ownership & Governance
   ## Changelog
 
@@ -60,6 +64,27 @@ keys off these literal labels — keep them verbatim):
   **Related KPIs:** <comma-separated KPI names from the intake>
 
   **Edge Cases & Notes:** <anything a smart analyst would want flagged>
+
+The audit sections are markdown tables with these exact header rows (the viewer and
+Excel export parse them as tables — keep the columns in this order):
+
+  ## Executive Summary — a 2-column table of | Property | Value | rows (Property, GTM
+  Container, Platforms in scope, Audit date, ...), optionally followed by a short narrative.
+
+  ## Gap Register
+  | # | Severity | Finding | Evidence | Business impact | Recommended fix | Fix location | Owner |
+
+  ## Conversion Audit
+  | GA4 key event | 90d count | Unique converters | Fires? | Verdict / action |
+
+  ## Consent & Privacy
+  | # | Severity | Check | Finding | Recommendation |
+
+  ## Remediation Roadmap
+  | Phase | Action | Resolves | Effort | Impact | Owner |
+
+These sections are optional — omit a section if you have nothing real to put in it rather
+than inventing rows.
 
 Status values: planned | implemented | verified | deprecated. Mark an event
 `implemented` only when a live source scan actually showed it; otherwise `planned`.
