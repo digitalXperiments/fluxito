@@ -87,3 +87,81 @@ def test_store_source_xlsx_rejects_oversize():
     big = base64.b64encode(b"\x00" * (2 * 1024 * 1024 + 1)).decode()
     ok, err = _store_source_xlsx(sdr, big, "x.xlsx")
     assert ok is False and "size" in err.lower()
+
+
+async def _seed_user_project(db_session_factory, pid):
+    """Seed FK parents so an SDR row can be inserted under project `pid`."""
+    from app.models.project import Project
+    from app.models.user import User
+
+    async with db_session_factory() as db:
+        u = User(email=f"o-{uuid.uuid4().hex[:8]}@example.com")
+        db.add(u)
+        await db.flush()
+        db.add(Project(id=pid, name="P", slug=f"p-{uuid.uuid4().hex[:8]}", owner_id=u.id))
+        await db.flush()
+        await db.commit()
+        return u.id
+
+
+@pytest.mark.asyncio
+async def test_download_source_xlsx_endpoint(_patch_db, db_session_factory):
+    import httpx
+    from httpx import ASGITransport
+    from unittest.mock import AsyncMock, patch
+
+    from app.auth.csrf import _generate_csrf_token
+    from app.main import app
+    from app.models.sdr import SDR
+    from app.tools.sdr_tools import _store_source_xlsx
+
+    pid = uuid.uuid4()
+    uid = await _seed_user_project(db_session_factory, pid)
+    async with db_session_factory() as db:
+        sdr = SDR(project_id=pid, name="X", markdown_content="# X", created_by=uid)
+        _store_source_xlsx(sdr, _xlsx_b64(), "VAST_Data_SDR.xlsx")
+        db.add(sdr)
+        await db.commit()
+
+    csrf = _generate_csrf_token()
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver",
+        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+    ) as client:
+        with patch(
+            "app.api.sdr_routes._require_user_and_project",
+            new=AsyncMock(return_value=(None, None, pid)),
+        ):
+            resp = await client.get(f"/api/projects/{pid}/solution-design/source.xlsx")
+    assert resp.status_code == 200, resp.text
+    assert "VAST_Data_SDR.xlsx" in resp.headers.get("content-disposition", "")
+    assert resp.content[:2] == b"PK"  # xlsx is a zip
+
+
+@pytest.mark.asyncio
+async def test_download_source_xlsx_404_when_none(_patch_db, db_session_factory):
+    import httpx
+    from httpx import ASGITransport
+    from unittest.mock import AsyncMock, patch
+
+    from app.auth.csrf import _generate_csrf_token
+    from app.main import app
+    from app.models.sdr import SDR
+
+    pid = uuid.uuid4()
+    uid = await _seed_user_project(db_session_factory, pid)
+    async with db_session_factory() as db:
+        db.add(SDR(project_id=pid, name="X", markdown_content="# X", created_by=uid))
+        await db.commit()
+
+    csrf = _generate_csrf_token()
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver",
+        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+    ) as client:
+        with patch(
+            "app.api.sdr_routes._require_user_and_project",
+            new=AsyncMock(return_value=(None, None, pid)),
+        ):
+            resp = await client.get(f"/api/projects/{pid}/solution-design/source.xlsx")
+    assert resp.status_code == 404
