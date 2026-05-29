@@ -186,3 +186,33 @@ async def test_admin_can_grant_superadmin(_http_client, db_session_factory):
     async with db_session_factory() as db:
         u = (await db.execute(select(User).where(User.id == uuid.UUID(tid)))).scalar_one()
         assert u.is_superadmin is True
+
+
+@pytest.mark.asyncio
+async def test_request_access_creates_pending(_http_client, db_session_factory):
+    from sqlalchemy import select
+    from app.models.access_request import AccessRequest
+
+    resp = await _http_client.post("/request-access",
+                                   json={"name": "Jane", "email": "newbie@example.com", "use_case": "kicking tires"})
+    assert resp.status_code == 200, resp.text
+    async with db_session_factory() as db:
+        r = (await db.execute(select(AccessRequest).where(AccessRequest.email == "newbie@example.com"))).scalar_one()
+        assert r.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_request_access_dedupes_existing_user(_http_client, db_session_factory):
+    await _make_user(db_session_factory, "exists@example.com")
+    resp = await _http_client.post("/request-access",
+                                   json={"name": "X", "email": "exists@example.com"})
+    assert resp.status_code == 400
+    assert "sign in" in resp.json().get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_request_access_dedupes_pending(_http_client, db_session_factory):
+    await _http_client.post("/request-access", json={"name": "A", "email": "dup@example.com"})
+    resp = await _http_client.post("/request-access", json={"name": "A", "email": "dup@example.com"})
+    assert resp.status_code == 400
+    assert "pending" in resp.json().get("error", "").lower()

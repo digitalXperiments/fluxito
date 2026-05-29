@@ -24,6 +24,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.app_state as app_state
 from app.config import settings
 from app.models.app_setting import AppSetting
 from app.utils.encryption import decrypt_str, encrypt_str
@@ -131,6 +132,15 @@ RUNTIME_SETTINGS: tuple[RuntimeSetting, ...] = (
         "Comma-separated tool domains or 'all'.",
         "ENABLED_TOOLS",
         category="platform",
+    ),
+    # ── Access Control ──
+    RuntimeSetting(
+        "require_access_approval",
+        "Require access approval",
+        "Gate new sign-ups behind super-admin approval via the request-access queue.",
+        "REQUIRE_ACCESS_APPROVAL",
+        "bool",
+        category="access",
     ),
 )
 
@@ -332,3 +342,9 @@ async def delete_setting(db: AsyncSession, *, key: str) -> bool:
     await db.delete(row)
     _cache_invalidate(key)
     return True
+
+
+async def access_approval_required() -> bool:
+    """True when the instance gates new sign-ups behind super-admin approval."""
+    async with app_state.db_session_factory() as db:
+        return bool(await get_runtime_setting(db, "require_access_approval", default=False))

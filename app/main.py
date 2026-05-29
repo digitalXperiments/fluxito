@@ -375,6 +375,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 # HTTP Routers
 # ---------------------------------------------------------------------------
 
+from app.api.access_request_routes import router as access_request_router
 from app.api.admin_routes import router as admin_router
 from app.api.audit_routes import router as audit_router
 from app.api.auth_routes import router as auth_router
@@ -410,6 +411,7 @@ app.include_router(project_router)
 app.include_router(sdr_router)
 app.include_router(scheduled_report_router)
 app.include_router(admin_router)
+app.include_router(access_request_router)
 
 from app.api import linkedin_oauth_routes, pinterest_oauth_routes
 
@@ -447,6 +449,7 @@ _setup_complete: bool | None = None
 _SETUP_BYPASS_PREFIXES = (
     "/setup",
     "/signin",
+    "/request-access",
     "/auth/",
     "/api/",
     "/mcp",
