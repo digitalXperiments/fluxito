@@ -437,6 +437,23 @@ def test_generator_destination_round_trips():
     assert "custom" not in platforms
 
 
+def test_skill_schema_matches_canonical_contract():
+    """The skill's markdown-schema.md must embed the canonical contract verbatim."""
+    import os
+
+    from app.tools.sdr_bootstrap.contract import SDR_MARKDOWN_SCHEMA
+
+    path = os.path.join(
+        os.path.dirname(__file__), "..",
+        "fluxito-skills", "fluxito", "references", "sdr", "markdown-schema.md",
+    )
+    with open(path) as fh:
+        skill_text = fh.read()
+    assert SDR_MARKDOWN_SCHEMA.strip() in skill_text, (
+        "skill markdown-schema.md has drifted from app/tools/sdr_bootstrap/contract.py"
+    )
+
+
 def test_skill_example_sdrs_round_trip_through_parser():
     """Anti-drift: every shipped skill example SDR must parse cleanly with no gaps."""
     import glob

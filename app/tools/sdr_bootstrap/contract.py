@@ -1,14 +1,17 @@
-# SDR Markdown Contract
+"""Single source of truth for the SDR markdown contract.
 
-The SDR is parsed back into a database (`sdr_events` / `sdr_parameters` /
-`sdr_destinations`). Follow this contract exactly or events will silently fail to
-project and downstream audits will break.
+This exact text is consumed by the server synthesis playbook AND embedded verbatim
+in the skill's reference (`fluxito-skills/fluxito/references/sdr/markdown-schema.md`).
+A test asserts the skill doc contains this block, so the contract can never drift
+between what the server tells the model and what the installed skill teaches.
 
-> **Single source of truth.** The block below is embedded verbatim from the
-> server's canonical contract (`app/tools/sdr_bootstrap/contract.py`). A repo test
-> asserts they stay identical, so this skill can never drift from the parser.
+It mirrors app.tools.sdr_parser.generate_sdr_markdown / parse_sdr_markdown so the
+saved document round-trips into sdr_events / sdr_parameters / sdr_destinations.
+"""
 
-```
+from __future__ import annotations
+
+SDR_MARKDOWN_SCHEMA = """\
 The document MUST use this exact structure so it parses into the event database.
 
 YAML frontmatter first, then one H1 title, then these H2 sections IN ORDER, each
@@ -61,9 +64,4 @@ keys off these literal labels — keep them verbatim):
 Status values: planned | implemented | verified | deprecated. Mark an event
 `implemented` only when a live source scan actually showed it; otherwise `planned`.
 Leave a `[TODO: ...]` marker anywhere you genuinely lack information — do NOT invent
-facts to remove a TODO.
-```
-
-**Destinations notes:** `- **GA4**: event name \`x\`` always parses. An account id
-may be given as `(\`AW-123\`)` or `(customer \`AW-123\`)`. Platform labels are
-case/underscore tolerant (`GOOGLE_ADS` → `google_ads`).
+facts to remove a TODO."""
