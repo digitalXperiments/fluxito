@@ -818,6 +818,62 @@ async def change_member_role(request: Request, slug: str, member_id: str):
     return JSONResponse({"success": True, "message": f"Role changed to {new_role}."})
 
 
+@router.post("/api/project/{slug}/members/{member_id}/reset-password")
+async def reset_member_password(request: Request, slug: str, member_id: str):
+    """Owner/admin re-issues a temporary password for a member (no SMTP era).
+
+    Refuses the project owner, and refuses password-less (Google sign-in) users —
+    minting a password onto a Google account would be an impersonation vector.
+    """
+    user = await _resolve_user(request)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+
+    project = await _get_project_by_slug(slug)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    uid = uuid.UUID(user["user_id"])
+    my_membership = await _get_membership(project.id, uid)
+    if not my_membership or my_membership.role not in CAN_MANAGE_MEMBERS_ROLES:
+        raise HTTPException(403, "Only owners and admins can reset passwords")
+
+    from app.auth.email_auth import generate_temp_password, hash_password
+
+    new_password = generate_temp_password()
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(
+            select(ProjectMember).where(
+                ProjectMember.id == uuid.UUID(member_id),
+                ProjectMember.project_id == project.id,
+            )
+        )
+        target = result.scalar_one_or_none()
+        if not target:
+            raise HTTPException(404, "Member not found")
+        if target.role == ROLE_OWNER:
+            raise HTTPException(400, "Cannot reset the project owner's password.")
+
+        target_user = await db.get(User, target.user_id)
+        if not target_user:
+            raise HTTPException(404, "User not found")
+        if not target_user.password_hash:
+            raise HTTPException(
+                400,
+                "This member signs in with Google; password reset doesn't apply.",
+            )
+
+        target_user.password_hash = hash_password(new_password)
+        target_user.email_verified = True
+        await db.commit()
+        target_email = target_user.email
+
+    return JSONResponse(
+        {"success": True, "email": target_email, "temp_password": new_password}
+    )
+
+
 # ---------------------------------------------------------------------------
 # Ownership transfer
 # ---------------------------------------------------------------------------

@@ -214,3 +214,118 @@ async def test_invite_existing_google_user_not_hijacked(_http_client, db_session
         row = (await db.execute(select(User).where(User.id == gid))).scalar_one()
         assert row.password_hash is None
         assert row.auth_provider == "google"
+
+
+@pytest.mark.asyncio
+async def test_reset_password_owner_can_reissue_member_credentials(
+    _http_client, db_session_factory
+):
+    from unittest.mock import AsyncMock, patch
+
+    from app.auth.email_auth import authenticate_user, hash_password
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    async with db_session_factory() as db:
+        owner = User(email="o2@example.com", display_name="O2")
+        db.add(owner)
+        await db.flush()
+        proj = Project(name="Beta", slug="beta", owner_id=owner.id)
+        db.add(proj)
+        await db.flush()
+        db.add(ProjectMember(project_id=proj.id, user_id=owner.id, role="owner"))
+        member = User(email="m2@example.com", password_hash=hash_password("oldpass1!"),
+                      email_verified=True, auth_provider="email")
+        db.add(member)
+        await db.flush()
+        member_pm = ProjectMember(project_id=proj.id, user_id=member.id, role="member")
+        db.add(member_pm)
+        await db.commit()
+        owner_ctx = {"user_id": str(owner.id), "email": owner.email}
+        member_pm_id = str(member_pm.id)
+
+    with patch(
+        "app.api.project_routes._resolve_user",
+        new=AsyncMock(return_value=owner_ctx),
+    ):
+        resp = await _http_client.post(
+            f"/api/project/beta/members/{member_pm_id}/reset-password"
+        )
+    assert resp.status_code == 200, resp.text
+    new_pw = resp.json()["temp_password"]
+    assert new_pw
+
+    user, err = await authenticate_user("m2@example.com", new_pw)
+    assert err is None and user is not None
+
+
+@pytest.mark.asyncio
+async def test_reset_password_refuses_owner_target(_http_client, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    async with db_session_factory() as db:
+        owner = User(email="o3@example.com")
+        db.add(owner)
+        await db.flush()
+        proj = Project(name="Gamma", slug="gamma", owner_id=owner.id)
+        db.add(proj)
+        await db.flush()
+        owner_pm = ProjectMember(project_id=proj.id, user_id=owner.id, role="owner")
+        db.add(owner_pm)
+        await db.commit()
+        owner_ctx = {"user_id": str(owner.id), "email": owner.email}
+        owner_pm_id = str(owner_pm.id)
+
+    with patch(
+        "app.api.project_routes._resolve_user",
+        new=AsyncMock(return_value=owner_ctx),
+    ):
+        resp = await _http_client.post(
+            f"/api/project/gamma/members/{owner_pm_id}/reset-password"
+        )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reset_password_refuses_google_only_member(_http_client, db_session_factory):
+    """A password-less (Google) member cannot be given a password by an admin."""
+    from unittest.mock import AsyncMock, patch
+
+    from sqlalchemy import select
+
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    async with db_session_factory() as db:
+        owner = User(email="o4@example.com")
+        db.add(owner)
+        await db.flush()
+        proj = Project(name="Delta", slug="delta", owner_id=owner.id)
+        db.add(proj)
+        await db.flush()
+        db.add(ProjectMember(project_id=proj.id, user_id=owner.id, role="owner"))
+        g = User(email="g4@example.com", auth_provider="google", email_verified=True)
+        db.add(g)
+        await db.flush()
+        gid = g.id
+        g_pm = ProjectMember(project_id=proj.id, user_id=g.id, role="member")
+        db.add(g_pm)
+        await db.commit()
+        owner_ctx = {"user_id": str(owner.id), "email": owner.email}
+        g_pm_id = str(g_pm.id)
+
+    with patch(
+        "app.api.project_routes._resolve_user",
+        new=AsyncMock(return_value=owner_ctx),
+    ):
+        resp = await _http_client.post(
+            f"/api/project/delta/members/{g_pm_id}/reset-password"
+        )
+    assert resp.status_code == 400
+    # Still has no password.
+    async with db_session_factory() as db:
+        row = (await db.execute(select(User).where(User.id == gid))).scalar_one()
+        assert row.password_hash is None

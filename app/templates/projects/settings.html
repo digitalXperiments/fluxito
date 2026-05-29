@@ -97,6 +97,7 @@
               </select>
               {% endif %}
               <button class="btn sm danger-outline" onclick="removeMember('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Remove</button>
+              <button class="btn sm" onclick="resetMemberPassword('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Reset password</button>
             </td>
             {% elif membership.role in ('owner', 'admin') %}
             <td></td>
@@ -911,6 +912,17 @@ async function removeMember(slug, memberId, email) {
     var data = await res.json();
     if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
     window.location.reload();
+  } catch(err) { alert(err.message); }
+}
+
+// ── Reset member password ──
+async function resetMemberPassword(slug, memberId, email) {
+  if (!confirm('Reset password for ' + email + '? A new temporary password will be shown once.')) return;
+  try {
+    var res = await fetch('/api/project/' + slug + '/members/' + memberId + '/reset-password', {method: 'POST'});
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
+    window.prompt('New password for ' + email + ' (copy it now — shown only once):', data.temp_password);
   } catch(err) { alert(err.message); }
 }
 
