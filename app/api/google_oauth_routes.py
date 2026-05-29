@@ -785,6 +785,11 @@ async def signin_callback(
         result = await db.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
         if not user:
+            from app.settings_service import get_runtime_setting
+
+            gate_on = bool(await get_runtime_setting(db, "require_access_approval", default=False))
+            if gate_on:
+                return RedirectResponse(url="/request-access?gated=1", status_code=302)
             user = User(
                 email=email,
                 display_name=display_name,

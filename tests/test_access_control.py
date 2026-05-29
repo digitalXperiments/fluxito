@@ -216,3 +216,28 @@ async def test_request_access_dedupes_pending(_http_client, db_session_factory):
     resp = await _http_client.post("/request-access", json={"name": "A", "email": "dup@example.com"})
     assert resp.status_code == 400
     assert "pending" in resp.json().get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_register_blocked_when_gate_on(_http_client, db_session_factory):
+    from app.settings_service import set_setting
+
+    async with db_session_factory() as db:
+        await set_setting(db, key="require_access_approval", value=True, is_secret=False, updated_by_user_id=None)
+        await db.commit()
+    try:
+        resp = await _http_client.post("/auth/register",
+                                       json={"email": "blocked@example.com", "password": "password123", "display_name": "B"})
+        assert resp.status_code == 403
+        assert "request access" in resp.json().get("error", "").lower()
+    finally:
+        async with db_session_factory() as db:
+            await set_setting(db, key="require_access_approval", value=False, is_secret=False, updated_by_user_id=None)
+            await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_register_open_when_gate_off(_http_client, db_session_factory):
+    resp = await _http_client.post("/auth/register",
+                                   json={"email": "open@example.com", "password": "password123", "display_name": "O"})
+    assert resp.status_code in (200, 201)
