@@ -27,6 +27,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -76,6 +77,9 @@ class SDR(Base):
     draft_version: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Raw structured source scans used for the current draft (reproducibility).
     last_source_scan: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    source_xlsx: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    source_xlsx_filename: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_xlsx_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     parsed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
