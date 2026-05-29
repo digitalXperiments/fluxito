@@ -1,8 +1,6 @@
 # tests/test_invite_and_projects.py
 """DB + endpoint tests for invite temp-password, register-claim, default project, reset."""
 
-import uuid
-
 import pytest
 
 import app.app_state as app_state
