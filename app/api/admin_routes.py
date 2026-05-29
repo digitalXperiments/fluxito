@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -90,3 +91,101 @@ async def admin_set_superadmin(request: Request, user_id: str):
         u.is_superadmin = is_superadmin
         await db.commit()
     return JSONResponse({"success": True})
+
+
+@router.get("/api/admin/access-requests")
+async def admin_list_access_requests(request: Request):
+    await require_superadmin(request)
+    status = request.query_params.get("status", "pending")
+    from app.models.access_request import AccessRequest
+
+    async with app_state.db_session_factory() as db:
+        rows = (
+            await db.execute(
+                select(AccessRequest).where(AccessRequest.status == status).order_by(AccessRequest.created_at.asc())
+            )
+        ).scalars().all()
+        items = [
+            {"id": str(r.id), "name": r.name, "email": r.email, "use_case": r.use_case,
+             "status": r.status, "created_at": r.created_at.isoformat() if r.created_at else None}
+            for r in rows
+        ]
+    return JSONResponse({"requests": items})
+
+
+@router.post("/api/admin/access-requests/{req_id}/approve")
+async def admin_approve_access_request(request: Request, req_id: str):
+    me = await require_superadmin(request)
+    from app.auth.email_auth import generate_temp_password, hash_password
+    from app.models.access_request import AccessRequest
+
+    async with app_state.db_session_factory() as db:
+        r = await db.get(AccessRequest, uuid.UUID(req_id))
+        if not r:
+            raise HTTPException(404, "Request not found")
+        if r.status != "pending":
+            raise HTTPException(400, f"Request already {r.status}.")
+        req_email = r.email
+        req_name = r.name
+
+        temp_password = None
+        existing = (await db.execute(select(User).where(User.email == req_email))).scalar_one_or_none()
+        if existing is None:
+            temp_password = generate_temp_password()
+            new_user = User(
+                email=req_email,
+                display_name=req_name,
+                password_hash=hash_password(temp_password),
+                email_verified=True,
+                auth_provider="email",
+            )
+            db.add(new_user)
+            await db.flush()
+            new_uid = new_user.id
+        else:
+            # Account already exists — never reset an existing password (takeover guard).
+            new_uid = existing.id
+
+        r.status = "approved"
+        r.reviewed_by = uuid.UUID(me["id"])
+        r.reviewed_at = datetime.now(UTC)
+        await db.commit()
+
+    try:
+        from app.api.project_routes import ensure_default_project
+
+        await ensure_default_project(new_uid, req_name, req_email)
+    except Exception:
+        logger.warning("ensure_default_project failed after approval", exc_info=True)
+
+    return JSONResponse({"success": True, "email": req_email, "temp_password": temp_password})
+
+
+@router.post("/api/admin/access-requests/{req_id}/reject")
+async def admin_reject_access_request(request: Request, req_id: str):
+    me = await require_superadmin(request)
+    from app.models.access_request import AccessRequest
+
+    async with app_state.db_session_factory() as db:
+        r = await db.get(AccessRequest, uuid.UUID(req_id))
+        if not r:
+            raise HTTPException(404, "Request not found")
+        r.status = "rejected"
+        r.reviewed_by = uuid.UUID(me["id"])
+        r.reviewed_at = datetime.now(UTC)
+        await db.commit()
+    return JSONResponse({"success": True})
+
+
+@router.patch("/api/admin/settings/require-access-approval")
+async def admin_toggle_gate(request: Request):
+    me = await require_superadmin(request)
+    body = await request.json()
+    enabled = bool(body.get("enabled"))
+    from app.settings_service import set_setting
+
+    async with app_state.db_session_factory() as db:
+        await set_setting(db, key="require_access_approval", value=enabled, is_secret=False,
+                          updated_by_user_id=uuid.UUID(me["id"]))
+        await db.commit()
+    return JSONResponse({"success": True, "enabled": enabled})
