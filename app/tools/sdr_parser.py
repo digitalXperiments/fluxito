@@ -379,7 +379,7 @@ def _parse_parameters_table(body: str) -> list[ParsedParameter]:
 
 
 def parse_markdown_table(text: str | None) -> dict | None:
-    """Parse the first GFM pipe table in *text* into headers + rows.
+    """Parse the pipe table in *text* into headers + rows (first row is the header).
 
     Returns ``{"headers": [...], "rows": [[...], ...]}`` or ``None`` when no
     table is present. Cells are stripped of surrounding whitespace and
@@ -403,8 +403,9 @@ def parse_markdown_table(text: str | None) -> dict | None:
     headers = cells(table_lines[0])
     rows: list[list[str]] = []
     for line in table_lines[1:]:
-        # Skip the |---|---| separator row
-        if re.match(r"^\|[\s\-:|]+\|?$", line):
+        # Skip the |---|---| / :--- alignment separator row (every cell is just -/:)
+        sep_cells = cells(line)
+        if sep_cells and all(c and set(c) <= {"-", ":"} for c in sep_cells):
             continue
         row = cells(line)
         if not any(row):

@@ -33,3 +33,9 @@ def test_skips_separator_and_blank_cells():
     table = parse_markdown_table(text)
     assert table["headers"] == ["A", "B"]
     assert table["rows"] == [["1", "2"]]
+
+
+def test_lone_dash_data_cells_not_dropped():
+    text = "| Name | Note |\n| --- | --- |\n| email | - |\n| - | n/a |\n"
+    table = parse_markdown_table(text)
+    assert table["rows"] == [["email", "-"], ["-", "n/a"]]
