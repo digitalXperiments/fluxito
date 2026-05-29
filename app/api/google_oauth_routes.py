@@ -1620,14 +1620,15 @@ async def google_data_callback(
                 status_code=401,
             )
 
-        # Create / update OAuthConnection. The row is owned by the *project*
-        # and keyed by (project_id, provider, google_email) — the same tuple
-        # as the uq_project_provider_email unique constraint. We MUST look it
-        # up by that key, not by user_id: the same Google account reconnected
-        # under a different Fluxito user (e.g. a phantom row left by the old
-        # session-hijack bug) would otherwise miss the existing row and try
-        # to INSERT a duplicate, violating the constraint.
+        # Create / update OAuthConnection. Credentials are per-user: the row
+        # is keyed by (user_id, project_id, provider, google_email) — the same
+        # tuple as the uq_user_project_provider_email unique constraint. We
+        # look it up by that exact key so reconnecting refreshes the caller's
+        # own row, while the same Google account connected by a *different*
+        # user (or left behind as a phantom row) gets its own separate row
+        # rather than being clobbered or colliding on the constraint.
         existing_stmt = select(OAuthConnection).where(
+            OAuthConnection.user_id == user.id,
             OAuthConnection.provider == "google",
             OAuthConnection.google_email == google_email,
             OAuthConnection.project_id == project_id,
@@ -1638,10 +1639,6 @@ async def google_data_callback(
         encrypted_refresh = _encrypt(refresh_token)
 
         if existing:
-            # Re-authentication: the signed-in user becomes the new token
-            # owner for this project-scoped connection.
-            existing.user_id = user.id
-            existing.provider = "google"
             existing.refresh_token_encrypted = encrypted_refresh
             existing.access_token_encrypted = _encrypt(access_token)
             existing.scopes = state_data["scopes"]

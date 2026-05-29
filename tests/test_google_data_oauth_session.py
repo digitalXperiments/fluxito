@@ -249,14 +249,13 @@ async def _empty():
 
 
 @pytest.mark.asyncio
-async def test_data_callback_reuses_project_connection_owned_by_other_user(monkeypatch):
+async def test_data_callback_stores_separate_row_per_user(monkeypatch):
     """
-    The connection record is owned by the *project*, keyed by
-    (project_id, provider, google_email). Reconnecting the same Google
-    account — even one whose existing row is owned by a *different* user
-    (e.g. a phantom row left over from the old hijack bug) — must UPDATE
-    that row (reassigning the token owner to the signed-in user) rather than
-    INSERT a duplicate and trip uq_project_provider_email.
+    Credentials are per-user. When the same Google account already has a row
+    owned by a *different* user (B) in the same project, connecting as user A
+    must INSERT a SEPARATE row for A (keyed by user_id, project, provider,
+    google_email) — never reuse or clobber B's row. This is what lets two
+    users hold their own credentials for the same external account.
     """
     redis = FakeRedis()
     state_token = "state-token-456"
@@ -275,14 +274,6 @@ async def test_data_callback_reuses_project_connection_owned_by_other_user(monke
     )
 
     added = []
-    # Pre-existing connection row owned by a DIFFERENT (phantom) user.
-    existing_conn = SimpleNamespace(
-        id="cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-        user_id="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-        google_email=EMAIL_B,
-        provider="google",
-        project_id="pppppppp-pppp-4ppp-8ppp-pppppppppppp",
-    )
 
     class FakeResult:
         def __init__(self, val):
@@ -305,8 +296,8 @@ async def test_data_callback_reuses_project_connection_owned_by_other_user(monke
             self._calls += 1
             if self._calls == 1:
                 return FakeResult(SimpleNamespace(id=USER_A, email="me@example.com"))
-            if self._calls == 2:
-                return FakeResult(existing_conn)  # existing project connection
+            # Existing-connection lookup is scoped to user A — B's row is not
+            # visible to it, so the query returns nothing.
             return FakeResult(None)
 
         def add(self, obj):
@@ -367,8 +358,9 @@ async def test_data_callback_reuses_project_connection_owned_by_other_user(monke
     )
 
     assert resp.status_code in (302, 307)
-    # No new OAuthConnection inserted — the existing project row was reused.
-    assert not [c for c in added if c.__class__.__name__ == "OAuthConnection"]
-    # The existing row was updated and its token owner reassigned to user A.
-    assert str(existing_conn.user_id) == USER_A
-    assert existing_conn.connection_status == "active"
+    # A brand-new row was inserted for user A (B's row is left untouched).
+    conns = [c for c in added if c.__class__.__name__ == "OAuthConnection"]
+    assert len(conns) == 1
+    assert str(conns[0].user_id) == USER_A
+    assert conns[0].google_email == EMAIL_B
+    assert conns[0].provider == "google"
