@@ -570,11 +570,28 @@ async def invite_member(request: Request, slug: str):
         result = await db.execute(select(User).where(User.email == invite_email))
         invited_user = result.scalar_one_or_none()
 
+        from app.auth.email_auth import generate_temp_password, hash_password
+
+        temp_password = generate_temp_password()
         if not invited_user:
-            # Create a placeholder user (they'll complete sign-in when they visit)
-            invited_user = User(email=invite_email)
+            # No SMTP yet: create the user with a temp password to hand over.
+            invited_user = User(
+                email=invite_email,
+                password_hash=hash_password(temp_password),
+                email_verified=True,
+                email_verified_at=datetime.utcnow(),
+                auth_provider="email",
+            )
             db.add(invited_user)
             await db.flush()
+        elif not invited_user.password_hash:
+            # Existing password-less stub (e.g. Google-only) — issue a temp password.
+            invited_user.password_hash = hash_password(temp_password)
+            invited_user.email_verified = True
+            invited_user.auth_provider = "both" if invited_user.auth_provider == "google" else "email"
+        else:
+            # Real account already has a password — don't reset it on invite.
+            temp_password = None
 
         # Check if already a member
         result = await db.execute(
@@ -644,7 +661,15 @@ async def invite_member(request: Request, slug: str):
         )
     )
 
-    return JSONResponse({"success": True, "message": f"Invited {invite_email} as {invite_role}."})
+    return JSONResponse(
+        {
+            "success": True,
+            "message": f"Invited {invite_email} as {invite_role}.",
+            "email": invite_email,
+            "temp_password": temp_password,
+            "smtp_sent": False,
+        }
+    )
 
 
 @router.delete("/api/project/{slug}/members/{member_id}")

@@ -94,3 +94,66 @@ async def test_ensure_default_project_noop_when_member(_patch_db, db_session_fac
 
     created = await ensure_default_project(uid, None, "hasproj@example.com")
     assert created is False
+
+
+@pytest.fixture
+async def _http_client(_patch_db):
+    import httpx
+    from httpx import ASGITransport
+
+    from app.auth.csrf import _generate_csrf_token
+    from app.main import app
+
+    csrf = _generate_csrf_token()
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"csrf_token": csrf},
+        headers={"x-csrf-token": csrf},
+    ) as client:
+        yield client
+
+
+async def _seed_owner_and_project(db_session_factory, slug="acme"):
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    async with db_session_factory() as db:
+        owner = User(email="owner@example.com", display_name="Owner")
+        db.add(owner)
+        await db.flush()
+        proj = Project(name="Acme", slug=slug, owner_id=owner.id)
+        db.add(proj)
+        await db.flush()
+        db.add(ProjectMember(project_id=proj.id, user_id=owner.id, role="owner"))
+        await db.commit()
+        return str(owner.id), str(owner.email), slug
+
+
+@pytest.mark.asyncio
+async def test_invite_returns_temp_password_and_member_can_login(
+    _http_client, db_session_factory
+):
+    from unittest.mock import AsyncMock, patch
+
+    from app.auth.email_auth import authenticate_user
+
+    owner_id, owner_email, slug = await _seed_owner_and_project(db_session_factory)
+    owner_ctx = {"user_id": owner_id, "email": owner_email}
+
+    with patch(
+        "app.api.project_routes._resolve_user",
+        new=AsyncMock(return_value=owner_ctx),
+    ):
+        resp = await _http_client.post(
+            f"/api/project/{slug}/members",
+            json={"email": "newhire@example.com", "role": "member"},
+        )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data.get("temp_password")
+    assert data.get("smtp_sent") is False
+
+    user, err = await authenticate_user("newhire@example.com", data["temp_password"])
+    assert err is None
+    assert user is not None

@@ -856,12 +856,21 @@ if (inviteForm) {
       });
       var data = await res.json();
       if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
-      msg.textContent = data.message || 'Invited!';
+      if (data.temp_password) {
+        msg.innerHTML =
+          '<div style="font-weight:600;margin-bottom:6px">Invited ' + emailVal + '</div>' +
+          '<div style="margin-bottom:6px">No invite email is sent (SMTP not configured). Share these credentials:</div>' +
+          '<div style="font-family:var(--font-mono,monospace);font-size:13px">Email: ' + emailVal + '<br>Password: <span id="tmpPw">' + data.temp_password + '</span></div>' +
+          '<button type="button" class="btn sm" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById(\'tmpPw\').textContent)">Copy password</button>' +
+          '<div style="margin-top:6px;color:var(--text-subtle);font-size:12px">⚠ This password is shown only once — copy it now, it won\'t be displayed again.</div>';
+      } else {
+        msg.textContent = data.message || 'Invited!';
+      }
       msg.style.background = 'color-mix(in srgb, var(--green) 10%, transparent)';
-      msg.style.color = 'var(--green)';
+      msg.style.color = 'var(--text)';
       msg.style.borderColor = 'color-mix(in srgb, var(--green) 25%, var(--line))';
-      msg.style.display = 'inline-block';
-      setTimeout(function(){ window.location.reload(); }, 1200);
+      msg.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Invite';
     } catch(err) {
       msg.textContent = err.message;
       msg.style.background = 'color-mix(in srgb, var(--red) 10%, transparent)';
