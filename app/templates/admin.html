@@ -25,7 +25,7 @@
 
   <section data-panel="requests" style="display:none">
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-      <input type="checkbox" id="gateToggle" onchange="toggleGate(this.checked)">
+      <input type="checkbox" id="gateToggle" onchange="toggleGate(this.checked)" {% if gate_enabled %}checked{% endif %}>
       Require access approval (gate open sign-up)
     </label>
     <div id="reqMsg" class="ps-msg" style="display:none"></div>

@@ -24,10 +24,12 @@ async def admin_page(request: Request):
     """Super-admin instance panel (page enforces 401/403)."""
     await require_superadmin(request)
     from app.api.google_oauth_routes import _load_user_view
+    from app.settings_service import access_approval_required
 
     user_ctx = await _resolve_user_ctx(request)
     user_view = await _load_user_view(user_ctx)
-    return render(request, "admin.html", {"user": user_view, "active": "admin"})
+    gate_enabled = await access_approval_required()
+    return render(request, "admin.html", {"user": user_view, "active": "admin", "gate_enabled": gate_enabled})
 
 
 async def require_superadmin(request: Request) -> dict:
