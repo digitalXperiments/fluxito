@@ -34,7 +34,7 @@ async def _email_config() -> dict:
         "username": getattr(settings, "SMTP_USERNAME", ""),
         "password": getattr(settings, "SMTP_PASSWORD", ""),
         "from_email": getattr(settings, "SMTP_FROM_EMAIL", "noreply@example.com"),
-        "from_name": getattr(settings, "SMTP_FROM_NAME", "Fluxito"),
+        "from_name": getattr(settings, "SMTP_FROM_NAME", ""),
     }
     session_factory = getattr(app_state, "db_session_factory", None)
     if session_factory is None:
@@ -69,9 +69,10 @@ async def send_email(
     """
     Send an email. Uses SMTP if configured, otherwise logs to console.
     """
+    from app.branding import brand as _brand
     cfg = await _email_config()
     from_email = cfg["from_email"] or "noreply@example.com"
-    from_name = cfg["from_name"] or "Fluxito"
+    from_name = cfg["from_name"] or _brand()["name"]
 
     if not (cfg["host"] and from_email):
         logger.info(f"[EMAIL-DEV] To: {to_email} | Subject: {subject}\n{text_body or html_body[:500]}")
@@ -116,16 +117,19 @@ async def send_project_invite_email(
     role: str,
 ):
     """Send an invitation email for a project."""
+    from app.branding import brand as _brand
+    brand_name = _brand()["name"]
+
     base_url = getattr(settings, "APP_BASE_URL", "https://fluxito.ai")
     invite_url = f"{base_url}/project/{project_slug}"
 
-    subject = f"You've been invited to {project_name} on Fluxito"
+    subject = f"You've been invited to {project_name} on {brand_name}"
 
     html_body = f"""
     <div style="font-family: Inter, -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 0;">
       <div style="text-align: center; margin-bottom: 32px;">
         <span style="font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: #1c1917;">
-          [ <span style="color: #b47800;">Fluxito.AI</span> ]
+          [ <span style="color: #b47800;">{brand_name}</span> ]
         </span>
       </div>
 
@@ -148,21 +152,21 @@ async def send_project_invite_email(
         </div>
 
         <p style="font-size: 13px; color: #a8a29e; margin: 24px 0 0; line-height: 1.5;">
-          If you don't have a Fluxito account, one will be created when you sign in
+          If you don't have a {brand_name} account, one will be created when you sign in
           with this email address ({to_email}).
         </p>
       </div>
 
       <p style="font-size: 12px; color: #a8a29e; text-align: center; margin-top: 24px;">
-        Fluxito — Marketing analytics for any AI
+        {brand_name} — Marketing analytics for any AI
       </p>
     </div>
     """
 
     text_body = (
-        f"{inviter_email} has invited you to join '{project_name}' on Fluxito as a {role}.\n\n"
+        f"{inviter_email} has invited you to join '{project_name}' on {brand_name} as a {role}.\n\n"
         f"Open the project: {invite_url}\n\n"
-        f"If you don't have a Fluxito account, one will be created when you sign in."
+        f"If you don't have a {brand_name} account, one will be created when you sign in."
     )
 
     await send_email(to_email, subject, html_body, text_body)

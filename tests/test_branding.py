@@ -43,3 +43,38 @@ async def test_brand_reflects_settings(_patch_db, db_session_factory):
     assert b["name"] == "Acme Analytics"
     assert b["logo_url"] == "https://x/logo.png"
     assert b["accent"] == "#ff0000"
+
+
+@pytest.mark.asyncio
+async def test_invite_email_uses_brand_name(_patch_db, db_session_factory, monkeypatch):
+    from app.branding import refresh_brand
+    from app.settings_service import set_setting
+    import app.email_service as es
+
+    async with db_session_factory() as db:
+        await set_setting(db, key="brand_name", value="Acme Analytics", is_secret=False, updated_by_user_id=None)
+        await db.commit()
+    await refresh_brand()
+
+    captured = {}
+
+    async def _fake_send_email(to_email, subject, html_body, text_body=None):
+        captured["subject"] = subject
+        captured["html"] = html_body
+        captured["text"] = text_body
+
+    monkeypatch.setattr(es, "send_email", _fake_send_email)
+    await es.send_project_invite_email(
+        to_email="x@example.com", project_name="Proj", project_slug="proj",
+        inviter_email="boss@example.com", role="member",
+    )
+    assert "Acme Analytics" in captured["subject"]
+    assert "Acme Analytics" in captured["html"]
+    assert "Fluxito" not in captured["subject"]
+
+
+def test_branding_reset_after():
+    # restore default cache so other tests/modules see Fluxito
+    import app.branding as b
+    b._BRAND_CACHE.update({"name": "Fluxito", "logo_url": "", "accent": ""})
+    assert b.brand()["name"] == "Fluxito"
