@@ -869,9 +869,7 @@ async def reset_member_password(request: Request, slug: str, member_id: str):
         await db.commit()
         target_email = target_user.email
 
-    return JSONResponse(
-        {"success": True, "email": target_email, "temp_password": new_password}
-    )
+    return JSONResponse({"success": True, "email": target_email, "temp_password": new_password})
 
 
 # ---------------------------------------------------------------------------

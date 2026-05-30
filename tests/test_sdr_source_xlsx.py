@@ -17,6 +17,7 @@ def _patch_db(db_session_factory):
     original = app_state.db_session_factory
     app_state.db_session_factory = db_session_factory
     import app.tools.sdr_tools as sdr_tools
+
     orig_state = sdr_tools.state.db_session_factory
     sdr_tools.state.db_session_factory = db_session_factory
     yield
@@ -47,11 +48,9 @@ async def test_store_source_xlsx_persists_bytes(_patch_db, db_session_factory):
         # SDR.project_id / created_by carry FK constraints — seed the parents.
         db.add(User(id=user_id, email=f"sdr-xlsx-{user_id}@example.com"))
         await db.flush()
-        db.add(Project(id=project_id, name="X", slug=f"sdr-xlsx-{project_id}",
-                       owner_id=user_id))
+        db.add(Project(id=project_id, name="X", slug=f"sdr-xlsx-{project_id}", owner_id=user_id))
         await db.flush()
-        sdr = SDR(project_id=project_id, name="X", markdown_content="# X",
-                  created_by=user_id)
+        sdr = SDR(project_id=project_id, name="X", markdown_content="# X", created_by=user_id)
         db.add(sdr)
         await db.flush()
         sdr_id = sdr.id
@@ -126,8 +125,10 @@ async def test_download_source_xlsx_endpoint(_patch_db, db_session_factory):
 
     csrf = _generate_csrf_token()
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver",
-        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"csrf_token": csrf},
+        headers={"x-csrf-token": csrf},
     ) as client:
         with patch(
             "app.api.sdr_routes._require_user_and_project",
@@ -161,8 +162,10 @@ async def test_download_source_xlsx_sanitizes_filename(_patch_db, db_session_fac
 
     csrf = _generate_csrf_token()
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver",
-        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"csrf_token": csrf},
+        headers={"x-csrf-token": csrf},
     ) as client:
         with patch(
             "app.api.sdr_routes._require_user_and_project",
@@ -202,8 +205,10 @@ async def test_download_source_xlsx_404_when_none(_patch_db, db_session_factory)
 
     csrf = _generate_csrf_token()
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver",
-        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"csrf_token": csrf},
+        headers={"x-csrf-token": csrf},
     ) as client:
         with patch(
             "app.api.sdr_routes._require_user_and_project",

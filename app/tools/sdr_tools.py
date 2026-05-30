@@ -343,7 +343,10 @@ def register_sdr_tools(mcp_server: Any) -> None:
 
             elif action == "apply_source_delta":
                 if not source_delta:
-                    return {"error": True, "message": "source_delta parameter required for apply_source_delta."}
+                    return {
+                        "error": True,
+                        "message": "source_delta parameter required for apply_source_delta.",
+                    }
                 result = _handle_apply_source_delta(sdr, ref_state, source_delta)
 
             elif action == "finalize":
@@ -433,7 +436,11 @@ async def _generate_sdr_v2(
     intake_snapshot = build_intake_snapshot(intake_answers or {})
     scans = await scan_sources(project_ctx, requested_sources)
     scan_events = merge_scan_events(scans)
-    business_type = business_type_hint or _infer_business_type_from_intake(intake_snapshot["answers"]) or _infer_business_type(scan_events)
+    business_type = (
+        business_type_hint
+        or _infer_business_type_from_intake(intake_snapshot["answers"])
+        or _infer_business_type(scan_events)
+    )
     template_events = get_industry_template(business_type)
 
     existing_sdr_id: str | None = None
@@ -459,9 +466,7 @@ async def _generate_sdr_v2(
         events=merged_events,
         intake_answers=intake_snapshot["answers"],
     )
-    diagnostics = _diagnostics_block(
-        scans, intake_snapshot["answers"], [e.name for e in merged_events]
-    )
+    diagnostics = _diagnostics_block(scans, intake_snapshot["answers"], [e.name for e in merged_events])
 
     return {
         "sdr_id": existing_sdr_id,
@@ -532,7 +537,11 @@ async def _capture_sdr_intake(
         if not sdr:
             return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
         if str(sdr.project_id) != project_ctx.project_id:
-            return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+            return {
+                "error": True,
+                "error_type": "access_denied",
+                "message": "SDR belongs to a different project.",
+            }
         await _persist_intake(db, sdr, snapshot, _uuid.UUID(str(user_ctx.user_id)))
         await db.commit()
 
@@ -547,7 +556,9 @@ async def _capture_sdr_intake(
 _MAX_SOURCE_XLSX_BYTES = 2 * 1024 * 1024  # 2 MB — SDR workbooks are tabular/text
 
 
-def _store_source_xlsx(sdr, source_xlsx_base64: str | None, source_filename: str | None) -> tuple[bool, str | None]:
+def _store_source_xlsx(
+    sdr, source_xlsx_base64: str | None, source_filename: str | None
+) -> tuple[bool, str | None]:
     """Validate + attach a base64-encoded source .xlsx to an SDR row.
 
     Returns (stored, error). Does not commit. No-op (False, None) when no payload.
@@ -634,7 +645,11 @@ async def _save_sdr_v2(
             if not sdr:
                 return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
             if str(sdr.project_id) != project_ctx.project_id:
-                return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+                return {
+                    "error": True,
+                    "error_type": "access_denied",
+                    "message": "SDR belongs to a different project.",
+                }
         else:
             result = await db.execute(select(SDR).where(SDR.project_id == target_project_id))
             sdr = result.scalar_one_or_none()
@@ -729,7 +744,11 @@ async def _refresh_sdr_sources_v2(
         if not sdr:
             return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
         if str(sdr.project_id) != project_ctx.project_id:
-            return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+            return {
+                "error": True,
+                "error_type": "access_denied",
+                "message": "SDR belongs to a different project.",
+            }
         parsed = parse_sdr_markdown(sdr.markdown_content)
         intake = (
             {"intake_version": sdr.intake_version, "answers": sdr.intake_answers or {}}
@@ -778,7 +797,11 @@ async def _diagnose_sdr_v2(*, sdr_id: str | None, connector_filter: list[str] | 
             if not sdr:
                 return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
             if str(sdr.project_id) != project_ctx.project_id:
-                return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+                return {
+                    "error": True,
+                    "error_type": "access_denied",
+                    "message": "SDR belongs to a different project.",
+                }
             intake_answers = sdr.intake_answers or {}
             current_names = [e.name for e in parse_sdr_markdown(sdr.markdown_content).events]
 
@@ -814,7 +837,11 @@ async def _get_sdr_intake(*, sdr_id: str) -> dict:
         if not sdr:
             return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
         if str(sdr.project_id) != project_ctx.project_id:
-            return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+            return {
+                "error": True,
+                "error_type": "access_denied",
+                "message": "SDR belongs to a different project.",
+            }
 
         intakes = await db.execute(
             select(SDRIntake).where(SDRIntake.sdr_id == sdr.id).order_by(SDRIntake.answered_at.desc())
@@ -863,7 +890,11 @@ async def _list_sdr_sources(*, sdr_id: str | None) -> dict:
             if not sdr:
                 return {"error": True, "error_type": "not_found", "message": f"SDR '{sdr_id}' not found."}
             if str(sdr.project_id) != project_ctx.project_id:
-                return {"error": True, "error_type": "access_denied", "message": "SDR belongs to a different project."}
+                return {
+                    "error": True,
+                    "error_type": "access_denied",
+                    "message": "SDR belongs to a different project.",
+                }
             if isinstance(sdr.last_source_scan, dict):
                 last_scan_sources = sorted(sdr.last_source_scan.keys())
             if sdr.last_full_source_scan_at:
@@ -1075,7 +1106,9 @@ def _infer_business_type_from_intake(answers: dict[str, str]) -> str | None:
 def _template_rationale(business_type: str, answers: dict[str, str], scanned_event_count: int) -> str:
     model = answers.get("business_model")
     if model:
-        return f"Selected '{business_type}' from intake business model and {scanned_event_count} scanned events."
+        return (
+            f"Selected '{business_type}' from intake business model and {scanned_event_count} scanned events."
+        )
     return f"Selected '{business_type}' from scanned event signals; intake did not provide a stronger business model clue."
 
 
@@ -1209,9 +1242,7 @@ def _build_synthesis_playbook(
     findings: list | None = None,
 ) -> str:
     connected = connected or {}
-    save_target = (
-        f"the existing draft (pass sdr_id='{sdr_id}')" if sdr_id else "a new draft (omit sdr_id)"
-    )
+    save_target = f"the existing draft (pass sdr_id='{sdr_id}')" if sdr_id else "a new draft (omit sdr_id)"
     unsupported = connected.get("connected_but_unsupported") or []
     failures = connected.get("partial_failures") or []
 
@@ -1571,14 +1602,20 @@ def _handle_apply_source_delta(sdr: SDR, ref_state: SDRRefinementState, source_d
     proposals = deltas.get("proposals") or []
     if not proposals:
         added = deltas.get("added_events") or []
-        proposals = [
-            {
-                "section_path": "event_catalog",
-                "change_type": "append",
-                "to_value": "\n".join(f"- Add `{event.get('name')}` from refreshed sources." for event in added),
-                "rationale": "New events were discovered by refresh_sdr_sources.",
-            }
-        ] if added else []
+        proposals = (
+            [
+                {
+                    "section_path": "event_catalog",
+                    "change_type": "append",
+                    "to_value": "\n".join(
+                        f"- Add `{event.get('name')}` from refreshed sources." for event in added
+                    ),
+                    "rationale": "New events were discovered by refresh_sdr_sources.",
+                }
+            ]
+            if added
+            else []
+        )
     if not proposals:
         return {
             "sdr_id": str(sdr.id),

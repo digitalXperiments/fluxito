@@ -72,9 +72,7 @@ async def test_initiate_records_cookie_session_user(monkeypatch):
     redis = FakeRedis()
     monkeypatch.setattr(google_oauth_routes.app_state, "redis_client", redis)
     monkeypatch.setattr(google_oauth_routes.app_state, "db_session_factory", _fake_cred_factory)
-    monkeypatch.setattr(
-        "app.auth.oauth_app_credentials.get_oauth_app_credentials", _fake_get_creds
-    )
+    monkeypatch.setattr("app.auth.oauth_app_credentials.get_oauth_app_credentials", _fake_get_creds)
     monkeypatch.setattr("app.utils.base_url_from_request", lambda request: "http://testserver")
 
     async def fake_resolve(request):
@@ -180,9 +178,7 @@ async def test_data_callback_does_not_switch_session(monkeypatch):
 
     monkeypatch.setattr(google_oauth_routes.app_state, "redis_client", redis)
     monkeypatch.setattr(google_oauth_routes.app_state, "db_session_factory", lambda: FakeSession())
-    monkeypatch.setattr(
-        "app.auth.oauth_app_credentials.get_oauth_app_credentials", _fake_get_creds
-    )
+    monkeypatch.setattr("app.auth.oauth_app_credentials.get_oauth_app_credentials", _fake_get_creds)
 
     # Fake Google HTTP: token exchange, userinfo (account B), and GTM probe.
     class FakeResp:
@@ -311,9 +307,7 @@ async def test_data_callback_stores_separate_row_per_user(monkeypatch):
 
     monkeypatch.setattr(google_oauth_routes.app_state, "redis_client", redis)
     monkeypatch.setattr(google_oauth_routes.app_state, "db_session_factory", lambda: FakeSession())
-    monkeypatch.setattr(
-        "app.auth.oauth_app_credentials.get_oauth_app_credentials", _fake_get_creds
-    )
+    monkeypatch.setattr("app.auth.oauth_app_credentials.get_oauth_app_credentials", _fake_get_creds)
 
     class FakeResp:
         def __init__(self, status, payload):

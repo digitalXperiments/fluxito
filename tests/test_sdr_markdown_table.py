@@ -18,7 +18,13 @@ def test_parses_headers_and_rows():
     assert table is not None
     assert table["headers"] == ["Name", "Scope", "Source", "Example", "Platforms"]
     assert len(table["rows"]) == 2
-    assert table["rows"][0] == ["email", "EVENT", "Qualified Identify()", "jane@acme.com", "GA4 [CRITICAL PII]"]
+    assert table["rows"][0] == [
+        "email",
+        "EVENT",
+        "Qualified Identify()",
+        "jane@acme.com",
+        "GA4 [CRITICAL PII]",
+    ]
     assert table["rows"][1][0] == "company"
 
 

@@ -70,6 +70,7 @@ async def send_email(
     Send an email. Uses SMTP if configured, otherwise logs to console.
     """
     from app.branding import brand as _brand
+
     cfg = await _email_config()
     from_email = cfg["from_email"] or "noreply@example.com"
     from_name = cfg["from_name"] or _brand()["name"]
@@ -118,6 +119,7 @@ async def send_project_invite_email(
 ):
     """Send an invitation email for a project."""
     from app.branding import brand as _brand
+
     brand_name = _brand()["name"]
 
     base_url = getattr(settings, "APP_BASE_URL", "https://fluxito.ai")

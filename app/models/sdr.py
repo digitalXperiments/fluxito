@@ -202,8 +202,12 @@ class SDRIntake(Base):
     )
     intake_version: Mapped[str] = mapped_column(Text, nullable=False)
     answers: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    answered_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    answered_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    answered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
     sdr: Mapped["SDR"] = relationship("SDR", back_populates="intakes")

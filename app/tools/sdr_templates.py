@@ -138,7 +138,9 @@ def _ecommerce_template() -> list[ParsedEvent]:
             parameters=[
                 ParsedParameter(name="currency", type="string", required=True, example="USD"),
                 ParsedParameter(name="value", type="number", required=True, example="49.99"),
-                ParsedParameter(name="items", type="array", required=True, source="dataLayer.ecommerce.items"),
+                ParsedParameter(
+                    name="items", type="array", required=True, source="dataLayer.ecommerce.items"
+                ),
             ],
             destinations=[ParsedDestination(platform="ga4")],
         ),
@@ -151,7 +153,9 @@ def _ecommerce_template() -> list[ParsedEvent]:
             parameters=[
                 ParsedParameter(name="currency", type="string", required=True, example="USD"),
                 ParsedParameter(name="value", type="number", required=True, example="49.99"),
-                ParsedParameter(name="items", type="array", required=True, source="dataLayer.ecommerce.items"),
+                ParsedParameter(
+                    name="items", type="array", required=True, source="dataLayer.ecommerce.items"
+                ),
             ],
             destinations=[ParsedDestination(platform="ga4")],
         ),
@@ -184,7 +188,9 @@ def _ecommerce_template() -> list[ParsedEvent]:
                 ParsedParameter(name="currency", type="string", required=True, example="USD"),
                 ParsedParameter(name="value", type="number", required=True, example="99.99"),
                 ParsedParameter(name="shipping_tier", type="string", required=False, example="Ground"),
-                ParsedParameter(name="items", type="array", required=True, source="dataLayer.ecommerce.items"),
+                ParsedParameter(
+                    name="items", type="array", required=True, source="dataLayer.ecommerce.items"
+                ),
             ],
             destinations=[ParsedDestination(platform="ga4")],
         ),

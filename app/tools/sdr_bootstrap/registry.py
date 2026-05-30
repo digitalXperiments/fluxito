@@ -17,8 +17,8 @@ from app.tools.sdr_parser import ParsedDestination, ParsedEvent
 # Capability roles a data source can fill. The diagnostic engine reasons about
 # these roles, never about named platforms — so GTM↔GA4, Adobe Launch↔Adobe
 # Analytics, or tags↔warehouse all diagnose through the same logic.
-ROLE_TAG_INVENTORY = "tag_inventory"        # is the event configured to collect?
-ROLE_EVENT_VOLUME = "event_volume"          # is the event actually flowing?
+ROLE_TAG_INVENTORY = "tag_inventory"  # is the event configured to collect?
+ROLE_EVENT_VOLUME = "event_volume"  # is the event actually flowing?
 ROLE_CONVERSION_CONFIG = "conversion_config"  # is it set up for activation/ROAS?
 DIAGNOSTIC_ROLES: tuple[str, ...] = (ROLE_TAG_INVENTORY, ROLE_EVENT_VOLUME, ROLE_CONVERSION_CONFIG)
 
@@ -53,11 +53,9 @@ class SDRDataSource(Protocol):
     display_name: str
     provides: frozenset[str]
 
-    async def is_available(self, project_ctx: ProjectContext) -> bool:
-        ...
+    async def is_available(self, project_ctx: ProjectContext) -> bool: ...
 
-    async def scan(self, project_ctx: ProjectContext, timeout_s: float = 45.0) -> SDRSourceScan:
-        ...
+    async def scan(self, project_ctx: ProjectContext, timeout_s: float = 45.0) -> SDRSourceScan: ...
 
 
 class GA4DataSource:
@@ -77,14 +75,18 @@ class GA4DataSource:
         ga4 = getattr(state, "ga4_connector", None)
         conn_id = _first_connection_id(project_ctx, "google")
         if not ga4 or not conn_id:
-            return _scan_result(self.name, "failed", started, errors=["GA4 connector or Google connection is unavailable."])
+            return _scan_result(
+                self.name, "failed", started, errors=["GA4 connector or Google connection is unavailable."]
+            )
 
         for prop in getattr(project_ctx, "ga4_properties", []) or []:
             prop_id = prop.get("property_id") or prop.get("id")
             if not prop_id:
                 continue
             try:
-                conv_result = await asyncio.wait_for(ga4.get_conversion_events(conn_id, prop_id), timeout=timeout_s)
+                conv_result = await asyncio.wait_for(
+                    ga4.get_conversion_events(conn_id, prop_id), timeout=timeout_s
+                )
                 conv_events = conv_result.get("conversion_events") or conv_result.get("events") or []
                 conversions.extend(conv_events)
                 for ce in conv_events:
@@ -108,8 +110,12 @@ class GA4DataSource:
                 errors.append(f"Property {prop_id} conversion events: {exc}")
 
             try:
-                dims_result = await asyncio.wait_for(ga4.list_custom_dimensions(conn_id, prop_id), timeout=timeout_s)
-                custom_dims.extend(dims_result.get("custom_dimensions") or dims_result.get("dimensions") or [])
+                dims_result = await asyncio.wait_for(
+                    ga4.list_custom_dimensions(conn_id, prop_id), timeout=timeout_s
+                )
+                custom_dims.extend(
+                    dims_result.get("custom_dimensions") or dims_result.get("dimensions") or []
+                )
             except Exception as exc:
                 errors.append(f"Property {prop_id} custom dimensions: {exc}")
 
@@ -168,7 +174,9 @@ class GTMDataSource:
         gtm = getattr(state, "gtm_connector", None)
         conn_id = _first_connection_id(project_ctx, "google")
         if not gtm or not conn_id:
-            return _scan_result(self.name, "failed", started, errors=["GTM connector or Google connection is unavailable."])
+            return _scan_result(
+                self.name, "failed", started, errors=["GTM connector or Google connection is unavailable."]
+            )
 
         for container in getattr(project_ctx, "gtm_containers", []) or []:
             account_id = container.get("account_id")
@@ -176,7 +184,9 @@ class GTMDataSource:
             if not account_id or not container_id:
                 continue
             try:
-                tags_result = await asyncio.wait_for(gtm.list_tags(conn_id, account_id, container_id), timeout=timeout_s)
+                tags_result = await asyncio.wait_for(
+                    gtm.list_tags(conn_id, account_id, container_id), timeout=timeout_s
+                )
                 tags = tags_result.get("tags") or []
                 tags_seen.extend(tags)
                 triggers_result = await asyncio.wait_for(
@@ -204,7 +214,9 @@ class GTMDataSource:
                             trigger_type=trigger_type,
                             trigger_config=trigger_config,
                             status="implemented",
-                            destinations=[ParsedDestination(platform=dest_platform, dest_event_name=event_name)],
+                            destinations=[
+                                ParsedDestination(platform=dest_platform, dest_event_name=event_name)
+                            ],
                         )
                     )
             except Exception as exc:
@@ -238,14 +250,21 @@ class GoogleAdsDataSource:
         ads = getattr(state, "ads_connector", None)
         conn_id = _first_connection_id(project_ctx, "google")
         if not ads or not conn_id:
-            return _scan_result(self.name, "failed", started, errors=["Google Ads connector or Google connection is unavailable."])
+            return _scan_result(
+                self.name,
+                "failed",
+                started,
+                errors=["Google Ads connector or Google connection is unavailable."],
+            )
 
         for acct in getattr(project_ctx, "ads_accounts", []) or []:
             customer_id = acct.get("customer_id")
             if not customer_id:
                 continue
             try:
-                conv_result = await asyncio.wait_for(ads.get_conversion_actions(conn_id, customer_id), timeout=timeout_s)
+                conv_result = await asyncio.wait_for(
+                    ads.get_conversion_actions(conn_id, customer_id), timeout=timeout_s
+                )
                 conv_actions = conv_result.get("conversion_actions") or conv_result.get("conversions") or []
                 raw_actions.extend(conv_actions)
                 for conv in conv_actions:
@@ -290,8 +309,14 @@ DATA_SOURCE_REGISTRY: dict[str, SDRDataSource] = {source.name: source for source
 SUPPORTED_SOURCE_NAMES: tuple[str, ...] = tuple(DATA_SOURCE_REGISTRY.keys())
 
 
-async def _available_sources_async(project_ctx: ProjectContext, requested: list[str] | None = None) -> list[SDRDataSource]:
-    sources = [DATA_SOURCE_REGISTRY[name] for name in requested or DATA_SOURCE_REGISTRY.keys() if name in DATA_SOURCE_REGISTRY]
+async def _available_sources_async(
+    project_ctx: ProjectContext, requested: list[str] | None = None
+) -> list[SDRDataSource]:
+    sources = [
+        DATA_SOURCE_REGISTRY[name]
+        for name in requested or DATA_SOURCE_REGISTRY.keys()
+        if name in DATA_SOURCE_REGISTRY
+    ]
     available: list[SDRDataSource] = []
     for source in sources:
         try:
@@ -303,7 +328,11 @@ async def _available_sources_async(project_ctx: ProjectContext, requested: list[
 
 
 def get_available_sources(project_ctx: ProjectContext, requested: list[str] | None = None) -> list[str]:
-    sources = [DATA_SOURCE_REGISTRY[name] for name in requested or DATA_SOURCE_REGISTRY.keys() if name in DATA_SOURCE_REGISTRY]
+    sources = [
+        DATA_SOURCE_REGISTRY[name]
+        for name in requested or DATA_SOURCE_REGISTRY.keys()
+        if name in DATA_SOURCE_REGISTRY
+    ]
     available: list[str] = []
     for source in sources:
         flag_name = "has_ads" if source.name == "google_ads" else f"has_{source.name}"
@@ -338,10 +367,16 @@ def compute_source_fingerprint(project_ctx: ProjectContext) -> str:
             ),
             key=lambda item: json.dumps(item, sort_keys=True),
         ),
-        "ga4_properties": _sorted_dicts(getattr(project_ctx, "ga4_properties", []) or [], ["property_id", "id"]),
-        "gtm_containers": _sorted_dicts(getattr(project_ctx, "gtm_containers", []) or [], ["account_id", "container_id"]),
+        "ga4_properties": _sorted_dicts(
+            getattr(project_ctx, "ga4_properties", []) or [], ["property_id", "id"]
+        ),
+        "gtm_containers": _sorted_dicts(
+            getattr(project_ctx, "gtm_containers", []) or [], ["account_id", "container_id"]
+        ),
         "ads_accounts": _sorted_dicts(getattr(project_ctx, "ads_accounts", []) or [], ["customer_id", "id"]),
-        "search_console_sites": _sorted_dicts(getattr(project_ctx, "search_console_sites", []) or [], ["site_url", "url"]),
+        "search_console_sites": _sorted_dicts(
+            getattr(project_ctx, "search_console_sites", []) or [], ["site_url", "url"]
+        ),
     }
     payload = json.dumps(resources, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
@@ -470,7 +505,9 @@ def _infer_event_name_from_tag(tag: dict[str, Any]) -> str | None:
     return None if name in ("", "tag", "pixel", "script", "html", "custom_html") else name
 
 
-def _infer_trigger(tag: dict[str, Any], trigger_map: dict[str, dict[str, Any]]) -> tuple[str, dict[str, Any] | None]:
+def _infer_trigger(
+    tag: dict[str, Any], trigger_map: dict[str, dict[str, Any]]
+) -> tuple[str, dict[str, Any] | None]:
     trigger_type = "custom"
     trigger_config: dict[str, Any] = {}
     for trigger_id in tag.get("firingTriggerId") or []:

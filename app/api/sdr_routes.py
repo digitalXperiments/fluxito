@@ -748,7 +748,9 @@ async def api_download_source_xlsx(project_id: str, request: Request):
 
         raw_name = sdr.source_xlsx_filename or f"{sdr.name or 'SDR'}-source.xlsx"
         # Strip characters that could break the Content-Disposition header.
-        filename = "".join(c for c in raw_name if c.isalnum() or c in (" ", "-", "_", ".")).strip() or "source.xlsx"
+        filename = (
+            "".join(c for c in raw_name if c.isalnum() or c in (" ", "-", "_", ".")).strip() or "source.xlsx"
+        )
         return Response(
             content=sdr.source_xlsx,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

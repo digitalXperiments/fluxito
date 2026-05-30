@@ -400,11 +400,7 @@ def parse_markdown_table(text: str | None) -> dict | None:
     if not text:
         return None
 
-    table_lines = [
-        line.strip()
-        for line in text.split("\n")
-        if line.strip().startswith("|")
-    ]
+    table_lines = [line.strip() for line in text.split("\n") if line.strip().startswith("|")]
     if len(table_lines) < 2:
         return None
 
@@ -846,7 +842,9 @@ def generate_sdr_markdown(
     # Gap Register
     lines.append("## Gap Register")
     lines.append("")
-    lines.append("| # | Severity | Finding | Evidence | Business impact | Recommended fix | Fix location | Owner |")
+    lines.append(
+        "| # | Severity | Finding | Evidence | Business impact | Recommended fix | Fix location | Owner |"
+    )
     lines.append("|---|---|---|---|---|---|---|---|")
     lines.append("| [TODO] | | | | | | | |")
     lines.append("")

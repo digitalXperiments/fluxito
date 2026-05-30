@@ -17,6 +17,7 @@ def _patch_db(db_session_factory):
     # Reset the module-global brand cache so branding tests never leak
     # a non-default value into other tests/files.
     import app.branding as _b
+
     _b._BRAND_CACHE.update({"name": "Fluxito", "logo_url": "", "accent": ""})
 
 
@@ -37,8 +38,12 @@ async def test_brand_reflects_settings(_patch_db, db_session_factory):
     from app.settings_service import set_setting
 
     async with db_session_factory() as db:
-        await set_setting(db, key="brand_name", value="Acme Analytics", is_secret=False, updated_by_user_id=None)
-        await set_setting(db, key="brand_logo_url", value="https://x/logo.png", is_secret=False, updated_by_user_id=None)
+        await set_setting(
+            db, key="brand_name", value="Acme Analytics", is_secret=False, updated_by_user_id=None
+        )
+        await set_setting(
+            db, key="brand_logo_url", value="https://x/logo.png", is_secret=False, updated_by_user_id=None
+        )
         await set_setting(db, key="brand_accent", value="#ff0000", is_secret=False, updated_by_user_id=None)
         await db.commit()
 
@@ -56,7 +61,9 @@ async def test_invite_email_uses_brand_name(_patch_db, db_session_factory, monke
     from app.settings_service import set_setting
 
     async with db_session_factory() as db:
-        await set_setting(db, key="brand_name", value="Acme Analytics", is_secret=False, updated_by_user_id=None)
+        await set_setting(
+            db, key="brand_name", value="Acme Analytics", is_secret=False, updated_by_user_id=None
+        )
         await db.commit()
     await refresh_brand()
 
@@ -69,8 +76,11 @@ async def test_invite_email_uses_brand_name(_patch_db, db_session_factory, monke
 
     monkeypatch.setattr(es, "send_email", _fake_send_email)
     await es.send_project_invite_email(
-        to_email="x@example.com", project_name="Proj", project_slug="proj",
-        inviter_email="boss@example.com", role="member",
+        to_email="x@example.com",
+        project_name="Proj",
+        project_slug="proj",
+        inviter_email="boss@example.com",
+        role="member",
     )
     assert "Acme Analytics" in captured["subject"]
     assert "Acme Analytics" in captured["html"]
@@ -87,14 +97,17 @@ async def _http_client(_patch_db):
 
     csrf = _generate_csrf_token()
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver",
-        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"csrf_token": csrf},
+        headers={"x-csrf-token": csrf},
     ) as client:
         yield client
 
 
 async def _make_user(db_session_factory, email, *, is_superadmin=False):
     from app.models.user import User
+
     async with db_session_factory() as db:
         u = User(email=email, is_superadmin=is_superadmin)
         db.add(u)
@@ -113,8 +126,12 @@ async def test_branding_route_requires_superadmin(_http_client, db_session_facto
     from unittest.mock import AsyncMock, patch
 
     uid = await _make_user(db_session_factory, "plain-b@example.com", is_superadmin=False)
-    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(uid, "plain-b@example.com"))):
-        resp = await _http_client.patch("/api/admin/settings/branding", json={"name": "Acme", "logo_url": "", "accent": ""})
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(uid, "plain-b@example.com"))
+    ):
+        resp = await _http_client.patch(
+            "/api/admin/settings/branding", json={"name": "Acme", "logo_url": "", "accent": ""}
+        )
     assert resp.status_code == 403
 
 
@@ -125,9 +142,13 @@ async def test_branding_route_writes_and_refreshes(_http_client, db_session_fact
     from app.branding import brand
 
     sid = await _make_user(db_session_factory, "super-b@example.com", is_superadmin=True)
-    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(sid, "super-b@example.com"))):
-        resp = await _http_client.patch("/api/admin/settings/branding",
-                                        json={"name": "Acme Co", "logo_url": "https://x/l.png", "accent": "#123456"})
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(sid, "super-b@example.com"))
+    ):
+        resp = await _http_client.patch(
+            "/api/admin/settings/branding",
+            json={"name": "Acme Co", "logo_url": "https://x/l.png", "accent": "#123456"},
+        )
     assert resp.status_code == 200, resp.text
     assert brand()["name"] == "Acme Co"
     assert brand()["accent"] == "#123456"
@@ -138,8 +159,13 @@ async def test_branding_route_rejects_empty_name(_http_client, db_session_factor
     from unittest.mock import AsyncMock, patch
 
     sid = await _make_user(db_session_factory, "super-b2@example.com", is_superadmin=True)
-    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(sid, "super-b2@example.com"))):
-        resp = await _http_client.patch("/api/admin/settings/branding", json={"name": "  ", "logo_url": "", "accent": ""})
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx",
+        new=AsyncMock(return_value=_ctx(sid, "super-b2@example.com")),
+    ):
+        resp = await _http_client.patch(
+            "/api/admin/settings/branding", json={"name": "  ", "logo_url": "", "accent": ""}
+        )
     assert resp.status_code == 400
 
 
@@ -148,9 +174,13 @@ async def test_branding_route_rejects_bad_accent(_http_client, db_session_factor
     from unittest.mock import AsyncMock, patch
 
     sid = await _make_user(db_session_factory, "super-b4@example.com", is_superadmin=True)
-    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(sid, "super-b4@example.com"))):
-        resp = await _http_client.patch("/api/admin/settings/branding",
-                                        json={"name": "Acme", "logo_url": "", "accent": "#fff; } body{}"})
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx",
+        new=AsyncMock(return_value=_ctx(sid, "super-b4@example.com")),
+    ):
+        resp = await _http_client.patch(
+            "/api/admin/settings/branding", json={"name": "Acme", "logo_url": "", "accent": "#fff; } body{}"}
+        )
     assert resp.status_code == 400
 
 
@@ -159,9 +189,13 @@ async def test_branding_get_returns_values(_http_client, db_session_factory):
     from unittest.mock import AsyncMock, patch
 
     sid = await _make_user(db_session_factory, "super-b3@example.com", is_superadmin=True)
-    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(sid, "super-b3@example.com"))):
-        await _http_client.patch("/api/admin/settings/branding", json={"name": "Zeta", "logo_url": "", "accent": ""})
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx",
+        new=AsyncMock(return_value=_ctx(sid, "super-b3@example.com")),
+    ):
+        await _http_client.patch(
+            "/api/admin/settings/branding", json={"name": "Zeta", "logo_url": "", "accent": ""}
+        )
         resp = await _http_client.get("/api/admin/settings/branding")
     assert resp.status_code == 200
     assert resp.json()["name"] == "Zeta"
-

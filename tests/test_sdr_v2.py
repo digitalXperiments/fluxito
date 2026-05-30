@@ -76,12 +76,16 @@ def test_generate_response_includes_findings_and_readiness():
 
     scans = {
         "gtm": SDRSourceScan(
-            source="gtm", status="success",
-            events=[ParsedEvent(name="purchase")], roles=frozenset({ROLE_TAG_INVENTORY}),
+            source="gtm",
+            status="success",
+            events=[ParsedEvent(name="purchase")],
+            roles=frozenset({ROLE_TAG_INVENTORY}),
         ),
         "ga4": SDRSourceScan(
-            source="ga4", status="success",
-            raw_metadata={"event_volumes": {"purchase": 0}}, roles=frozenset({ROLE_EVENT_VOLUME}),
+            source="ga4",
+            status="success",
+            raw_metadata={"event_volumes": {"purchase": 0}},
+            roles=frozenset({ROLE_EVENT_VOLUME}),
         ),
     }
     block = t._diagnostics_block(scans, {"conversion_definition": "purchase"}, ["purchase"])
@@ -92,8 +96,14 @@ def test_generate_response_includes_findings_and_readiness():
 def test_synthesis_playbook_renders_findings():
     from app.tools.sdr_tools import _build_synthesis_playbook
 
-    findings = [{"type": "tag_configured_but_no_data", "severity": "critical",
-                 "summary": "`purchase` configured but no data", "fix_location": "website"}]
+    findings = [
+        {
+            "type": "tag_configured_but_no_data",
+            "severity": "critical",
+            "summary": "`purchase` configured but no data",
+            "fix_location": "website",
+        }
+    ]
     pb = _build_synthesis_playbook("X", "general", None, findings=findings)
     assert "DIAGNOSTIC FINDINGS" in pb
     assert "purchase" in pb
@@ -455,8 +465,13 @@ def test_save_validation_passes_for_gold_standard_example():
     from app.tools.sdr_tools import _validate_sdr_for_save
 
     path = os.path.join(
-        os.path.dirname(__file__), "..",
-        "fluxito-skills", "fluxito", "examples", "sdr", "bmk-eco-farms-sdr.md",
+        os.path.dirname(__file__),
+        "..",
+        "fluxito-skills",
+        "fluxito",
+        "examples",
+        "sdr",
+        "bmk-eco-farms-sdr.md",
     )
     with open(path) as fh:
         md = fh.read()
@@ -471,14 +486,19 @@ def test_skill_schema_matches_canonical_contract():
     from app.tools.sdr_bootstrap.contract import SDR_MARKDOWN_SCHEMA
 
     path = os.path.join(
-        os.path.dirname(__file__), "..",
-        "fluxito-skills", "fluxito", "references", "sdr", "markdown-schema.md",
+        os.path.dirname(__file__),
+        "..",
+        "fluxito-skills",
+        "fluxito",
+        "references",
+        "sdr",
+        "markdown-schema.md",
     )
     with open(path) as fh:
         skill_text = fh.read()
-    assert SDR_MARKDOWN_SCHEMA.strip() in skill_text, (
-        "skill markdown-schema.md has drifted from app/tools/sdr_bootstrap/contract.py"
-    )
+    assert (
+        SDR_MARKDOWN_SCHEMA.strip() in skill_text
+    ), "skill markdown-schema.md has drifted from app/tools/sdr_bootstrap/contract.py"
 
 
 def test_skill_example_sdrs_round_trip_through_parser():
@@ -508,8 +528,13 @@ def test_bmk_example_sdr_is_gold_standard():
     from app.tools.sdr_parser import compute_gaps, parse_sdr_markdown
 
     path = os.path.join(
-        os.path.dirname(__file__), "..",
-        "fluxito-skills", "fluxito", "examples", "sdr", "bmk-eco-farms-sdr.md",
+        os.path.dirname(__file__),
+        "..",
+        "fluxito-skills",
+        "fluxito",
+        "examples",
+        "sdr",
+        "bmk-eco-farms-sdr.md",
     )
     if not os.path.exists(path):
         import pytest

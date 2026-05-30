@@ -42,7 +42,9 @@ def _tag(events):
 
 
 def _vol(volumes, recent=None, conversions=None):
-    s = _scan("analytics", ["event_volume", "conversion_config"], events=conversions, volumes=volumes, recent=recent)
+    s = _scan(
+        "analytics", ["event_volume", "conversion_config"], events=conversions, volumes=volumes, recent=recent
+    )
     return s
 
 
@@ -143,9 +145,9 @@ def test_eval_diagnosis_matches_expectations(name):
     found = {f["type"] for f in out["findings"]}
     missing = sc["must_find"] - found
     assert not missing, f"{name}: expected findings missing: {missing} (got {found})"
-    assert out["readiness"]["primary_conversion_proven"] is sc["primary_proven"], (
-        f"{name}: primary_conversion_proven mismatch"
-    )
+    assert (
+        out["readiness"]["primary_conversion_proven"] is sc["primary_proven"]
+    ), f"{name}: primary_conversion_proven mismatch"
 
 
 @pytest.mark.parametrize("name", list(SCENARIOS))
@@ -153,7 +155,12 @@ def test_eval_skeleton_is_parse_valid_for_any_vertical(name):
     sc = SCENARIOS[name]
     configured = [e["name"] for e in sc["scans"]["tags"]["events"]]
     scan_events = [
-        ParsedEvent(name=n, status="implemented", purpose=f"{n} event", destinations=[ParsedDestination(platform="ga4")])
+        ParsedEvent(
+            name=n,
+            status="implemented",
+            purpose=f"{n} event",
+            destinations=[ParsedDestination(platform="ga4")],
+        )
         for n in configured
     ]
     merged = _merge_scan_with_template(scan_events, get_industry_template(sc["business_type"]))

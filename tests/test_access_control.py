@@ -6,7 +6,7 @@ import uuid
 import pytest
 
 import app.app_state as app_state
-import app.models.access_request  # noqa: F401 — register table in metadata
+import app.models.access_request
 import app.models.sdr  # noqa: F401
 
 
@@ -81,14 +81,17 @@ async def _http_client(_patch_db):
 
     csrf = _generate_csrf_token()
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver",
-        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"csrf_token": csrf},
+        headers={"x-csrf-token": csrf},
     ) as client:
         yield client
 
 
 async def _make_user(db_session_factory, email, *, is_superadmin=False):
     from app.models.user import User
+
     async with db_session_factory() as db:
         u = User(email=email, is_superadmin=is_superadmin)
         db.add(u)
@@ -103,8 +106,10 @@ async def test_admin_users_requires_superadmin(_http_client, db_session_factory)
     from unittest.mock import AsyncMock, patch
 
     uid = await _make_user(db_session_factory, "plain@example.com", is_superadmin=False)
-    with patch("app.api.admin_routes._resolve_user_ctx",
-               new=AsyncMock(return_value=type("C", (), {"user_id": uid, "email": "plain@example.com"})())):
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx",
+        new=AsyncMock(return_value=type("C", (), {"user_id": uid, "email": "plain@example.com"})()),
+    ):
         resp = await _http_client.get("/api/admin/users")
     assert resp.status_code == 403
 
@@ -115,8 +120,10 @@ async def test_admin_users_lists_for_superadmin(_http_client, db_session_factory
 
     sid = await _make_user(db_session_factory, "super@example.com", is_superadmin=True)
     await _make_user(db_session_factory, "member@example.com", is_superadmin=False)
-    with patch("app.api.admin_routes._resolve_user_ctx",
-               new=AsyncMock(return_value=type("C", (), {"user_id": sid, "email": "super@example.com"})())):
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx",
+        new=AsyncMock(return_value=type("C", (), {"user_id": sid, "email": "super@example.com"})()),
+    ):
         resp = await _http_client.get("/api/admin/users")
     assert resp.status_code == 200
     emails = [u["email"] for u in resp.json()["users"]]
@@ -157,7 +164,9 @@ async def test_admin_cannot_deactivate_self(_http_client, db_session_factory):
 @pytest.mark.asyncio
 async def test_admin_can_deactivate_other_user(_http_client, db_session_factory):
     from unittest.mock import AsyncMock, patch
+
     from sqlalchemy import select
+
     from app.models.user import User
 
     sid = await _make_user(db_session_factory, "s2@example.com", is_superadmin=True)
@@ -174,7 +183,9 @@ async def test_admin_can_deactivate_other_user(_http_client, db_session_factory)
 @pytest.mark.asyncio
 async def test_admin_can_grant_superadmin(_http_client, db_session_factory):
     from unittest.mock import AsyncMock, patch
+
     from sqlalchemy import select
+
     from app.models.user import User
 
     sid = await _make_user(db_session_factory, "granter@example.com", is_superadmin=True)
@@ -191,21 +202,24 @@ async def test_admin_can_grant_superadmin(_http_client, db_session_factory):
 @pytest.mark.asyncio
 async def test_request_access_creates_pending(_http_client, db_session_factory):
     from sqlalchemy import select
+
     from app.models.access_request import AccessRequest
 
-    resp = await _http_client.post("/request-access",
-                                   json={"name": "Jane", "email": "newbie@example.com", "use_case": "kicking tires"})
+    resp = await _http_client.post(
+        "/request-access", json={"name": "Jane", "email": "newbie@example.com", "use_case": "kicking tires"}
+    )
     assert resp.status_code == 200, resp.text
     async with db_session_factory() as db:
-        r = (await db.execute(select(AccessRequest).where(AccessRequest.email == "newbie@example.com"))).scalar_one()
+        r = (
+            await db.execute(select(AccessRequest).where(AccessRequest.email == "newbie@example.com"))
+        ).scalar_one()
         assert r.status == "pending"
 
 
 @pytest.mark.asyncio
 async def test_request_access_dedupes_existing_user(_http_client, db_session_factory):
     await _make_user(db_session_factory, "exists@example.com")
-    resp = await _http_client.post("/request-access",
-                                   json={"name": "X", "email": "exists@example.com"})
+    resp = await _http_client.post("/request-access", json={"name": "X", "email": "exists@example.com"})
     assert resp.status_code == 400
     assert "sign in" in resp.json().get("error", "").lower()
 
@@ -223,29 +237,37 @@ async def test_register_blocked_when_gate_on(_http_client, db_session_factory):
     from app.settings_service import set_setting
 
     async with db_session_factory() as db:
-        await set_setting(db, key="require_access_approval", value=True, is_secret=False, updated_by_user_id=None)
+        await set_setting(
+            db, key="require_access_approval", value=True, is_secret=False, updated_by_user_id=None
+        )
         await db.commit()
     try:
-        resp = await _http_client.post("/auth/register",
-                                       json={"email": "blocked@example.com", "password": "password123", "display_name": "B"})
+        resp = await _http_client.post(
+            "/auth/register",
+            json={"email": "blocked@example.com", "password": "password123", "display_name": "B"},
+        )
         assert resp.status_code == 403
         assert "request access" in resp.json().get("error", "").lower()
     finally:
         async with db_session_factory() as db:
-            await set_setting(db, key="require_access_approval", value=False, is_secret=False, updated_by_user_id=None)
+            await set_setting(
+                db, key="require_access_approval", value=False, is_secret=False, updated_by_user_id=None
+            )
             await db.commit()
 
 
 @pytest.mark.asyncio
 async def test_register_open_when_gate_off(_http_client, db_session_factory):
-    resp = await _http_client.post("/auth/register",
-                                   json={"email": "open@example.com", "password": "password123", "display_name": "O"})
+    resp = await _http_client.post(
+        "/auth/register", json={"email": "open@example.com", "password": "password123", "display_name": "O"}
+    )
     assert resp.status_code in (200, 201)
 
 
 @pytest.mark.asyncio
 async def test_approve_provisions_user_with_temp_password(_http_client, db_session_factory):
     from unittest.mock import AsyncMock, patch
+
     from sqlalchemy import select
 
     from app.auth.email_auth import authenticate_user
@@ -269,7 +291,9 @@ async def test_approve_provisions_user_with_temp_password(_http_client, db_sessi
     assert err is None and user is not None
 
     async with db_session_factory() as db:
-        r = (await db.execute(select(AccessRequest).where(AccessRequest.email == "newbie2@example.com"))).scalar_one()
+        r = (
+            await db.execute(select(AccessRequest).where(AccessRequest.email == "newbie2@example.com"))
+        ).scalar_one()
         assert r.status == "approved"
 
 
@@ -284,8 +308,14 @@ async def test_approve_existing_password_account_not_reset(_http_client, db_sess
 
     sid = await _make_user(db_session_factory, "appr2@example.com", is_superadmin=True)
     async with db_session_factory() as db:
-        db.add(User(email="hasacct@example.com", password_hash=hash_password("origpass1!"),
-                    email_verified=True, auth_provider="email"))
+        db.add(
+            User(
+                email="hasacct@example.com",
+                password_hash=hash_password("origpass1!"),
+                email_verified=True,
+                auth_provider="email",
+            )
+        )
         r = AccessRequest(name="Has Acct", email="hasacct@example.com")
         db.add(r)
         await db.flush()
@@ -305,6 +335,7 @@ async def test_approve_existing_password_account_not_reset(_http_client, db_sess
 @pytest.mark.asyncio
 async def test_reject_creates_no_account(_http_client, db_session_factory):
     from unittest.mock import AsyncMock, patch
+
     from sqlalchemy import select
 
     from app.models.access_request import AccessRequest
@@ -323,14 +354,19 @@ async def test_reject_creates_no_account(_http_client, db_session_factory):
         resp = await _http_client.post(f"/api/admin/access-requests/{rid}/reject")
     assert resp.status_code == 200
     async with db_session_factory() as db:
-        assert (await db.execute(select(User).where(User.email == "nope@example.com"))).scalar_one_or_none() is None
-        r = (await db.execute(select(AccessRequest).where(AccessRequest.email == "nope@example.com"))).scalar_one()
+        assert (
+            await db.execute(select(User).where(User.email == "nope@example.com"))
+        ).scalar_one_or_none() is None
+        r = (
+            await db.execute(select(AccessRequest).where(AccessRequest.email == "nope@example.com"))
+        ).scalar_one()
         assert r.status == "rejected"
 
 
 @pytest.mark.asyncio
 async def test_toggle_gate(_http_client, db_session_factory):
     from unittest.mock import AsyncMock, patch
+
     from app.settings_service import access_approval_required
 
     sid = await _make_user(db_session_factory, "toggler@example.com", is_superadmin=True)

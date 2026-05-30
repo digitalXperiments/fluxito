@@ -125,8 +125,10 @@ def test_diagnose_flags_event_recently_stopped():
     scans = {
         "gtm": _scan("gtm", ["tag_inventory"], events=["purchase"]),
         "ga4": _scan(
-            "ga4", ["event_volume"],
-            volumes={"purchase": 1500}, recent={"purchase": 0},
+            "ga4",
+            ["event_volume"],
+            volumes={"purchase": 1500},
+            recent={"purchase": 0},
         ),
     }
     out = diagnose(scans, {"conversion_definition": "purchase"})
@@ -140,7 +142,8 @@ def test_diagnose_flags_low_volume_for_important_event():
     scans = {
         "gtm": _scan("gtm", ["tag_inventory"], events=["purchase", "page_view"]),
         "ga4": _scan(
-            "ga4", ["event_volume"],
+            "ga4",
+            ["event_volume"],
             volumes={"page_view": 100000, "purchase": 3},
             recent={"page_view": 9000, "purchase": 1},
         ),

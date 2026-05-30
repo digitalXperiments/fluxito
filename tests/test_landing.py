@@ -15,6 +15,7 @@ def _patch_db(db_session_factory):
     yield
     app_state.db_session_factory = original
     import app.branding as _b
+
     _b._BRAND_CACHE.update({"name": "Fluxito", "logo_url": "", "accent": ""})
 
 
@@ -28,8 +29,10 @@ async def _http_client(_patch_db):
 
     csrf = _generate_csrf_token()
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver",
-        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"csrf_token": csrf},
+        headers={"x-csrf-token": csrf},
         follow_redirects=False,
     ) as client:
         yield client

@@ -20,6 +20,7 @@ def _patch_db(db_session_factory):
 
 async def _make_user(db_session_factory, email, *, is_superadmin=False):
     from app.models.user import User
+
     async with db_session_factory() as db:
         u = User(email=email, is_superadmin=is_superadmin)
         db.add(u)
@@ -101,7 +102,7 @@ async def test_check_rate_limit_blocks_over_limit(_patch_db, db_session_factory,
     uid = "u-test"
     assert await rl.check_rate_limit(uid) is None  # 1st
     assert await rl.check_rate_limit(uid) is None  # 2nd
-    blocked = await rl.check_rate_limit(uid)        # 3rd → over
+    blocked = await rl.check_rate_limit(uid)  # 3rd → over
     assert blocked is not None
     assert blocked["error_type"] == "rate_limited"
     assert "retry_after_seconds" in blocked
@@ -117,8 +118,10 @@ async def _http_client(_patch_db):
 
     csrf = _generate_csrf_token()
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver",
-        cookies={"csrf_token": csrf}, headers={"x-csrf-token": csrf},
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"csrf_token": csrf},
+        headers={"x-csrf-token": csrf},
     ) as client:
         yield client
 
@@ -132,8 +135,13 @@ async def test_rate_limits_route_requires_superadmin(_http_client, db_session_fa
     from unittest.mock import AsyncMock, patch
 
     uid = await _make_user(db_session_factory, "plain-rl@example.com", is_superadmin=False)
-    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(uid, "plain-rl@example.com"))):
-        resp = await _http_client.patch("/api/admin/settings/rate-limits", json={"per_min": 30, "per_hour": 500})
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx",
+        new=AsyncMock(return_value=_ctx(uid, "plain-rl@example.com")),
+    ):
+        resp = await _http_client.patch(
+            "/api/admin/settings/rate-limits", json={"per_min": 30, "per_hour": 500}
+        )
     assert resp.status_code == 403
 
 
@@ -144,8 +152,13 @@ async def test_rate_limits_route_writes_settings(_http_client, db_session_factor
     from app.settings_service import get_runtime_setting
 
     sid = await _make_user(db_session_factory, "super-rl@example.com", is_superadmin=True)
-    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(sid, "super-rl@example.com"))):
-        resp = await _http_client.patch("/api/admin/settings/rate-limits", json={"per_min": 42, "per_hour": 999})
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx",
+        new=AsyncMock(return_value=_ctx(sid, "super-rl@example.com")),
+    ):
+        resp = await _http_client.patch(
+            "/api/admin/settings/rate-limits", json={"per_min": 42, "per_hour": 999}
+        )
     assert resp.status_code == 200, resp.text
     async with db_session_factory() as db:
         assert int(await get_runtime_setting(db, "rate_limit_per_min", default=0)) == 42
@@ -157,8 +170,13 @@ async def test_rate_limits_route_rejects_nonpositive(_http_client, db_session_fa
     from unittest.mock import AsyncMock, patch
 
     sid = await _make_user(db_session_factory, "super-rl2@example.com", is_superadmin=True)
-    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(sid, "super-rl2@example.com"))):
-        resp = await _http_client.patch("/api/admin/settings/rate-limits", json={"per_min": 0, "per_hour": 500})
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx",
+        new=AsyncMock(return_value=_ctx(sid, "super-rl2@example.com")),
+    ):
+        resp = await _http_client.patch(
+            "/api/admin/settings/rate-limits", json={"per_min": 0, "per_hour": 500}
+        )
     assert resp.status_code == 400
 
 
@@ -167,7 +185,10 @@ async def test_rate_limits_get_returns_values(_http_client, db_session_factory):
     from unittest.mock import AsyncMock, patch
 
     sid = await _make_user(db_session_factory, "super-rl3@example.com", is_superadmin=True)
-    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=_ctx(sid, "super-rl3@example.com"))):
+    with patch(
+        "app.api.admin_routes._resolve_user_ctx",
+        new=AsyncMock(return_value=_ctx(sid, "super-rl3@example.com")),
+    ):
         await _http_client.patch("/api/admin/settings/rate-limits", json={"per_min": 11, "per_hour": 222})
         resp = await _http_client.get("/api/admin/settings/rate-limits")
     assert resp.status_code == 200

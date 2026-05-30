@@ -106,10 +106,15 @@ def diagnose(
     for s in scans.values():
         if s.get("status") in ("failed", "partial"):
             findings.append(
-                _f("connector_error", HIGH,
-                   f"The {s['source']} connector returned {s.get('status')} data.",
-                   "; ".join(s.get("errors") or []) or s.get("status", ""), [],
-                   "Reconnect or re-authorize the connector, then re-run diagnose.", "connector")
+                _f(
+                    "connector_error",
+                    HIGH,
+                    f"The {s['source']} connector returned {s.get('status')} data.",
+                    "; ".join(s.get("errors") or []) or s.get("status", ""),
+                    [],
+                    "Reconnect or re-authorize the connector, then re-run diagnose.",
+                    "connector",
+                )
             )
 
     if has_volume:
@@ -119,37 +124,56 @@ def diagnose(
             vol = volumes.get(name, 0)
             if vol == 0:
                 findings.append(
-                    _f("tag_configured_but_no_data", CRITICAL if is_primary(name) else MEDIUM,
-                       f"`{name}` is configured to collect but shows 0 events in the analytics platform.",
-                       "configured in tag layer; 0 events in last window", [name],
-                       "Verify the site/app actually fires this event (dataLayer push / SDK call).",
-                       "website")
+                    _f(
+                        "tag_configured_but_no_data",
+                        CRITICAL if is_primary(name) else MEDIUM,
+                        f"`{name}` is configured to collect but shows 0 events in the analytics platform.",
+                        "configured in tag layer; 0 events in last window",
+                        [name],
+                        "Verify the site/app actually fires this event (dataLayer push / SDK call).",
+                        "website",
+                    )
                 )
                 continue
             # Recently stopped: had volume over 30d but nothing in the recent window.
             if has_recent and recent_volumes.get(name, 0) == 0:
                 findings.append(
-                    _f("event_recently_stopped", CRITICAL if is_primary(name) else MEDIUM,
-                       f"`{name}` fired over the last 30 days but 0 times in the recent window — it likely broke recently.",
-                       f"30d: {vol}; recent: 0", [name],
-                       "Check for a recent site/app or tag deploy that stopped this event.", "website")
+                    _f(
+                        "event_recently_stopped",
+                        CRITICAL if is_primary(name) else MEDIUM,
+                        f"`{name}` fired over the last 30 days but 0 times in the recent window — it likely broke recently.",
+                        f"30d: {vol}; recent: 0",
+                        [name],
+                        "Check for a recent site/app or tag deploy that stopped this event.",
+                        "website",
+                    )
                 )
             # Suspiciously low volume for an important event (e.g. fires ~monthly).
             elif (is_primary(name) or name in conversion_events) and 0 < vol < low_floor:
                 findings.append(
-                    _f("low_volume", HIGH if is_primary(name) else MEDIUM,
-                       f"`{name}` fires far below peers ({vol} in 30d vs peak {max_volume}) — likely partially broken.",
-                       f"30d: {vol}; floor: {low_floor}", [name],
-                       "Verify this event fires on every relevant interaction, not just edge cases.", "website")
+                    _f(
+                        "low_volume",
+                        HIGH if is_primary(name) else MEDIUM,
+                        f"`{name}` fires far below peers ({vol} in 30d vs peak {max_volume}) — likely partially broken.",
+                        f"30d: {vol}; floor: {low_floor}",
+                        [name],
+                        "Verify this event fires on every relevant interaction, not just edge cases.",
+                        "website",
+                    )
                 )
         known = configured | set(current_event_names or [])
         for name, cnt in sorted(volumes.items(), key=lambda kv: -kv[1]):
             if cnt > 0 and name not in known and not name.startswith("("):
                 findings.append(
-                    _f("event_flowing_but_undocumented", MEDIUM,
-                       f"`{name}` is flowing ({cnt} in last window) but is not documented/configured.",
-                       f"{cnt} events", [name],
-                       "Decide whether to document and map this event.", "sdr")
+                    _f(
+                        "event_flowing_but_undocumented",
+                        MEDIUM,
+                        f"`{name}` is flowing ({cnt} in last window) but is not documented/configured.",
+                        f"{cnt} events",
+                        [name],
+                        "Decide whether to document and map this event.",
+                        "sdr",
+                    )
                 )
 
     primary_candidates = sorted({n for n in (configured | conversion_events) if is_primary(n)})
@@ -157,26 +181,41 @@ def diagnose(
     if terms:
         if not primary_candidates:
             findings.append(
-                _f("primary_conversion_unproven", CRITICAL,
-                   "No event matching the stated primary conversion is configured anywhere.",
-                   f"intake conversion: {intake_answers.get('conversion_definition', '?')[:120]}", [],
-                   "Define and implement the primary conversion event.", "website")
+                _f(
+                    "primary_conversion_unproven",
+                    CRITICAL,
+                    "No event matching the stated primary conversion is configured anywhere.",
+                    f"intake conversion: {intake_answers.get('conversion_definition', '?')[:120]}",
+                    [],
+                    "Define and implement the primary conversion event.",
+                    "website",
+                )
             )
         else:
             primary_proven = has_volume and any(volumes.get(n, 0) > 0 for n in primary_candidates)
             if has_volume and not primary_proven:
                 findings.append(
-                    _f("primary_conversion_unproven", CRITICAL,
-                       "The primary conversion is configured but no matching event is flowing.",
-                       f"candidates: {', '.join(primary_candidates)}", primary_candidates,
-                       "Fix the site/app so the primary conversion event fires.", "website")
+                    _f(
+                        "primary_conversion_unproven",
+                        CRITICAL,
+                        "The primary conversion is configured but no matching event is flowing.",
+                        f"candidates: {', '.join(primary_candidates)}",
+                        primary_candidates,
+                        "Fix the site/app so the primary conversion event fires.",
+                        "website",
+                    )
                 )
             if has_conv and not any(n in conversion_events for n in primary_candidates):
                 findings.append(
-                    _f("conversion_not_configured", HIGH,
-                       "The primary conversion is not configured as an ad-platform conversion (no ROAS).",
-                       f"candidates: {', '.join(primary_candidates)}", primary_candidates,
-                       "Configure the conversion in the relevant ad platform(s).", "config")
+                    _f(
+                        "conversion_not_configured",
+                        HIGH,
+                        "The primary conversion is not configured as an ad-platform conversion (no ROAS).",
+                        f"candidates: {', '.join(primary_candidates)}",
+                        primary_candidates,
+                        "Configure the conversion in the relevant ad platform(s).",
+                        "config",
+                    )
                 )
 
     consent_detected = any(
@@ -186,10 +225,15 @@ def diagnose(
     privacy_text = str(intake_answers.get("privacy_consent", "")).lower()
     if conversion_events and not consent_detected and any(h in privacy_text for h in _CONSENT_HINTS):
         findings.append(
-            _f("consent_gap", HIGH,
-               "Intake says consent gating is required but no consent signal was detected in the tag layer.",
-               intake_answers.get("privacy_consent", "")[:120], [],
-               "Gate ad/analytics tags behind the consent platform.", "config")
+            _f(
+                "consent_gap",
+                HIGH,
+                "Intake says consent gating is required but no consent signal was detected in the tag layer.",
+                intake_answers.get("privacy_consent", "")[:120],
+                [],
+                "Gate ad/analytics tags behind the consent platform.",
+                "config",
+            )
         )
 
     findings.sort(key=lambda x: _SEV_ORDER.get(x["severity"], 9))

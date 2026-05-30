@@ -98,7 +98,9 @@ def build_intake_snapshot(answers: dict[str, str] | None) -> dict[str, Any]:
 
 def missing_required_answers(answers: dict[str, str] | None) -> list[str]:
     values = answers or {}
-    return [q["key"] for q in INTAKE_QUESTIONS if not q["optional"] and not str(values.get(q["key"], "")).strip()]
+    return [
+        q["key"] for q in INTAKE_QUESTIONS if not q["optional"] and not str(values.get(q["key"], "")).strip()
+    ]
 
 
 def intake_interview_instructions(project_name: str) -> str:

@@ -116,8 +116,13 @@ def test_export_includes_new_sheets():
 
     xlsx = generate_sdr_xlsx(SAMPLE, "Demo SDR")
     wb = load_workbook(BytesIO(xlsx))
-    for name in ["Executive Summary", "Gap Register", "Conversion Audit",
-                 "Consent & Privacy", "Remediation Roadmap"]:
+    for name in [
+        "Executive Summary",
+        "Gap Register",
+        "Conversion Audit",
+        "Consent & Privacy",
+        "Remediation Roadmap",
+    ]:
         assert name in wb.sheetnames, f"missing sheet {name}"
     ws = wb["Gap Register"]
     assert ws.cell(row=1, column=1).value == "#"

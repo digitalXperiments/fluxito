@@ -45,7 +45,9 @@ async def require_superadmin(request: Request) -> dict:
     if not user_ctx:
         raise HTTPException(401, "Not authenticated")
     async with app_state.db_session_factory() as db:
-        u = (await db.execute(select(User).where(User.id == uuid.UUID(user_ctx.user_id)))).scalar_one_or_none()
+        u = (
+            await db.execute(select(User).where(User.id == uuid.UUID(user_ctx.user_id)))
+        ).scalar_one_or_none()
         if not u or not u.is_superadmin:
             raise HTTPException(403, "Super-admin only")
         return {"id": str(u.id), "email": u.email, "is_superadmin": True}
@@ -83,7 +85,9 @@ async def admin_set_active(request: Request, user_id: str):
             raise HTTPException(404, "User not found")
         if u.is_superadmin and not is_active:
             count = await db.scalar(
-                select(func.count()).select_from(User).where(User.is_superadmin == True, User.is_active == True)
+                select(func.count())
+                .select_from(User)
+                .where(User.is_superadmin == True, User.is_active == True)
             )
             if count is not None and count <= 1:
                 raise HTTPException(400, "Cannot deactivate the last active super-admin.")
@@ -118,13 +122,25 @@ async def admin_list_access_requests(request: Request):
 
     async with app_state.db_session_factory() as db:
         rows = (
-            await db.execute(
-                select(AccessRequest).where(AccessRequest.status == status).order_by(AccessRequest.created_at.asc())
+            (
+                await db.execute(
+                    select(AccessRequest)
+                    .where(AccessRequest.status == status)
+                    .order_by(AccessRequest.created_at.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         items = [
-            {"id": str(r.id), "name": r.name, "email": r.email, "use_case": r.use_case,
-             "status": r.status, "created_at": r.created_at.isoformat() if r.created_at else None}
+            {
+                "id": str(r.id),
+                "name": r.name,
+                "email": r.email,
+                "use_case": r.use_case,
+                "status": r.status,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
             for r in rows
         ]
     return JSONResponse({"requests": items})
@@ -220,10 +236,20 @@ async def admin_set_rate_limits(request: Request):
     from app.settings_service import set_setting
 
     async with app_state.db_session_factory() as db:
-        await set_setting(db, key="rate_limit_per_min", value=per_min, is_secret=False,
-                          updated_by_user_id=uuid.UUID(me["id"]))
-        await set_setting(db, key="rate_limit_per_hour", value=per_hour, is_secret=False,
-                          updated_by_user_id=uuid.UUID(me["id"]))
+        await set_setting(
+            db,
+            key="rate_limit_per_min",
+            value=per_min,
+            is_secret=False,
+            updated_by_user_id=uuid.UUID(me["id"]),
+        )
+        await set_setting(
+            db,
+            key="rate_limit_per_hour",
+            value=per_hour,
+            is_secret=False,
+            updated_by_user_id=uuid.UUID(me["id"]),
+        )
         await db.commit()
     return JSONResponse({"success": True, "per_min": per_min, "per_hour": per_hour})
 
@@ -236,8 +262,13 @@ async def admin_toggle_gate(request: Request):
     from app.settings_service import set_setting
 
     async with app_state.db_session_factory() as db:
-        await set_setting(db, key="require_access_approval", value=enabled, is_secret=False,
-                          updated_by_user_id=uuid.UUID(me["id"]))
+        await set_setting(
+            db,
+            key="require_access_approval",
+            value=enabled,
+            is_secret=False,
+            updated_by_user_id=uuid.UUID(me["id"]),
+        )
         await db.commit()
     return JSONResponse({"success": True, "enabled": enabled})
 
