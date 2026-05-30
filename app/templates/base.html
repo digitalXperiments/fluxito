@@ -1,4 +1,4 @@
-{% macro wordmark() %}{% if brand().logo_url %}<img src="{{ brand().logo_url }}" alt="{{ brand().name }}" class="wordmark-logo" style="height:22px;width:auto;vertical-align:middle">{% else %}{{ brand().name }}{% endif %}{% endmacro %}
+{% macro wordmark() %}{% if brand().logo_url %}<img src="{{ brand().logo_url }}" alt="{{ brand().name }}" class="wordmark-logo" style="height:22px;width:auto;vertical-align:middle">{% elif brand().name == 'Fluxito' %}<span style="font-family:var(--mono);font-weight:500;letter-spacing:-0.02em">flux</span><em>ito</em><span class="dot" style="display:inline-block;width:4px;height:4px;border-radius:99px;background:var(--blue);margin-left:3px;vertical-align:middle"></span>{% else %}{{ brand().name }}{% endif %}{% endmacro %}
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
