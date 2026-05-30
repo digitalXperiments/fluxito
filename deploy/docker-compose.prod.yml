@@ -1,50 +1,30 @@
-name: fluxito-demo
+name: fluxito-prod
 
-# Dedicated demo deployment for the public Fluxito instance.
-# This runs a published image (ghcr.io/digitalxperiments/fluxito:demo or sha-...)
-# with its own isolated Postgres + Redis volumes.
+# Production deployment for the self-hosted Fluxito instance.
 #
-# Usage on your Mac:
-#   1. Copy this folder to ~/fluxito-demo/
-#   2. cp .env.demo.example .env.demo
-#   3. Edit .env.demo (generate secrets, set APP_BASE_URL and DEMO_VIEWER_EMAIL)
-#   4. docker compose -f docker-compose.demo.yml up -d
+# Builds the app image from the LOCAL source checkout (no registry image) and
+# runs it with isolated Postgres + Redis volumes. The prod host holds a git
+# clone and tracks `main`; deploy with deploy/update.sh.
 #
-# Update flow (via update-demo.sh or cron):
-#   docker compose -f docker-compose.demo.yml pull
-#   docker compose -f docker-compose.demo.yml up -d --remove-orphans
+# Run from the repo root:
+#   docker compose --env-file deploy/.env.prod -f deploy/docker-compose.prod.yml up -d --build
+# (--env-file feeds ${POSTGRES_PASSWORD}/${APP_BASE_URL} interpolation; env_file:
+#  below injects the full app env into the app container.)
 
 services:
-  # One-shot helper: copies the static assets baked into the published app
-  # image into the `static_assets` volume so nginx can serve them directly.
-  # Runs on every `up` (and is recreated on every image pull), so updated
-  # CSS/JS propagates to the demo instead of going stale. Exits 0 when done.
-  static-sync:
-    container_name: fluxito-demo-static-sync
-    image: ${FLUXITO_IMAGE:-ghcr.io/digitalxperiments/fluxito:demo}
-    # Run as root: the published image runs as the non-root `app` user, but a
-    # fresh named volume is owned by root, so the copy needs write access here.
-    user: "0:0"
-    entrypoint: ["/bin/sh", "-c"]
-    # Clear the volume (catches removed files on update), then copy fresh.
-    command: ["find /static-out -mindepth 1 -delete 2>/dev/null; cp -a /app/app/static/. /static-out/ && echo 'static assets synced'"]
-    volumes:
-      - static_assets:/static-out
-    restart: "no"
-
   nginx:
-    container_name: fluxito-demo-nginx
+    container_name: fluxito-prod-nginx
     image: nginx:alpine
     ports:
       - "8010:80"   # Change if you need a different host port
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - static_assets:/app/app/static:ro   # Served directly by nginx (see nginx.conf)
+      # Static assets served directly by nginx, straight from the source tree
+      # (the prod host has a full checkout — no image/volume copy needed).
+      - ../app/static:/app/app/static:ro
     depends_on:
       app:
         condition: service_healthy
-      static-sync:
-        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/api/health"]
@@ -54,16 +34,17 @@ services:
       start_period: 10s
 
   app:
-    container_name: fluxito-demo-app
-    image: ${FLUXITO_IMAGE:-ghcr.io/digitalxperiments/fluxito:demo}
+    container_name: fluxito-prod-app
+    build:
+      context: ..
+      dockerfile: Dockerfile
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/fluxito
       - REDIS_URL=redis://redis:6379/0
       - APP_ENV=production
       - APP_BASE_URL=${APP_BASE_URL:-http://localhost:8010}
-      - DEMO_VIEWER_EMAIL=${DEMO_VIEWER_EMAIL:-demo@fluxito.local}
     env_file:
-      - .env.demo
+      - .env.prod
     depends_on:
       db:
         condition: service_healthy
@@ -85,7 +66,7 @@ services:
           memory: 384M
 
   db:
-    container_name: fluxito-demo-db
+    container_name: fluxito-prod-db
     image: postgres:15
     environment:
       POSTGRES_DB: fluxito
@@ -99,7 +80,7 @@ services:
         -c work_mem=4MB
         -c log_min_duration_statement=2000
     volumes:
-      - demo_postgres_data:/var/lib/postgresql/data
+      - fluxito_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d fluxito"]
       interval: 5s
@@ -112,7 +93,7 @@ services:
           memory: 384M
 
   redis:
-    container_name: fluxito-demo-redis
+    container_name: fluxito-prod-redis
     image: redis:7-alpine
     command: >
       redis-server
@@ -121,7 +102,7 @@ services:
         --maxmemory 512mb
         --maxmemory-policy volatile-ttl
     volumes:
-      - demo_redis_data:/data
+      - fluxito_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -134,6 +115,5 @@ services:
           memory: 256M
 
 volumes:
-  demo_postgres_data:
-  demo_redis_data:
-  static_assets:
+  fluxito_postgres_data:
+  fluxito_redis_data:
