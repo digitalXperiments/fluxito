@@ -24,13 +24,17 @@ class MCPClient(Base):
 
 class OAuthConnection(Base):
     """
-    OAuth connection scoped to a project.
+    OAuth connection — one per (user, project, provider, external account).
 
     ``user_id`` is the **token owner** — the person whose Google/Meta/etc.
-    account was used to authenticate. The *project* owns the connection
-    record (which platform, which properties). If the token owner is
-    removed from the project, ``connection_status`` should be set to
-    ``"disconnected"`` so an admin can re-authenticate.
+    account was used to authenticate, and who owns *this* credential. The
+    same external account (same ``provider`` + ``google_email``) connected by
+    two different users in the same project is stored as two separate rows,
+    each with its own tokens (see ``uq_user_project_provider_email``).
+
+    Resolution is owner-aware: ``build_user_context`` loads a user's own
+    connections (``user_id``), while ``build_project_context`` loads every
+    connection in the project (``project_id``).
     """
 
     __tablename__ = "oauth_connections"
@@ -65,7 +69,12 @@ class OAuthConnection(Base):
     connection_status: Mapped[str] = mapped_column(String(50), default="active", index=True)
 
     __table_args__ = (
-        UniqueConstraint("project_id", "provider", "google_email", name="uq_project_provider_email"),
+        # Per-user: the same external account (provider + google_email) can be
+        # connected by multiple users within one project, each keeping their
+        # own credentials. user_id is part of the key so those rows coexist.
+        UniqueConstraint(
+            "user_id", "project_id", "provider", "google_email", name="uq_user_project_provider_email"
+        ),
         # Hot-path filters: `_load_connections_and_resources` scans by
         # (project_id|user_id, provider, is_active). Composite indexes let
         # Postgres serve these without touching the base table.

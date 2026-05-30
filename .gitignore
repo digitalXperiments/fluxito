@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!deploy/.env.prod.example
 *.pem
 *.key
 *.p12
@@ -40,6 +41,7 @@ docs/superpowers/
 docs/context/
 docs/sessions/
 docs/plans/
+docs/marketing
 .superpowers
 test_results
 .benchmarks

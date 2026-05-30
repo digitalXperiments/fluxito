@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-05-30
+
+### Added
+- Solution Design Reference (SDR) v2: richer audit sections (Executive Summary, Gap Register, Conversion Audit, Consent, Roadmap), viewer tabs, full Excel export of every section, and storing + downloading the original source `.xlsx` (validated, 2MB cap).
+- Access control: a super-admin role (first setup account), an admin panel at `/admin` (Users + Access Requests), and a request-access flow gated by the `require_access_approval` instance setting (default off — open signup unchanged for existing self-hosts).
+- Per-user MCP rate limiting (super-admin configurable and exempt) with an admin Rate Limits control.
+- Whitelabel branding: brand name / wordmark / accent settings, brand-aware chrome and invite emails, and an admin Branding tab.
+- Marketing landing page at `/` for logged-out visitors (hero, problem, how-it-works, features, platforms, OSS sections, video slot), brand-aware with an overridable `og:description`.
+- Auto-provisioned personal project for users with none; one-time temp credentials for invites and admin password resets (no SMTP required).
+- Production deployment under `deploy/` that builds from a local source checkout on the host and deploys by pulling `main` (`deploy/update.sh`).
+
+### Changed
+- MCP active-project now resolves per call from Redis (fixes `no_active_project` in batched/parallel tool calls).
+- CI is now a pure quality gate (lint, typecheck, test, build smoke); it no longer publishes container images.
+- Connections de-duplicated to one card per account.
+
+### Fixed
+- SDR User-Properties table rendering; Members-tab native validation bubble overlap; account-takeover vectors in the register / invite / password-reset flows (never set or reset a password on an email that already has one).
+
+### Removed
+- GHCR image publishing (`publish-sha` / `publish-demo` jobs) and the `v*` tag trigger; the `demo/` folder is now the production `deploy/` stack.
+
 ## [1.0.2] — 2026-05-28
 
 ### Added

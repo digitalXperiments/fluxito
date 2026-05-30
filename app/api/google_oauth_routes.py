@@ -53,8 +53,9 @@ router = APIRouter()
 
 
 async def _load_user_view(user_ctx) -> dict:
-    """Load a lightweight user view for templates (email, display_name)."""
+    """Load a lightweight user view for templates (email, display_name, is_superadmin)."""
     display_name = None
+    is_superadmin = False
     try:
         db_session = app_state.db_session_factory()
         async with db_session as db:
@@ -62,12 +63,14 @@ async def _load_user_view(user_ctx) -> dict:
             u = result.scalar_one_or_none()
             if u:
                 display_name = u.display_name
+                is_superadmin = bool(u.is_superadmin)
     except Exception:
         pass
     return {
         "id": user_ctx.user_id,
         "email": user_ctx.email,
         "display_name": display_name,
+        "is_superadmin": is_superadmin,
     }
 
 
@@ -260,15 +263,14 @@ def _build_scopes_for_products(
 
 @router.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
-    """Root route. Authenticated users go to the dashboard; unauthenticated to /signin.
-
-    The marketing landing page lives in the separate static-site repo; the
-    self-host app does not serve marketing content.
-    """
+    """Root route. Logged-in users go to the dashboard; logged-out visitors see
+    the marketing landing page."""
     user_ctx = await _resolve_user_ctx(request)
     if user_ctx is not None:
         return RedirectResponse(url="/home", status_code=302)
-    return RedirectResponse(url="/signin?next=/home", status_code=302)
+    from app.templating import render
+
+    return render(request, "landing.html", {"github_url": "https://github.com/digitalXperiments/fluxito"})
 
 
 @router.get("/home", response_class=HTMLResponse)
@@ -782,6 +784,11 @@ async def signin_callback(
         result = await db.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
         if not user:
+            from app.settings_service import get_runtime_setting
+
+            gate_on = bool(await get_runtime_setting(db, "require_access_approval", default=False))
+            if gate_on:
+                return RedirectResponse(url="/request-access?gated=1", status_code=302)
             user = User(
                 email=email,
                 display_name=display_name,
@@ -828,6 +835,14 @@ async def signin_callback(
         needs_tutorial = user.tutorial_completed_at is None
         await db.commit()
         user_id = str(user.id)
+
+    if is_new_user:
+        try:
+            from app.api.project_routes import ensure_default_project
+
+            await ensure_default_project(user_id, display_name, email)
+        except Exception:
+            logger.warning("ensure_default_project failed for new Google user", exc_info=True)
 
     # Redirect new users (or those who haven't finished) to tutorial
     redirect_url = next_url
@@ -1445,6 +1460,14 @@ async def initiate_google_oauth(
     """Start the Google data OAuth flow with per-product scope selection."""
     user_ctx = await _resolve_user_ctx(request)
 
+    # Connecting a data source must be tied to the logged-in user. If we let
+    # the flow start anonymously, the callback has no choice but to guess the
+    # account from the Google email it gets back — which silently switches the
+    # browser session into whatever Google account was used to connect. Refuse
+    # up front instead. (Mirrors /connect/meta, /connect/tiktok, /connect/snap.)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/google", status_code=302)
+
     # Legacy tier support
     if tier and tier in SCOPE_MAP:
         scopes = SCOPE_MAP[tier]
@@ -1462,13 +1485,9 @@ async def initiate_google_oauth(
 
     oauth_state = secrets.token_urlsafe(32)
 
-    # Get user_id from session if authenticated
-    user_id = None
-    try:
-        user_ctx = await require_valid_mcp_token(request)
-        user_id = user_ctx.user_id
-    except Exception:
-        pass
+    # The connection is always bound to the already-authenticated user
+    # resolved above (covers both MCP bearer and signed uid cookie sessions).
+    user_id = user_ctx.user_id
 
     from app.utils import base_url_from_request
 
@@ -1593,28 +1612,42 @@ async def google_data_callback(
     from app.models.user import User
 
     user_id = state_data.get("user_id")
-    project_id = state_data.get("project_id")  # May be None for legacy flows
+    project_id = state_data.get("project_id")
+
+    # The connect flow always records the logged-in user in the OAuth state
+    # (see initiate_google_oauth). A missing user_id means the flow wasn't
+    # started from an authenticated session — refuse, rather than resolving
+    # the account from the Google email, which would attach the connection
+    # to (and below, log the browser in as) whatever Google account was used.
+    if not user_id:
+        return HTMLResponse(
+            "<h2>Your session expired. Please <a href='/signin'>sign in</a> and connect again.</h2>",
+            status_code=401,
+        )
 
     db_session = app_state.db_session_factory()
     async with db_session as db:
-        if user_id:
-            result = await db.execute(select(User).where(User.id == user_id))
-            user = result.scalar_one_or_none()
-        else:
-            result = await db.execute(select(User).where(User.email == google_email))
-            user = result.scalar_one_or_none()
-            if not user:
-                user = User(email=google_email, display_name=userinfo.get("name"))
-                db.add(user)
-                await db.flush()
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            return HTMLResponse(
+                "<h2>Your session expired. Please <a href='/signin'>sign in</a> and connect again.</h2>",
+                status_code=401,
+            )
 
-        # Create / update OAuthConnection — scoped to project
+        # Create / update OAuthConnection. Credentials are per-user: the row
+        # is keyed by (user_id, project_id, provider, google_email) — the same
+        # tuple as the uq_user_project_provider_email unique constraint. We
+        # look it up by that exact key so reconnecting refreshes the caller's
+        # own row, while the same Google account connected by a *different*
+        # user (or left behind as a phantom row) gets its own separate row
+        # rather than being clobbered or colliding on the constraint.
         existing_stmt = select(OAuthConnection).where(
             OAuthConnection.user_id == user.id,
+            OAuthConnection.provider == "google",
             OAuthConnection.google_email == google_email,
+            OAuthConnection.project_id == project_id,
         )
-        if project_id:
-            existing_stmt = existing_stmt.where(OAuthConnection.project_id == project_id)
         result = await db.execute(existing_stmt)
         existing = result.scalar_one_or_none()
 
@@ -1626,13 +1659,12 @@ async def google_data_callback(
             existing.scopes = state_data["scopes"]
             existing.connection_status = "active"
             existing.is_active = True
-            if project_id:
-                existing.project_id = project_id
             conn = existing
         else:
             conn = OAuthConnection(
                 user_id=user.id,
                 project_id=project_id,  # Scope to active project (None for legacy)
+                provider="google",
                 google_email=google_email,
                 access_token_encrypted=_encrypt(access_token),
                 refresh_token_encrypted=encrypted_refresh,
@@ -1757,16 +1789,11 @@ async def google_data_callback(
         )
     )
 
-    response = RedirectResponse(url="/home?toast=google_connected", status_code=302)
-    response.set_cookie(
-        "uid",
-        sign_uid(str(user.id)),
-        max_age=30 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=settings.APP_ENV == "production",
-    )
-    return response
+    # Do NOT touch the uid session cookie here. The user is already
+    # authenticated (initiate_google_oauth requires it); re-issuing the
+    # session on a data-connect callback is what allowed connecting a
+    # different Google account to hijack the session.
+    return RedirectResponse(url="/home?toast=google_connected", status_code=302)
 
 
 @router.get("/api/connections")
@@ -2394,16 +2421,8 @@ async def meta_callback(
         )
     )
 
-    response = RedirectResponse(url="/home?toast=meta_connected", status_code=302)
-    response.set_cookie(
-        "uid",
-        sign_uid(str(user_id)),
-        max_age=30 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=settings.APP_ENV == "production",
-    )
-    return response
+    # Already-authenticated connect flow — never re-issue the uid session cookie.
+    return RedirectResponse(url="/home?toast=meta_connected", status_code=302)
 
 
 @router.delete("/api/connections/meta/{conn_id}")
@@ -2666,16 +2685,8 @@ async def tiktok_callback(
         )
     )
 
-    response = RedirectResponse(url="/home?toast=tiktok_connected", status_code=302)
-    response.set_cookie(
-        "uid",
-        sign_uid(str(user_id)),
-        max_age=30 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=settings.APP_ENV == "production",
-    )
-    return response
+    # Already-authenticated connect flow — never re-issue the uid session cookie.
+    return RedirectResponse(url="/home?toast=tiktok_connected", status_code=302)
 
 
 @router.delete("/api/connections/tiktok/{conn_id}")
@@ -2955,16 +2966,8 @@ async def snap_callback(
         )
     )
 
-    response = RedirectResponse(url="/home?toast=snap_connected", status_code=302)
-    response.set_cookie(
-        "uid",
-        sign_uid(str(user_id)),
-        max_age=30 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=settings.APP_ENV == "production",
-    )
-    return response
+    # Already-authenticated connect flow — never re-issue the uid session cookie.
+    return RedirectResponse(url="/home?toast=snap_connected", status_code=302)
 
 
 @router.delete("/api/connections/snap/{conn_id}")

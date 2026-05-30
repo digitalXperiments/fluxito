@@ -44,6 +44,7 @@ from app.models.sdr import SDR, SDREvent, SDRVersion
 from app.templating import render
 from app.tools.sdr_parser import (
     compute_gaps,
+    parse_markdown_table,
     parse_sdr_markdown,
     rebuild_projections_async,
 )
@@ -136,6 +137,8 @@ async def sdr_home_page(request: Request):
     version_info = None
     gaps = []
     parsed_meta = {}
+    has_source_xlsx = False
+    source_xlsx_at = None
     async with app_state.db_session_factory() as db:
         stmt = (
             select(SDR)
@@ -152,6 +155,9 @@ async def sdr_home_page(request: Request):
             sdr_data = sdr.to_dict(include_markdown=True)
             sdr_data["events"] = [e.to_dict() for e in (sdr.events or [])]
             sdr_data["refinement_state"] = sdr.refinement_state.to_dict() if sdr.refinement_state else None
+
+            has_source_xlsx = bool(getattr(sdr, "source_xlsx", None))
+            source_xlsx_at = sdr.source_xlsx_at.isoformat() if getattr(sdr, "source_xlsx_at", None) else None
 
             # Current approved version info
             if sdr.current_version_id:
@@ -171,8 +177,15 @@ async def sdr_home_page(request: Request):
                     "user_journeys": parsed.user_journeys,
                     "data_layer_schema": parsed.data_layer_schema,
                     "user_properties": parsed.user_properties,
+                    "user_properties_table": parse_markdown_table(parsed.user_properties),
                     "destinations_matrix": parsed.destinations_matrix,
                     "consent_and_privacy": parsed.consent_and_privacy,
+                    "consent_table": parse_markdown_table(parsed.consent_and_privacy),
+                    "executive_summary": parsed.executive_summary,
+                    "executive_summary_table": parse_markdown_table(parsed.executive_summary),
+                    "gap_register_table": parse_markdown_table(parsed.gap_register),
+                    "conversion_audit_table": parse_markdown_table(parsed.conversion_audit),
+                    "remediation_roadmap_table": parse_markdown_table(parsed.remediation_roadmap),
                     "ownership": parsed.ownership,
                     "business_type": parsed.business_type,
                     "sdr_status": parsed.sdr_status,
@@ -192,6 +205,8 @@ async def sdr_home_page(request: Request):
             "version_info": version_info,
             "gaps": gaps,
             "parsed_meta": parsed_meta,
+            "has_source_xlsx": has_source_xlsx,
+            "source_xlsx_at": source_xlsx_at,
             "active": "sdr",
             "base_url": base_url_from_request(request),
         },
@@ -708,6 +723,36 @@ async def api_export_sdr_xlsx(project_id: str, request: Request):
 
         return Response(
             content=xlsx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+
+@router.get("/api/projects/{project_id}/solution-design/source.xlsx")
+async def api_download_source_xlsx(project_id: str, request: Request):
+    """Download the original Claude-generated source .xlsx, if one was stored."""
+    _, _, proj_id = await _require_user_and_project(request)
+
+    try:
+        param_pid = uuid.UUID(project_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid project id")
+    if param_pid != proj_id:
+        raise HTTPException(status_code=403, detail="Project mismatch")
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(select(SDR).where(SDR.project_id == proj_id))
+        sdr = result.scalar_one_or_none()
+        if not sdr or not sdr.source_xlsx:
+            raise HTTPException(status_code=404, detail="No source file stored for this SDR")
+
+        raw_name = sdr.source_xlsx_filename or f"{sdr.name or 'SDR'}-source.xlsx"
+        # Strip characters that could break the Content-Disposition header.
+        filename = (
+            "".join(c for c in raw_name if c.isalnum() or c in (" ", "-", "_", ".")).strip() or "source.xlsx"
+        )
+        return Response(
+            content=sdr.source_xlsx,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )

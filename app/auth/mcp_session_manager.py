@@ -906,6 +906,156 @@ def require_project_ctx() -> Optional["ProjectContext"]:
     return app_state.current_project_ctx.get()
 
 
+# ---------------------------------------------------------------------------
+# Per-call active-project resolution
+# ---------------------------------------------------------------------------
+#
+# MCP is stateless HTTP and the tool-call hook (see registry._install_tool_hook)
+# runs every tool inside its own asyncio task via ``asyncio.wait_for``. A new
+# task copies the current context at creation time, so a
+# ``current_project_ctx.set()`` performed by ``set_active_project`` in ONE tool
+# call never reaches a sibling call in the same request/batch. Relying on that
+# ContextVar across calls is therefore unsound.
+#
+# The durable source of truth is Redis (written by ``set_active_project``) plus
+# any explicit per-call ``project_id``. ``ensure_call_project_ctx`` resolves
+# both, once per call, inside the hook's task — so EVERY tool sees a consistent
+# active project regardless of ordering, batching, or which ContextVar it reads.
+
+# Tools that must NOT have their project context auto-resolved (they manage it
+# themselves or are project-agnostic).
+_PROJECT_CTX_SKIP_TOOLS = frozenset({"set_active_project"})
+
+# Project-context flags mirrored onto the UserContext shim so legacy read tools
+# that fall back to ``user_ctx`` (analytics_read, marketing_read, ...) reflect
+# the active project's connections rather than the user's own.
+_PROJECT_FLAG_ATTRS = (
+    "has_ga4",
+    "has_gtm",
+    "has_ads",
+    "has_gsc",
+    "has_bq",
+    "has_meta",
+    "has_tiktok",
+    "has_snap",
+    "has_linkedin",
+    "has_pinterest",
+    "has_amplitude",
+    "has_adobe_analytics",
+    "has_adobe_launch",
+    "has_redshift",
+    "has_snowflake",
+    "connections",
+    "ga4_properties",
+    "gtm_containers",
+    "ads_accounts",
+    "search_console_sites",
+)
+
+
+def _is_project_member(user_ctx, project_id: str) -> bool:
+    return hasattr(user_ctx, "projects") and any(p.project_id == project_id for p in user_ctx.projects)
+
+
+def _match_membership_project_id(user_ctx, query: str) -> str | None:
+    """Exact-match a project by id, slug, or name against the caller's memberships.
+
+    Deliberately stricter than ``set_active_project``'s fuzzy match: this runs
+    silently on every tool call, so we only honor unambiguous identifiers and
+    never a partial-name guess (which could hijack scope off a stray argument).
+    """
+    if not query or not hasattr(user_ctx, "projects"):
+        return None
+    q = query.strip().lower()
+    for p in user_ctx.projects:
+        if q == p.project_id.lower() or q == p.project_slug.lower() or q == p.project_name.lower():
+            return p.project_id
+    return None
+
+
+def _extract_explicit_project(arguments) -> str | None:
+    """Pull an explicit Fluxito project identifier from tool arguments.
+
+    Checks top-level ``project_id`` / ``project`` and the nested ``params`` dict
+    (the unified dispatchers wrap real args inside ``params``). A value that
+    doesn't match a membership (e.g. an Amplitude ``project_id``) is ignored by
+    the caller, so this is safe to read broadly.
+    """
+    if not isinstance(arguments, dict):
+        return None
+    cand = arguments.get("project_id") or arguments.get("project")
+    if not cand:
+        params = arguments.get("params")
+        if isinstance(params, dict):
+            cand = params.get("project_id") or params.get("project")
+    return str(cand) if cand else None
+
+
+def _sync_project_flags_onto_user(user_ctx, pctx) -> None:
+    """Mirror the active project's connection flags onto the UserContext shim."""
+    for attr in _PROJECT_FLAG_ATTRS:
+        if hasattr(pctx, attr):
+            setattr(user_ctx, attr, getattr(pctx, attr))
+
+
+async def ensure_call_project_ctx(tool_name: str, arguments) -> object | None:
+    """Resolve and set ``current_project_ctx`` for a single tool call.
+
+    Resolution order:
+      1. Explicit ``project_id`` / ``project`` argument matching one of the
+         caller's projects → per-call override (fully stateless).
+      2. Otherwise, if a project is already active for this request → keep it.
+      3. Otherwise, restore the session's last-selected project from Redis.
+
+    Returns a ContextVar token to ``reset`` after the call, or ``None`` when
+    nothing was set (caller must guard the reset on a non-None token).
+    """
+    if tool_name in _PROJECT_CTX_SKIP_TOOLS:
+        return None
+    user_ctx = app_state.current_user_ctx.get()
+    if user_ctx is None:
+        return None
+
+    target_pid: str | None = None
+
+    explicit = _extract_explicit_project(arguments)
+    if explicit:
+        target_pid = _match_membership_project_id(user_ctx, explicit)
+        # A non-matching explicit value is not a Fluxito project — fall through
+        # to session/Redis resolution rather than blocking it.
+
+    if target_pid is None:
+        current = app_state.current_project_ctx.get()
+        if current is not None:
+            return None  # already resolved for this request — keep it
+        try:
+            redis = app_state.redis_client
+            if redis is not None:
+                cached = await redis.get(f"mcp:active_project:{user_ctx.user_id}")
+                if cached:
+                    pid = cached.decode() if isinstance(cached, bytes) else str(cached)
+                    if _is_project_member(user_ctx, pid):
+                        target_pid = pid
+        except Exception:
+            return None
+
+    if not target_pid:
+        return None
+
+    current = app_state.current_project_ctx.get()
+    if current is not None and current.project_id == target_pid:
+        return None  # no change needed
+
+    try:
+        pctx = await build_project_context(target_pid, user_ctx.user_id)
+    except Exception:
+        return None
+
+    token = app_state.current_project_ctx.set(pctx)
+    _sync_project_flags_onto_user(user_ctx, pctx)
+    return token
+
+
 def _no_connection(base_url: str, message: str, connect_path: str = "/connect") -> dict:
     """Factory for standard 'connection_missing' error responses."""
     return {

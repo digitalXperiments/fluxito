@@ -20,6 +20,8 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app.branding import brand as _brand_global
+
 logger = logging.getLogger(__name__)
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -127,6 +129,9 @@ templates.env.filters["initials"] = _initials
 # Make asset_hash available as a global function in all templates
 templates.env.globals["asset_hash"] = _asset_hash
 
+# Expose instance branding (name, logo, accent) to all templates
+templates.env.globals["brand"] = _brand_global
+
 
 # ---------- Render helpers ---------------------------------------------------
 
@@ -152,7 +157,7 @@ def render(
         ctx["active_project_plan"] = getattr(request.state, "active_project_plan", "free")
     if "nav_projects" not in ctx:
         ctx["nav_projects"] = getattr(request.state, "nav_projects", [])
-    return templates.TemplateResponse(template_name, ctx, status_code=status_code)
+    return templates.TemplateResponse(request, template_name, ctx, status_code=status_code)
 
 
 def _base_url_from_request(request: Request) -> str:

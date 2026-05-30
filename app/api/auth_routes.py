@@ -81,6 +81,21 @@ async def register(payload: RegisterRequest, request: Request):
     if len(password) < 8:
         return JSONResponse({"error": "Password must be at least 8 characters."}, status_code=400)
 
+    from app.settings_service import access_approval_required
+
+    if await access_approval_required():
+        from sqlalchemy import select as _select
+
+        from app.models.user import User as _User
+
+        async with app_state.db_session_factory() as db:
+            exists_user = (await db.execute(_select(_User).where(_User.email == email))).scalar_one_or_none()
+        if not exists_user:
+            return JSONResponse(
+                {"error": "This instance is invite-only. Please request access.", "request_access": True},
+                status_code=403,
+            )
+
     user, error = await register_user(email, password, display_name)
     if error:
         return JSONResponse({"error": error}, status_code=400)
@@ -131,6 +146,14 @@ async def login(payload: LoginRequest, request: Request):
 
     if error:
         return JSONResponse({"error": error}, status_code=401)
+
+    # Give brand-new users (e.g. just-invited members) a personal project.
+    try:
+        from app.api.project_routes import ensure_default_project
+
+        await ensure_default_project(user.id, user.display_name, user.email)
+    except Exception:
+        logger.warning("ensure_default_project failed on login", exc_info=True)
 
     # Check tutorial
     needs_tutorial = user.tutorial_completed_at is None

@@ -45,10 +45,10 @@
     {# Invite bar (owner/admin only) #}
     {% if membership.role in ('owner', 'admin') %}
     <div class="ps-card" style="padding:18px 20px;margin-bottom:18px">
-      <form id="inviteForm" class="ps-invite">
+      <form id="inviteForm" class="ps-invite" novalidate>
         <label class="f-field" style="flex:1;min-width:220px">
           <span>Invite by email</span>
-          <input type="email" name="email" class="f-input" placeholder="colleague@example.com" required>
+          <input type="email" name="email" class="f-input" placeholder="colleague@example.com" autocomplete="off">
         </label>
         <label class="f-field" style="min-width:140px">
           <span>Role</span>
@@ -97,6 +97,7 @@
               </select>
               {% endif %}
               <button class="btn sm danger-outline" onclick="removeMember('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Remove</button>
+              <button class="btn sm" onclick="resetMemberPassword('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Reset password</button>
             </td>
             {% elif membership.role in ('owner', 'admin') %}
             <td></td>
@@ -123,6 +124,9 @@
           <span class="t-flag ps-conn-status ps-conn-{{ c.status }}">{{ c.status | capitalize }}</span>
         </div>
         <div class="ps-conn-email">{{ c.google_email }}</div>
+        {% if c.connected_by_count and c.connected_by_count > 1 %}
+        <div class="ps-conn-email" style="color:var(--text-subtle);font-size:12px">Connected by {{ c.connected_by_count }} members</div>
+        {% endif %}
         {% if c.status == 'disconnected' %}
         <div class="ps-warn">
           The user who connected this platform was removed. An admin needs to reconnect.
@@ -834,6 +838,16 @@ if (inviteForm) {
     var msg = document.getElementById('inviteMsg');
     btn.disabled = true; btn.textContent = 'Inviting…';
     msg.style.display = 'none';
+    var emailVal = (this.email.value || '').trim();
+    if (!emailVal) {
+      msg.textContent = 'Enter an email address.';
+      msg.style.background = 'color-mix(in srgb, var(--red) 10%, transparent)';
+      msg.style.color = 'var(--red)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+      msg.style.display = 'inline-block';
+      btn.disabled = false; btn.textContent = 'Invite';
+      return;
+    }
     var fd = new FormData(this);
     try {
       var res = await fetch('/api/project/{{ project.slug }}/members', {
@@ -843,12 +857,42 @@ if (inviteForm) {
       });
       var data = await res.json();
       if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
-      msg.textContent = data.message || 'Invited!';
+      if (data.temp_password) {
+        msg.textContent = '';
+        var h = document.createElement('div');
+        h.style.fontWeight = '600'; h.style.marginBottom = '6px';
+        h.textContent = 'Invited ' + emailVal;
+        var info = document.createElement('div');
+        info.style.marginBottom = '6px';
+        info.textContent = 'No invite email is sent (SMTP not configured). Share these credentials:';
+        var creds = document.createElement('div');
+        creds.style.fontFamily = 'var(--font-mono,monospace)'; creds.style.fontSize = '13px';
+        var emailLine = document.createElement('div');
+        emailLine.textContent = 'Email: ' + emailVal;
+        var pwLine = document.createElement('div');
+        pwLine.appendChild(document.createTextNode('Password: '));
+        var pwSpan = document.createElement('span');
+        pwSpan.id = 'tmpPw';
+        pwSpan.textContent = data.temp_password;
+        pwLine.appendChild(pwSpan);
+        creds.appendChild(emailLine); creds.appendChild(pwLine);
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button'; copyBtn.className = 'btn sm';
+        copyBtn.style.marginTop = '8px';
+        copyBtn.textContent = 'Copy password';
+        copyBtn.onclick = function(){ navigator.clipboard.writeText(pwSpan.textContent); };
+        var warn = document.createElement('div');
+        warn.style.marginTop = '6px'; warn.style.color = 'var(--text-subtle)'; warn.style.fontSize = '12px';
+        warn.textContent = '⚠ This password is shown only once — copy it now, it won\'t be displayed again.';
+        msg.appendChild(h); msg.appendChild(info); msg.appendChild(creds); msg.appendChild(copyBtn); msg.appendChild(warn);
+      } else {
+        msg.textContent = data.message || 'Invited!';
+      }
       msg.style.background = 'color-mix(in srgb, var(--green) 10%, transparent)';
-      msg.style.color = 'var(--green)';
+      msg.style.color = 'var(--text)';
       msg.style.borderColor = 'color-mix(in srgb, var(--green) 25%, var(--line))';
-      msg.style.display = 'inline-block';
-      setTimeout(function(){ window.location.reload(); }, 1200);
+      msg.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Invite';
     } catch(err) {
       msg.textContent = err.message;
       msg.style.background = 'color-mix(in srgb, var(--red) 10%, transparent)';
@@ -868,6 +912,17 @@ async function removeMember(slug, memberId, email) {
     var data = await res.json();
     if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
     window.location.reload();
+  } catch(err) { alert(err.message); }
+}
+
+// ── Reset member password ──
+async function resetMemberPassword(slug, memberId, email) {
+  if (!confirm('Reset password for ' + email + '? A new temporary password will be shown once.')) return;
+  try {
+    var res = await fetch('/api/project/' + slug + '/members/' + memberId + '/reset-password', {method: 'POST'});
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
+    window.prompt('New password for ' + email + ' (copy it now — shown only once):', data.temp_password);
   } catch(err) { alert(err.message); }
 }
 

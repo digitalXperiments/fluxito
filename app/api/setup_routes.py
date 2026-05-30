@@ -99,6 +99,7 @@ async def setup_email(request: Request):
                 password_hash=hash_password(password),
                 email_verified=True,  # self-hosted: trust the operator
                 auth_provider="email",
+                is_superadmin=True,
             )
             db.add(user)
             await db.flush()

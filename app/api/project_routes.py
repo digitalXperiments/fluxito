@@ -72,6 +72,26 @@ async def _resolve_user(request: Request) -> dict | None:
     return None
 
 
+def dedupe_connections(rows: list[dict]) -> list[dict]:
+    """Collapse per-user connection rows into one card per (provider, email).
+
+    Migration 042 made connections per-user, so the same external account can
+    appear once per member. For display we show a single card; ``active`` wins
+    over ``disconnected`` and we surface how many members connected it.
+    """
+    by_key: dict[tuple, dict] = {}
+    for r in rows:
+        key = (r["provider"], r["google_email"])
+        card = by_key.get(key)
+        if card is None:
+            by_key[key] = {**r, "connected_by_count": 1}
+        else:
+            card["connected_by_count"] += 1
+            if r["status"] == "active":
+                card["status"] = "active"
+    return list(by_key.values())
+
+
 def get_active_project_id(request: Request) -> str | None:
     """Read the active project ID from the browser cookie.
 
@@ -311,6 +331,50 @@ async def create_project(request: Request):
     )
 
 
+async def ensure_default_project(
+    user_id: "uuid.UUID | str",
+    display_name: str | None,
+    email: str,
+) -> bool:
+    """Create a personal project for *user_id* iff they belong to none.
+
+    Returns True if a project was created, False if the user already had one.
+    Safe to call on every login — it is a no-op for existing members.
+    """
+    uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+
+    async with app_state.db_session_factory() as db:
+        count = await db.scalar(
+            select(func.count())
+            .select_from(ProjectMember)
+            .where(ProjectMember.user_id == uid, ProjectMember.is_active == True)
+        )
+        if count and count > 0:
+            return False
+
+        base = (display_name or (email.split("@")[0] if email else "My")).strip()
+        name = f"{base}'s Project"
+        slug = _slugify(name)
+
+        project = Project(name=name, slug=slug, owner_id=uid)
+        db.add(project)
+        await db.flush()
+        db.add(
+            ProjectMember(
+                project_id=project.id,
+                user_id=uid,
+                role=ROLE_OWNER,
+                joined_at=datetime.utcnow(),
+            )
+        )
+        await db.commit()
+
+    from app.auth.mcp_session_manager import invalidate_user_context_cache
+
+    await invalidate_user_context_cache(str(uid))
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Project settings
 # ---------------------------------------------------------------------------
@@ -365,7 +429,7 @@ async def project_settings_page(request: Request, slug: str):
                 OAuthConnection.is_active == True,
             )
         )
-        connections = [
+        raw_connections = [
             {
                 "id": str(c.id),
                 "provider": c.provider,
@@ -374,6 +438,7 @@ async def project_settings_page(request: Request, slug: str):
             }
             for c in conn_result.scalars().all()
         ]
+        connections = dedupe_connections(raw_connections)
 
     # Load email senders + Slack webhooks for the Notifications tab.
     # Owner/admin only — for member/viewer we pass empty lists so the
@@ -506,10 +571,23 @@ async def invite_member(request: Request, slug: str):
         invited_user = result.scalar_one_or_none()
 
         if not invited_user:
-            # Create a placeholder user (they'll complete sign-in when they visit)
-            invited_user = User(email=invite_email)
+            # No SMTP yet: create the user with a temp password to hand over.
+            from app.auth.email_auth import generate_temp_password, hash_password
+
+            temp_password = generate_temp_password()
+            invited_user = User(
+                email=invite_email,
+                password_hash=hash_password(temp_password),
+                email_verified=True,
+                email_verified_at=datetime.utcnow(),
+                auth_provider="email",
+            )
             db.add(invited_user)
             await db.flush()
+        else:
+            # Existing account (real or Google-only): never touch their credentials.
+            # They log in with their existing method; we only add the membership.
+            temp_password = None
 
         # Check if already a member
         result = await db.execute(
@@ -579,7 +657,15 @@ async def invite_member(request: Request, slug: str):
         )
     )
 
-    return JSONResponse({"success": True, "message": f"Invited {invite_email} as {invite_role}."})
+    return JSONResponse(
+        {
+            "success": True,
+            "message": f"Invited {invite_email} as {invite_role}.",
+            "email": invite_email,
+            "temp_password": temp_password,
+            "smtp_sent": False,
+        }
+    )
 
 
 @router.delete("/api/project/{slug}/members/{member_id}")
@@ -730,6 +816,60 @@ async def change_member_role(request: Request, slug: str, member_id: str):
         await db.commit()
 
     return JSONResponse({"success": True, "message": f"Role changed to {new_role}."})
+
+
+@router.post("/api/project/{slug}/members/{member_id}/reset-password")
+async def reset_member_password(request: Request, slug: str, member_id: str):
+    """Owner/admin re-issues a temporary password for a member (no SMTP era).
+
+    Refuses the project owner, and refuses password-less (Google sign-in) users —
+    minting a password onto a Google account would be an impersonation vector.
+    """
+    user = await _resolve_user(request)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+
+    project = await _get_project_by_slug(slug)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    uid = uuid.UUID(user["user_id"])
+    my_membership = await _get_membership(project.id, uid)
+    if not my_membership or my_membership.role not in CAN_MANAGE_MEMBERS_ROLES:
+        raise HTTPException(403, "Only owners and admins can reset passwords")
+
+    from app.auth.email_auth import generate_temp_password, hash_password
+
+    new_password = generate_temp_password()
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(
+            select(ProjectMember).where(
+                ProjectMember.id == uuid.UUID(member_id),
+                ProjectMember.project_id == project.id,
+            )
+        )
+        target = result.scalar_one_or_none()
+        if not target:
+            raise HTTPException(404, "Member not found")
+        if target.role == ROLE_OWNER:
+            raise HTTPException(400, "Cannot reset the project owner's password.")
+
+        target_user = await db.get(User, target.user_id)
+        if not target_user:
+            raise HTTPException(404, "User not found")
+        if not target_user.password_hash:
+            raise HTTPException(
+                400,
+                "This member signs in with Google; password reset doesn't apply.",
+            )
+
+        target_user.password_hash = hash_password(new_password)
+        target_user.email_verified = True
+        await db.commit()
+        target_email = target_user.email
+
+    return JSONResponse({"success": True, "email": target_email, "temp_password": new_password})
 
 
 # ---------------------------------------------------------------------------

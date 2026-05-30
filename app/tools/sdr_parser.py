@@ -80,12 +80,16 @@ class ParsedSDR:
     last_approved_at: str | None = None
 
     # Sections (raw markdown)
+    executive_summary: str | None = None
     business_context: str | None = None
     user_journeys: str | None = None
     data_layer_schema: str | None = None
     user_properties: str | None = None
     destinations_matrix: str | None = None
     consent_and_privacy: str | None = None
+    gap_register: str | None = None
+    conversion_audit: str | None = None
+    remediation_roadmap: str | None = None
     ownership: str | None = None
     changelog: str | None = None
 
@@ -147,7 +151,9 @@ def parse_sdr_markdown(markdown_text: str) -> ParsedSDR:
     # Map sections
     for heading, body in sections.items():
         heading_lower = heading.lower().strip()
-        if "business context" in heading_lower:
+        if "executive summary" in heading_lower:
+            result.executive_summary = body
+        elif "business context" in heading_lower:
             result.business_context = body
         elif "user journeys" in heading_lower or "user journey" in heading_lower:
             result.user_journeys = body
@@ -155,12 +161,18 @@ def parse_sdr_markdown(markdown_text: str) -> ParsedSDR:
             result.data_layer_schema = body
         elif "event catalog" in heading_lower:
             result.events = _parse_event_catalog(body)
+        elif "conversion audit" in heading_lower:
+            result.conversion_audit = body
         elif "user properties" in heading_lower or "custom dimensions" in heading_lower:
             result.user_properties = body
         elif "destinations matrix" in heading_lower or "destination matrix" in heading_lower:
             result.destinations_matrix = body
         elif "consent" in heading_lower:
             result.consent_and_privacy = body
+        elif "gap register" in heading_lower:
+            result.gap_register = body
+        elif "remediation roadmap" in heading_lower:
+            result.remediation_roadmap = body
         elif "ownership" in heading_lower or "governance" in heading_lower:
             result.ownership = body
         elif "changelog" in heading_lower:
@@ -378,6 +390,46 @@ def _parse_parameters_table(body: str) -> list[ParsedParameter]:
     return params
 
 
+def parse_markdown_table(text: str | None) -> dict | None:
+    """Parse the pipe table in *text* into headers + rows (first row is the header).
+
+    Returns ``{"headers": [...], "rows": [[...], ...]}`` or ``None`` when no
+    table is present. Cells are stripped of surrounding whitespace and
+    backticks. Display-only helper — does not validate column names.
+    """
+    if not text:
+        return None
+
+    table_lines = [line.strip() for line in text.split("\n") if line.strip().startswith("|")]
+    if len(table_lines) < 2:
+        return None
+
+    def cells(line: str) -> list[str]:
+        parts = [c.strip().strip("`").strip() for c in line.strip().strip("|").split("|")]
+        return parts
+
+    headers = cells(table_lines[0])
+    rows: list[list[str]] = []
+    for line in table_lines[1:]:
+        # Skip the |---|---| / :--- alignment separator row (every cell is just -/:)
+        sep_cells = cells(line)
+        if sep_cells and all(c and set(c) <= {"-", ":"} for c in sep_cells):
+            continue
+        row = cells(line)
+        if not any(row):
+            continue
+        # Pad/truncate to header width so the template can zip safely
+        if len(row) < len(headers):
+            row = row + [""] * (len(headers) - len(row))
+        else:
+            row = row[: len(headers)]
+        rows.append(row)
+
+    if not rows:
+        return None
+    return {"headers": headers, "rows": rows}
+
+
 def _parse_destinations(body: str) -> list[ParsedDestination]:
     """Parse destination list items from an event section."""
     dests: list[ParsedDestination] = []
@@ -387,9 +439,13 @@ def _parse_destinations(body: str) -> list[ParsedDestination]:
         return dests
 
     # Pattern: - **GA4** (property `G-XXX`): event name `purchase`, ...
-    # Or simpler: - **GA4**: ...
+    # The account-id parenthetical is optional and the leading keyword
+    # (property/customer/pixel/account) is also optional, so all of these parse:
+    #   - **GA4**: event name `purchase`
+    #   - **GOOGLE_ADS** (`AW-123`): event name `purchase`
+    #   - **GOOGLE_ADS** (customer `AW-123`): event name `purchase`
     pattern = re.compile(
-        r"-\s*\*\*(.+?)\*\*\s*(?:\((?:property|customer|pixel|account)\s*`?([^)]*?)`?\))?\s*:\s*(.+)",
+        r"-\s*\*\*(.+?)\*\*\s*(?:\((?:property|customer|pixel|account)?\s*`?([^)`]*?)`?\))?\s*:\s*(.+)",
         re.IGNORECASE,
     )
 
@@ -422,12 +478,16 @@ def _parse_destinations(body: str) -> list[ParsedDestination]:
 
 
 def _normalize_platform(raw: str) -> str:
-    """Normalize a platform name to our canonical form."""
-    raw = raw.lower().strip()
+    """Normalize a platform name to our canonical form.
+
+    Tolerant of underscores/case so the generator's own ``GOOGLE_ADS`` upper-cased
+    output round-trips back to ``google_ads`` (not ``custom``).
+    """
+    raw = raw.lower().strip().replace("_", " ")
+    if "google ads" in raw or "gads" in raw or "adwords" in raw:
+        return "google_ads"
     if "ga4" in raw or "google analytics" in raw:
         return "ga4"
-    if "google ads" in raw or "gads" in raw:
-        return "google_ads"
     if "meta" in raw or "facebook" in raw:
         return "meta"
     if "tiktok" in raw:
@@ -666,6 +726,20 @@ def generate_sdr_markdown(
     lines.append(f"# {project_name} — Solution Design Reference")
     lines.append("")
 
+    # Executive Summary
+    lines.append("## Executive Summary")
+    lines.append("")
+    lines.append("| Property | Value |")
+    lines.append("|---|---|")
+    lines.append("| GTM Container | [TODO] |")
+    lines.append("| Platforms in scope | [TODO] |")
+    lines.append(f"| Audit date | {now[:10]} |")
+    lines.append("")
+    lines.append("[TODO: Add a short narrative summary of audit scope and headline findings]")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
     # Business Context
     lines.append("## Business Context")
     lines.append("")
@@ -720,6 +794,16 @@ def generate_sdr_markdown(
     lines.append("---")
     lines.append("")
 
+    # Conversion Audit
+    lines.append("## Conversion Audit")
+    lines.append("")
+    lines.append("| GA4 key event | 90d count | Unique converters | Fires? | Verdict / action |")
+    lines.append("|---|---|---|---|---|")
+    lines.append("| [TODO] | | | | |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
     # User Properties
     lines.append("## User Properties / Custom Dimensions")
     lines.append("")
@@ -751,6 +835,28 @@ def generate_sdr_markdown(
         lines.append(consent_md)
     else:
         lines.append("[TODO: Document consent management platform, categories, gating rules]")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # Gap Register
+    lines.append("## Gap Register")
+    lines.append("")
+    lines.append(
+        "| # | Severity | Finding | Evidence | Business impact | Recommended fix | Fix location | Owner |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|")
+    lines.append("| [TODO] | | | | | | | |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # Remediation Roadmap
+    lines.append("## Remediation Roadmap")
+    lines.append("")
+    lines.append("| Phase | Action | Resolves | Effort | Impact | Owner |")
+    lines.append("|---|---|---|---|---|---|")
+    lines.append("| [TODO] | | | | | |")
     lines.append("")
     lines.append("---")
     lines.append("")

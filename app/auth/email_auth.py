@@ -12,6 +12,7 @@ Handles:
 import hashlib
 import hmac
 import logging
+import secrets
 import time
 import uuid
 from datetime import UTC, datetime
@@ -51,6 +52,11 @@ def verify_password(password: str, hashed: str) -> bool:
         return bcrypt.verify(password, hashed)
     except Exception:
         return False
+
+
+def generate_temp_password() -> str:
+    """Generate a strong, URL-safe temporary password for invited users."""
+    return secrets.token_urlsafe(12)
 
 
 # ---------------------------------------------------------------------------
@@ -240,14 +246,15 @@ async def register_user(
     Register a new user with email/password.
 
     Returns (user, error). On success error is None; on failure user is None.
-    If the email is already taken by a Google user, returns an error suggesting
-    Google sign-in instead.
+    If an account already owns the email, returns an error (existing rows are
+    never claimed or modified — that would be an account-takeover vector, since
+    a password-less row may be a Google-only user, not just an invited stub).
     """
     async with app_state.db_session_factory() as db:
         result = await db.execute(select(User).where(User.email == email))
         existing = result.scalar_one_or_none()
 
-        if existing:
+        if existing is not None:
             if existing.auth_provider == "google":
                 return (
                     None,

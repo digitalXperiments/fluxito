@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, String, func
+from sqlalchemy import Boolean, DateTime, Index, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,6 +43,8 @@ class User(Base):
     auth_provider: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=AUTH_PROVIDER_GOOGLE
     )
+
+    is_superadmin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
     __table_args__ = (Index("idx_email_active", email, is_active),)
 

@@ -231,6 +231,14 @@ async def lifespan(app: FastAPI):
     mcp_session_cm = mcp_server.session_manager.run()
     await mcp_session_cm.__aenter__()
 
+    # Warm the branding cache so the first request renders correct chrome.
+    try:
+        from app.branding import refresh_brand
+
+        await refresh_brand()
+    except Exception:
+        logger.warning("Initial brand refresh failed; using defaults", exc_info=True)
+
     logger.info("Application started (APP_ENV=%s)", settings.APP_ENV)
 
     yield
@@ -375,6 +383,8 @@ async def generic_exception_handler(request: Request, exc: Exception):
 # HTTP Routers
 # ---------------------------------------------------------------------------
 
+from app.api.access_request_routes import router as access_request_router
+from app.api.admin_routes import router as admin_router
 from app.api.audit_routes import router as audit_router
 from app.api.auth_routes import router as auth_router
 from app.api.automation_routes import router as automation_router
@@ -408,6 +418,8 @@ app.include_router(audit_router)
 app.include_router(project_router)
 app.include_router(sdr_router)
 app.include_router(scheduled_report_router)
+app.include_router(admin_router)
+app.include_router(access_request_router)
 
 from app.api import linkedin_oauth_routes, pinterest_oauth_routes
 
@@ -445,6 +457,7 @@ _setup_complete: bool | None = None
 _SETUP_BYPASS_PREFIXES = (
     "/setup",
     "/signin",
+    "/request-access",
     "/auth/",
     "/api/",
     "/mcp",
@@ -466,6 +479,13 @@ async def _first_run_gate(path: str):
 
     # Fast-path: once users exist, never block again.
     if _setup_complete is True:
+        return None
+
+    # The marketing landing page at "/" is public — anonymous visitors should
+    # see it regardless of whether any users exist yet (the landing route
+    # itself redirects logged-in users onward). Exact match only so we don't
+    # accidentally bypass every path.
+    if path == "/":
         return None
 
     # Never block setup-related or static paths.
@@ -798,6 +818,32 @@ class _MCPASGIApp:
             )
             await send({"type": "http.response.body", "body": body})
             return
+
+        # ── Per-user MCP rate limiting (super-admins exempt) ─────────
+        _uid = str(getattr(user_ctx, "user_id", "") or "")
+        if _uid:
+            from app.auth.superadmin_cache import is_superadmin_cached
+
+            if not await is_superadmin_cached(_uid):
+                from app.auth.rate_limiter import check_rate_limit
+
+                blocked = await check_rate_limit(_uid)
+                if blocked:
+                    import json as _json
+
+                    body = _json.dumps(blocked).encode()
+                    await send(
+                        {
+                            "type": "http.response.start",
+                            "status": 429,
+                            "headers": [
+                                (b"content-type", b"application/json"),
+                                (b"retry-after", str(blocked.get("retry_after_seconds", 60)).encode()),
+                            ],
+                        }
+                    )
+                    await send({"type": "http.response.body", "body": body})
+                    return
 
         user_token = app_state.current_user_ctx.set(user_ctx)
         client_token = app_state.current_client_name_ctx.set(state.get("mcp_client_name"))

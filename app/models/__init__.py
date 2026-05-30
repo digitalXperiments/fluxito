@@ -1,3 +1,4 @@
+from app.models.access_request import AccessRequest
 from app.models.activity import ActivityEvent
 from app.models.app_setting import AppSetting
 from app.models.audit import ToolCallAudit
@@ -37,6 +38,7 @@ from app.models.user import User
 
 __all__ = [
     "KPI",
+    "AccessRequest",
     "ActivityEvent",
     "AdobeConnection",
     "AmplitudeConnection",

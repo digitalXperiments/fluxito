@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Authorize access — Fluxito{% endblock %}
+{% block title %}Authorize access — {{ brand().name }}{% endblock %}
 
 {% block nav %}
 <nav class="mcp-consent-nav">
   <div class="mcp-consent-nav-inner">
-    <a href="/home" class="mcp-consent-nav-wordmark" aria-label="Fluxito home">
-      <span>flux</span><em>ito</em><i></i>
+    <a href="/home" class="mcp-consent-nav-wordmark" aria-label="{{ brand().name }} home">
+      {{ wordmark() }}
     </a>
     <div class="mcp-consent-account" title="{{ account_email or account_display_name or 'Signed in' }}">
       <div class="mcp-consent-avatar">{{ account_initials|default('U') }}</div>
@@ -27,8 +27,8 @@
 <div class="mcp-consent-shell">
   <div class="mcp-consent-card">
     <div class="mcp-consent-brand">
-      <a href="/" aria-label="Fluxito home">
-        <span class="mcp-consent-wordmark">Fluxito<span>.</span></span>
+      <a href="/" aria-label="{{ brand().name }} home">
+        <span class="mcp-consent-wordmark">{{ brand().name }}<span>.</span></span>
       </a>
     </div>
 
@@ -41,9 +41,9 @@
 
     <div class="mcp-consent-lead">
       <span class="mcp-consent-kicker">Authorize access</span>
-      <h1>Allow this app to access Fluxito?</h1>
+      <h1>Allow this app to access {{ brand().name }}?</h1>
       <p>
-        <strong>{{ client_name or "An application" }}</strong> wants to connect to your Fluxito account
+        <strong>{{ client_name or "An application" }}</strong> wants to connect to your {{ brand().name }} account
         {% if project_name %}on project <strong>{{ project_name }}</strong>{% else %}and access your data and connections{% endif %}.
       </p>
     </div>

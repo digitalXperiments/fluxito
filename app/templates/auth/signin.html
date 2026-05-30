@@ -1,19 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Sign in — Fluxito{% endblock %}
+{% block title %}Sign in — {{ brand().name }}{% endblock %}
 
 {% block main %}
 <div class="auth-shell">
   <div class="auth-card">
     <div class="auth-brand">
       <a href="/">
-        <span class="auth-brand-mark">Fluxito<span class="auth-brand-dot">.</span></span>
+        <span class="auth-brand-mark">{{ brand().name }}<span class="auth-brand-dot">.</span></span>
       </a>
     </div>
 
     {% if first_run %}
     {# ── First-run: create the admin account ── #}
     <div class="auth-lead">
-      <h1>Welcome to <em class="serif-italic">Fluxito.</em></h1>
+      <h1>Welcome to <em class="serif-italic">{{ brand().name }}.</em></h1>
       <p>Create an admin account to get started. You can add Google sign-in and invite teammates later from Settings.</p>
     </div>
     {% else %}
@@ -96,7 +96,7 @@
     </div>
 
     <p class="auth-footnote">
-      By continuing, you agree to Fluxito's <a href="/legal/terms">terms</a> and <a href="/legal/privacy">privacy policy</a>.
+      By continuing, you agree to {{ brand().name }}'s <a href="/legal/terms">terms</a> and <a href="/legal/privacy">privacy policy</a>.
     </p>
   </div>
 </div>
