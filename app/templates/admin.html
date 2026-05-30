@@ -15,6 +15,7 @@
   <div class="tabs" style="margin-bottom:24px;">
     <button class="tab is-active" data-tab="users" onclick="adminTab('users')">Users</button>
     <button class="tab" data-tab="requests" onclick="adminTab('requests')">Access Requests</button>
+    <button class="tab" data-tab="ratelimits" onclick="adminTab('ratelimits')">Rate Limits</button>
   </div>
 
   <section data-panel="users">
@@ -32,6 +33,16 @@
     <table class="ps-table"><thead><tr><th>Name</th><th>Email</th><th>Use case</th><th></th></tr></thead>
       <tbody id="reqBody"><tr><td colspan="4">Loading…</td></tr></tbody>
     </table>
+  </section>
+
+  <section data-panel="ratelimits" style="display:none">
+    <p style="color:var(--text-muted);margin-bottom:16px">Per-user limits on MCP / AI tool calls. Super-admins are exempt. Changes take effect within ~60s.</p>
+    <div id="rlMsg" class="ps-msg" style="display:none"></div>
+    <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+      <label class="f-field">Requests per minute<input id="rlMin" type="number" min="1" class="f-input" style="width:140px"></label>
+      <label class="f-field">Requests per hour<input id="rlHour" type="number" min="1" class="f-input" style="width:140px"></label>
+      <button class="btn primary" onclick="saveRateLimits()">Save</button>
+    </div>
   </section>
 </main>
 
@@ -101,6 +112,22 @@ async function approve(id){
 }
 async function reject(id){ try{ await api(`/api/admin/access-requests/${id}/reject`,{method:'POST'}); loadRequests(); }catch(e){ alert(e.message);} }
 async function toggleGate(v){ try{ await api('/api/admin/settings/require-access-approval',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:v})}); }catch(e){ alert(e.message); document.getElementById('gateToggle').checked=!v;} }
-loadUsers(); loadRequests();
+async function loadRateLimits(){
+  try{
+    const d = await api('/api/admin/settings/rate-limits');
+    document.getElementById('rlMin').value = d.per_min;
+    document.getElementById('rlHour').value = d.per_hour;
+  }catch(e){ /* leave blank on error */ }
+}
+async function saveRateLimits(){
+  const per_min = parseInt(document.getElementById('rlMin').value, 10);
+  const per_hour = parseInt(document.getElementById('rlHour').value, 10);
+  const m = document.getElementById('rlMsg');
+  try{
+    await api('/api/admin/settings/rate-limits', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({per_min, per_hour})});
+    m.textContent = 'Saved.'; m.style.display='block';
+  }catch(e){ m.textContent = e.message; m.style.display='block'; }
+}
+loadUsers(); loadRequests(); loadRateLimits();
 </script>
 {% endblock %}
