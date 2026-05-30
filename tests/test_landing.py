@@ -4,7 +4,7 @@
 import pytest
 
 import app.app_state as app_state
-import app.models.access_request  # noqa: F401
+import app.models.access_request
 import app.models.sdr  # noqa: F401
 
 
@@ -22,6 +22,7 @@ def _patch_db(db_session_factory):
 async def _http_client(_patch_db):
     import httpx
     from httpx import ASGITransport
+
     from app.auth.csrf import _generate_csrf_token
     from app.main import app
 
