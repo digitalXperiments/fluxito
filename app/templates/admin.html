@@ -16,6 +16,7 @@
     <button class="tab is-active" data-tab="users" onclick="adminTab('users')">Users</button>
     <button class="tab" data-tab="requests" onclick="adminTab('requests')">Access Requests</button>
     <button class="tab" data-tab="ratelimits" onclick="adminTab('ratelimits')">Rate Limits</button>
+    <button class="tab" data-tab="branding" onclick="adminTab('branding')">Branding</button>
   </div>
 
   <section data-panel="users">
@@ -42,6 +43,17 @@
       <label class="f-field">Requests per minute<input id="rlMin" type="number" min="1" class="f-input" style="width:140px"></label>
       <label class="f-field">Requests per hour<input id="rlHour" type="number" min="1" class="f-input" style="width:140px"></label>
       <button class="btn primary" onclick="saveRateLimits()">Save</button>
+    </div>
+  </section>
+
+  <section data-panel="branding" style="display:none">
+    <p style="color:var(--text-muted);margin-bottom:16px">Whitelabel the instance chrome. Changes apply on the next page load.</p>
+    <div id="brMsg" class="ps-msg" style="display:none"></div>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:420px">
+      <label class="f-field">App name<input id="brName" class="f-input" maxlength="120"></label>
+      <label class="f-field">Logo URL<input id="brLogo" class="f-input" maxlength="500" placeholder="https://…/logo.png"></label>
+      <label class="f-field">Accent colour<input id="brAccent" class="f-input" maxlength="64" placeholder="#0B0B0E"></label>
+      <button class="btn primary" style="align-self:flex-start" onclick="saveBranding()">Save</button>
     </div>
   </section>
 </main>
@@ -128,6 +140,24 @@ async function saveRateLimits(){
     m.textContent = 'Saved.'; m.style.display='block';
   }catch(e){ m.textContent = e.message; m.style.display='block'; }
 }
-loadUsers(); loadRequests(); loadRateLimits();
+async function loadBranding(){
+  try{
+    const d = await api('/api/admin/settings/branding');
+    document.getElementById('brName').value = d.name || '';
+    document.getElementById('brLogo').value = d.logo_url || '';
+    document.getElementById('brAccent').value = d.accent || '';
+  }catch(e){ /* leave blank */ }
+}
+async function saveBranding(){
+  const name = document.getElementById('brName').value.trim();
+  const logo_url = document.getElementById('brLogo').value.trim();
+  const accent = document.getElementById('brAccent').value.trim();
+  const m = document.getElementById('brMsg');
+  try{
+    await api('/api/admin/settings/branding', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, logo_url, accent})});
+    m.textContent = 'Saved. Reload to see changes.'; m.style.display='block';
+  }catch(e){ m.textContent = e.message; m.style.display='block'; }
+}
+loadUsers(); loadRequests(); loadRateLimits(); loadBranding();
 </script>
 {% endblock %}
