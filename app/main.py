@@ -804,6 +804,32 @@ class _MCPASGIApp:
             await send({"type": "http.response.body", "body": body})
             return
 
+        # ── Per-user MCP rate limiting (super-admins exempt) ─────────
+        _uid = str(getattr(user_ctx, "user_id", "") or "")
+        if _uid:
+            from app.auth.superadmin_cache import is_superadmin_cached
+
+            if not await is_superadmin_cached(_uid):
+                from app.auth.rate_limiter import check_rate_limit
+
+                blocked = await check_rate_limit(_uid)
+                if blocked:
+                    import json as _json
+
+                    body = _json.dumps(blocked).encode()
+                    await send(
+                        {
+                            "type": "http.response.start",
+                            "status": 429,
+                            "headers": [
+                                (b"content-type", b"application/json"),
+                                (b"retry-after", str(blocked.get("retry_after_seconds", 60)).encode()),
+                            ],
+                        }
+                    )
+                    await send({"type": "http.response.body", "body": body})
+                    return
+
         user_token = app_state.current_user_ctx.set(user_ctx)
         client_token = app_state.current_client_name_ctx.set(state.get("mcp_client_name"))
         project_token = app_state.current_project_ctx.set(None)
