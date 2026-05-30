@@ -276,8 +276,8 @@
   .sdr-table-scroll { overflow-x: auto; }
 
   .sdr-table {
-    width: 100%; border-collapse: collapse; font-size: 13px;
-    table-layout: auto;
+    width: 100%; min-width: 1330px; border-collapse: collapse; font-size: 13px;
+    table-layout: fixed;
   }
   .sdr-table th {
     padding: 9px 14px; text-align: left;
@@ -299,6 +299,9 @@
     padding: 10px 14px; border-bottom: 1px solid var(--border);
     color: var(--text); vertical-align: top;
     max-width: 320px; line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
   .sdr-table tr:last-child td { border-bottom: none; }
   .sdr-table tr:hover td { background: var(--accent-soft); }
@@ -307,10 +310,26 @@
   /* Cell types */
   .cell-mono {
     font-family: var(--mono); font-size: 12px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .cell-truncate {
-    overflow: hidden; text-overflow: ellipsis;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: visible;
+    text-overflow: clip;
+    display: block;
+    white-space: normal;
+  }
+  #table-events th:nth-child(1), #table-events td:nth-child(1) { width: 44px; }
+  #table-events th:nth-child(2), #table-events td:nth-child(2) { width: 170px; }
+  #table-events th:nth-child(3), #table-events td:nth-child(3) { width: 260px; }
+  #table-events th:nth-child(4), #table-events td:nth-child(4) { width: 150px; }
+  #table-events th:nth-child(5), #table-events td:nth-child(5) { width: 145px; }
+  #table-events th:nth-child(6), #table-events td:nth-child(6) { width: 86px; text-align: center; }
+  #table-events th:nth-child(7), #table-events td:nth-child(7) { width: 180px; }
+  #table-events th:nth-child(8), #table-events td:nth-child(8),
+  #table-events th:nth-child(9), #table-events td:nth-child(9) { width: 150px; }
+  #table-params td[style*="white-space:nowrap"] {
+    white-space: normal !important;
   }
   .cell-badge {
     display: inline-flex; align-items: center; gap: 4px;
@@ -454,7 +473,7 @@
       <div class="sdr-step-head">
         <span class="sdr-step-num">2</span>
         <div>
-          <h3>Ask Claude to generate the SDR</h3>
+          <h3>Ask Claude to generate the Solution Design Reference</h3>
           <p>Pick the starting point that matches where you are. Claude handles the rest conversationally.</p>
         </div>
       </div>
@@ -466,8 +485,8 @@
               From your live setup
             </div>
             <div class="sdr-prompt-row">
-              <code class="sdr-prompt-text">Generate an SDR for my project</code>
-              <button class="sdr-copy-btn" data-copy="Generate an SDR for my project" type="button">Copy</button>
+              <code class="sdr-prompt-text">Generate a Solution Design Reference for my project</code>
+              <button class="sdr-copy-btn" data-copy="Generate a Solution Design Reference for my project" type="button">Copy</button>
             </div>
             <p class="sdr-prompt-hint">Pulls GA4 events, GTM tags, and Ads conversions to bootstrap a draft.</p>
           </div>
@@ -475,8 +494,8 @@
           <div class="sdr-prompt-card">
             <div class="sdr-prompt-label">From GA4 only</div>
             <div class="sdr-prompt-row">
-              <code class="sdr-prompt-text">Generate an SDR based on my GA4 events from the last 90 days</code>
-              <button class="sdr-copy-btn" data-copy="Generate an SDR based on my GA4 events from the last 90 days" type="button">Copy</button>
+              <code class="sdr-prompt-text">Generate a Solution Design Reference based on my GA4 events from the last 90 days</code>
+              <button class="sdr-copy-btn" data-copy="Generate a Solution Design Reference based on my GA4 events from the last 90 days" type="button">Copy</button>
             </div>
             <p class="sdr-prompt-hint">Useful if only GA4 is connected, or you want to scope the audit.</p>
           </div>
@@ -484,8 +503,8 @@
           <div class="sdr-prompt-card">
             <div class="sdr-prompt-label">From scratch</div>
             <div class="sdr-prompt-row">
-              <code class="sdr-prompt-text">Create a blank SDR I can fill in for a &lt;ecommerce / SaaS / lead-gen&gt; site</code>
-              <button class="sdr-copy-btn" data-copy="Create a blank SDR I can fill in for a <ecommerce / SaaS / lead-gen> site" type="button">Copy</button>
+              <code class="sdr-prompt-text">Create a blank Solution Design Reference I can fill in for a &lt;ecommerce / SaaS / lead-gen&gt; site</code>
+              <button class="sdr-copy-btn" data-copy="Create a blank Solution Design Reference I can fill in for a <ecommerce / SaaS / lead-gen> site" type="button">Copy</button>
             </div>
             <p class="sdr-prompt-hint">Starts with a template — good for greenfield or pre-launch tracking.</p>
           </div>
@@ -870,7 +889,7 @@
       <div style="text-align:center;padding:48px 20px;color:var(--text-muted)">
         <div style="font-size:14px;margin-bottom:8px">No user properties documented yet</div>
         <div style="font-size:12px;color:var(--text-subtle)">
-          Use Claude to refine the SDR and add custom dimensions / user properties.
+          Use Claude to refine the Solution Design Reference and add custom dimensions / user properties.
         </div>
       </div>
       {% endif %}
@@ -923,7 +942,7 @@
         <div class="sdr-meta-card-label">Ownership & Governance</div>
         <div class="sdr-meta-card-body">
           {% set ow = parsed_meta.get('ownership', '') or '' %}
-          {% if ow and '[TODO' not in ow %}{{ ow }}{% else %}<span class="todo-inline">TODO — SDR owner, review cadence, change process</span>{% endif %}
+          {% if ow and '[TODO' not in ow %}{{ ow }}{% else %}<span class="todo-inline">TODO — Solution Design Reference owner, review cadence, change process</span>{% endif %}
         </div>
       </div>
 
@@ -937,7 +956,7 @@
               <strong>{{ parsed_meta.get('business_type', '—') or '—' }}</strong>
             </div>
             <div>
-              <span style="color:var(--text-subtle)">SDR status:</span>
+              <span style="color:var(--text-subtle)">Solution Design Reference status:</span>
               <strong>{{ sdr.status }}</strong>
             </div>
             <div>

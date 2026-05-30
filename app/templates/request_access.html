@@ -1,46 +1,520 @@
 {% extends "base.html" %}
-{% block title %}Request access — {{ brand().name }}{% endblock %}
+{% block title %}Request access - {{ brand().name }}{% endblock %}
+{% block description %}Request access to {{ brand().name }} and automate Solution Design Reference generation, tag implementation, reporting, audits, and campaign optimization across your marketing stack.{% endblock %}
+{% block og_title %}Request access - {{ brand().name }}{% endblock %}
+{% block og_description %}Request access to {{ brand().name }} and automate Solution Design Reference generation, tag implementation, reporting, audits, and campaign optimization across your marketing stack.{% endblock %}
+
+{% block head_extra %}
+<style>
+  body {
+    background: #f7f9fc;
+  }
+
+  .main {
+    max-width: none;
+    padding: 0;
+  }
+
+  .ra-nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(255, 255, 255, .9);
+    border-bottom: 1px solid #e4e9f1;
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+  }
+
+  .ra-nav-inner,
+  .ra-shell {
+    width: min(1120px, calc(100% - 48px));
+    margin: 0 auto;
+  }
+
+  .ra-nav-inner {
+    min-height: 68px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .ra-wordmark,
+  .ra-wordmark:hover {
+    color: #101114;
+    text-decoration: none;
+  }
+
+  .ra-nav .dot {
+    background: #2557f6 !important;
+  }
+
+  .ra-nav-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ra-nav-link,
+  .ra-button {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-weight: 650;
+    text-decoration: none;
+    line-height: 1;
+  }
+
+  .ra-nav-link {
+    color: #566070;
+    padding: 10px 12px;
+  }
+
+  .ra-nav-link:hover {
+    color: #101114;
+  }
+
+  .ra-button {
+    border: 1px solid #101114;
+    background: #101114;
+    color: #fff;
+    padding: 11px 17px;
+    cursor: pointer;
+    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+  }
+
+  .ra-button:hover {
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 16px 36px rgba(17, 24, 39, .18);
+  }
+
+  .ra-button:disabled {
+    cursor: wait;
+    opacity: .7;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .ra-page {
+    min-height: calc(100vh - 68px);
+    color: #101114;
+    background:
+      radial-gradient(circle at 12% 10%, rgba(37, 87, 246, .13), transparent 28%),
+      radial-gradient(circle at 84% 4%, rgba(11, 159, 138, .13), transparent 30%),
+      linear-gradient(90deg, rgba(16, 17, 20, .035) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(16, 17, 20, .035) 1px, transparent 1px),
+      #f7f9fc;
+    background-size: auto, auto, 72px 72px, 72px 72px, auto;
+  }
+
+  .ra-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 480px);
+    gap: 72px;
+    align-items: center;
+    padding: 74px 0 88px;
+  }
+
+  .ra-kicker {
+    display: inline-flex;
+    min-height: 28px;
+    align-items: center;
+    padding: 5px 10px;
+    border: 1px solid #cbd7ff;
+    border-radius: 999px;
+    background: #eef3ff;
+    color: #2557f6;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+
+  .ra-copy h1 {
+    max-width: 680px;
+    margin: 20px 0 0;
+    color: #101114;
+    font-size: 64px;
+    line-height: .98;
+    font-weight: 760;
+    letter-spacing: 0;
+  }
+
+  .ra-lead {
+    max-width: 610px;
+    margin: 24px 0 0;
+    color: #566070;
+    font-size: 20px;
+    line-height: 1.55;
+  }
+
+  .ra-workflows {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    max-width: 660px;
+    margin-top: 34px;
+  }
+
+  .ra-workflows span {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    border: 1px solid #e3e7ee;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .78);
+    color: #273044;
+    padding: 12px 14px;
+    font-weight: 650;
+  }
+
+  .ra-note {
+    max-width: 610px;
+    margin: 24px 0 0;
+    color: #7b8493;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .ra-card {
+    border: 1px solid #dce3ee;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, .92);
+    box-shadow: 0 24px 70px rgba(25, 36, 60, .12);
+    overflow: hidden;
+  }
+
+  .ra-card-head {
+    padding: 24px 24px 18px;
+    border-bottom: 1px solid #e5eaf2;
+  }
+
+  .ra-card-head h2 {
+    margin: 0;
+    color: #101114;
+    font-size: 28px;
+    line-height: 1.12;
+    letter-spacing: 0;
+  }
+
+  .ra-card-head p {
+    margin: 10px 0 0;
+    color: #566070;
+    line-height: 1.55;
+  }
+
+  .ra-form {
+    display: grid;
+    gap: 15px;
+    padding: 24px;
+  }
+
+  .ra-field {
+    display: grid;
+    gap: 7px;
+    color: #273044;
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  .ra-field-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .ra-field-label em {
+    color: #7b8493;
+    font-style: normal;
+    font-weight: 500;
+  }
+
+  .ra-input {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid #d7dee9;
+    border-radius: 10px;
+    background: #fff;
+    color: #101114;
+    padding: 11px 12px;
+    font: inherit;
+    line-height: 1.4;
+    outline: none;
+    transition: border-color .16s ease, box-shadow .16s ease;
+  }
+
+  .ra-input:focus {
+    border-color: #2557f6;
+    box-shadow: 0 0 0 4px rgba(37, 87, 246, .12);
+  }
+
+  textarea.ra-input {
+    min-height: 120px;
+    resize: vertical;
+  }
+
+  .ra-form-footer {
+    display: grid;
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .ra-message {
+    min-height: 20px;
+    color: #b42318;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .ra-message.is-success {
+    color: #0b7a68;
+  }
+
+  .ra-success {
+    margin: 0 24px 24px;
+    padding: 18px;
+    border: 1px solid #bde8df;
+    border-radius: 12px;
+    background: #eefbf8;
+    color: #0c4f45;
+    line-height: 1.55;
+  }
+
+  .ra-success strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #083c35;
+  }
+
+  .ra-next {
+    display: grid;
+    gap: 12px;
+    padding: 20px 24px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #e5eaf2;
+  }
+
+  .ra-next h3 {
+    margin: 0;
+    color: #101114;
+    font-size: 15px;
+    letter-spacing: 0;
+  }
+
+  .ra-next ol {
+    display: grid;
+    gap: 9px;
+    margin: 0;
+    padding-left: 20px;
+    color: #566070;
+    line-height: 1.5;
+  }
+
+  .ra-signin {
+    margin: 0;
+    color: #7b8493;
+    font-size: 14px;
+  }
+
+  .ra-signin a {
+    color: #101114;
+    font-weight: 650;
+  }
+
+  @media (max-width: 920px) {
+    .ra-shell {
+      grid-template-columns: 1fr;
+      gap: 42px;
+      padding-top: 54px;
+    }
+
+    .ra-copy h1 {
+      font-size: 50px;
+    }
+
+    .ra-copy,
+    .ra-lead,
+    .ra-note {
+      max-width: 720px;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .ra-nav-inner,
+    .ra-shell {
+      width: calc(100% - 32px);
+    }
+
+    .ra-nav-link {
+      display: none;
+    }
+
+    .ra-shell {
+      padding: 42px 0 64px;
+    }
+
+    .ra-copy h1 {
+      font-size: 40px;
+    }
+
+    .ra-lead {
+      font-size: 18px;
+    }
+
+    .ra-workflows {
+      grid-template-columns: 1fr;
+    }
+
+    .ra-card-head,
+    .ra-form,
+    .ra-next {
+      padding-left: 18px;
+      padding-right: 18px;
+    }
+
+    .ra-success {
+      margin-left: 18px;
+      margin-right: 18px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block nav %}
+<nav class="ra-nav" aria-label="Request access navigation">
+  <div class="ra-nav-inner">
+    <a href="/" class="wordmark ra-wordmark" aria-label="{{ brand().name }} home">{{ wordmark() }}</a>
+    <div class="ra-nav-actions">
+      <a href="/signin" class="ra-nav-link">Sign in</a>
+      <a href="/" class="ra-button">Back to site</a>
+    </div>
+  </div>
+</nav>
+{% endblock %}
 
 {% block main %}
-<div class="auth-shell">
-  <div class="auth-card">
-    <div class="auth-brand">
-      <a href="/">
-        <span class="auth-brand-mark">{{ brand().name }}<span class="auth-brand-dot">.</span></span>
-      </a>
-    </div>
+<div class="ra-page">
+  <div class="ra-shell">
+    <section class="ra-copy" aria-labelledby="request-access-title">
+      <span class="ra-kicker">Public beta access</span>
+      <h1 id="request-access-title">Bring an AI operator into your marketing stack.</h1>
+      <p class="ra-lead">{{ brand().name }} helps growth teams generate Solution Design References, implement tracking, automate reporting, audit conversion quality, and prepare campaign optimization work across the tools they already use.</p>
+      <div class="ra-workflows" aria-label="Supported beta workflows">
+        <span>Solution Design Reference generation</span>
+        <span>Tag implementation</span>
+        <span>Reporting automation</span>
+        <span>Ads optimization QA</span>
+      </div>
+      <p class="ra-note">We keep access reviewed while the beta is active, but the product experience is the same for every approved workspace.</p>
+    </section>
 
-    <div class="auth-lead">
-      <h1>Request access</h1>
-      {% if gated %}
-      <p>This instance is invite-only. Tell us a bit about you and we'll review your request.</p>
-      {% else %}
-      <p>Tell us a bit about you and we'll be in touch.</p>
-      {% endif %}
-    </div>
+    <section class="ra-card" aria-label="Access request form">
+      <div class="ra-card-head">
+        <h2>Request access</h2>
+        {% if gated %}
+        <p>This instance is invite-only. Share your name and work email. The use case field is optional context only.</p>
+        {% else %}
+        <p>Share your name and work email. The use case field is optional context only.</p>
+        {% endif %}
+      </div>
 
-    <form id="raForm" class="f-field" style="display:flex;flex-direction:column;gap:12px">
-      <label>Name<input name="name" class="f-input" required></label>
-      <label>Email<input name="email" type="email" class="f-input" required></label>
-      <label>What will you use it for?<textarea name="use_case" class="f-input" rows="3"></textarea></label>
-      <button type="submit" class="btn primary">Request access</button>
-    </form>
-    <div id="raMsg" style="margin-top:16px"></div>
+      <form id="raForm" class="ra-form">
+        <label class="ra-field">Name
+          <input name="name" class="ra-input" autocomplete="name" required>
+        </label>
+        <label class="ra-field">Work email
+          <input name="email" type="email" class="ra-input" autocomplete="email" required>
+        </label>
+        <label class="ra-field"><span class="ra-field-label">Use case <em>(optional)</em></span>
+          <textarea name="use_case" class="ra-input" rows="4" placeholder="Example: generate a Solution Design Reference, deploy GTM tags, automate weekly paid media reports, audit conversion drift"></textarea>
+        </label>
+        <div class="ra-form-footer">
+          <button id="raSubmit" type="submit" class="ra-button">Submit request</button>
+          <div id="raMsg" class="ra-message" role="status" aria-live="polite"></div>
+          <p class="ra-signin">Already have access? <a href="/signin">Sign in</a></p>
+        </div>
+      </form>
 
-    <p style="margin-top:20px;font-size:13px">Already have access? <a href="/signin">Sign in</a></p>
+      <div id="raSuccess" class="ra-success" hidden>
+        <strong>Request received.</strong>
+        We will review it and follow up with next steps.
+      </div>
+
+      <div class="ra-next">
+        <h3>What happens next</h3>
+        <ol>
+          <li>We review the request and approve beta access.</li>
+          <li>You get setup instructions for your workspace.</li>
+          <li>Your team connects platforms and starts automating the stack.</li>
+        </ol>
+      </div>
+    </section>
   </div>
 </div>
 
 <script>
-document.getElementById('raForm').addEventListener('submit', async function(e){
-  e.preventDefault();
-  const fd=new FormData(this);
-  const r=await fetch('/request-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:fd.get('name'),email:fd.get('email'),use_case:fd.get('use_case')})});
-  const d=await r.json().catch(()=>({}));
-  const m=document.getElementById('raMsg');
-  m.textContent = r.ok ? (d.message||'Request submitted.') : (d.error||d.message||'Failed.');
-  m.style.color = r.ok ? 'var(--green,green)' : 'var(--red,crimson)';
-  if(r.ok) this.style.display='none';
-});
+  (function () {
+    var form = document.getElementById('raForm');
+    var button = document.getElementById('raSubmit');
+    var message = document.getElementById('raMsg');
+    var success = document.getElementById('raSuccess');
+
+    function getCookie(name) {
+      var parts = document.cookie ? document.cookie.split('; ') : [];
+      for (var i = 0; i < parts.length; i += 1) {
+        var pair = parts[i].split('=');
+        if (pair[0] === name) return decodeURIComponent(pair.slice(1).join('='));
+      }
+      return '';
+    }
+
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      var data = new FormData(form);
+      var csrf = getCookie('csrf_token');
+      var headers = { 'Content-Type': 'application/json' };
+      if (csrf) headers['x-csrf-token'] = csrf;
+
+      button.disabled = true;
+      button.textContent = 'Submitting...';
+      message.textContent = '';
+      message.classList.remove('is-success');
+
+      try {
+        var response = await fetch('/request-access', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            name: data.get('name'),
+            email: data.get('email'),
+            use_case: data.get('use_case')
+          })
+        });
+        var payload = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          throw new Error(
+            typeof payload.error === 'string'
+              ? payload.error
+              : payload.message || 'Request failed. Please try again.'
+          );
+        }
+        form.hidden = true;
+        success.hidden = false;
+        message.classList.add('is-success');
+        message.textContent = payload.message || 'Request submitted.';
+      } catch (error) {
+        message.textContent = error.message || 'Request failed. Please try again.';
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Submit request';
+      }
+    });
+  })();
 </script>
 {% endblock %}
+
+{% block footer %}{% endblock %}

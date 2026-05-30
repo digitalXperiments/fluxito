@@ -1,19 +1,25 @@
 {% extends "base.html" %}
-{% block title %}{{ brand().name }} — AI operations for marketing analytics{% endblock %}
-{% block description %}{{ brand().name }} gives any MCP-compatible AI real, authenticated hands across your marketing stack — from tracking plan to tag management to dashboards.{% endblock %}
-{% block og_description %}{{ brand().name }} gives any MCP-compatible AI real, authenticated hands across your marketing stack — from tracking plan to tag management to dashboards. Request access to the public beta.{% endblock %}
+{% block title %}{{ brand().name }} - Automate your marketing operations stack{% endblock %}
+{% block description %}{{ brand().name }} lets marketing teams use any MCP-compatible AI to generate Solution Design References, implement tags, automate reporting, audit tracking, and optimize campaigns across the stack.{% endblock %}
+{% block og_title %}{{ brand().name }} - Automate your marketing operations stack{% endblock %}
+{% block og_description %}{{ brand().name }} gives marketing teams an AI operator for Solution Design Reference generation, tag implementation, reporting, tracking QA, and ads optimization. Request access to the public beta.{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="/static/css/landing.css?v={{ asset_hash('css/landing.css') }}">{% endblock %}
 
 {% block nav %}
-<nav class="lp-nav">
-  <a href="/" class="wordmark">{{ wordmark() }}</a>
-  <div class="lp-nav-links">
-    <a href="#how">How it works</a>
-    <a href="#features">Features</a>
-    <a href="#platforms">Platforms</a>
-    {% if brand().name == 'Fluxito' %}<a href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>{% endif %}
-    <a href="/signin" class="lp-nav-signin">Sign in</a>
-    <a href="/request-access" class="btn primary lp-nav-cta">Request access</a>
+<nav class="lp-nav" aria-label="Marketing navigation">
+  <div class="lp-nav-inner">
+    <a href="/" class="wordmark lp-wordmark" aria-label="{{ brand().name }} home">{{ wordmark() }}</a>
+    <div class="lp-nav-links">
+      <a href="#features">Features</a>
+      <a href="#use-cases">Use cases</a>
+      <a href="#platforms">Platforms</a>
+      <a href="#roadmap">Roadmap</a>
+      {% if brand().name == 'Fluxito' %}<a href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>{% endif %}
+    </div>
+    <div class="lp-nav-actions">
+      <a href="/signin" class="lp-link">Sign in</a>
+      <a href="/request-access" class="lp-button lp-button-primary">Request access</a>
+    </div>
   </div>
 </nav>
 {% endblock %}
@@ -21,81 +27,220 @@
 {% block main %}
 <main class="lp">
   <section class="lp-hero">
-    <span class="lp-badge">Public beta</span>
-    <h1>Run marketing analytics through a <em class="serif-italic">conversation</em> with your AI.</h1>
-    <p class="lp-sub">{{ brand().name }} is the operations layer that gives any MCP-compatible AI real, authenticated access to your marketing stack — define the tracking plan, implement it in GTM, query the warehouse, and build the dashboards, all from one conversation.</p>
-    <div class="lp-cta-row">
-      <a href="/request-access" class="btn primary lp-cta">Request access</a>
-      {% if brand().name == 'Fluxito' %}<a href="{{ github_url }}" target="_blank" rel="noopener" class="btn lp-cta-secondary">Self-host on GitHub</a>{% endif %}
-    </div>
-    <p class="lp-cta-note">Works with Claude, GPT, Gemini, Cursor, Windsurf — any MCP client.</p>
-  </section>
+    <div class="lp-shell lp-hero-grid">
+      <div class="lp-hero-copy">
+        <span class="lp-beta">Public beta for growth and marketing teams</span>
+        <h1>Automate the marketing ops work behind every campaign.</h1>
+        <p class="lp-lead">Ask your AI to generate the tracking plan, implement tags, audit conversion data, build reports, and tune campaigns. {{ brand().name }} turns the prompt into governed actions across your real stack.</p>
+        <div class="lp-cta-row">
+          <a href="/request-access" class="lp-button lp-button-primary">Request access</a>
+          <a href="#features" class="lp-button lp-button-secondary">Explore features</a>
+        </div>
+        <p class="lp-trust">Built for teams that want cleaner data, faster launches, fewer manual checks, and fewer tabs open on reporting day.</p>
+      </div>
 
-  <section class="lp-problem">
-    <h2>Four jobs. Four owners. One conversation.</h2>
-    <p class="lp-section-sub">Marketing analytics today is four disconnected jobs — and they're always out of sync.</p>
-    <div class="lp-problem-grid">
-      <div class="lp-prob"><span class="lp-prob-n">01</span><h3>Define</h3><p>What to track — events, parameters, conversions. Lives in a tracking-plan sheet nobody updates.</p></div>
-      <div class="lp-prob"><span class="lp-prob-n">02</span><h3>Implement</h3><p>Click through GTM, GA4, Meta Pixel — tags, triggers, variables — by hand.</p></div>
-      <div class="lp-prob"><span class="lp-prob-n">03</span><h3>Pipe</h3><p>Warehouse syncs, custom dimensions, connectors. Brittle and manual.</p></div>
-      <div class="lp-prob"><span class="lp-prob-n">04</span><h3>Report</h3><p>Build dashboards, run audits, write the weekly recap. Slow and stale.</p></div>
-    </div>
-    <p class="lp-solution">{{ brand().name }} collapses all four into a single conversation with your AI. <strong>The AI is the operator; {{ brand().name }} gives it the hands.</strong> It speaks the open Model Context Protocol, so it works with any MCP-compatible client.</p>
-  </section>
-
-  <section class="lp-how" id="how">
-    <h2>From idea to dashboard, in one thread.</h2>
-    <div class="lp-stage-strip">
-      <div class="lp-stage"><h3>Define</h3><p>Generate, refine, and version Smart Data References (tracking plans + data dictionary) from live data. Export to Excel.</p></div>
-      <div class="lp-stage"><h3>Implement</h3><p>Full create / update / delete of GTM tags, triggers, and variables with workspace support. Adobe Launch read + write.</p></div>
-      <div class="lp-stage"><h3>Measure</h3><p>GA4, Adobe Analytics, Amplitude, Search Console — authenticated, queryable.</p></div>
-      <div class="lp-stage"><h3>Report</h3><p>Native dashboards with signed public links, scheduled email / Slack reports, and automations.</p></div>
-    </div>
-  </section>
-
-  <section class="lp-video">
-    <h2>See it in action.</h2>
-    <div class="lp-video-frame" role="img" aria-label="Product demo video coming soon">
-      <div class="lp-video-play" aria-hidden="true">&#9654;</div>
-      <span class="lp-video-caption">Demo coming soon</span>
+      <div class="lp-product" aria-label="Example marketing automation workflow">
+        <div class="lp-product-bar">
+          <span>Growth ops request</span>
+          <strong>AI-ready</strong>
+        </div>
+        <div class="lp-product-prompt">
+          <small>Prompt</small>
+          <p>Create the campaign Solution Design Reference, deploy GTM conversion tags, build the launch dashboard, and flag any paid-channel budget risks.</p>
+        </div>
+        <div class="lp-product-flow">
+          <div><span class="lp-dot is-blue"></span><strong>Reference generated</strong><p>Events, properties, owners, KPIs, and implementation notes.</p></div>
+          <div><span class="lp-dot is-teal"></span><strong>Tags prepared</strong><p>GTM workspace changes and conversion tracking QA.</p></div>
+          <div><span class="lp-dot is-amber"></span><strong>Report drafted</strong><p>Dashboard cards, summary, and scheduled recap.</p></div>
+          <div><span class="lp-dot is-rose"></span><strong>Ads checked</strong><p>Budget pacing, conversion health, and optimization next steps.</p></div>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="lp-features" id="features">
-    <h2>What you can actually do today.</h2>
-    <div class="lp-feature-grid">
-      <div class="lp-feature"><h3>Tracking plans (SDR)</h3><p>Generate and version a Smart Data Reference from live scans and templates, flag gaps, and export the whole thing to Excel.</p></div>
-      <div class="lp-feature"><h3>Tag management</h3><p>Implement the plan directly in Google Tag Manager — tags, triggers, variables, workspaces — without clicking through the UI.</p></div>
-      <div class="lp-feature"><h3>Dashboards &amp; reports</h3><p>Build native dashboard cards, share signed public links, and schedule email / Slack recaps and automations.</p></div>
-      <div class="lp-feature"><h3>Audits &amp; anomalies</h3><p>Run conversion and consent audits, surface drift between what's planned and what's live, and catch anomalies.</p></div>
+  <section class="lp-stack" aria-label="Supported clients and platforms">
+    <div class="lp-shell lp-stack-card">
+      <div class="lp-stack-copy">
+        <h2>Works with your AI. Operates the tools underneath.</h2>
+        <p>Use Claude, ChatGPT, Cursor, Windsurf, or any Model Context Protocol-compatible client. {{ brand().name }} handles authenticated actions across analytics, tags, paid media, and warehouses.</p>
+      </div>
+      <div class="lp-stack-groups">
+        <div>
+          <span>AI clients</span>
+          <strong><img src="/static/img/logos/claude.svg" alt="" aria-hidden="true">Claude</strong>
+          <strong><img src="/static/img/logos/chatgpt.svg" alt="" aria-hidden="true">ChatGPT</strong>
+          <strong><img src="/static/img/logos/cursor.svg" alt="" aria-hidden="true">Cursor</strong>
+          <strong><img src="/static/img/logos/windsurf.svg" alt="" aria-hidden="true">Windsurf</strong>
+          <strong>Any MCP-supported client</strong>
+        </div>
+        <div>
+          <span>Analytics</span>
+          <img src="/static/img/logos/ga4.svg" alt="Google Analytics 4">
+          <img src="/static/img/logos/adobe.svg" alt="Adobe Analytics">
+          <img src="/static/img/logos/amplitude.svg" alt="Amplitude">
+        </div>
+        <div>
+          <span>Tag management</span>
+          <img src="/static/img/logos/gtm.svg" alt="Google Tag Manager">
+          <img src="/static/img/logos/adobe.svg" alt="Adobe Launch">
+        </div>
+        <div>
+          <span>Marketing platforms</span>
+          <img src="/static/img/logos/google-ads.svg" alt="Google Ads">
+          <img src="/static/img/logos/meta.svg" alt="Meta">
+          <img src="/static/img/logos/tiktok.svg" alt="TikTok">
+          <img src="/static/img/logos/snapchat.svg" alt="Snap">
+        </div>
+        <div>
+          <span>Warehouse</span>
+          <img src="/static/img/logos/bigquery.svg" alt="BigQuery">
+          <img src="/static/img/logos/snowflake.svg" alt="Snowflake">
+          <img src="/static/img/logos/redshift.svg" alt="Redshift">
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="lp-platforms" id="platforms">
-    <h2>15 platforms, one authenticated interface.</h2>
-    <div class="lp-platform-grid">
-      <div class="lp-pf"><h4>Define / SDR</h4><p>Smart Data References from live data + templates</p></div>
-      <div class="lp-pf"><h4>Implement</h4><p>Google Tag Manager · Adobe Launch</p></div>
-      <div class="lp-pf"><h4>Measure</h4><p>GA4 · Adobe Analytics · Amplitude · Search Console</p></div>
-      <div class="lp-pf"><h4>Acquire</h4><p>Google Ads · Meta · TikTok · Snap · LinkedIn · Pinterest</p></div>
-      <div class="lp-pf"><h4>Warehouse</h4><p>BigQuery · Snowflake · Redshift</p></div>
-      <div class="lp-pf"><h4>Report</h4><p>Native dashboards · scheduled reports · automations</p></div>
+  <section class="lp-section" id="features">
+    <div class="lp-shell lp-section-head">
+      <h2>Feature flow for the full marketing data lifecycle.</h2>
+      <p>Fluxito is not a chatbot wrapper. It exposes real tools your AI can call, so analytics strategy, implementation, reporting, and optimization stay connected.</p>
+    </div>
+    <div class="lp-shell lp-feature-flow">
+      <article>
+        <span>01</span>
+        <h3>Solution Design Reference generation</h3>
+        <p>Generate Solution Design References from business context, live platform evidence, and templates. Export the plan with events, parameters, KPIs, ownership, and implementation notes.</p>
+      </article>
+      <article>
+        <span>02</span>
+        <h3>Tag implementation</h3>
+        <p>Turn the plan into Google Tag Manager or Adobe Launch workspaces. Inspect tags, triggers, and variables, then prepare changes with context instead of guessing in the UI.</p>
+      </article>
+      <article>
+        <span>03</span>
+        <h3>Reporting automation</h3>
+        <p>Create dashboard cards, signed public links, scheduled email or Slack summaries, and recurring performance narratives for weekly or launch reporting.</p>
+      </article>
+      <article>
+        <span>04</span>
+        <h3>Ads automation</h3>
+        <p>Read campaign, ad group, keyword, and conversion performance across paid channels. Update campaign budgets or status when the user has write permissions.</p>
+      </article>
+      <article>
+        <span>05</span>
+        <h3>Optimization and QA</h3>
+        <p>Run tracking audits, budget pacing checks, anomaly reviews, conversion health checks, and drift detection between what was planned and what is live.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="lp-section lp-use-case-section" id="use-cases">
+    <div class="lp-shell lp-section-head">
+      <h2>Use cases built around real marketing operations.</h2>
+      <p>Each workflow starts with a plain-language ask and ends with an artifact or action your team can review, share, or schedule.</p>
+    </div>
+    <div class="lp-shell lp-use-case-grid">
+      <article>
+        <h3>Campaign launch QA</h3>
+        <p>Check campaign naming, UTMs, GTM tags, conversion actions, dashboard readiness, and budget setup before spend goes live.</p>
+        <strong>Output: launch checklist + tracking gaps + dashboard draft</strong>
+      </article>
+      <article>
+        <h3>Solution Design Reference from a messy setup</h3>
+        <p>Scan existing events, ad conversions, and business context, then produce a clean Solution Design Reference that marketers, analysts, and engineers can agree on.</p>
+        <strong>Output: Solution Design Reference markdown + Excel export + gap register</strong>
+      </article>
+      <article>
+        <h3>Weekly growth report</h3>
+        <p>Pull paid, web, SEO, and warehouse metrics, explain movement against targets, then package a summary for leadership.</p>
+        <strong>Output: dashboard link + Slack/email recap</strong>
+      </article>
+      <article>
+        <h3>Conversion tracking cleanup</h3>
+        <p>Compare the Solution Design Reference against GA4, GTM, and ad-platform conversions to find duplicate, missing, or stale conversion signals.</p>
+        <strong>Output: audit findings + prioritized fixes</strong>
+      </article>
+      <article>
+        <h3>Budget pacing and optimization</h3>
+        <p>Review campaign spend, CPA, conversion volume, and pacing, then suggest or prepare safe budget/status updates.</p>
+        <strong>Output: optimization brief + proposed changes</strong>
+      </article>
+      <article>
+        <h3>Client or exec readout</h3>
+        <p>Turn dashboards and source data into a clear narrative: what changed, why it matters, what is blocked, and what happens next.</p>
+        <strong>Output: shareable report + next-step plan</strong>
+      </article>
+    </div>
+  </section>
+
+  <section class="lp-section" id="platforms">
+    <div class="lp-shell lp-section-head">
+      <h2>15 platforms, one authenticated interface.</h2>
+      <p>Connect once inside {{ brand().name }}. Your AI gets the actions it needs while OAuth, credentials, and project scope stay controlled.</p>
+    </div>
+    <div class="lp-shell lp-platform-grid">
+      <article><strong>Planning</strong><span>Solution Design References, KPI Library, Business Context</span></article>
+      <article><strong>Tagging</strong><span>Google Tag Manager, Adobe Launch</span></article>
+      <article><strong>Analytics</strong><span>GA4, Adobe Analytics, Amplitude, Search Console</span></article>
+      <article><strong>Marketing platforms</strong><span>Google Ads, Meta, TikTok, Snap, LinkedIn, Pinterest</span></article>
+      <article><strong>Warehouse</strong><span>BigQuery, Snowflake, Redshift</span></article>
+      <article><strong>Reporting</strong><span>Dashboards, scheduled reports, automations</span></article>
+    </div>
+  </section>
+
+  <section class="lp-section lp-roadmap" id="roadmap">
+    <div class="lp-shell lp-section-head">
+      <h2>Roadmap: make the operator more complete, not more complicated.</h2>
+      <p>The next work is focused on practical gaps users will feel immediately: cleaner Solution Design Reference change control, stronger implementation QA, broader connector coverage, and safer write actions.</p>
+    </div>
+    <div class="lp-shell lp-roadmap-grid">
+      <article>
+        <span>Now shipping</span>
+        <h3>Core marketing ops loop</h3>
+        <p>Generate Solution Design References, inspect and prepare GTM work, build dashboards, schedule reports, and run cross-platform analysis from connected marketing data.</p>
+      </article>
+      <article>
+        <span>Building next</span>
+        <h3>Audit depth and version control</h3>
+        <p>Stronger automated tag auditing, clearer drift detection between the Solution Design Reference and live implementation, better versioning, and practical diffs stakeholders can approve.</p>
+      </article>
+      <article>
+        <span>Planned expansion</span>
+        <h3>More platforms, safer actions</h3>
+        <p>Add connectors such as Reddit Ads, Microsoft Advertising, Mixpanel, and Klaviyo, bring Ask Fluxito into the UI, and expand governed write actions for ad optimization.</p>
+      </article>
     </div>
   </section>
 
   {% if brand().name == 'Fluxito' %}
   <section class="lp-oss">
-    <h2>Open-source. Self-host in minutes.</h2>
-    <p>{{ brand().name }} is Apache-2.0 licensed. Run it on your own infrastructure with full control of your data and credentials.</p>
-    <pre class="lp-code"><code>git clone {{ github_url }} &amp;&amp; cd fluxito &amp;&amp; docker compose up</code></pre>
-    <a href="{{ github_url }}" target="_blank" rel="noopener" class="btn lp-cta-secondary">View on GitHub</a>
-    <p class="lp-oss-note">Agencies can whitelabel it — your name, logo, and colours, your clients.</p>
+    <div class="lp-shell lp-oss-grid">
+      <div>
+        <h2>Open-source and self-hostable.</h2>
+        <p>{{ brand().name }} is Apache-2.0 licensed, brandable, and designed to run where your customer data and platform credentials already live.</p>
+      </div>
+      <div class="lp-code">
+        <pre><code>git clone {{ github_url }}
+cd fluxito
+docker compose up</code></pre>
+        <a href="{{ github_url }}" target="_blank" rel="noopener" class="lp-button lp-button-secondary">View on GitHub</a>
+      </div>
+      <div class="lp-oss-proof" aria-label="Open-source architecture proof points">
+        <article><strong>MCP-native</strong><span>Works with any compatible AI client, not one locked-in chat surface.</span></article>
+        <article><strong>User-scoped OAuth</strong><span>Every action runs through the access each user and project is allowed to use.</span></article>
+        <article><strong>Automation-ready</strong><span>Dashboards, reports, audits, and scheduled workflows share the same source of truth.</span></article>
+      </div>
+    </div>
   </section>
   {% endif %}
 
   <section class="lp-final-cta">
-    <h2>See it on your own stack.</h2>
-    <a href="/request-access" class="btn primary lp-cta">Request access</a>
+    <div class="lp-shell">
+      <h2>Give your marketing team an AI operator for the stack.</h2>
+      <p>Request access and see what {{ brand().name }} can automate across your own setup.</p>
+      <a href="/request-access" class="lp-button lp-button-primary">Request access</a>
+    </div>
   </section>
 </main>
 {% endblock %}
