@@ -1,159 +1,95 @@
-# Fluxito Demo Deployment (Mac + Cloudflare Tunnel)
+# Fluxito Production Deployment (Mac + Cloudflare Tunnel)
 
-This folder contains everything you need to run the public Fluxito demo on your M1 MacBook Pro behind your existing Cloudflare Tunnel.
+This folder runs a self-hosted Fluxito production instance that **builds from
+the local source checkout** — no container registry. The prod host holds a git
+clone of this repo and tracks `main` as the stable channel.
 
-All demo deployment artifacts live in this single top-level `demo/` folder for cleanliness.
+## Files
 
-## Files in this folder
+- `docker-compose.prod.yml` — The stack (nginx + app + Postgres + Redis). The
+  `app` image is **built from source** (`build: { context: .. }`); nginx serves
+  `/static/` from the bind-mounted source tree.
+- `.env.prod.example` — Template for secrets/config. Copy to `.env.prod`.
+- `update.sh` — Run on the prod Mac to deploy: pulls `main`, rebuilds, restarts,
+  health-checks.
+- `nginx.conf` — Reverse-proxy config (serves `/static/` directly).
 
-- `docker-compose.demo.yml` — The demo stack (nginx + app + Postgres + Redis). Uses a published GHCR image, not a local build.
-- `.env.demo.example` — Template for your secrets and demo settings. Copy to `.env.demo`.
-- `update-demo.sh` — Pulls the latest image and restarts the stack with health verification. Safe to run from cron.
-- `nginx.conf` — Demo reverse-proxy config. Ships in this folder — use it as-is, do NOT copy the repo-root `nginx.conf`. It serves `/static/` directly off the `static_assets` volume, which the `static-sync` service populates from the published image (no source checkout needed on the host).
+## One-time setup on the prod Mac
 
-## One-time setup on your Mac
+1. **Install Docker Desktop** and enable "Start on login" + "Always run in background".
 
-1. Create the demo directory:
+2. **Clone the repo** (needs read access — use a deploy key or `gh auth login`):
    ```bash
-   mkdir -p ~/fluxito-demo
-   cd ~/fluxito-demo
+   git clone git@github.com:digitalxperiments/fluxito.git ~/fluxito
+   cd ~/fluxito
    ```
 
-2. Copy the files from this folder (or clone the repo and copy `demo/*`).
-   The folder is self-contained — it ships its own `nginx.conf`. Do NOT copy
-   the repo-root `nginx.conf`; static assets are served from a volume the
-   stack populates from the published image, so no source checkout is needed.
-
-3. Create your env file:
+3. **Create the env file** (lives only here, never committed, survives every pull):
    ```bash
-   cp .env.demo.example .env.demo
+   cp deploy/.env.prod.example deploy/.env.prod
+   # Edit deploy/.env.prod:
+   #  - APP_SECRET_KEY        (python -c "import secrets; print(secrets.token_urlsafe(48))")
+   #  - TOKEN_ENCRYPTION_KEY  (python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+   #  - APP_BASE_URL          (your public https URL)
+   #  - POSTGRES_PASSWORD     (something strong)
+   #  - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
    ```
 
-4. Edit `.env.demo`:
-   - Generate `APP_SECRET_KEY` and `TOKEN_ENCRYPTION_KEY` (see comments in the file).
-   - Set `DEMO_VIEWER_EMAIL=demo@fluxito.local` (or whatever email you choose for the public login).
-   - Set `APP_BASE_URL=https://demo.yourdomain.com` (your public demo hostname).
-   - Adjust `POSTGRES_PASSWORD` if you want something stronger.
-
-5. Start the stack for the first time:
+4. **First build + start:**
    ```bash
-   docker compose -f docker-compose.demo.yml up -d
+   docker compose --env-file deploy/.env.prod -f deploy/docker-compose.prod.yml up -d --build
    ```
 
-6. Do the initial admin setup (this is you, the real owner):
-   - Visit `https://demo.yourdomain.com`
-   - Go through `/setup` and create **your** real admin account (not the demo one).
-   - Log in as yourself.
-   - Create the public demo user (`demo@fluxito.local`) with a known password.
-   - Make that user an `owner` of a new project called "Fluxito Demo".
-   - Connect real platforms (Google, etc.) while logged in as yourself.
-   - Build nice dashboards, SDRs, add audit history, etc. This becomes the public experience.
-
-7. Add the Cloudflare Tunnel ingress rule (in your `cloudflared` config):
+5. **Cloudflare Tunnel ingress** (in your `cloudflared` config):
    ```yaml
    ingress:
-     - hostname: demo.fluxito.yourdomain.com
+     - hostname: your-domain.example.com
        service: http://localhost:8010
      # ... your other rules
    ```
    Reload `cloudflared`.
 
+6. **Create your admin account** at the public URL via `/setup`.
 
-## Daily / CI-driven updates
+## Deploying a release
 
-**Important policy change (May 2026):**  
-The `:demo` tag (the one your `update-demo.sh` pulls) is **only updated on stable releases**, not on every merge to `main`.
+`main` is the stable channel. To ship the latest `main` to production, SSH into
+the prod Mac and run the updater:
 
-This keeps the public demo reliable and prevents WIP code from reaching visitors.
-
-### When the `:demo` tag gets updated (stable triggers only)
-
-- Git tags starting with `v` or `demo/stable-` (example: `git tag demo/stable-2026-05-28 && git push --tags`)
-- Manual trigger in GitHub UI (Actions → "Publish stable Demo image" → Run workflow)
-- Optional nightly schedule (03:00 UTC) — can be disabled in the workflow file
-
-Every normal push to `main` still produces fast `sha-xxx` tags (for debugging/pinning), but those do **not** move the public `:demo` tag.
-
-### How to trigger a new public demo image
-
-**Option A — Git tag (recommended when you certify it's stable)**
 ```bash
-git tag demo/stable-2026-05-28
-git push origin demo/stable-2026-05-28
+ssh <prod-mac>
+cd ~/fluxito
+./deploy/update.sh
 ```
 
-**Option B — GitHub UI (no git needed)**
-1. Go to your repo → **Actions** tab.
-2. In the left sidebar click **"Publish stable Demo image"**.
-3. Click **"Run workflow"**.
-4. (Optional) Fill in the `demo_tag` field with a custom value (e.g. `demo/stable-may-28`).
-5. Click **"Run workflow"**.
+`update.sh` does: `git pull --ff-only origin main` → rebuild + restart the stack
+→ wait for `/api/health`. It exits non-zero on failure and can send a Telegram
+alert if `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` are set in the environment.
 
-The job will build the full multi-arch image and push `:demo` (plus `:latest` and your chosen tag).
+## Notes
 
-**Option C — Nightly (set and forget)**
-The workflow has a scheduled run at 03:00 UTC. It will only produce a new `:demo` image if the schedule is left enabled.
+- **Data** lives in the `fluxito_postgres_data` and `fluxito_redis_data` Docker
+  volumes. Deploys rebuild the app image but never touch these — accounts and
+  content survive every update.
+- **`.env.prod`** is gitignored and never overwritten by a pull.
+- This is a **fresh production instance** — it does not carry over data from the
+  old demo stack (volumes were renamed).
 
-### Running the updater on your Mac
-
-```bash
-cd ~/fluxito-demo
-./update-demo.sh
-```
-
-Or via cron (example: every 20 minutes):
-```bash
-crontab -e
-# Add this line:
-*/20 * * * * cd ~/fluxito-demo && ./update-demo.sh >> ~/fluxito-demo/update.log 2>&1
-```
-
-The script pulls the latest `:demo` image (whatever the stable pipeline last published), restarts the stack, and waits for `/api/health`.
-
-You can also force a specific image:
-```bash
-FLUXITO_IMAGE=ghcr.io/digitalxperiments/fluxito:sha-abc1234 ./update-demo.sh
-```
-
-The script exits non-zero on failure and can send a Telegram notification if you set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in the cron environment.
-
-## Important notes
-
-- The public demo login (`demo@fluxito.local`) can see **everything** as an admin except the MCP / AI connection endpoint.
-- You (real admin login) have full power on the same instance, including MCP.
-- All data lives in the `demo_postgres_data` and `demo_redis_data` Docker volumes. Image updates do **not** touch your data.
-- If the demo ever gets messy, just log in as yourself and clean it up, or trigger a reset (if you added the optional reset endpoint).
-
-## Power / sleep settings for 24/7 on M1 (lid closed)
-
-To keep the demo reachable even when your Mac lid is closed:
+## Power / sleep settings for 24/7 on a Mac (lid closed)
 
 ```bash
-# Prevent sleep while on AC power
 sudo pmset -c sleep 0
 sudo pmset -c hibernatemode 0
 sudo pmset -c autopoweroff 0
 sudo pmset -c powernap 0
-
-# Keep Docker Desktop running in background
-# Docker Desktop → Settings → General → "Start Docker Desktop when you log in" + "Always run in background"
-
-# Optional: caffeinate wrapper (launchd plist or just leave a terminal with caffeinate -s)
 ```
 
-Cloudflare Tunnel (`cloudflared`) should be configured as a user agent or launchd service so it survives sleep/wake.
+Keep Docker Desktop and `cloudflared` running as background/launchd agents so
+they survive sleep/wake.
 
 ## Troubleshooting
 
-- Health failing after update → `docker compose -f docker-compose.demo.yml logs --tail=200 app`
-- Can't reach the site → check Cloudflare Tunnel dashboard + `cloudflared` logs.
-- Demo viewer can't log in → make sure you created the user while logged in as a real admin, and that the password is set.
-- MCP still works for demo user → double-check that `DEMO_VIEWER_EMAIL` in `.env.demo` exactly matches the email you created.
-
-## Future improvements (optional)
-
-- Add a protected `/api/demo/reset` endpoint (secret header) + call it from a nightly cron or button only you know.
-- Light web guards so the demo viewer can't complete real OAuth connects or publish GTM containers.
-- Switch to a cheap always-on mini-PC or VPS later (same Docker image + compose file, just move the volumes).
-
-This setup gives you a beautiful, always-up-to-date public demo with almost zero ongoing work after the initial curation.
+- Health failing after deploy → `docker compose -f deploy/docker-compose.prod.yml logs --tail=200 app`
+- Can't reach the site → check the Cloudflare Tunnel dashboard + `cloudflared` logs.
+- `git pull --ff-only` fails → the prod checkout diverged from `main`; inspect
+  with `git status` and reset to `origin/main` if safe.
