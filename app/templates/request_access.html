@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Request access — Fluxito{% endblock %}
+{% block title %}Request access — {{ brand().name }}{% endblock %}
 
 {% block main %}
 <div class="auth-shell">
   <div class="auth-card">
     <div class="auth-brand">
       <a href="/">
-        <span class="auth-brand-mark">Fluxito<span class="auth-brand-dot">.</span></span>
+        <span class="auth-brand-mark">{{ brand().name }}<span class="auth-brand-dot">.</span></span>
       </a>
     </div>
 

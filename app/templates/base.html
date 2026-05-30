@@ -1,13 +1,14 @@
+{% macro wordmark() %}{% if brand().logo_url %}<img src="{{ brand().logo_url }}" alt="{{ brand().name }}" class="wordmark-logo" style="height:22px;width:auto;vertical-align:middle">{% else %}{{ brand().name }}{% endif %}{% endmacro %}
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#0B0B0E"/>
-  <title>{% block title %}Fluxito{% endblock %}</title>
+  <title>{% block title %}{{ brand().name }}{% endblock %}</title>
   {% block meta %}
   <meta name="description" content="{% block description %}Connect GA4, GTM, Google Ads, Meta, TikTok, Snap, and BigQuery to any AI. Live marketing analytics, one interface.{% endblock %}"/>
-  <meta property="og:title" content="{% block og_title %}Fluxito — Marketing analytics for AI{% endblock %}"/>
+  <meta property="og:title" content="{% block og_title %}{{ brand().name }} — Marketing analytics for AI{% endblock %}"/>
   <meta property="og:description" content="Connect every marketing platform to any AI. Live dashboards, MCP-ready."/>
   {% endblock %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,6 +31,9 @@
       document.documentElement.setAttribute('data-theme-mode', mode);
     })();
   </script>
+  {% if brand().accent %}
+  <style>:root{ --accent: {{ brand().accent }}; --accent-hover: {{ brand().accent }}; }</style>
+  {% endif %}
   {% block head_extra %}{% endblock %}
 </head>
 <body class="{% if user %}has-sidebar{% endif %}">
@@ -80,7 +84,7 @@
     {# ── Header: wordmark ── #}
     <div class="sidebar-header">
       <a href="/home" class="wordmark">
-        <span style="font-family:var(--mono);font-weight:500;letter-spacing:-0.02em">flux</span><em>ito</em><span class="dot" style="display:inline-block;width:4px;height:4px;border-radius:99px;background:var(--blue);margin-left:3px;vertical-align:middle"></span>
+        {{ wordmark() }}
       </a>
     </div>
 
@@ -241,7 +245,7 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
     <a href="/home" class="wordmark logo" style="font-size:18px">
-      <span style="font-family:var(--mono);font-weight:500;letter-spacing:-0.02em">flux</span><em>ito</em><span style="display:inline-block;width:4px;height:4px;border-radius:99px;background:var(--blue);margin-left:3px;vertical-align:middle"></span>
+      {{ wordmark() }}
     </a>
   </div>
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
@@ -275,7 +279,7 @@
   <nav class="nav nav-landing">
     <div class="nav-inner">
       <a href="/" class="wordmark" style="font-size:20px">
-        <span style="font-family:var(--mono);font-weight:500;letter-spacing:-0.02em">flux</span><em>ito</em><span style="display:inline-block;width:4px;height:4px;border-radius:99px;background:var(--blue);margin-left:3px;vertical-align:middle"></span>
+        {{ wordmark() }}
       </a>
       <div class="nav-spacer"></div>
       <div class="nav-right">
@@ -295,7 +299,7 @@
   <footer class="site-footer">
     <div class="container">
       <div class="sf-bottom">
-        <span>Fluxito · open-source MCP server · <a href="https://github.com/digitalXperiments/fluxito" target="_blank" rel="noopener">github.com/digitalXperiments/fluxito</a></span>
+        <span>{{ brand().name }}{% if brand().name == 'Fluxito' %} · open-source MCP server · <a href="https://github.com/digitalXperiments/fluxito" target="_blank" rel="noopener">github.com/digitalXperiments/fluxito</a>{% endif %}</span>
       </div>
     </div>
   </footer>

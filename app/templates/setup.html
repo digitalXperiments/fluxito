@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}First-run Setup — Fluxito{% endblock %}
+{% block title %}First-run Setup — {{ brand().name }}{% endblock %}
 
 {% block main %}
 <div class="auth-shell">
   <div class="auth-card">
     <div class="auth-brand">
-      <span class="auth-brand-mark">Fluxito<span class="auth-brand-dot">.</span></span>
+      <span class="auth-brand-mark">{{ brand().name }}<span class="auth-brand-dot">.</span></span>
     </div>
 
     {% if already_complete %}
@@ -18,7 +18,7 @@
     {% else %}
 
     <div class="auth-lead">
-      <h1>Welcome to <em class="serif-italic">Fluxito.</em></h1>
+      <h1>Welcome to <em class="serif-italic">{{ brand().name }}.</em></h1>
       <p>Create your admin account to get started. This form is only available once — while the users table is empty.</p>
     </div>
 
