@@ -6,7 +6,7 @@ import uuid
 import pytest
 
 import app.app_state as app_state
-import app.models.access_request  # noqa: F401 — register tables in metadata
+import app.models.access_request
 import app.models.sdr  # noqa: F401
 
 
@@ -31,7 +31,7 @@ async def _make_user(db_session_factory, email, *, is_superadmin=False):
 
 @pytest.mark.asyncio
 async def test_superadmin_cache_true_for_superadmin(_patch_db, db_session_factory):
-    from app.auth.superadmin_cache import is_superadmin_cached, _clear_superadmin_cache
+    from app.auth.superadmin_cache import _clear_superadmin_cache, is_superadmin_cached
 
     _clear_superadmin_cache()
     sid = await _make_user(db_session_factory, "s@example.com", is_superadmin=True)
@@ -40,7 +40,7 @@ async def test_superadmin_cache_true_for_superadmin(_patch_db, db_session_factor
 
 @pytest.mark.asyncio
 async def test_superadmin_cache_false_for_normal_user(_patch_db, db_session_factory):
-    from app.auth.superadmin_cache import is_superadmin_cached, _clear_superadmin_cache
+    from app.auth.superadmin_cache import _clear_superadmin_cache, is_superadmin_cached
 
     _clear_superadmin_cache()
     uid = await _make_user(db_session_factory, "n@example.com", is_superadmin=False)
@@ -52,7 +52,7 @@ async def test_superadmin_cache_caches(_patch_db, db_session_factory):
     """A cached value persists within TTL even if the DB row changes."""
     from sqlalchemy import update
 
-    from app.auth.superadmin_cache import is_superadmin_cached, _clear_superadmin_cache
+    from app.auth.superadmin_cache import _clear_superadmin_cache, is_superadmin_cached
     from app.models.user import User
 
     _clear_superadmin_cache()
@@ -68,7 +68,7 @@ async def test_superadmin_cache_caches(_patch_db, db_session_factory):
 
 @pytest.mark.asyncio
 async def test_superadmin_cache_unknown_user_false(_patch_db, db_session_factory):
-    from app.auth.superadmin_cache import is_superadmin_cached, _clear_superadmin_cache
+    from app.auth.superadmin_cache import _clear_superadmin_cache, is_superadmin_cached
 
     _clear_superadmin_cache()
     assert await is_superadmin_cached(str(uuid.uuid4())) is False
