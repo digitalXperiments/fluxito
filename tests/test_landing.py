@@ -68,3 +68,21 @@ async def test_landing_redirects_logged_in_to_home(_http_client):
         resp = await _http_client.get("/")
     assert resp.status_code == 302
     assert resp.headers["location"] == "/home"
+
+
+@pytest.mark.asyncio
+async def test_landing_hides_oss_when_rebranded(_http_client):
+    from unittest.mock import AsyncMock, patch
+
+    import app.branding as b
+
+    b._BRAND_CACHE.update({"name": "Acme Analytics", "logo_url": "", "accent": ""})
+    try:
+        with patch("app.api.google_oauth_routes._resolve_user_ctx", new=AsyncMock(return_value=None)):
+            resp = await _http_client.get("/")
+        body = resp.text
+        assert "Acme Analytics" in body
+        assert "github.com/digitalXperiments/fluxito" not in body
+        assert "Open-source" not in body
+    finally:
+        b._BRAND_CACHE.update({"name": "Fluxito", "logo_url": "", "accent": ""})
