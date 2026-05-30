@@ -2,7 +2,7 @@
 
 **Open-source AI operations layer for marketing analytics. End-to-end — from tracking plan, to tag management implementation, to reporting and dashboards — through a conversation with any MCP-compatible AI.**
 
-[![Version: 1.0.2](https://img.shields.io/badge/version-1.0.2-green.svg)](CHANGELOG.md)
+[![Version: 1.0.3](https://img.shields.io/badge/version-1.0.3-green.svg)](CHANGELOG.md)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 [![Python: 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)](pyproject.toml)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-009688.svg)](requirements.txt)
@@ -350,6 +350,7 @@ location /mcp {
     proxy_request_buffering off;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
+    add_header X-Accel-Buffering no always;  # tell upstream edge proxies (Cloudflare, etc.) not to buffer
 }
 ```
 

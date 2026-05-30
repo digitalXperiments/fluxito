@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- `deploy/` folder removed from the public repo. Production orchestration (compose, update script, reverse-proxy config) is environment-specific and is kept outside version control. Self-hosting is covered by the root `docker-compose.yml` and the Production notes in the README (including the required nginx `/mcp` no-buffering config).
+
 ## [1.0.3] — 2026-05-30
 
 ### Added
