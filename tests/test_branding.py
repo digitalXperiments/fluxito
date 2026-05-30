@@ -4,8 +4,8 @@
 import pytest
 
 import app.app_state as app_state
-import app.models.access_request  # noqa: F401
-import app.models.sdr  # noqa: F401
+import app.models.access_request  # register models for FK resolution
+import app.models.sdr  # noqa: F401 — register models for FK resolution
 
 
 @pytest.fixture
@@ -51,9 +51,9 @@ async def test_brand_reflects_settings(_patch_db, db_session_factory):
 
 @pytest.mark.asyncio
 async def test_invite_email_uses_brand_name(_patch_db, db_session_factory, monkeypatch):
+    import app.email_service as es
     from app.branding import refresh_brand
     from app.settings_service import set_setting
-    import app.email_service as es
 
     async with db_session_factory() as db:
         await set_setting(db, key="brand_name", value="Acme Analytics", is_secret=False, updated_by_user_id=None)

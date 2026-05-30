@@ -20,6 +20,8 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app.branding import brand as _brand_global
+
 logger = logging.getLogger(__name__)
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -128,8 +130,6 @@ templates.env.filters["initials"] = _initials
 templates.env.globals["asset_hash"] = _asset_hash
 
 # Expose instance branding (name, logo, accent) to all templates
-from app.branding import brand as _brand_global
-
 templates.env.globals["brand"] = _brand_global
 
 
