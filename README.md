@@ -26,13 +26,13 @@ Running marketing analytics today means four separate jobs, usually owned by fou
 
 Each step is slow, error-prone, and out of sync with the others. Tracking plans go stale. Implementations drift. Dashboards lie.
 
-Fluxito collapses all four into a single conversation with your AI. **The AI is the operator; Fluxito gives it the hands.** It speaks the [Model Context Protocol](https://modelcontextprotocol.io) — an open standard — so it works with Claude, GPT, Gemini, Cursor, Windsurf, or any other MCP-compatible client.
+Fluxito collapses all four into a single conversation with your AI. **The AI is the operator; Fluxito gives it the hands.** It speaks the [Model Context Protocol](https://modelcontextprotocol.io) — an open standard — so it works with Claude, GPT, Cursor, Windsurf, or any other MCP-compatible client.
 
 Right now it gives your AI real, authenticated access across **15 platforms**:
 
 | Stage | Platforms |
 |---|---|
-| **Define / SDR** | Generate, refine, and version Smart Data References (tracking plans + data dictionary) from live data + templates. Export to Excel. |
+| **Define / SDR** | Generate, refine, and version Solution Design References (tracking plans + data dictionary) from live data + templates. Export to Excel. |
 | **Implement** | Google Tag Manager (full create/update/delete of tags, triggers, variables with workspace support). Adobe Launch (read + some write). |
 | **Measure** | Google Analytics 4, Adobe Analytics, Amplitude, Search Console |
 | **Acquire** | Google Ads, Meta Ads, TikTok Ads, Snap Ads, LinkedIn Ads, Pinterest Ads |
@@ -177,7 +177,7 @@ Go to **/connect** and click the big **Connect** button for Google. Authorize Fl
 
 ### 5. Connect your AI (the fun part)
 
-Fluxito is an MCP server. Any MCP-compatible client (Claude, GPT, Gemini, Cursor, Windsurf, etc.) can talk to it.
+Fluxito is an MCP server. Any MCP-compatible client (Claude, GPT, Cursor, Windsurf, etc.) can talk to it.
 
 The easiest first experience for most people is testing locally with ngrok (free). Full instructions, including the exact ngrok steps and how to add the connector in Claude, are in the section below called **Connecting an AI client**.
 
@@ -273,7 +273,7 @@ This is the only way it works now. No more `.env` files for platform credentials
 
 ## Connecting an AI client
 
-Fluxito is an MCP server. You connect it directly inside Claude, ChatGPT, Cursor, Gemini, Windsurf, or any other tool that supports the [Model Context Protocol](https://modelcontextprotocol.io).
+Fluxito is an MCP server. You connect it directly inside Claude, ChatGPT, Cursor, Windsurf, or any other tool that supports the [Model Context Protocol](https://modelcontextprotocol.io).
 
 The endpoint is `/mcp`. Once added as a custom connector, your AI can see and call real tools against your platforms (with proper auth and audit trails).
 
@@ -454,7 +454,7 @@ print(f.decrypt(b"...encrypted-bytes-from-db..."))
 
 ## Roadmap & Honest State of Things
 
-This is the first real step toward something much bigger. What exists today is already useful (you can generate SDRs, do real GTM work, build dashboards, run cross-platform analysis, etc.), but there is a lot still missing or rough.
+This is the first real step toward something much bigger. What exists today is already useful (you can generate Solution Design References, do real GTM work, build dashboards, run cross-platform analysis, etc.), but there is a lot still missing or rough.
 
 Some things I want to get to:
 - More connectors (Reddit Ads, Microsoft Advertising, Mixpanel, Klaviyo, etc.)

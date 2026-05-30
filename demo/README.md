@@ -1,6 +1,6 @@
 # Fluxito Demo Deployment (Mac + Cloudflare Tunnel)
 
-This folder contains everything you need to run the public Fluxito demo on your M1 MacBook Pro behind your existing Cloudflare Tunnel + Hermes supervisor.
+This folder contains everything you need to run the public Fluxito demo on your M1 MacBook Pro behind your existing Cloudflare Tunnel.
 
 All demo deployment artifacts live in this single top-level `demo/` folder for cleanliness.
 
@@ -58,7 +58,6 @@ All demo deployment artifacts live in this single top-level `demo/` folder for c
    ```
    Reload `cloudflared`.
 
-8. Add the service to Hermes (or your supervisor of choice) so it starts on boot.
 
 ## Daily / CI-driven updates
 
