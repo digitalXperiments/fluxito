@@ -157,7 +157,7 @@ def render(
         ctx["active_project_plan"] = getattr(request.state, "active_project_plan", "free")
     if "nav_projects" not in ctx:
         ctx["nav_projects"] = getattr(request.state, "nav_projects", [])
-    return templates.TemplateResponse(template_name, ctx, status_code=status_code)
+    return templates.TemplateResponse(request, template_name, ctx, status_code=status_code)
 
 
 def _base_url_from_request(request: Request) -> str:

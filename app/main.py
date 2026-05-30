@@ -481,6 +481,13 @@ async def _first_run_gate(path: str):
     if _setup_complete is True:
         return None
 
+    # The marketing landing page at "/" is public — anonymous visitors should
+    # see it regardless of whether any users exist yet (the landing route
+    # itself redirects logged-in users onward). Exact match only so we don't
+    # accidentally bypass every path.
+    if path == "/":
+        return None
+
     # Never block setup-related or static paths.
     for prefix in _SETUP_BYPASS_PREFIXES:
         if path == prefix or path.startswith(prefix):

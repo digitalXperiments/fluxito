@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ brand().name }} — AI operations for marketing analytics{% endblock %}
+{% block description %}{{ brand().name }} gives any MCP-compatible AI real, authenticated hands across your marketing stack — from tracking plan to tag management to dashboards.{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/css/landing.css?v={{ asset_hash('css/landing.css') }}">{% endblock %}
+
+{% block nav %}
+<nav class="lp-nav">
+  <a href="/" class="wordmark">{{ wordmark() }}</a>
+  <div class="lp-nav-links">
+    <a href="#how">How it works</a>
+    <a href="#platforms">Platforms</a>
+    {% if brand().name == 'Fluxito' %}<a href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>{% endif %}
+    <a href="/signin" class="lp-nav-signin">Sign in</a>
+    <a href="/request-access" class="btn primary lp-nav-cta">Request access</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block main %}
+<main class="lp">
+  <section class="lp-hero">
+    <span class="lp-badge">Public beta</span>
+    <h1>Run marketing analytics through a <em class="serif-italic">conversation</em> with your AI.</h1>
+    <p class="lp-sub">{{ brand().name }} is the operations layer that gives any MCP-compatible AI real, authenticated access to your marketing stack — define the tracking plan, implement it in GTM, query the warehouse, and build the dashboards, all from one conversation.</p>
+    <div class="lp-cta-row">
+      <a href="/request-access" class="btn primary lp-cta">Request access</a>
+      {% if brand().name == 'Fluxito' %}<a href="{{ github_url }}" target="_blank" rel="noopener" class="btn lp-cta-secondary">Self-host on GitHub</a>{% endif %}
+    </div>
+    <p class="lp-cta-note">Works with Claude, GPT, Gemini, Cursor, Windsurf — any MCP client.</p>
+  </section>
+
+  {# Content sections added in Task 2 #}
+
+  <section class="lp-final-cta">
+    <h2>See it on your own stack.</h2>
+    <a href="/request-access" class="btn primary lp-cta">Request access</a>
+  </section>
+</main>
+{% endblock %}

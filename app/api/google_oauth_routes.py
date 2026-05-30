@@ -263,15 +263,14 @@ def _build_scopes_for_products(
 
 @router.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
-    """Root route. Authenticated users go to the dashboard; unauthenticated to /signin.
-
-    The marketing landing page lives in the separate static-site repo; the
-    self-host app does not serve marketing content.
-    """
+    """Root route. Logged-in users go to the dashboard; logged-out visitors see
+    the marketing landing page."""
     user_ctx = await _resolve_user_ctx(request)
     if user_ctx is not None:
         return RedirectResponse(url="/home", status_code=302)
-    return RedirectResponse(url="/signin?next=/home", status_code=302)
+    from app.templating import render
+
+    return render(request, "landing.html", {"github_url": "https://github.com/digitalXperiments/fluxito"})
 
 
 @router.get("/home", response_class=HTMLResponse)
