@@ -191,6 +191,40 @@ async def admin_reject_access_request(request: Request, req_id: str):
     return JSONResponse({"success": True})
 
 
+@router.get("/api/admin/settings/rate-limits")
+async def admin_get_rate_limits(request: Request):
+    await require_superadmin(request)
+    from app.settings_service import get_runtime_setting
+
+    async with app_state.db_session_factory() as db:
+        per_min = int(await get_runtime_setting(db, "rate_limit_per_min", default=60))
+        per_hour = int(await get_runtime_setting(db, "rate_limit_per_hour", default=1000))
+    return JSONResponse({"per_min": per_min, "per_hour": per_hour})
+
+
+@router.patch("/api/admin/settings/rate-limits")
+async def admin_set_rate_limits(request: Request):
+    me = await require_superadmin(request)
+    body = await request.json()
+    try:
+        per_min = int(body.get("per_min"))
+        per_hour = int(body.get("per_hour"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "per_min and per_hour must be integers.")
+    if per_min <= 0 or per_hour <= 0:
+        raise HTTPException(400, "Rate limits must be positive.")
+
+    from app.settings_service import set_setting
+
+    async with app_state.db_session_factory() as db:
+        await set_setting(db, key="rate_limit_per_min", value=per_min, is_secret=False,
+                          updated_by_user_id=uuid.UUID(me["id"]))
+        await set_setting(db, key="rate_limit_per_hour", value=per_hour, is_secret=False,
+                          updated_by_user_id=uuid.UUID(me["id"]))
+        await db.commit()
+    return JSONResponse({"success": True, "per_min": per_min, "per_hour": per_hour})
+
+
 @router.patch("/api/admin/settings/require-access-approval")
 async def admin_toggle_gate(request: Request):
     me = await require_superadmin(request)
