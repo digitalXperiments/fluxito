@@ -79,6 +79,14 @@ RUNTIME_SETTINGS: tuple[RuntimeSetting, ...] = (
         "int",
         category="rate_limiting",
     ),
+    RuntimeSetting(
+        "rate_limit_per_day",
+        "Requests per day",
+        "Default API requests per user per day.",
+        "RATE_LIMIT_PER_DAY",
+        "int",
+        category="rate_limiting",
+    ),
     # ── Observability ──
     RuntimeSetting(
         "sentry_dsn",
@@ -137,10 +145,43 @@ RUNTIME_SETTINGS: tuple[RuntimeSetting, ...] = (
     RuntimeSetting(
         "require_access_approval",
         "Require access approval",
-        "Gate new sign-ups behind super-admin approval via the request-access queue.",
+        "Gate new sign-ups behind super-admin approval via the request-access queue. "
+        "When on, the sign-in page hides 'Create account' and shows 'Request access'.",
         "REQUIRE_ACCESS_APPROVAL",
         "bool",
         category="access",
+    ),
+    RuntimeSetting(
+        "auth_google_enabled",
+        "Allow Google sign-in",
+        "Show the 'Continue with Google' button on the sign-in page.",
+        "AUTH_GOOGLE_ENABLED",
+        "bool",
+        category="access",
+    ),
+    RuntimeSetting(
+        "auth_password_enabled",
+        "Allow email + password sign-in",
+        "Allow signing in with an email address and password.",
+        "AUTH_PASSWORD_ENABLED",
+        "bool",
+        category="access",
+    ),
+    # ── Instance operations ──
+    RuntimeSetting(
+        "maintenance_mode",
+        "Maintenance mode",
+        "When on, only super-admins can use the app; everyone else sees a maintenance page.",
+        "MAINTENANCE_MODE",
+        "bool",
+        category="operations",
+    ),
+    RuntimeSetting(
+        "announcement_banner",
+        "Announcement banner",
+        "Site-wide message shown to all signed-in users (e.g. beta notices). Blank to hide.",
+        "ANNOUNCEMENT_BANNER",
+        category="operations",
     ),
     # ── Branding ──
     RuntimeSetting(
@@ -370,3 +411,27 @@ async def access_approval_required() -> bool:
     """True when the instance gates new sign-ups behind super-admin approval."""
     async with app_state.db_session_factory() as db:
         return bool(await get_runtime_setting(db, "require_access_approval", default=False))
+
+
+async def get_auth_flags() -> dict[str, bool]:
+    """Sign-in surface flags for the auth page (Google / password / signup)."""
+    async with app_state.db_session_factory() as db:
+        gate = bool(await get_runtime_setting(db, "require_access_approval", default=False))
+        return {
+            "google_enabled": bool(await get_runtime_setting(db, "auth_google_enabled", default=True)),
+            "password_enabled": bool(await get_runtime_setting(db, "auth_password_enabled", default=True)),
+            # When access approval is required, account self-creation is closed.
+            "signup_enabled": not gate,
+        }
+
+
+async def maintenance_mode_enabled() -> bool:
+    """True when the instance is in maintenance mode (super-admins exempt)."""
+    async with app_state.db_session_factory() as db:
+        return bool(await get_runtime_setting(db, "maintenance_mode", default=False))
+
+
+async def get_announcement_banner() -> str:
+    """The site-wide announcement banner text, or '' when unset."""
+    async with app_state.db_session_factory() as db:
+        return str(await get_runtime_setting(db, "announcement_banner", default="") or "")

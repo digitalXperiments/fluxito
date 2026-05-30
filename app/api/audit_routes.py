@@ -152,8 +152,14 @@ async def audit_page(request: Request):
     days: dict = {}
     account_events_by_day: dict[str, list] = defaultdict(list)
 
-    # Resolve active project for scoping
-    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+    # Optional EXPLICIT project filter via ?project_id=. We deliberately do NOT
+    # fall back to the active_project_id cookie here: MCP tool calls are audited
+    # against whichever project the AI client had active (resolved per-call from
+    # Redis), which routinely differs from the project the web UI happens to have
+    # selected — or is NULL when no project was set. Silently scoping the log to
+    # the browser cookie hid the user's entire tool-call history. Default to
+    # showing everything the user did; let project filtering be opt-in.
+    active_project_id = request.query_params.get("project_id")
 
     db_factory = app_state.db_session_factory
     async with db_factory() as db:
@@ -375,8 +381,9 @@ async def api_audit_list(
 
     stmt = select(ToolCallAudit).where(ToolCallAudit.user_id == user_uuid)
 
-    # Scope to active project when available
-    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+    # Explicit project filter only (see audit_page for why we don't use the
+    # active_project_id cookie — it silently hid the user's tool-call history).
+    active_project_id = request.query_params.get("project_id")
     if active_project_id:
         try:
             stmt = stmt.where(ToolCallAudit.project_id == uuid.UUID(active_project_id))

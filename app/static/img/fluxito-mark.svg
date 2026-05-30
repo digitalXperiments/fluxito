@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Fluxito">
+  <defs>
+    <linearGradient id="fxg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b6cff"/>
+      <stop offset="100%" stop-color="#1d44d6"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded tile -->
+  <rect width="64" height="64" rx="15" fill="url(#fxg)"/>
+  <!-- Bracket motif "[ ]" (brand icon language) + signature dot, all vector -->
+  <g fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M25 19 H19 V45 H25"/>
+    <path d="M39 19 H45 V45 H39"/>
+  </g>
+  <circle cx="32" cy="32" r="4.2" fill="#9ec1ff"/>
+</svg>

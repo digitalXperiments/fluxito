@@ -115,6 +115,7 @@ Use `https://abc123.ngrok-free.app/mcp` in your AI client.
 
 ## What to do next
 
+- **[Add the Fluxito Skill](/tutorials/fluxito-skill)** so your AI operates the MCP the right way — the connector gives it the tools, the Skill gives it the method.
 - Add Business Context so answers use your business rules.
 - Add KPI definitions so the AI uses your formulas.
 - Connect Google first if you want GA4, GTM, Google Ads, Search Console, or BigQuery.

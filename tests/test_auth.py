@@ -216,3 +216,47 @@ class TestCSRF:
         assert "OPTIONS" in _SAFE_METHODS
         assert "POST" not in _SAFE_METHODS
         assert "DELETE" not in _SAFE_METHODS
+
+    def test_all_csrf_cookie_values_parses_duplicates(self):
+        """Multiple csrf_token cookies (different scoping) must all be seen."""
+        from types import SimpleNamespace
+
+        from app.auth.csrf import _all_csrf_cookie_values
+
+        req = SimpleNamespace(headers={"cookie": "uid=abc; csrf_token=AAA; foo=1; csrf_token=BBB"})
+        assert _all_csrf_cookie_values(req) == ["AAA", "BBB"]
+
+    def test_validate_double_submit_accepts_any_matching_cookie(self):
+        """Header matching ANY sent cookie value (with valid sig) passes — the
+        fix for the duplicate-cookie 'token mismatch' bug."""
+        from app.auth.csrf import _generate_csrf_token, _validate_double_submit
+
+        stale = "deadbeef.0000000000000000"  # legacy/duplicate cookie, bad sig
+        good = _generate_csrf_token()
+        # Browser sends both cookies; JS submitted the good one as the header.
+        assert _validate_double_submit([stale, good], good) is None
+        # Order-independent.
+        assert _validate_double_submit([good, stale], good) is None
+
+    def test_validate_double_submit_rejects_unknown_header(self):
+        from app.auth.csrf import _generate_csrf_token, _validate_double_submit
+
+        good = _generate_csrf_token()
+        other = _generate_csrf_token()
+        # Header matches no cookie the browser sent → mismatch.
+        msg = _validate_double_submit([good], other)
+        assert msg is not None and "mismatch" in msg
+
+    def test_validate_double_submit_missing(self):
+        from app.auth.csrf import _generate_csrf_token, _validate_double_submit
+
+        assert "missing" in _validate_double_submit([], _generate_csrf_token())
+        assert "missing" in _validate_double_submit([_generate_csrf_token()], None)
+
+    def test_validate_double_submit_rejects_unsigned_match(self):
+        """A matching cookie+header that we never minted (bad signature) fails."""
+        from app.auth.csrf import _validate_double_submit
+
+        forged = "deadbeef.0000000000000000"
+        msg = _validate_double_submit([forged], forged)
+        assert msg is not None and "Invalid" in msg

@@ -231,13 +231,14 @@ async def lifespan(app: FastAPI):
     mcp_session_cm = mcp_server.session_manager.run()
     await mcp_session_cm.__aenter__()
 
-    # Warm the branding cache so the first request renders correct chrome.
+    # Warm the branding + announcement caches so the first request renders correctly.
     try:
-        from app.branding import refresh_brand
+        from app.branding import refresh_announcement, refresh_brand
 
         await refresh_brand()
+        await refresh_announcement()
     except Exception:
-        logger.warning("Initial brand refresh failed; using defaults", exc_info=True)
+        logger.warning("Initial brand/announcement refresh failed; using defaults", exc_info=True)
 
     logger.info("Application started (APP_ENV=%s)", settings.APP_ENV)
 
@@ -590,6 +591,14 @@ class _FluxitoRequestMiddleware:
                         exc,
                     )
 
+        # ── 1b. Maintenance mode ──────────────────────────────────────────
+        # When enabled, only super-admins may use the app; everyone else gets a
+        # maintenance page (503). Sign-in/auth/static stay open so an admin can
+        # still get in and turn it back off.
+        maint = await _maintenance_gate(scope, path, state)
+        if maint is not None:
+            return await maint(scope, receive, send)
+
         # ── 2. CSRF — double-submit validation + cookie seeding ───────────
         # The pure-ASGI path only validates incoming; we wrap `send` so that
         # any outgoing response (including the 403 CSRF rejection itself)
@@ -633,6 +642,81 @@ class _FluxitoRequestMiddleware:
             await _attach_nav_project_context(scope)
 
         await self.app(scope, receive, send_wrapped)
+
+
+_MAINTENANCE_ALLOW_PREFIXES = (
+    "/static",
+    "/.well-known",
+    "/favicon",
+    "/signin",
+    "/auth/",
+    "/setup",
+    "/healthz",
+    "/oauth/",
+)
+
+
+async def _maintenance_gate(scope, path: str, state: dict):
+    """Return an ASGI response app to short-circuit when maintenance mode is on
+    and the requester is not a super-admin; otherwise None (allow through)."""
+    from app.settings_service import maintenance_mode_enabled
+
+    try:
+        if not await maintenance_mode_enabled():
+            return None
+    except Exception:
+        return None  # fail open — never lock everyone out on a settings blip
+
+    if any(path.startswith(p) for p in _MAINTENANCE_ALLOW_PREFIXES):
+        return None
+
+    # Resolve the requester so super-admins can keep working through maintenance.
+    uid = None
+    if path.startswith("/mcp"):
+        uctx = state.get("user_context")
+        uid = str(getattr(uctx, "user_id", "") or "") if uctx else None
+    else:
+        from starlette.requests import Request as _StarletteRequest
+
+        from app.auth.uid_cookie import verify_uid
+
+        uid = verify_uid(_StarletteRequest(scope).cookies.get("uid"))
+
+    if uid:
+        from app.auth.superadmin_cache import is_superadmin_cached
+
+        if await is_superadmin_cached(uid):
+            return None
+
+    if path.startswith(("/api/", "/mcp")):
+        return JSONResponse(
+            {
+                "error": True,
+                "error_type": "maintenance",
+                "message": "Fluxito is undergoing maintenance. Please try again shortly.",
+            },
+            status_code=503,
+        )
+
+    from fastapi.responses import HTMLResponse
+
+    from app.branding import brand as _brand
+
+    name = _brand()["name"]
+    html = (
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{name} — Maintenance</title>"
+        "<style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
+        "background:#f7f9fc;color:#101114;display:flex;min-height:100vh;align-items:center;justify-content:center}"
+        ".m{max-width:440px;padding:40px;text-align:center}.m h1{font-size:28px;margin:0 0 12px}"
+        ".m p{color:#566070;line-height:1.55;margin:0 0 8px}.dot{display:inline-block;width:7px;height:7px;"
+        "border-radius:99px;background:#2557f6;margin-left:2px;vertical-align:middle}</style></head>"
+        f"<body><div class='m'><h1>{name}<span class='dot'></span></h1>"
+        "<p>We're performing scheduled maintenance and will be back shortly.</p>"
+        "<p>Thanks for your patience.</p></div></body></html>"
+    )
+    return HTMLResponse(html, status_code=503)
 
 
 async def _attach_nav_project_context(scope) -> None:

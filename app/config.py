@@ -82,6 +82,13 @@ class Settings(BaseSettings):
     # Rate limits — soft API throttle. Defaults are sane; only set if you need to override.
     RATE_LIMIT_PER_MIN: int = 60
     RATE_LIMIT_PER_HOUR: int = 1000
+    RATE_LIMIT_PER_DAY: int = 10000
+
+    # Beta / instance operations — all runtime-overridable via the Admin panel.
+    MAINTENANCE_MODE: bool = False  # When True, only super-admins can use the app.
+    ANNOUNCEMENT_BANNER: str = ""  # Site-wide banner shown to signed-in users.
+    AUTH_GOOGLE_ENABLED: bool = True  # Show "Continue with Google" on sign-in.
+    AUTH_PASSWORD_ENABLED: bool = True  # Allow email + password sign-in.
 
     # MCP OAuth
     MCP_ALLOWED_REDIRECT_URIS: str = "https://claude.ai/api/mcp/auth_callback"

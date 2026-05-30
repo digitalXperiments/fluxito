@@ -218,7 +218,8 @@ async def admin_get_rate_limits(request: Request):
     async with app_state.db_session_factory() as db:
         per_min = int(await get_runtime_setting(db, "rate_limit_per_min", default=60))
         per_hour = int(await get_runtime_setting(db, "rate_limit_per_hour", default=1000))
-    return JSONResponse({"per_min": per_min, "per_hour": per_hour})
+        per_day = int(await get_runtime_setting(db, "rate_limit_per_day", default=10000))
+    return JSONResponse({"per_min": per_min, "per_hour": per_hour, "per_day": per_day})
 
 
 @router.patch("/api/admin/settings/rate-limits")
@@ -228,30 +229,31 @@ async def admin_set_rate_limits(request: Request):
     try:
         per_min = int(body.get("per_min"))
         per_hour = int(body.get("per_hour"))
+        per_day = int(body.get("per_day"))
     except (TypeError, ValueError):
-        raise HTTPException(400, "per_min and per_hour must be integers.")
-    if per_min <= 0 or per_hour <= 0:
+        raise HTTPException(400, "per_min, per_hour and per_day must be integers.")
+    if per_min <= 0 or per_hour <= 0 or per_day <= 0:
         raise HTTPException(400, "Rate limits must be positive.")
+    if not (per_min <= per_hour <= per_day):
+        raise HTTPException(400, "Limits must be ordered: per-minute ≤ per-hour ≤ per-day.")
 
+    from app.auth.rate_limiter import set_rate_limits
     from app.settings_service import set_setting
 
     async with app_state.db_session_factory() as db:
-        await set_setting(
-            db,
-            key="rate_limit_per_min",
-            value=per_min,
-            is_secret=False,
-            updated_by_user_id=uuid.UUID(me["id"]),
-        )
-        await set_setting(
-            db,
-            key="rate_limit_per_hour",
-            value=per_hour,
-            is_secret=False,
-            updated_by_user_id=uuid.UUID(me["id"]),
-        )
+        for key, val in (
+            ("rate_limit_per_min", per_min),
+            ("rate_limit_per_hour", per_hour),
+            ("rate_limit_per_day", per_day),
+        ):
+            await set_setting(db, key=key, value=val, is_secret=False, updated_by_user_id=uuid.UUID(me["id"]))
         await db.commit()
-    return JSONResponse({"success": True, "per_min": per_min, "per_hour": per_hour})
+    # Push to the Redis override + bust the in-memory cache so limits apply now.
+    try:
+        await set_rate_limits({"default": {"per_min": per_min, "per_hour": per_hour, "per_day": per_day}})
+    except Exception:
+        logger.warning("rate-limit Redis override failed; DB values will apply within 60s", exc_info=True)
+    return JSONResponse({"success": True, "per_min": per_min, "per_hour": per_hour, "per_day": per_day})
 
 
 @router.patch("/api/admin/settings/require-access-approval")
@@ -308,3 +310,153 @@ async def admin_set_branding(request: Request):
         await db.commit()
     await refresh_brand()
     return JSONResponse({"success": True, "name": name, "logo_url": logo_url, "accent": accent})
+
+
+# ---------------------------------------------------------------------------
+# Instance operations — maintenance mode + announcement banner
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/admin/settings/operations")
+async def admin_get_operations(request: Request):
+    await require_superadmin(request)
+    from app.settings_service import get_runtime_setting
+
+    async with app_state.db_session_factory() as db:
+        maintenance = bool(await get_runtime_setting(db, "maintenance_mode", default=False))
+        banner = await get_runtime_setting(db, "announcement_banner", default="")
+    return JSONResponse({"maintenance_mode": maintenance, "announcement_banner": str(banner or "")})
+
+
+@router.patch("/api/admin/settings/operations")
+async def admin_set_operations(request: Request):
+    me = await require_superadmin(request)
+    body = await request.json()
+    maintenance = bool(body.get("maintenance_mode"))
+    banner = (body.get("announcement_banner") or "").strip()
+    if len(banner) > 280:
+        raise HTTPException(400, "Announcement banner is too long (max 280 chars).")
+    from app.settings_service import set_setting
+
+    async with app_state.db_session_factory() as db:
+        await set_setting(
+            db, key="maintenance_mode", value=maintenance, is_secret=False,
+            updated_by_user_id=uuid.UUID(me["id"]),
+        )
+        await set_setting(
+            db, key="announcement_banner", value=banner, is_secret=False,
+            updated_by_user_id=uuid.UUID(me["id"]),
+        )
+        await db.commit()
+    from app.branding import refresh_announcement
+
+    await refresh_announcement()
+    return JSONResponse({"success": True, "maintenance_mode": maintenance, "announcement_banner": banner})
+
+
+# ---------------------------------------------------------------------------
+# Sign-in method toggles
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/admin/settings/auth-methods")
+async def admin_get_auth_methods(request: Request):
+    await require_superadmin(request)
+    from app.settings_service import get_runtime_setting
+
+    async with app_state.db_session_factory() as db:
+        google = bool(await get_runtime_setting(db, "auth_google_enabled", default=True))
+        password = bool(await get_runtime_setting(db, "auth_password_enabled", default=True))
+    return JSONResponse({"google_enabled": google, "password_enabled": password})
+
+
+@router.patch("/api/admin/settings/auth-methods")
+async def admin_set_auth_methods(request: Request):
+    me = await require_superadmin(request)
+    body = await request.json()
+    google = bool(body.get("google_enabled"))
+    password = bool(body.get("password_enabled"))
+    if not google and not password:
+        raise HTTPException(400, "At least one sign-in method must stay enabled.")
+    from app.settings_service import set_setting
+
+    async with app_state.db_session_factory() as db:
+        await set_setting(
+            db, key="auth_google_enabled", value=google, is_secret=False,
+            updated_by_user_id=uuid.UUID(me["id"]),
+        )
+        await set_setting(
+            db, key="auth_password_enabled", value=password, is_secret=False,
+            updated_by_user_id=uuid.UUID(me["id"]),
+        )
+        await db.commit()
+    return JSONResponse({"success": True, "google_enabled": google, "password_enabled": password})
+
+
+# ---------------------------------------------------------------------------
+# Direct user invite — create an account + temp password without a request
+# ---------------------------------------------------------------------------
+
+_EMAIL_RE = _re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+@router.post("/api/admin/users/invite")
+async def admin_invite_user(request: Request):
+    me = await require_superadmin(request)
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    name = (body.get("name") or "").strip() or email.split("@")[0]
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(400, "Please enter a valid email address.")
+
+    from app.auth.email_auth import generate_temp_password, hash_password
+
+    temp_password = None
+    async with app_state.db_session_factory() as db:
+        existing = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(400, "A user with that email already exists.")
+        temp_password = generate_temp_password()
+        new_user = User(
+            email=email,
+            display_name=name,
+            password_hash=hash_password(temp_password),
+            email_verified=True,  # invited by an operator — trusted
+            auth_provider="email",
+        )
+        db.add(new_user)
+        await db.flush()
+        new_uid = new_user.id
+        await db.commit()
+
+    try:
+        from app.api.project_routes import ensure_default_project
+
+        await ensure_default_project(new_uid, name, email)
+    except Exception:
+        logger.warning("ensure_default_project failed after invite", exc_info=True)
+
+    # Best-effort invite email (logs to console if SMTP isn't configured).
+    try:
+        from app.branding import brand as _brand
+        from app.config import settings as _settings
+        from app.email_service import send_email
+
+        brand_name = _brand()["name"]
+        base_url = _settings.APP_BASE_URL.rstrip("/")
+        html_body = (
+            f"<p>You've been invited to {brand_name}.</p>"
+            f"<p>Sign in at <a href='{base_url}/signin'>{base_url}/signin</a> with:</p>"
+            f"<p><b>Email:</b> {email}<br><b>Temporary password:</b> {temp_password}</p>"
+            f"<p>Please change your password after your first sign-in.</p>"
+        )
+        text_body = (
+            f"You've been invited to {brand_name}.\n\n"
+            f"Sign in at {base_url}/signin\nEmail: {email}\nTemporary password: {temp_password}\n\n"
+            "Please change your password after your first sign-in."
+        )
+        await send_email(email, f"You're invited to {brand_name}", html_body, text_body)
+    except Exception:
+        logger.warning("invite email failed for %s", email, exc_info=True)
+
+    return JSONResponse({"success": True, "email": email, "temp_password": temp_password})

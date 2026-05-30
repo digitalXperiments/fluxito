@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 _RATE_LIMITS_CONFIG_KEY = "rate_limits:config"
 _RATE_LIMIT_MINUTE_KEY_TEMPLATE = "rl:{user_id}:{minute_slot}"
 _RATE_LIMIT_HOUR_KEY_TEMPLATE = "rl_h:{user_id}:{hour_slot}"
+_RATE_LIMIT_DAY_KEY_TEMPLATE = "rl_d:{user_id}:{day_slot}"
 
 # In-memory cache of limits (refreshed from Redis every 60s)
 _cached_limits: dict | None = None
@@ -35,21 +36,24 @@ _cached_limits_ts: float = 0
 _CACHE_TTL = 60  # seconds
 _RATE_LIMIT_MINUTE_TTL = 120  # seconds, expire minute bucket after 2 minutes
 _RATE_LIMIT_HOUR_TTL = 7200  # seconds, expire hour bucket after 2 hours
+_RATE_LIMIT_DAY_TTL = 172800  # seconds, expire day bucket after 2 days
 
 
 async def _default_limits() -> dict:
     """Return DB-backed default rate limits with env/default fallback."""
     per_min = settings.RATE_LIMIT_PER_MIN
     per_hour = settings.RATE_LIMIT_PER_HOUR
+    per_day = settings.RATE_LIMIT_PER_DAY
     session_factory = getattr(app_state, "db_session_factory", None)
     if session_factory is not None:
         try:
             async with session_factory() as db:
                 per_min = await get_runtime_setting(db, "rate_limit_per_min")
                 per_hour = await get_runtime_setting(db, "rate_limit_per_hour")
+                per_day = await get_runtime_setting(db, "rate_limit_per_day")
         except Exception as e:
             logger.warning("Failed to load DB rate limit settings; using env/default fallback: %s", e)
-    return {"default": {"per_min": int(per_min), "per_hour": int(per_hour)}}
+    return {"default": {"per_min": int(per_min), "per_hour": int(per_hour), "per_day": int(per_day)}}
 
 
 async def get_rate_limits() -> dict:
@@ -78,6 +82,9 @@ async def get_rate_limits() -> dict:
                     )
                     defaults["default"]["per_hour"] = overrides["default"].get(
                         "per_hour", defaults["default"]["per_hour"]
+                    )
+                    defaults["default"]["per_day"] = overrides["default"].get(
+                        "per_day", defaults["default"]["per_day"]
                     )
     except (ValueError, KeyError, TypeError) as e:
         logger.warning("Failed to read rate limit overrides from Redis: %s", e)
@@ -119,6 +126,7 @@ async def check_rate_limit(user_id: str, tier: str | None = None) -> dict | None
 
     per_min = tier_limits["per_min"]
     per_hour = tier_limits["per_hour"]
+    per_day = tier_limits.get("per_day", settings.RATE_LIMIT_PER_DAY)
 
     redis = app_state.redis_client
     now = int(time.time())
@@ -181,6 +189,38 @@ async def check_rate_limit(user_id: str, tier: str | None = None) -> dict | None
             "retry_after_seconds": 3600 - (now % 3600),
             "limit_per_min": per_min,
             "limit_per_hour": per_hour,
+            "limit_per_day": per_day,
+        }
+
+    # Per-day check
+    day_slot = now // 86400
+    day_key = _RATE_LIMIT_DAY_KEY_TEMPLATE.format(user_id=user_id, day_slot=day_slot)
+    try:
+        day_count = await redis.incr(day_key)
+        if day_count == 1:
+            await redis.expire(day_key, _RATE_LIMIT_DAY_TTL)
+    except Exception as e:
+        logger.warning("Redis error checking day rate limit for user %s: %s", user_id, e)
+        return None  # Fail open: allow request on Redis failure
+
+    if day_count > per_day:
+        logger.warning(
+            "Rate limit hit (per-day) for user %s: %d/%d",
+            user_id,
+            day_count,
+            per_day,
+        )
+        return {
+            "error": True,
+            "error_type": "rate_limited",
+            "message": (
+                f"Daily rate limit reached ({day_count}/{per_day} requests). "
+                f"Limit resets in {86400 - (now % 86400)} seconds."
+            ),
+            "retry_after_seconds": 86400 - (now % 86400),
+            "limit_per_min": per_min,
+            "limit_per_hour": per_hour,
+            "limit_per_day": per_day,
         }
 
     return None  # Rate limit check passed

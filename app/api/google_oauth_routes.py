@@ -611,13 +611,24 @@ async def signin(request: Request, next: str = Query(default="/home")):
         except OAuthAppNotConfigured:
             pass
 
+    # Admin-controlled sign-in surface flags. During first-run the operator must
+    # be able to create the admin account with a password, so force those on.
+    from app.settings_service import get_auth_flags
+
+    if first_run:
+        flags = {"google_enabled": True, "password_enabled": True, "signup_enabled": True}
+    else:
+        flags = await get_auth_flags()
+
     response = render(
         request,
         "auth/signin.html",
         {
             "next_url": safe_next,
-            "google_configured": google_configured,
+            "google_configured": google_configured and flags["google_enabled"],
             "first_run": first_run,
+            "signup_enabled": flags["signup_enabled"],
+            "password_enabled": flags["password_enabled"],
         },
     )
 
