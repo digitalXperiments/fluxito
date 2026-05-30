@@ -14,6 +14,10 @@ def _patch_db(db_session_factory):
     app_state.db_session_factory = db_session_factory
     yield
     app_state.db_session_factory = original
+    # Reset the module-global brand cache so branding tests never leak
+    # a non-default value into other tests/files.
+    import app.branding as _b
+    _b._BRAND_CACHE.update({"name": "Fluxito", "logo_url": "", "accent": ""})
 
 
 @pytest.mark.asyncio
@@ -72,9 +76,3 @@ async def test_invite_email_uses_brand_name(_patch_db, db_session_factory, monke
     assert "Acme Analytics" in captured["html"]
     assert "Fluxito" not in captured["subject"]
 
-
-def test_branding_reset_after():
-    # restore default cache so other tests/modules see Fluxito
-    import app.branding as b
-    b._BRAND_CACHE.update({"name": "Fluxito", "logo_url": "", "accent": ""})
-    assert b.brand()["name"] == "Fluxito"
