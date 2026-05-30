@@ -127,6 +127,11 @@ templates.env.filters["initials"] = _initials
 # Make asset_hash available as a global function in all templates
 templates.env.globals["asset_hash"] = _asset_hash
 
+# Expose instance branding (name, logo, accent) to all templates
+from app.branding import brand as _brand_global
+
+templates.env.globals["brand"] = _brand_global
+
 
 # ---------- Render helpers ---------------------------------------------------
 

@@ -142,6 +142,28 @@ RUNTIME_SETTINGS: tuple[RuntimeSetting, ...] = (
         "bool",
         category="access",
     ),
+    # ── Branding ──
+    RuntimeSetting(
+        "brand_name",
+        "App name",
+        "Product name shown in the UI chrome and emails.",
+        "BRAND_NAME",
+        category="branding",
+    ),
+    RuntimeSetting(
+        "brand_logo_url",
+        "Logo URL",
+        "URL of a logo image shown in place of the wordmark.",
+        "BRAND_LOGO_URL",
+        category="branding",
+    ),
+    RuntimeSetting(
+        "brand_accent",
+        "Accent colour",
+        "CSS colour for the primary accent (e.g. #0B0B0E).",
+        "BRAND_ACCENT",
+        category="branding",
+    ),
 )
 
 RUNTIME_SETTING_BY_KEY = {item.key: item for item in RUNTIME_SETTINGS}

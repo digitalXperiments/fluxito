@@ -231,6 +231,14 @@ async def lifespan(app: FastAPI):
     mcp_session_cm = mcp_server.session_manager.run()
     await mcp_session_cm.__aenter__()
 
+    # Warm the branding cache so the first request renders correct chrome.
+    try:
+        from app.branding import refresh_brand
+
+        await refresh_brand()
+    except Exception:
+        logger.warning("Initial brand refresh failed; using defaults", exc_info=True)
+
     logger.info("Application started (APP_ENV=%s)", settings.APP_ENV)
 
     yield
