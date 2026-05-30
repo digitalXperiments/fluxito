@@ -17,3 +17,26 @@
 
 .lp-final-cta { text-align:center; padding:72px 0 96px; border-top:1px solid var(--line); margin-top:72px; }
 .lp-final-cta h2 { font-size:clamp(24px,3vw,36px); margin:0 0 24px; letter-spacing:-0.02em; }
+
+/* Content sections (Task 2) */
+.lp section { padding:56px 0; }
+.lp h2 { font-size:clamp(24px,3.5vw,40px); letter-spacing:-0.02em; text-align:center; margin:0 0 12px; }
+.lp-section-sub { text-align:center; color:var(--muted); max-width:640px; margin:0 auto 36px; }
+.lp-problem-grid, .lp-stage-strip, .lp-feature-grid, .lp-platform-grid { display:grid; gap:18px; }
+.lp-problem-grid { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+.lp-stage-strip { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+.lp-feature-grid { grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
+.lp-platform-grid { grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+.lp-prob, .lp-stage, .lp-feature, .lp-pf { border:1px solid var(--line); border-radius:14px; padding:22px; }
+.lp-prob-n { font-family:var(--mono); font-size:13px; color:var(--muted); }
+.lp-prob h3, .lp-stage h3, .lp-feature h3 { margin:8px 0 8px; font-size:18px; }
+.lp-pf h4 { margin:0 0 8px; font-family:var(--mono); font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+.lp-prob p, .lp-stage p, .lp-feature p, .lp-pf p { color:var(--ink-soft); font-size:14px; line-height:1.5; margin:0; }
+.lp-solution { text-align:center; max-width:720px; margin:36px auto 0; font-size:18px; line-height:1.6; }
+.lp-video-frame { position:relative; max-width:880px; margin:0 auto; aspect-ratio:16/9; border:1px solid var(--line); border-radius:16px; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px; }
+.lp-video-play { font-size:40px; color:var(--accent); }
+.lp-video-caption { font-size:13px; color:var(--muted); }
+.lp-oss { text-align:center; }
+.lp-oss p { max-width:620px; margin:12px auto; color:var(--ink-soft); }
+.lp-code { display:inline-block; text-align:left; font-family:var(--mono); font-size:13px; border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:8px 0 20px; overflow-x:auto; }
+.lp-oss-note { font-size:13px; color:var(--muted); }

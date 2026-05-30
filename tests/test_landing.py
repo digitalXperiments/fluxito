@@ -48,6 +48,18 @@ async def test_landing_renders_for_anonymous(_http_client):
 
 
 @pytest.mark.asyncio
+async def test_landing_has_key_content(_http_client):
+    from unittest.mock import AsyncMock, patch
+
+    with patch("app.api.google_oauth_routes._resolve_user_ctx", new=AsyncMock(return_value=None)):
+        resp = await _http_client.get("/")
+    body = resp.text
+    assert "15 platforms" in body
+    assert "Google Tag Manager" in body
+    assert "Model Context Protocol" in body
+
+
+@pytest.mark.asyncio
 async def test_landing_redirects_logged_in_to_home(_http_client):
     from unittest.mock import AsyncMock, patch
 

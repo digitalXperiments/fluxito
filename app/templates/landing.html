@@ -29,7 +29,67 @@
     <p class="lp-cta-note">Works with Claude, GPT, Gemini, Cursor, Windsurf — any MCP client.</p>
   </section>
 
-  {# Content sections added in Task 2 #}
+  <section class="lp-problem">
+    <h2>Four jobs. Four owners. One conversation.</h2>
+    <p class="lp-section-sub">Marketing analytics today is four disconnected jobs — and they're always out of sync.</p>
+    <div class="lp-problem-grid">
+      <div class="lp-prob"><span class="lp-prob-n">01</span><h3>Define</h3><p>What to track — events, parameters, conversions. Lives in a tracking-plan sheet nobody updates.</p></div>
+      <div class="lp-prob"><span class="lp-prob-n">02</span><h3>Implement</h3><p>Click through GTM, GA4, Meta Pixel — tags, triggers, variables — by hand.</p></div>
+      <div class="lp-prob"><span class="lp-prob-n">03</span><h3>Pipe</h3><p>Warehouse syncs, custom dimensions, connectors. Brittle and manual.</p></div>
+      <div class="lp-prob"><span class="lp-prob-n">04</span><h3>Report</h3><p>Build dashboards, run audits, write the weekly recap. Slow and stale.</p></div>
+    </div>
+    <p class="lp-solution">{{ brand().name }} collapses all four into a single conversation with your AI. <strong>The AI is the operator; {{ brand().name }} gives it the hands.</strong> It speaks the open Model Context Protocol, so it works with any MCP-compatible client.</p>
+  </section>
+
+  <section class="lp-how" id="how">
+    <h2>From idea to dashboard, in one thread.</h2>
+    <div class="lp-stage-strip">
+      <div class="lp-stage"><h3>Define</h3><p>Generate, refine, and version Smart Data References (tracking plans + data dictionary) from live data. Export to Excel.</p></div>
+      <div class="lp-stage"><h3>Implement</h3><p>Full create / update / delete of GTM tags, triggers, and variables with workspace support. Adobe Launch read + write.</p></div>
+      <div class="lp-stage"><h3>Measure</h3><p>GA4, Adobe Analytics, Amplitude, Search Console — authenticated, queryable.</p></div>
+      <div class="lp-stage"><h3>Report</h3><p>Native dashboards with signed public links, scheduled email / Slack reports, and automations.</p></div>
+    </div>
+  </section>
+
+  <section class="lp-video">
+    <h2>See it in action.</h2>
+    <div class="lp-video-frame" role="img" aria-label="Product demo video coming soon">
+      <div class="lp-video-play" aria-hidden="true">&#9654;</div>
+      <span class="lp-video-caption">Demo coming soon</span>
+    </div>
+  </section>
+
+  <section class="lp-features" id="features">
+    <h2>What you can actually do today.</h2>
+    <div class="lp-feature-grid">
+      <div class="lp-feature"><h3>Tracking plans (SDR)</h3><p>Generate and version a Smart Data Reference from live scans and templates, flag gaps, and export the whole thing to Excel.</p></div>
+      <div class="lp-feature"><h3>Tag management</h3><p>Implement the plan directly in Google Tag Manager — tags, triggers, variables, workspaces — without clicking through the UI.</p></div>
+      <div class="lp-feature"><h3>Dashboards &amp; reports</h3><p>Build native dashboard cards, share signed public links, and schedule email / Slack recaps and automations.</p></div>
+      <div class="lp-feature"><h3>Audits &amp; anomalies</h3><p>Run conversion and consent audits, surface drift between what's planned and what's live, and catch anomalies.</p></div>
+    </div>
+  </section>
+
+  <section class="lp-platforms" id="platforms">
+    <h2>15 platforms, one authenticated interface.</h2>
+    <div class="lp-platform-grid">
+      <div class="lp-pf"><h4>Define / SDR</h4><p>Smart Data References from live data + templates</p></div>
+      <div class="lp-pf"><h4>Implement</h4><p>Google Tag Manager · Adobe Launch</p></div>
+      <div class="lp-pf"><h4>Measure</h4><p>GA4 · Adobe Analytics · Amplitude · Search Console</p></div>
+      <div class="lp-pf"><h4>Acquire</h4><p>Google Ads · Meta · TikTok · Snap · LinkedIn · Pinterest</p></div>
+      <div class="lp-pf"><h4>Warehouse</h4><p>BigQuery · Snowflake · Redshift</p></div>
+      <div class="lp-pf"><h4>Report</h4><p>Native dashboards · scheduled reports · automations</p></div>
+    </div>
+  </section>
+
+  {% if brand().name == 'Fluxito' %}
+  <section class="lp-oss">
+    <h2>Open-source. Self-host in minutes.</h2>
+    <p>{{ brand().name }} is Apache-2.0 licensed. Run it on your own infrastructure with full control of your data and credentials.</p>
+    <pre class="lp-code"><code>git clone {{ github_url }} &amp;&amp; cd fluxito &amp;&amp; docker compose up</code></pre>
+    <a href="{{ github_url }}" target="_blank" rel="noopener" class="btn lp-cta-secondary">View on GitHub</a>
+    <p class="lp-oss-note">Agencies can whitelabel it — your name, logo, and colours, your clients.</p>
+  </section>
+  {% endif %}
 
   <section class="lp-final-cta">
     <h2>See it on your own stack.</h2>
