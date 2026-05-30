@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re as _re
 import uuid
 from datetime import UTC, datetime
 
@@ -17,6 +18,8 @@ from app.templating import render
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_ACCENT_RE = _re.compile(r"^#?[0-9a-zA-Z]{3,8}$")
 
 
 @router.get("/admin", response_class=HTMLResponse)
@@ -237,3 +240,40 @@ async def admin_toggle_gate(request: Request):
                           updated_by_user_id=uuid.UUID(me["id"]))
         await db.commit()
     return JSONResponse({"success": True, "enabled": enabled})
+
+
+@router.get("/api/admin/settings/branding")
+async def admin_get_branding(request: Request):
+    await require_superadmin(request)
+    from app.settings_service import get_runtime_setting
+
+    async with app_state.db_session_factory() as db:
+        name = await get_runtime_setting(db, "brand_name", default="Fluxito")
+        logo_url = await get_runtime_setting(db, "brand_logo_url", default="")
+        accent = await get_runtime_setting(db, "brand_accent", default="")
+    return JSONResponse({"name": str(name), "logo_url": str(logo_url or ""), "accent": str(accent or "")})
+
+
+@router.patch("/api/admin/settings/branding")
+async def admin_set_branding(request: Request):
+    me = await require_superadmin(request)
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    logo_url = (body.get("logo_url") or "").strip()
+    accent = (body.get("accent") or "").strip()
+    if not name or len(name) > 120:
+        raise HTTPException(400, "App name is required (max 120 chars).")
+    if len(logo_url) > 500:
+        raise HTTPException(400, "Logo URL is too long.")
+    if accent and not _ACCENT_RE.match(accent):
+        raise HTTPException(400, "Accent must be a simple colour (e.g. #0B0B0E).")
+
+    from app.branding import refresh_brand
+    from app.settings_service import set_setting
+
+    async with app_state.db_session_factory() as db:
+        for key, val in (("brand_name", name), ("brand_logo_url", logo_url), ("brand_accent", accent)):
+            await set_setting(db, key=key, value=val, is_secret=False, updated_by_user_id=uuid.UUID(me["id"]))
+        await db.commit()
+    await refresh_brand()
+    return JSONResponse({"success": True, "name": name, "logo_url": logo_url, "accent": accent})
