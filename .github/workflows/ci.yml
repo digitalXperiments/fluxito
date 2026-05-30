@@ -187,7 +187,7 @@ jobs:
     name: Notify Telegram
     runs-on: ubuntu-latest
     needs: [lint, typecheck, test, build]
-    # Run on pushes only (main or tags), skip PR noise.
+    # Run on pushes to main only, skip PR noise.
     if: always() && github.event_name == 'push'
     steps:
       - name: Determine overall status
