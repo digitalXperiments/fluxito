@@ -9,7 +9,7 @@
   {% block meta %}
   <meta name="description" content="{% block description %}Connect GA4, GTM, Google Ads, Meta, TikTok, Snap, and BigQuery to any AI. Live marketing analytics, one interface.{% endblock %}"/>
   <meta property="og:title" content="{% block og_title %}{{ brand().name }} — Marketing analytics for AI{% endblock %}"/>
-  <meta property="og:description" content="Connect every marketing platform to any AI. Live dashboards, MCP-ready."/>
+  <meta property="og:description" content="{% block og_description %}Connect every marketing platform to any AI. Live dashboards, MCP-ready.{% endblock %}"/>
   {% endblock %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
