@@ -605,6 +605,13 @@ Create, refine, and maintain a tracking plan — the project's Solution Design
 Reference (SDR): a markdown doc describing the event taxonomy, destinations,
 and tracking contract for the product.
 
+PROJECT SCOPING: every action runs against the active project. The active
+project persists across turns once set_active_project succeeds, so in normal
+use you don't pass it. BUT if you call set_active_project and a tracking_plan
+action in the SAME turn (parallel tool calls), pass project_id in params here —
+the active-project selection from a sibling call in the same batch is not
+guaranteed to be visible yet. Passing project_id is always race-free.
+
 In v2 the server gathers high-fidelity facts and YOU (the model) do the
 synthesis. Typical first-time flow:
   1. generate (no intake_answers) → returns 6 business-intake questions. Ask

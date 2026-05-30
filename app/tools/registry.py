@@ -281,11 +281,32 @@ def _install_tool_hook(mcp_server):
         _audit_start = time.perf_counter()
         import asyncio as _asyncio
 
+        # Resolve the active project for THIS call, in this task's context,
+        # from the durable store (Redis) or an explicit project_id/project
+        # argument. The ContextVar set by set_active_project in a *sibling*
+        # call never reaches here (each tool runs in its own wait_for task),
+        # so we re-resolve per call — see ensure_call_project_ctx.
+        from app.auth.mcp_session_manager import ensure_call_project_ctx
+
         try:
-            result = await _asyncio.wait_for(
-                _original_call(name, arguments, *args, **kwargs),
-                timeout=_tool_timeout,
-            )
+            _proj_token = await ensure_call_project_ctx(name, arguments)
+        except Exception:
+            _proj_token = None
+
+        try:
+            try:
+                result = await _asyncio.wait_for(
+                    _original_call(name, arguments, *args, **kwargs),
+                    timeout=_tool_timeout,
+                )
+            finally:
+                # Reset before post-processing so the resolved project never
+                # leaks into the next tool call sharing this task/context.
+                if _proj_token is not None:
+                    try:
+                        app_state.current_project_ctx.reset(_proj_token)
+                    except ValueError:
+                        app_state.current_project_ctx.set(None)
         except TimeoutError:
             _audit_duration_ms = int((time.perf_counter() - _audit_start) * 1000)
             logger.warning(f"tool '{name}' timed out after {_tool_timeout}s (args={arguments})")
@@ -572,6 +593,13 @@ def register_all_tools(mcp_server):
             project: Project name, slug, or ID. Partial matches are supported.
 
         If you have only one project, it is auto-selected — no need to call this.
+
+        The selection persists across turns. Call this in its OWN turn, then use
+        the scoped tools afterwards. Do NOT emit set_active_project and a
+        dependent tool as parallel tool calls in the same turn expecting the
+        dependent call to see the new project — parallel calls run concurrently
+        and the selection may not be visible yet. If you must scope a tool in the
+        same turn, pass project_id to that tool directly instead.
         """
         import app.app_state as state
         from app.auth.mcp_session_manager import build_project_context

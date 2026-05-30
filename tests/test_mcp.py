@@ -333,6 +333,157 @@ def test_project_context_cache_roundtrip():
     assert restored.has_bq is True
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Per-call active-project resolution (ensure_call_project_ctx)
+#
+# Regression coverage for the stateless-session bug: set_active_project's
+# selection must reach sibling tool calls in the same request/batch (and across
+# turns) even though each tool runs in its own asyncio.wait_for task. Tools that
+# read current_project_ctx (tracking_plan/SDR, get_session_context) used to see
+# no_active_project while connection-fallback tools (analytics_read) worked,
+# because the ContextVar set by set_active_project never crossed the task
+# boundary. The fix re-resolves per call from Redis + explicit project_id.
+# ═══════════════════════════════════════════════════════════════════════════
+
+_PID = "22222222-2222-2222-2222-222222222222"
+_UID = "11111111-1111-1111-1111-111111111111"
+
+
+def _user_ctx_with_project():
+    from app.auth.mcp_session_manager import ProjectMembership, UserContext
+
+    return UserContext(
+        user_id=_UID,
+        email="owner@example.com",
+        display_name="Owner",
+        projects=[
+            ProjectMembership(
+                project_id=_PID,
+                project_name="VAST Data",
+                project_slug="vast-data",
+                role="owner",
+            )
+        ],
+    )
+
+
+def _fake_project_ctx():
+    from app.auth.mcp_session_manager import ProjectContext
+
+    return ProjectContext(
+        project_id=_PID,
+        project_name="VAST Data",
+        project_slug="vast-data",
+        role="owner",
+        owner_id=_UID,
+        has_ga4=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_call_project_ctx_restores_from_redis(fake_redis, monkeypatch):
+    """A tool that reads current_project_ctx resolves the session's active
+    project from Redis even when the ContextVar is unset (the sibling-call /
+    cross-turn case that broke tracking_plan)."""
+    import app.app_state as state
+    from app.auth import mcp_session_manager as mgr
+
+    saved = {"user": state.current_user_ctx.get(), "redis": state.redis_client}
+    monkeypatch.setattr(mgr, "build_project_context", lambda pid, uid: _async_return(_fake_project_ctx()))
+    state.redis_client = fake_redis
+    state.current_user_ctx.set(_user_ctx_with_project())
+    state.current_project_ctx.set(None)
+    await fake_redis.set(f"mcp:active_project:{_UID}", _PID)
+
+    try:
+        token = await mgr.ensure_call_project_ctx("tracking_plan", {"action": "generate", "params": {}})
+        assert token is not None
+        resolved = state.current_project_ctx.get()
+        assert resolved is not None and resolved.project_id == _PID
+        # Legacy fallback flags mirrored onto the user context too.
+        assert state.current_user_ctx.get().has_ga4 is True
+    finally:
+        state.current_project_ctx.set(None)
+        state.current_user_ctx.set(saved["user"])
+        state.redis_client = saved["redis"]
+
+
+@pytest.mark.asyncio
+async def test_ensure_call_project_ctx_honors_explicit_project_id(monkeypatch):
+    """An explicit project_id in params resolves with NO Redis state — the
+    stateless per-call override that previously couldn't bypass the SDR guard."""
+    import app.app_state as state
+    from app.auth import mcp_session_manager as mgr
+
+    saved = {"user": state.current_user_ctx.get(), "redis": state.redis_client}
+    monkeypatch.setattr(mgr, "build_project_context", lambda pid, uid: _async_return(_fake_project_ctx()))
+    state.redis_client = None  # prove it does not depend on session state
+    state.current_user_ctx.set(_user_ctx_with_project())
+    state.current_project_ctx.set(None)
+
+    try:
+        token = await mgr.ensure_call_project_ctx(
+            "tracking_plan", {"action": "generate", "params": {"project_id": _PID}}
+        )
+        assert token is not None
+        assert state.current_project_ctx.get().project_id == _PID
+    finally:
+        state.current_project_ctx.set(None)
+        state.current_user_ctx.set(saved["user"])
+        state.redis_client = saved["redis"]
+
+
+@pytest.mark.asyncio
+async def test_ensure_call_project_ctx_ignores_foreign_project_id(fake_redis, monkeypatch):
+    """A non-membership project_id (e.g. an Amplitude project id) must NOT
+    override scope, and must fall through to Redis session restore."""
+    import app.app_state as state
+    from app.auth import mcp_session_manager as mgr
+
+    saved = {"user": state.current_user_ctx.get(), "redis": state.redis_client}
+    monkeypatch.setattr(mgr, "build_project_context", lambda pid, uid: _async_return(_fake_project_ctx()))
+    state.redis_client = fake_redis
+    state.current_user_ctx.set(_user_ctx_with_project())
+    state.current_project_ctx.set(None)
+    await fake_redis.set(f"mcp:active_project:{_UID}", _PID)
+
+    try:
+        # Amplitude analytics_read passes its own numeric project_id in params.
+        token = await mgr.ensure_call_project_ctx(
+            "analytics_read", {"action": "run_report", "params": {"project_id": "987654"}}
+        )
+        assert token is not None
+        # Falls through to the session's real project, not the foreign id.
+        assert state.current_project_ctx.get().project_id == _PID
+    finally:
+        state.current_project_ctx.set(None)
+        state.current_user_ctx.set(saved["user"])
+        state.redis_client = saved["redis"]
+
+
+@pytest.mark.asyncio
+async def test_ensure_call_project_ctx_skips_set_active_project():
+    """set_active_project manages its own selection — the resolver must not
+    pre-empt it with the stale Redis value."""
+    import app.app_state as state
+    from app.auth import mcp_session_manager as mgr
+
+    saved = state.current_user_ctx.get()
+    state.current_user_ctx.set(_user_ctx_with_project())
+    try:
+        token = await mgr.ensure_call_project_ctx("set_active_project", {"project": "vast-data"})
+        assert token is None
+    finally:
+        state.current_user_ctx.set(saved)
+
+
+def _async_return(value):
+    async def _coro():
+        return value
+
+    return _coro()
+
+
 def test_google_platform_flags_readonly():
     from app.auth.mcp_session_manager import derive_google_platform_flags
 
