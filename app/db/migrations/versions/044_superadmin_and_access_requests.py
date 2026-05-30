@@ -1,6 +1,6 @@
 """Add is_superadmin to users, backfill earliest user, create access_requests.
 
-Revision ID: 044_superadmin_and_access_requests
+Revision ID: 044_superadmin_access_requests
 Revises: 043_sdr_source_xlsx
 """
 
@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "044_superadmin_and_access_requests"
+revision = "044_superadmin_access_requests"
 down_revision = "043_sdr_source_xlsx"
 branch_labels = None
 depends_on = None
