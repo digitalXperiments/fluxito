@@ -134,9 +134,11 @@ jobs:
       - name: Export digests
         run: |
           mkdir -p /tmp/digests/app /tmp/digests/updater /tmp/digests/nginx
-          touch "/tmp/digests/app/${{ steps.build_app.outputs.digest }}"
-          touch "/tmp/digests/updater/${{ steps.build_updater.outputs.digest }}"
-          touch "/tmp/digests/nginx/${{ steps.build_nginx.outputs.digest }}"
+          # Strip the "sha256:" prefix — actions/upload-artifact rejects ':' in
+          # filenames. The merge job re-adds the prefix when building refs.
+          d="${{ steps.build_app.outputs.digest }}";     touch "/tmp/digests/app/${d#sha256:}"
+          d="${{ steps.build_updater.outputs.digest }}"; touch "/tmp/digests/updater/${d#sha256:}"
+          d="${{ steps.build_nginx.outputs.digest }}";   touch "/tmp/digests/nginx/${d#sha256:}"
 
       - name: Upload digests
         uses: actions/upload-artifact@v4
@@ -186,8 +188,8 @@ jobs:
             image="${IMAGES[$name]}"
             refs=""
             for f in /tmp/digests/$name/*; do
-              digest="$(basename "$f")"   # e.g. sha256:abc...
-              refs="$refs ${image}@${digest}"
+              digest="$(basename "$f")"   # hex only (sha256: prefix stripped on upload)
+              refs="$refs ${image}@sha256:${digest}"
             done
             echo "Creating manifest for $image from:$refs"
             docker buildx imagetools create \
