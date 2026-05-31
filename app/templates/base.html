@@ -45,6 +45,10 @@
       border-radius: 999px; vertical-align: middle; line-height: 1.4;
     }
     .sidebar-header { display: flex; align-items: center; }
+    .version-chip { font-family: var(--mono); font-size: 10px; color: var(--muted, #888);
+      margin-left: 6px; vertical-align: middle; position: relative; cursor: default; }
+    .update-dot { display: inline-block; width: 6px; height: 6px; border-radius: 99px;
+      background: var(--blue, #4D7CE3); margin-left: 4px; vertical-align: middle; }
   </style>
   {% block head_extra %}{% endblock %}
 </head>
@@ -99,6 +103,9 @@
         {{ wordmark() }}
       </a>
       {% if brand().name == 'Fluxito' %}<span class="beta-pill" title="Fluxito is in public beta">Beta</span>{% endif %}
+      <span class="version-chip" id="version-chip" data-current="{{ app_version }}" title="Version {{ app_version }}">
+        v{{ app_version }}{% if user and user.is_superadmin %}<span class="update-dot" id="update-dot" hidden></span>{% endif %}
+      </span>
     </div>
 
     {# ── Project switcher (same data, compact form) ── #}
@@ -663,6 +670,22 @@
   })();
   </script>
   {% endif %}
+  <script>
+  (function () {
+    var dot = document.getElementById('update-dot');
+    if (!dot) return;
+    fetch('/api/updates/status', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.update_available) {
+          dot.hidden = false;
+          var chip = document.getElementById('version-chip');
+          if (chip) chip.title = 'Update available: v' + d.latest;
+        }
+      })
+      .catch(function () {});
+  })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
