@@ -18,7 +18,9 @@ permissions:
   packages: write   # push to GHCR
 
 env:
-  IMAGE: ghcr.io/digitalxperiments/fluxito
+  IMAGE_APP: ghcr.io/digitalxperiments/fluxito
+  IMAGE_UPDATER: ghcr.io/digitalxperiments/fluxito-updater
+  IMAGE_NGINX: ghcr.io/digitalxperiments/fluxito-nginx
 
 jobs:
   # ── 1. Compute the next version once, share it with the build/merge jobs ──
@@ -63,8 +65,8 @@ jobs:
 
   # ── 2. Build each architecture on its OWN native runner (no QEMU) ──
   #    amd64 on ubuntu-latest, arm64 on ubuntu-24.04-arm. Each pushes the
-  #    image by digest (no tag yet); the merge job stitches them into one
-  #    multi-arch manifest. Native builds are far faster than emulation.
+  #    images by digest (no tag yet); the merge job stitches them into
+  #    multi-arch manifests. Native builds are far faster than emulation.
   build:
     needs: prepare
     if: needs.prepare.outputs.skip == 'false'
@@ -93,8 +95,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build + push by digest (${{ matrix.arch }})
-        id: build
+      - name: Build + push app (${{ matrix.arch }})
+        id: build_app
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -104,23 +106,47 @@ jobs:
           labels: |
             org.opencontainers.image.version=${{ needs.prepare.outputs.full }}
             org.opencontainers.image.source=https://github.com/digitalXperiments/fluxito
-          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.IMAGE_APP }},push-by-digest=true,name-canonical=true,push=true
 
-      - name: Export digest
+      - name: Build + push updater (${{ matrix.arch }})
+        id: build_updater
+        uses: docker/build-push-action@v6
+        with:
+          context: ./updater
+          platforms: ${{ matrix.platform }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.prepare.outputs.full }}
+            org.opencontainers.image.source=https://github.com/digitalXperiments/fluxito
+          outputs: type=image,name=${{ env.IMAGE_UPDATER }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Build + push nginx (${{ matrix.arch }})
+        id: build_nginx
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.nginx
+          platforms: ${{ matrix.platform }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.prepare.outputs.full }}
+            org.opencontainers.image.source=https://github.com/digitalXperiments/fluxito
+          outputs: type=image,name=${{ env.IMAGE_NGINX }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digests
         run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
+          mkdir -p /tmp/digests/app /tmp/digests/updater /tmp/digests/nginx
+          touch "/tmp/digests/app/${{ steps.build_app.outputs.digest }}"
+          touch "/tmp/digests/updater/${{ steps.build_updater.outputs.digest }}"
+          touch "/tmp/digests/nginx/${{ steps.build_nginx.outputs.digest }}"
 
-      - name: Upload digest
+      - name: Upload digests
         uses: actions/upload-artifact@v4
         with:
-          name: digest-${{ matrix.arch }}
+          name: digests-${{ matrix.arch }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
-  # ── 3. Merge the per-arch digests into one manifest, tag, release ──
+  # ── 3. Merge the per-arch digests into manifests, tag, release ──
   merge:
     needs: [prepare, build]
     if: needs.prepare.outputs.skip == 'false'
@@ -135,7 +161,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
-          pattern: digest-*
+          pattern: digests-*
           merge-multiple: true
 
       - name: Set up Buildx
@@ -148,16 +174,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create + push multi-arch manifest
-        working-directory: /tmp/digests
+      - name: Create + push multi-arch manifests
         run: |
-          docker buildx imagetools create \
-            -t ${{ env.IMAGE }}:${{ needs.prepare.outputs.full }} \
-            -t ${{ env.IMAGE }}:latest \
-            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
-
-      - name: Inspect manifest
-        run: docker buildx imagetools inspect ${{ env.IMAGE }}:${{ needs.prepare.outputs.full }}
+          set -euo pipefail
+          declare -A IMAGES=(
+            [app]="${IMAGE_APP}"
+            [updater]="${IMAGE_UPDATER}"
+            [nginx]="${IMAGE_NGINX}"
+          )
+          for name in "${!IMAGES[@]}"; do
+            image="${IMAGES[$name]}"
+            refs=""
+            for f in /tmp/digests/$name/*; do
+              digest="$(basename "$f")"   # e.g. sha256:abc...
+              refs="$refs ${image}@${digest}"
+            done
+            echo "Creating manifest for $image from:$refs"
+            docker buildx imagetools create \
+              -t "${image}:${{ needs.prepare.outputs.full }}" \
+              -t "${image}:latest" \
+              $refs
+            docker buildx imagetools inspect "${image}:${{ needs.prepare.outputs.full }}"
+          done
 
       - name: Create git tag
         run: |
