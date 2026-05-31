@@ -18,6 +18,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -195,6 +196,10 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     if not TOKEN:
-        raise SystemExit("UPDATER_TOKEN must be set")
+        print(
+            "WARNING: UPDATER_TOKEN is not set — the updater will reject all requests. "
+            "Set UPDATER_TOKEN to enable in-app self-update.",
+            file=sys.stderr,
+        )
     write_state({"status": "idle"})
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
