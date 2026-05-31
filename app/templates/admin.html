@@ -19,7 +19,7 @@
     <button class="tab" data-tab="ratelimits" onclick="adminTab('ratelimits')">Rate Limits</button>
     <button class="tab" data-tab="operations" onclick="adminTab('operations')">Operations</button>
     <button class="tab" data-tab="branding" onclick="adminTab('branding')">Branding</button>
-    <button class="tab" data-tab="updates" onclick="adminTab('updates')">Updates</button>
+    <button class="tab" data-tab="updates" onclick="adminTab('updates');if(window.__fluxRefreshUpdates)window.__fluxRefreshUpdates();">Updates</button>
   </div>
 
   <section data-panel="users">
@@ -264,7 +264,6 @@ loadUsers(); loadRequests(); loadRateLimits(); loadBranding(); loadAuthMethods()
   if (!apply) return;
 
   function show(id) { document.getElementById(id).style.display = ''; }
-  function hide(id) { document.getElementById(id).style.display = 'none'; }
 
   function refreshStatus() {
     return fetch('/api/updates/status', { credentials: 'same-origin' })
@@ -279,8 +278,14 @@ loadUsers(); loadRequests(); loadRateLimits(); loadBranding(); loadAuthMethods()
         } else {
           show('upd-uptodate');
         }
+      })
+      .catch(function () {
+        var c = document.getElementById('upd-current');
+        if (c) c.textContent = 'unknown';
       });
   }
+
+  window.__fluxRefreshUpdates = refreshStatus;
 
   function pollJob() {
     var prog = document.getElementById('upd-progress');
@@ -312,7 +317,12 @@ loadUsers(); loadRequests(); loadRateLimits(); loadBranding(); loadAuthMethods()
     fetch('/api/updates/apply', { method: 'POST', credentials: 'same-origin' })
       .then(function (r) {
         if (r.ok) { pollJob(); }
-        else { r.json().then(function (e) { alert('Could not start update: ' + (e.error || r.status)); apply.disabled = false; }); }
+        else {
+          r.json().then(function (e) {
+            alert('Could not start update: ' + (e.error || r.status));
+            apply.disabled = false;
+          }).catch(function () { apply.disabled = false; });
+        }
       })
       .catch(function () { pollJob(); });
   });
