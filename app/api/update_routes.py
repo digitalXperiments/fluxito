@@ -15,6 +15,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.api.admin_routes import require_superadmin
+from app.api.google_oauth_routes import _resolve_user_ctx
 from app.services import update_service
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,9 @@ async def _trigger_updater(version: str, previous: str) -> dict:
 
 @router.get("/api/updates/status")
 async def update_status(request: Request):
-    """Return current vs latest version + whether an update is available."""
+    """Return current vs latest version + whether an update is available (auth required)."""
+    if not await _resolve_user_ctx(request):
+        return JSONResponse({"error": "not authenticated"}, status_code=401)
     return JSONResponse(await update_service.check_for_update())
 
 

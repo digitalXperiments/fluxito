@@ -15,6 +15,10 @@ async def test_status_endpoint_returns_check_result(monkeypatch):
             "checks_enabled": True,
         }
 
+    async def _user(request):
+        return {"user_id": "1"}
+
+    monkeypatch.setattr(update_routes, "_resolve_user_ctx", _user)
     monkeypatch.setattr(update_service, "check_for_update", _fake_check)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -23,6 +27,18 @@ async def test_status_endpoint_returns_check_result(monkeypatch):
     body = resp.json()
     assert body["update_available"] is True
     assert body["latest"] == "1.0.5"
+
+
+@pytest.mark.asyncio
+async def test_status_requires_auth(monkeypatch):
+    async def _anon(request):
+        return None
+
+    monkeypatch.setattr(update_routes, "_resolve_user_ctx", _anon)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/updates/status")
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio

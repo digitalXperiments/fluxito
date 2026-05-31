@@ -43,7 +43,6 @@ services:
         condition: service_healthy
     volumes:
       - ./docs:/app/docs:ro
-      - update_state:/state:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8001/api/health"]
