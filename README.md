@@ -100,6 +100,39 @@ code changes are picked up on rebuild.
 
 ---
 
+## Updating Fluxito
+
+Fluxito can update itself in place. When a newer release is published, a super-admin
+sees an **update indicator** next to the version number and can apply it from
+**Admin → Updates → "Update now"** — Fluxito pulls the new image, recreates its
+container, and **automatically rolls back** if the new version fails to come up. The
+UI shows progress through the brief restart.
+
+### Enabling one-click updates
+
+One-click updates require a shared secret so the app can talk to its privileged
+updater sidecar. Generate one into your `.env`:
+
+```bash
+echo "UPDATER_TOKEN=$(openssl rand -hex 32)" >> .env
+docker compose up -d
+```
+
+If `UPDATER_TOKEN` is left blank, Fluxito still runs normally and displays its
+version — you simply won't get the one-click button (the updater stays inert). You
+can always update manually instead:
+
+```bash
+docker compose pull app && docker compose up -d app
+```
+
+### Air-gapped installs
+
+Set `UPDATE_CHECKS_ENABLED=false` in your `.env` to stop all outbound calls to
+GitHub. The version is still displayed; no update checks are performed.
+
+---
+
 ## How to Start (Recommended First Path)
 
 This is the shortest, highest-leverage way to get Fluxito running and connected to an AI.
@@ -287,11 +320,6 @@ Once saved, the "Connect" button for that platform becomes active at `/connect`.
 If nothing is saved for a platform, the Connect button stays disabled.
 
 This is the only way it works now. No more `.env` files for platform credentials.
-
-### Air-gapped installs
-
-Set `UPDATE_CHECKS_ENABLED=false` in your `.env` to stop all outbound calls to
-GitHub. The version is still displayed; no update checks are performed.
 
 ---
 
