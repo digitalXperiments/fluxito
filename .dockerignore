@@ -79,7 +79,9 @@ desktop.ini
 # ── Deployment & tooling ──────────────────────────────────────────────────
 fly.toml
 .github/
-nginx.conf
+# nginx.conf must stay in the build context so Dockerfile.nginx can bake it
+# into the fluxito-nginx image. (It also ends up in the app image via COPY . . —
+# harmless: ~4KB, no secrets, never executed.)
 !nginx.conf
 docker-compose.yml
 
