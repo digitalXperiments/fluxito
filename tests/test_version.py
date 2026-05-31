@@ -27,3 +27,16 @@ def test_blank_app_version_uses_fallback(monkeypatch):
     monkeypatch.setenv("APP_VERSION", "   ")
     mod = _reload()
     assert mod.get_version().endswith("+local")
+
+
+def test_read_track_missing_file_falls_back(monkeypatch, tmp_path):
+    import app._version as v
+    monkeypatch.setattr(v, "_VERSION_FILE", tmp_path / "nope" / "VERSION")
+    assert v.read_track() == "0.0"
+
+
+def test_module_version_matches_get_version(monkeypatch):
+    monkeypatch.setenv("APP_VERSION", "2.3.4")
+    import app._version as v
+    importlib.reload(v)
+    assert v.__version__ == "2.3.4" == v.get_version()
