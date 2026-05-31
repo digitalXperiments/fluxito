@@ -38,3 +38,7 @@ def test_upsert_env_var_replaces_existing(tmp_path):
     assert "FLUXITO_VERSION=1.0.5" in text
     assert "FLUXITO_VERSION=1.0.4" not in text
     assert text.count("FLUXITO_VERSION=") == 1
+
+
+def test_valid_version_rejects_newline_injection():
+    assert updater.is_valid_version("1.0.4\nPOSTGRES_PASSWORD=hacked") is False

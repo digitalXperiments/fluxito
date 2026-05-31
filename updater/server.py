@@ -109,6 +109,9 @@ def run_update(target: str, previous: str) -> None:
     upsert_env_var(ENV_FILE, "FLUXITO_VERSION", target)
     pull = _compose("pull", APP_SERVICE, version=target)
     if pull.returncode != 0:
+        # Nothing was recreated; revert the env pin so .env matches the running container.
+        if previous:
+            upsert_env_var(ENV_FILE, "FLUXITO_VERSION", previous)
         write_state({"status": "failed", "stage": "pull", "target": target,
                      "error": pull.stderr[-2000:]})
         return
@@ -156,7 +159,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         if not self._auth_ok():
             return self._send(401, {"error": "unauthorized"})
-        length = int(self.headers.get("Content-Length", "0") or "0")
+        length = min(int(self.headers.get("Content-Length", "0") or "0"), 1_048_576)
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
@@ -165,14 +168,19 @@ class Handler(BaseHTTPRequestHandler):
         previous = str(body.get("previous", "")).lstrip("vV")
         if not is_valid_version(target):
             return self._send(400, {"error": "invalid version"})
+        if previous and not is_valid_version(previous):
+            return self._send(400, {"error": "invalid previous version"})
         if not _lock.acquire(blocking=False):
             return self._send(409, {"error": "update already in progress"})
+        started = False
         try:
             threading.Thread(
                 target=lambda: self._guarded_run(target, previous), daemon=True
             ).start()
+            started = True
         finally:
-            pass  # lock released inside _guarded_run
+            if not started:
+                _lock.release()  # never started -> _guarded_run won't run -> release here
         self._send(202, {"status": "accepted", "target": target})
 
     def _guarded_run(self, target: str, previous: str) -> None:
