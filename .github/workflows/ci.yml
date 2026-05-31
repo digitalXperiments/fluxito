@@ -217,13 +217,20 @@ jobs:
           short_sha="${SHA:0:7}"
           # First line of the commit message only
           first_line="$(printf '%s' "$COMMIT_MSG" | head -n1)"
-          text="${EMOJI} *CI ${VERB}* on \`${REPO}\` (${REF})
-          commit: \`${short_sha}\` — ${first_line}
-          author: ${ACTOR}
-          [view run](${RUN_URL})"
+          # HTML-escape user-controlled fields so arbitrary commit/author text
+          # can't break Telegram's HTML parser (& < > are the only specials).
+          html_escape() {
+            printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+          }
+          first_line_esc="$(html_escape "$first_line")"
+          actor_esc="$(html_escape "$ACTOR")"
+          text="${EMOJI} <b>CI ${VERB}</b> on <code>${REPO}</code> (${REF})
+          commit: <code>${short_sha}</code> — ${first_line_esc}
+          author: ${actor_esc}
+          <a href=\"${RUN_URL}\">view run</a>"
           curl -sS --fail-with-body -X POST \
             "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${CHAT_ID}" \
             --data-urlencode "text=${text}" \
-            --data-urlencode "parse_mode=Markdown" \
+            --data-urlencode "parse_mode=HTML" \
             --data-urlencode "disable_web_page_preview=true"
