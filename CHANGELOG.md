@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- In-product version display and one-click self-update for super-admins, delivered
+  via published GHCR images and a privileged `fluxito-updater` sidecar with
+  automatic rollback on failed updates.
+- Automated push-to-main release pipeline: auto-incrementing patch versions,
+  multi-arch (amd64/arm64) GHCR images, and auto-generated GitHub releases.
+- `update_checks_enabled` instance setting (disable for air-gapped installs).
+
+### Changed
+- Default Docker deployment now pulls the published GHCR image; build-from-source
+  moves behind `docker-compose.build.yml`.
+- Version is now sourced from a single `VERSION` track file (+ build-time
+  `APP_VERSION`), resolving prior drift between `pyproject.toml` and `config.py`.
+
 ### Removed
 - `deploy/` folder removed from the public repo. Production orchestration (compose, update script, reverse-proxy config) is environment-specific and is kept outside version control. Self-hosting is covered by the root `docker-compose.yml` and the Production notes in the README (including the required nginx `/mcp` no-buffering config).
 

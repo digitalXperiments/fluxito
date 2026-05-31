@@ -74,6 +74,32 @@ Prefer to run your own instance? You can also [self-host Fluxito](#how-to-start-
 
 ---
 
+## Install
+
+### Docker (recommended)
+
+```bash
+git clone https://github.com/digitalXperiments/fluxito.git
+cd fluxito
+cp .env.example .env
+# Set UPDATER_TOKEN (openssl rand -hex 32) and any secrets in .env
+docker compose up -d
+```
+
+This pulls the published image `ghcr.io/digitalxperiments/fluxito:latest`. Updates
+are one click from the in-app **Admin → Updates** panel (super-admin only).
+
+### Build from source (developers / forkers)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+Builds the image locally from your checkout instead of pulling from GHCR. Local
+code changes are picked up on rebuild.
+
+---
+
 ## How to Start (Recommended First Path)
 
 This is the shortest, highest-leverage way to get Fluxito running and connected to an AI.
@@ -261,6 +287,12 @@ Once saved, the "Connect" button for that platform becomes active at `/connect`.
 If nothing is saved for a platform, the Connect button stays disabled.
 
 This is the only way it works now. No more `.env` files for platform credentials.
+
+### Air-gapped installs
+
+Set **Admin → Settings → Check for updates** off (or `UPDATE_CHECKS_ENABLED=false`)
+to stop all outbound calls to GitHub. The version is still displayed; no update
+checks are performed.
 
 ---
 
