@@ -340,11 +340,17 @@ async def admin_set_operations(request: Request):
 
     async with app_state.db_session_factory() as db:
         await set_setting(
-            db, key="maintenance_mode", value=maintenance, is_secret=False,
+            db,
+            key="maintenance_mode",
+            value=maintenance,
+            is_secret=False,
             updated_by_user_id=uuid.UUID(me["id"]),
         )
         await set_setting(
-            db, key="announcement_banner", value=banner, is_secret=False,
+            db,
+            key="announcement_banner",
+            value=banner,
+            is_secret=False,
             updated_by_user_id=uuid.UUID(me["id"]),
         )
         await db.commit()
@@ -382,11 +388,17 @@ async def admin_set_auth_methods(request: Request):
 
     async with app_state.db_session_factory() as db:
         await set_setting(
-            db, key="auth_google_enabled", value=google, is_secret=False,
+            db,
+            key="auth_google_enabled",
+            value=google,
+            is_secret=False,
             updated_by_user_id=uuid.UUID(me["id"]),
         )
         await set_setting(
-            db, key="auth_password_enabled", value=password, is_secret=False,
+            db,
+            key="auth_password_enabled",
+            value=password,
+            is_secret=False,
             updated_by_user_id=uuid.UUID(me["id"]),
         )
         await db.commit()
