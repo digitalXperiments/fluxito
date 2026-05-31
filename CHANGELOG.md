@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-05-31
+
 ### Added
 - In-product version display and one-click self-update for super-admins, delivered
   via published GHCR images and a privileged `fluxito-updater` sidecar with

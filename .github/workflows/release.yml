@@ -212,3 +212,38 @@ jobs:
             --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update CHANGELOG.md from release notes
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.prepare.outputs.tag }}"
+          VERSION="${{ needs.prepare.outputs.full }}"
+          DATE="$(date -u +%Y-%m-%d)"
+          # Auto-generated notes from the release we just created.
+          NOTES="$(gh release view "$TAG" --json body --jq .body)"
+          # Build the new section.
+          {
+            echo "## [$VERSION] — $DATE"
+            echo
+            echo "$NOTES"
+            echo
+          } > /tmp/section.md
+          # Insert the new section directly above the first existing versioned
+          # heading (## [x.y.z]); keep the file header + [Unreleased] above it.
+          awk '
+            /^## \[[0-9]/ && !done {
+              while ((getline line < "/tmp/section.md") > 0) print line
+              done = 1
+            }
+            { print }
+          ' CHANGELOG.md > /tmp/CHANGELOG.md && mv /tmp/CHANGELOG.md CHANGELOG.md
+          # Commit back to main. [skip release] + the *.md paths-ignore both
+          # prevent this commit from re-triggering the Release workflow.
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs(changelog): $TAG [skip release]"
+          git pull --rebase origin main
+          git push origin HEAD:main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
