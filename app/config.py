@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     ANNOUNCEMENT_BANNER: str = ""  # Site-wide banner shown to signed-in users.
     AUTH_GOOGLE_ENABLED: bool = True  # Show "Continue with Google" on sign-in.
     AUTH_PASSWORD_ENABLED: bool = True  # Allow email + password sign-in.
+    UPDATE_CHECKS_ENABLED: bool = True  # Check GitHub for newer releases; disable for air-gapped installs.
 
     # MCP OAuth
     MCP_ALLOWED_REDIRECT_URIS: str = "https://claude.ai/api/mcp/auth_callback"

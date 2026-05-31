@@ -183,6 +183,15 @@ RUNTIME_SETTINGS: tuple[RuntimeSetting, ...] = (
         "ANNOUNCEMENT_BANNER",
         category="operations",
     ),
+    RuntimeSetting(
+        "update_checks_enabled",
+        "Check for updates",
+        "Periodically check GitHub for a newer Fluxito release and show an update "
+        "indicator to super-admins. Turn off for air-gapped installs (no outbound calls).",
+        "UPDATE_CHECKS_ENABLED",
+        "bool",
+        category="operations",
+    ),
     # ── Branding ──
     RuntimeSetting(
         "brand_name",
@@ -435,3 +444,9 @@ async def get_announcement_banner() -> str:
     """The site-wide announcement banner text, or '' when unset."""
     async with app_state.db_session_factory() as db:
         return str(await get_runtime_setting(db, "announcement_banner", default="") or "")
+
+
+async def update_checks_enabled() -> bool:
+    """True when the instance is allowed to check GitHub for newer releases."""
+    async with app_state.db_session_factory() as db:
+        return bool(await get_runtime_setting(db, "update_checks_enabled", default=True))
