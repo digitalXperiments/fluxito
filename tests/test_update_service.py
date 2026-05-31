@@ -1,5 +1,4 @@
-import pytest
-
+from app.services.update_service import is_newer, parse_semver
 from app.settings_service import RUNTIME_SETTING_BY_KEY
 
 
@@ -7,9 +6,6 @@ def test_update_checks_setting_registered():
     assert "update_checks_enabled" in RUNTIME_SETTING_BY_KEY
     spec = RUNTIME_SETTING_BY_KEY["update_checks_enabled"]
     assert spec.value_type == "bool"
-
-
-from app.services.update_service import is_newer, parse_semver
 
 
 def test_parse_semver_strips_prefix_and_suffix():

@@ -6,17 +6,6 @@ rate limit (60/hr) and avoid a network call on every page load.
 
 from __future__ import annotations
 
-import json
-import logging
-
-import httpx
-
-import app.app_state as app_state
-from app._version import get_version
-from app.settings_service import update_checks_enabled
-
-logger = logging.getLogger(__name__)
-
 GITHUB_LATEST_RELEASE_URL = (
     "https://api.github.com/repos/digitalXperiments/fluxito/releases/latest"
 )
