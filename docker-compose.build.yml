@@ -1,5 +1,5 @@
-# Developer override: build the app image from local source instead of pulling
-# the published GHCR image.
+# Developer override: build all images from local source instead of pulling the
+# published GHCR images.
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 name: fluxito
 
@@ -7,3 +7,12 @@ services:
   app:
     build:
       context: .
+
+  updater:
+    build:
+      context: ./updater
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
