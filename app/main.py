@@ -401,6 +401,7 @@ from app.api.scheduled_report_routes import router as scheduled_report_router
 from app.api.sdr_routes import router as sdr_router
 from app.api.setup_routes import router as setup_router
 from app.api.template_routes import router as template_router
+from app.api.update_routes import router as update_router
 from app.auth.mcp_oauth_server import router as oauth_router
 
 app.include_router(setup_router)
@@ -421,6 +422,7 @@ app.include_router(sdr_router)
 app.include_router(scheduled_report_router)
 app.include_router(admin_router)
 app.include_router(access_request_router)
+app.include_router(update_router)
 
 from app.api import linkedin_oauth_routes, pinterest_oauth_routes
 
