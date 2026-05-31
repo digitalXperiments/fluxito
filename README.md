@@ -290,9 +290,8 @@ This is the only way it works now. No more `.env` files for platform credentials
 
 ### Air-gapped installs
 
-Set **Admin → Settings → Check for updates** off (or `UPDATE_CHECKS_ENABLED=false`)
-to stop all outbound calls to GitHub. The version is still displayed; no update
-checks are performed.
+Set `UPDATE_CHECKS_ENABLED=false` in your `.env` to stop all outbound calls to
+GitHub. The version is still displayed; no update checks are performed.
 
 ---
 
