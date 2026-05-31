@@ -80,6 +80,7 @@ desktop.ini
 fly.toml
 .github/
 nginx.conf
+!nginx.conf
 docker-compose.yml
 
 # ── Logs & runtime artifacts ──────────────────────────────────────────────

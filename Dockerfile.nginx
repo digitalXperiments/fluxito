@@ -1,0 +1,9 @@
+# fluxito-nginx: nginx with the Fluxito reverse-proxy config baked in, so the
+# standalone (no-clone) compose needs no host config file. Static is proxied to
+# the app — nothing is served from a host mount.
+FROM nginx:alpine
+
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Fail the build early if the baked config is invalid.
+RUN nginx -t
