@@ -206,46 +206,26 @@ jobs:
           git tag -a "${{ needs.prepare.outputs.tag }}" -m "Release ${{ needs.prepare.outputs.tag }}"
           git push origin "${{ needs.prepare.outputs.tag }}"
 
-      - name: Create GitHub release (auto-generated notes)
-        run: |
-          gh release create "${{ needs.prepare.outputs.tag }}" \
-            --title "${{ needs.prepare.outputs.tag }}" \
-            --generate-notes \
-            --latest
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update CHANGELOG.md from release notes
+      - name: Create GitHub release (notes from CHANGELOG)
         run: |
           set -euo pipefail
           TAG="${{ needs.prepare.outputs.tag }}"
           VERSION="${{ needs.prepare.outputs.full }}"
-          DATE="$(date -u +%Y-%m-%d)"
-          # Auto-generated notes from the release we just created.
-          NOTES="$(gh release view "$TAG" --json body --jq .body)"
-          # Build the new section.
-          {
-            echo "## [$VERSION] — $DATE"
-            echo
-            echo "$NOTES"
-            echo
-          } > /tmp/section.md
-          # Insert the new section directly above the first existing versioned
-          # heading (## [x.y.z]); keep the file header + [Unreleased] above it.
-          awk '
-            /^## \[[0-9]/ && !done {
-              while ((getline line < "/tmp/section.md") > 0) print line
-              done = 1
-            }
-            { print }
-          ' CHANGELOG.md > /tmp/CHANGELOG.md && mv /tmp/CHANGELOG.md CHANGELOG.md
-          # Commit back to main. [skip release] + the *.md paths-ignore both
-          # prevent this commit from re-triggering the Release workflow.
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git commit -m "docs(changelog): $TAG [skip release]"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          # Use the curated notes for this version straight out of CHANGELOG.md.
+          # The ## [VERSION] section is authored + committed before the push that
+          # triggered this release (see CLAUDE.md "Releasing" policy), so no bot
+          # ever commits back to main.
+          awk -v pfx="## [$VERSION]" '
+            index($0, pfx) == 1 { cap = 1; next }
+            cap && /^## \[/ { exit }
+            cap { print }
+          ' CHANGELOG.md > /tmp/notes.md
+          if [ ! -s /tmp/notes.md ]; then
+            echo "Release $TAG" > /tmp/notes.md
+          fi
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/notes.md \
+            --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
