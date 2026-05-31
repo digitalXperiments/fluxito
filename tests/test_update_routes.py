@@ -80,3 +80,30 @@ async def test_apply_rejects_when_no_update(monkeypatch):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/updates/apply")
     assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_job_requires_superadmin(monkeypatch):
+    async def _deny(request):
+        from fastapi import HTTPException
+        raise HTTPException(403, "Super-admin only")
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _deny)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/updates/job")
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_job_returns_503_when_updater_unreachable(monkeypatch):
+    async def _allow(request):
+        return {"id": "1", "email": "a@b.c", "is_superadmin": True}
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _allow)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # No updater reachable at UPDATER_URL in the test env -> httpx error -> 503
+        resp = await client.get("/api/updates/job")
+    assert resp.status_code == 503
+    assert resp.json()["status"] == "unknown"

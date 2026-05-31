@@ -68,6 +68,7 @@ async def update_job(request: Request):
             resp = await client.get(f"{UPDATER_URL}/status", headers=headers)
             resp.raise_for_status()
             return JSONResponse(resp.json())
-    except httpx.HTTPError:
+    except httpx.HTTPError as exc:
         # During the app's own restart the updater may briefly be unreachable.
+        logger.warning("updater status check failed: %s", exc)
         return JSONResponse({"status": "unknown"}, status_code=503)
