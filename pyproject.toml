@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fluxito"
-version = "1.0.2"
+dynamic = ["version"]
 description = "Open-source MCP server bridging Claude with marketing & analytics platforms"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,6 +27,12 @@ classifiers = [
 urls = {Homepage = "https://github.com/digitalXperiments/fluxito", Repository = "https://github.com/digitalXperiments/fluxito", Issues = "https://github.com/digitalXperiments/fluxito/issues"}
 
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Setuptools dynamic version — reads MAJOR.MINOR track from repo-root VERSION
+# ---------------------------------------------------------------------------
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
 
 # ---------------------------------------------------------------------------
 # Pytest

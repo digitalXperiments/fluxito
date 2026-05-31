@@ -6,6 +6,8 @@ bootstrap_secrets()
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app._version import get_version as _get_version
+
 
 class Settings(BaseSettings):
     # Hybrid model (per user request 2026-05-27):
@@ -93,7 +95,7 @@ class Settings(BaseSettings):
     # MCP OAuth
     MCP_ALLOWED_REDIRECT_URIS: str = "https://claude.ai/api/mcp/auth_callback"
     MCP_SERVER_NAME: str = "fluxito"
-    MCP_SERVER_VERSION: str = "1.0.3"
+    MCP_SERVER_VERSION: str = _get_version()
 
     # When True (default), the /oauth/authorize flow can detect a valid browser
     # (uid cookie) session and offer email/password sign-in + explicit consent.
