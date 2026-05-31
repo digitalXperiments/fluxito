@@ -2,7 +2,6 @@
 
 **Open-source AI operations layer for marketing analytics. End-to-end — from tracking plan, to tag management implementation, to reporting and dashboards — through a conversation with any MCP-compatible AI.**
 
-[![Version: 1.0.3](https://img.shields.io/badge/version-1.0.3-green.svg)](CHANGELOG.md)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 [![Python: 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)](pyproject.toml)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-009688.svg)](requirements.txt)
@@ -71,7 +70,7 @@ This is the real, fully hosted product — not a demo. Sign up at [fluxito.app](
 - Real GTM work, dashboards, and cross-platform analysis
 - Audit logs and scheduled automations against your own connections
 
-Prefer to run your own instance? You can also [self-host Fluxito](#how-to-start-recommended-first-path).
+Prefer to run your own instance? You can also [self-host Fluxito](#install).
 
 ---
 
@@ -134,7 +133,7 @@ version — you simply won't get the one-click button (the updater stays inert).
 can always update manually instead:
 
 ```bash
-docker compose pull app && docker compose up -d app
+docker compose pull && docker compose up -d
 ```
 
 ### Air-gapped installs
@@ -144,77 +143,20 @@ GitHub. The version is still displayed; no update checks are performed.
 
 ---
 
-## How to Start (Recommended First Path)
+## First Run — Connect Google & Your AI
 
-This is the shortest, highest-leverage way to get Fluxito running and connected to an AI.
+If you followed **Install** above, Fluxito is already running at http://localhost:8000 — skip straight to the platform + AI setup below. (Building from source? Same steps once your stack is up.)
 
-**Honest time estimate the first time:**
-- 3–5 minutes to get the server running locally
+**Honest time estimate for the first-time setup:**
 - 15–25 minutes for the Google OAuth app setup (one-time pain, unlocks five platforms)
 - 5 minutes to connect your account + AI
 
 After the first run it becomes much faster.
 
-### What you need before you begin
-- Docker + Docker Compose (Docker Desktop on Mac/Windows works great)
+### What you need
 - A Google account that has access to at least one GA4 property or GTM container (strongly recommended for your first try — one OAuth app gives you GA4, GTM, Google Ads, Search Console, and BigQuery)
 
-### 0. Create your .env file (exact commands — do this first)
-
-This is the only file you need to create by hand. After the first admin account exists, you will almost never touch this file again.
-
-Run these commands one by one in your terminal:
-
-```bash
-cd fluxito
-cp .env.example .env
-```
-
-Now generate the two required secret keys. Copy and paste each command exactly:
-
-**Command 1 – APP_SECRET_KEY** (this signs your login cookies):
-
-```bash
-python3 -c "import secrets; print(secrets.token_urlsafe(48))"
-```
-
-Copy the long string that appears and paste it after `APP_SECRET_KEY=` in the `.env` file.
-
-**Command 2 – TOKEN_ENCRYPTION_KEY** (this encrypts all your platform tokens in the database):
-
-```bash
-python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-Copy that output and paste it after `TOKEN_ENCRYPTION_KEY=` in the same `.env` file.
-
-Your `.env` file should now look like this (your actual keys will be different):
-
-```
-APP_SECRET_KEY=your-long-random-string-here
-TOKEN_ENCRYPTION_KEY=your-fernet-key-here
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/fluxito
-REDIS_URL=redis://localhost:6379/0
-APP_BASE_URL=http://localhost:8000
-```
-
-Save the file.
-
-**Please keep a safe backup of this `.env` file.** If you ever lose the `TOKEN_ENCRYPTION_KEY` and don't have a backup, any tokens stored in the database will become unreadable. For your first local test this is usually fine — just don't delete the file.
-
-That's all the `.env` work you need to do for now.
-
-### 1. Clone and start the server
-
-```bash
-git clone https://github.com/digitalXperiments/fluxito.git
-cd fluxito
-docker compose up -d
-```
-
-This starts everything (Postgres, Redis, the app, and a reverse proxy on port 8000). Migrations run automatically. You don't need to touch anything else yet.
-
-### 2. Open http://localhost:8000
+### 1. Open http://localhost:8000
 
 You'll land on the setup screen because no admin exists yet.
 
@@ -222,7 +164,7 @@ Create the first admin with an email and password. No email verification is sent
 
 After signup you go straight to **Settings → Integrations**.
 
-### 3. Set up Google (the single best first move)
+### 2. Set up Google (the single best first move)
 
 This is the highest-ROI step. One Google OAuth app unlocks five platforms at once.
 
@@ -234,11 +176,11 @@ It walks you through creating the project, enabling the right APIs, setting up t
 
 Once saved, the entire Google family lights up in the UI.
 
-### 4. Connect your real Google account
+### 3. Connect your real Google account
 
 Go to **/connect** and click the big **Connect** button for Google. Authorize Fluxito against the actual accounts you want the AI to work with (GA4 properties, GTM containers, Google Ads accounts, etc.).
 
-### 5. Connect your AI (the fun part)
+### 4. Connect your AI (the fun part)
 
 Fluxito is an MCP server. Any MCP-compatible client (Claude, GPT, Cursor, Windsurf, etc.) can talk to it.
 
