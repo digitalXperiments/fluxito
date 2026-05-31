@@ -25,13 +25,15 @@ services:
 
   app:
     container_name: fluxito-app
-    build: .
+    image: ghcr.io/digitalxperiments/fluxito:${FLUXITO_VERSION:-latest}
     # No external port — nginx proxies to app:8001 internally
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/fluxito
       - REDIS_URL=redis://redis:6379/0
       - APP_ENV=${APP_ENV:-development}
       - APP_BASE_URL=${APP_BASE_URL:-http://localhost:8000}
+      - UPDATER_URL=http://updater:9000
+      - UPDATER_TOKEN=${UPDATER_TOKEN:-}
     env_file:
       - .env
     depends_on:
@@ -40,8 +42,8 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./app:/app/app
       - ./docs:/app/docs:ro
+      - update_state:/state:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8001/api/health"]
@@ -56,6 +58,23 @@ services:
           memory: 1G
         reservations:
           memory: 512M
+
+  updater:
+    container_name: fluxito-updater
+    build: ./updater
+    environment:
+      - UPDATER_TOKEN=${UPDATER_TOKEN:-}
+      - COMPOSE_FILE=/compose/docker-compose.yml
+      - ENV_FILE=/compose/.env
+      - STATE_FILE=/state/update.json
+      - APP_SERVICE=app
+      - HEALTH_TIMEOUT=180
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/compose/docker-compose.yml:ro
+      - ./.env:/compose/.env
+      - update_state:/state
+    restart: unless-stopped
 
   db:
     container_name: fluxito-db
@@ -138,3 +157,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  update_state:
