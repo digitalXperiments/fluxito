@@ -521,7 +521,10 @@
           if (opts.headers instanceof Headers) {
             if (!opts.headers.has('X-CSRF-Token')) opts.headers.set('X-CSRF-Token', decodeURIComponent(csrf));
           } else {
-            if (!opts.headers['X-CSRF-Token']) opts.headers['X-CSRF-Token'] = decodeURIComponent(csrf);
+            var hasCsrfHeader = Object.keys(opts.headers).some(function(key) {
+              return key.toLowerCase() === 'x-csrf-token';
+            });
+            if (!hasCsrfHeader) opts.headers['X-CSRF-Token'] = decodeURIComponent(csrf);
           }
         }
       }

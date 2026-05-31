@@ -101,11 +101,17 @@ def _validate_double_submit(cookie_values: "list[str]", header_token: "str | Non
     """Shared double-submit check. Returns an error message, or None if valid."""
     if not cookie_values or not header_token:
         return "CSRF token missing. Please refresh the page and try again."
+    header_values = [part.strip() for part in header_token.split(",") if part.strip()]
+    if not header_values:
+        return "CSRF token missing. Please refresh the page and try again."
+    if len(set(header_values)) != 1:
+        return "CSRF token mismatch. Please refresh the page and try again."
+    submitted_token = header_values[0]
     # The submitted header must equal one of the cookies the browser sent.
-    if not any(hmac.compare_digest(cv, header_token) for cv in cookie_values):
+    if not any(hmac.compare_digest(cv, submitted_token) for cv in cookie_values):
         return "CSRF token mismatch. Please refresh the page and try again."
     # ...and that token must be one we actually minted (valid signature).
-    if not _verify_csrf_token(header_token):
+    if not _verify_csrf_token(submitted_token):
         return "Invalid CSRF token. Please refresh the page and try again."
     return None
 

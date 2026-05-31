@@ -238,6 +238,21 @@ class TestCSRF:
         # Order-independent.
         assert _validate_double_submit([good, stale], good) is None
 
+    def test_validate_double_submit_accepts_coalesced_identical_headers(self):
+        """Duplicate X-CSRF-Token headers can arrive comma-coalesced."""
+        from app.auth.csrf import _generate_csrf_token, _validate_double_submit
+
+        good = _generate_csrf_token()
+        assert _validate_double_submit([good], f"{good}, {good}") is None
+
+    def test_validate_double_submit_rejects_coalesced_mixed_headers(self):
+        from app.auth.csrf import _generate_csrf_token, _validate_double_submit
+
+        good = _generate_csrf_token()
+        other = _generate_csrf_token()
+        msg = _validate_double_submit([good], f"{good}, {other}")
+        assert msg is not None and "mismatch" in msg
+
     def test_validate_double_submit_rejects_unknown_header(self):
         from app.auth.csrf import _generate_csrf_token, _validate_double_submit
 

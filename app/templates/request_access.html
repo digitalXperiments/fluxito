@@ -477,7 +477,7 @@
       var data = new FormData(form);
       var csrf = getCookie('csrf_token');
       var headers = { 'Content-Type': 'application/json' };
-      if (csrf) headers['x-csrf-token'] = csrf;
+      if (csrf) headers['X-CSRF-Token'] = csrf;
 
       button.disabled = true;
       button.textContent = 'Submitting...';
