@@ -19,6 +19,7 @@
     <button class="tab" data-tab="ratelimits" onclick="adminTab('ratelimits')">Rate Limits</button>
     <button class="tab" data-tab="operations" onclick="adminTab('operations')">Operations</button>
     <button class="tab" data-tab="branding" onclick="adminTab('branding')">Branding</button>
+    <button class="tab" data-tab="updates" onclick="adminTab('updates')">Updates</button>
   </div>
 
   <section data-panel="users">
@@ -91,6 +92,18 @@
       <button class="btn primary" style="align-self:flex-start" onclick="saveBranding()">Save</button>
     </div>
   </section>
+
+  <section data-panel="updates" style="display:none">
+    <p style="color:var(--text-muted);margin-bottom:16px">Check for and apply Fluxito updates. The instance will briefly restart during an update.</p>
+    <div id="update-box" class="update-box">
+      <p>Current version: <strong id="upd-current">…</strong></p>
+      <p id="upd-latest-row" style="display:none">Latest version: <strong id="upd-latest"></strong>
+        — <a id="upd-notes" href="#" target="_blank" rel="noopener">release notes</a></p>
+      <p id="upd-uptodate" style="display:none">&#x2713; You're on the latest version.</p>
+      <button id="upd-apply" class="btn primary" style="display:none">Update now</button>
+      <p id="upd-progress" class="update-progress" style="display:none"></p>
+    </div>
+  </section>
 </main>
 
 <style>
@@ -113,6 +126,9 @@
 .ps-table tbody tr:last-child { border-bottom: none; }
 .ps-table td { padding: 14px 18px; vertical-align: middle; }
 .btn.sm.danger-outline { border-color: var(--red, crimson); color: var(--red, crimson); }
+.update-box { max-width: 520px; }
+.update-box p { margin: 0 0 12px; line-height: 1.6; }
+.update-progress { font-size: 13px; color: var(--ink-soft); font-family: var(--mono); padding: 8px 14px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: var(--r-m); }
 </style>
 
 <script>
@@ -242,5 +258,66 @@ async function saveBranding(){
   }catch(e){ m.textContent = e.message; m.style.display='block'; }
 }
 loadUsers(); loadRequests(); loadRateLimits(); loadBranding(); loadAuthMethods(); loadOperations();
+
+(function () {
+  var apply = document.getElementById('upd-apply');
+  if (!apply) return;
+
+  function show(id) { document.getElementById(id).style.display = ''; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+  function refreshStatus() {
+    return fetch('/api/updates/status', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        document.getElementById('upd-current').textContent = 'v' + d.current;
+        if (d.update_available) {
+          document.getElementById('upd-latest').textContent = 'v' + d.latest;
+          document.getElementById('upd-notes').href = d.release_notes_url || '#';
+          show('upd-latest-row');
+          show('upd-apply');
+        } else {
+          show('upd-uptodate');
+        }
+      });
+  }
+
+  function pollJob() {
+    var prog = document.getElementById('upd-progress');
+    show('upd-progress');
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      fetch('/api/updates/job', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : { status: 'unknown' }; })
+        .then(function (j) {
+          prog.textContent = 'Status: ' + j.status + (j.target ? ' → v' + j.target : '');
+          if (j.status === 'success') {
+            clearInterval(iv);
+            prog.textContent = '✓ Updated to v' + (j.current || j.target) + '. Reloading…';
+            setTimeout(function () { location.reload(); }, 2000);
+          } else if (j.status === 'failed') {
+            clearInterval(iv);
+            prog.textContent = '✗ Update failed (' + (j.stage || '') + ')'
+              + (j.rolled_back ? ' — rolled back to v' + j.current : '');
+          }
+        })
+        .catch(function () { prog.textContent = 'Restarting… (' + tries + ')'; });
+    }, 3000);
+  }
+
+  apply.addEventListener('click', function () {
+    if (!confirm('Update now? Fluxito will briefly restart.')) return;
+    apply.disabled = true;
+    fetch('/api/updates/apply', { method: 'POST', credentials: 'same-origin' })
+      .then(function (r) {
+        if (r.ok) { pollJob(); }
+        else { r.json().then(function (e) { alert('Could not start update: ' + (e.error || r.status)); apply.disabled = false; }); }
+      })
+      .catch(function () { pollJob(); });
+  });
+
+  refreshStatus();
+})();
 </script>
 {% endblock %}
