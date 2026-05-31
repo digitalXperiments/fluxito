@@ -30,6 +30,7 @@ def test_blank_app_version_uses_fallback(monkeypatch):
 
 def test_read_track_missing_file_falls_back(monkeypatch, tmp_path):
     import app._version as v
+
     monkeypatch.setattr(v, "_VERSION_FILE", tmp_path / "nope" / "VERSION")
     assert v.read_track() == "0.0"
 
@@ -37,6 +38,7 @@ def test_read_track_missing_file_falls_back(monkeypatch, tmp_path):
 def test_module_version_matches_get_version(monkeypatch):
     monkeypatch.setenv("APP_VERSION", "2.3.4")
     import app._version as v
+
     importlib.reload(v)
     assert v.__version__ == "2.3.4" == v.get_version()
 
@@ -47,6 +49,7 @@ def test_config_uses_runtime_version(monkeypatch):
 
     import app._version as v
     import app.config as config
-    importlib.reload(v)       # rebind get_version to read the new env
+
+    importlib.reload(v)  # rebind get_version to read the new env
     importlib.reload(config)  # re-executes Settings body, re-imports _get_version from fresh v
     assert config.Settings.model_fields["MCP_SERVER_VERSION"].default == "9.9.9"

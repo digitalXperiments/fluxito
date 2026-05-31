@@ -10,8 +10,11 @@ from app.services import update_service
 async def test_status_endpoint_returns_check_result(monkeypatch):
     async def _fake_check():
         return {
-            "current": "1.0.2", "latest": "1.0.5", "update_available": True,
-            "release_notes_url": "https://x", "published_at": "2026-05-30T00:00:00Z",
+            "current": "1.0.2",
+            "latest": "1.0.5",
+            "update_available": True,
+            "release_notes_url": "https://x",
+            "published_at": "2026-05-30T00:00:00Z",
             "checks_enabled": True,
         }
 
@@ -45,6 +48,7 @@ async def test_status_requires_auth(monkeypatch):
 async def test_apply_requires_superadmin(monkeypatch):
     async def _deny(request):
         from fastapi import HTTPException
+
         raise HTTPException(403, "Super-admin only")
 
     monkeypatch.setattr(update_routes, "require_superadmin", _deny)
@@ -60,8 +64,14 @@ async def test_apply_forwards_to_updater(monkeypatch):
         return {"id": "1", "email": "a@b.c", "is_superadmin": True}
 
     async def _check():
-        return {"current": "1.0.2", "latest": "1.0.5", "update_available": True,
-                "release_notes_url": "https://x", "published_at": None, "checks_enabled": True}
+        return {
+            "current": "1.0.2",
+            "latest": "1.0.5",
+            "update_available": True,
+            "release_notes_url": "https://x",
+            "published_at": None,
+            "checks_enabled": True,
+        }
 
     calls = {}
 
@@ -87,8 +97,14 @@ async def test_apply_rejects_when_no_update(monkeypatch):
         return {"id": "1", "email": "a@b.c", "is_superadmin": True}
 
     async def _check():
-        return {"current": "1.0.5", "latest": "1.0.5", "update_available": False,
-                "release_notes_url": None, "published_at": None, "checks_enabled": True}
+        return {
+            "current": "1.0.5",
+            "latest": "1.0.5",
+            "update_available": False,
+            "release_notes_url": None,
+            "published_at": None,
+            "checks_enabled": True,
+        }
 
     monkeypatch.setattr(update_routes, "require_superadmin", _allow)
     monkeypatch.setattr(update_service, "check_for_update", _check)
@@ -102,6 +118,7 @@ async def test_apply_rejects_when_no_update(monkeypatch):
 async def test_job_requires_superadmin(monkeypatch):
     async def _deny(request):
         from fastapi import HTTPException
+
         raise HTTPException(403, "Super-admin only")
 
     monkeypatch.setattr(update_routes, "require_superadmin", _deny)

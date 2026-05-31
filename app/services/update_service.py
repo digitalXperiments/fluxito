@@ -17,9 +17,7 @@ from app.settings_service import update_checks_enabled
 
 logger = logging.getLogger(__name__)
 
-GITHUB_LATEST_RELEASE_URL = (
-    "https://api.github.com/repos/digitalXperiments/fluxito/releases/latest"
-)
+GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/digitalXperiments/fluxito/releases/latest"
 CACHE_KEY = "update:latest_release"
 CACHE_TTL_SECONDS = 6 * 60 * 60  # 6 hours
 HTTP_TIMEOUT = 5.0

@@ -46,6 +46,7 @@ class _FakeRedis:
 def _async_return(value):
     async def _inner():
         return value
+
     return _inner
 
 
@@ -62,8 +63,13 @@ async def test_check_returns_disabled_when_setting_off(monkeypatch):
 async def test_check_uses_cache_when_present(monkeypatch):
     monkeypatch.setattr(update_service, "update_checks_enabled", _async_return(True))
     monkeypatch.setattr(update_service, "get_version", lambda: "1.0.2")
-    cached = json.dumps({"tag_name": "v1.0.5", "html_url": "https://x/releases/v1.0.5",
-                         "published_at": "2026-05-30T00:00:00Z"})
+    cached = json.dumps(
+        {
+            "tag_name": "v1.0.5",
+            "html_url": "https://x/releases/v1.0.5",
+            "published_at": "2026-05-30T00:00:00Z",
+        }
+    )
     monkeypatch.setattr(app_state, "redis_client", _FakeRedis({update_service.CACHE_KEY: cached}))
 
     async def _boom(*a, **k):
