@@ -12,6 +12,7 @@
 [![Platforms: 15](https://img.shields.io/badge/platforms-15-orange.svg)](#connecting-your-platforms)
 [![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC.svg)](pyproject.toml)
 [![Code style: Ruff](https://img.shields.io/badge/code_style-Ruff-D7FF64.svg)](pyproject.toml)
+[![Release](https://img.shields.io/github/v/release/digitalXperiments/fluxito?label=release&color=2F5BF4)](https://github.com/digitalXperiments/fluxito/releases/latest)
 
 ---
 
@@ -76,27 +77,37 @@ Prefer to run your own instance? You can also [self-host Fluxito](#how-to-start-
 
 ## Install
 
-### Docker (recommended)
+### Run with Docker (recommended — no clone needed)
+
+Download the compose file and start the stack. Every service is pulled as a
+prebuilt image from GHCR — no source checkout, no build, static included.
+
+```bash
+mkdir fluxito && cd fluxito
+curl -O https://raw.githubusercontent.com/digitalXperiments/fluxito/main/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/digitalXperiments/fluxito/main/.env.example
+# Edit .env: set a UPDATER_TOKEN (openssl rand -hex 32) and any secrets you need
+docker compose up -d
+```
+
+Fluxito is then available on `http://localhost:8000`. Updates are one click from
+the in-app **Admin → Updates** panel (super-admin only), or:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+### Build from source (developers / forkers)
 
 ```bash
 git clone https://github.com/digitalXperiments/fluxito.git
 cd fluxito
 cp .env.example .env
-# Set UPDATER_TOKEN (openssl rand -hex 32) and any secrets in .env
-docker compose up -d
-```
-
-This pulls the published image `ghcr.io/digitalxperiments/fluxito:latest`. Updates
-are one click from the in-app **Admin → Updates** panel (super-admin only).
-
-### Build from source (developers / forkers)
-
-```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-Builds the image locally from your checkout instead of pulling from GHCR. Local
-code changes are picked up on rebuild.
+This builds the app, updater, and nginx images locally from your checkout instead
+of pulling them from GHCR.
 
 ---
 
