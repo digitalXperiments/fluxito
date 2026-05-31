@@ -85,7 +85,16 @@ prebuilt image from GHCR — no source checkout, no build, static included.
 mkdir fluxito && cd fluxito
 curl -O https://raw.githubusercontent.com/digitalXperiments/fluxito/main/docker-compose.yml
 curl -o .env https://raw.githubusercontent.com/digitalXperiments/fluxito/main/.env.example
-# Edit .env: set a UPDATER_TOKEN (openssl rand -hex 32) and any secrets you need
+# Set a UPDATER_TOKEN for in-app updates
+echo "UPDATER_TOKEN=$(openssl rand -hex 32)" >> .env
+# Pin the secret keys in .env so encrypted data survives updates/restarts.
+# (If you skip this, Fluxito auto-generates them on first boot — but they live
+#  only inside the container and are LOST when the app is recreated/updated,
+#  which would orphan previously-encrypted data like stored OAuth tokens.)
+docker pull ghcr.io/digitalxperiments/fluxito:latest
+echo "APP_SECRET_KEY=$(docker run --rm ghcr.io/digitalxperiments/fluxito python -c 'import secrets; print(secrets.token_hex(32))')" >> .env
+echo "TOKEN_ENCRYPTION_KEY=$(docker run --rm ghcr.io/digitalxperiments/fluxito python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
+
 docker compose up -d
 ```
 
@@ -242,7 +251,7 @@ Fluxito has two distinct configuration surfaces:
 
 ### What actually goes in .env (bootstrap only)
 
-You can mostly ignore this section after you finish the first run. The exact commands you need are already written out in the "How to Start" section above.
+You can mostly ignore this section after you finish the first run. The exact commands you need are already written out in the **Install** section above.
 
 The `.env` file is now only for the five values Fluxito needs before the database is even available or before anyone has logged in. After the first admin exists, almost everything else (Google OAuth apps, other platform credentials, MCP redirect settings, email, rate limits, etc.) moves to the web UI.
 
@@ -254,7 +263,7 @@ Here they are in the simplest possible language:
 - `REDIS_URL` — address of your Redis instance.
 - `APP_BASE_URL` — the public URL people (and your AI) use to reach Fluxito.
 
-That's it. Five lines. The two secret keys are the only ones you generate yourself, and the commands to create them are already shown earlier in this guide.
+That's it. Five lines. The two secret keys are the only ones you generate yourself, and the commands to create them are shown in the **Install** section above.
 
 Everything else is now done through the browser after the first admin signs in. The old way of putting platform credentials in `.env` files is gone.
 
@@ -387,7 +396,7 @@ The only stateful service is **Postgres**. Standard `pg_dump` applies:
 docker compose exec db pg_dump -U postgres fluxito > fluxito-$(date +%F).sql
 ```
 
-Also back up `.env.local` — it holds the auto-generated `TOKEN_ENCRYPTION_KEY`. Lose that key, lose the ability to decrypt OAuth tokens stored in your DB.
+Also back up your `.env` — if you pinned `TOKEN_ENCRYPTION_KEY` there (recommended), that file is all you need. If you skipped pinning and let Fluxito auto-generate the key, it lives in `.env.local` inside the app container — back that up instead. Lose the key, lose the ability to decrypt OAuth tokens stored in your DB.
 
 For production, use your managed Postgres provider's automated snapshots and store `TOKEN_ENCRYPTION_KEY` in your secrets manager.
 
