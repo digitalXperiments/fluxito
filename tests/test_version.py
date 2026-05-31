@@ -1,5 +1,4 @@
 import importlib
-import os
 
 import app._version as version_mod
 
@@ -45,6 +44,7 @@ def test_module_version_matches_get_version(monkeypatch):
 def test_config_uses_runtime_version(monkeypatch):
     monkeypatch.setenv("APP_VERSION", "9.9.9")
     import importlib
+
     import app._version as v
     import app.config as config
     importlib.reload(v)       # rebind get_version to read the new env
