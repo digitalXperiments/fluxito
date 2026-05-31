@@ -27,8 +27,6 @@ classifiers = [
 urls = {Homepage = "https://github.com/digitalXperiments/fluxito", Repository = "https://github.com/digitalXperiments/fluxito", Issues = "https://github.com/digitalXperiments/fluxito/issues"}
 
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
 # Setuptools dynamic version — reads MAJOR.MINOR track from repo-root VERSION
 # ---------------------------------------------------------------------------
 [tool.setuptools.dynamic]

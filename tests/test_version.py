@@ -46,10 +46,7 @@ def test_config_uses_runtime_version(monkeypatch):
     monkeypatch.setenv("APP_VERSION", "9.9.9")
     import importlib
     import app._version as v
-    importlib.reload(v)
     import app.config as config
-    importlib.reload(config)
-    # Verify the class default is sourced from _get_version(); the resolved
-    # *instance* value may be overridden by .env / environment variables, so
-    # we assert on the field default directly.
+    importlib.reload(v)       # rebind get_version to read the new env
+    importlib.reload(config)  # re-executes Settings body, re-imports _get_version from fresh v
     assert config.Settings.model_fields["MCP_SERVER_VERSION"].default == "9.9.9"
