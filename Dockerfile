@@ -44,6 +44,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_ENV=production
 
+# Exact release version, injected by the release workflow (--build-arg APP_VERSION=X.Y.Z).
+# Source/dev builds leave it empty and the app falls back to the VERSION track.
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
+
 # Runtime dependencies only (no compiler toolchain).
 # curl is needed for healthchecks; libpango/libharfbuzz for WeasyPrint runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
