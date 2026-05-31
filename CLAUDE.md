@@ -1,5 +1,13 @@
 # Fluxito — Project Instructions
 
+## Committing while working on a branch
+
+Do **not** commit after every small change, and don't make frequent
+checkpoint-style commits on your own. Make the edits and pause — **commit only when
+I explicitly ask.** When I say "commit", batch the outstanding work into a sensible
+commit (or a few well-scoped commits) with a good message. Pushing then follows the
+Releasing policy below.
+
 ## Releasing: pushing to `main`
 
 Every push to `main` cuts a release: the GitHub Actions **Release** workflow builds

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] — 2026-06-01
+
+### Changed
+- Release notes are now taken from the curated `CHANGELOG.md` entry for each version
+  instead of being auto-generated from commit messages, and the release pipeline no
+  longer commits the changelog back to `main` — the changelog is written by hand
+  before each push.
+
 ## [1.0.5] — 2026-05-31
 
 **Full Changelog**: https://github.com/digitalXperiments/fluxito/compare/v1.0.4...v1.0.5
