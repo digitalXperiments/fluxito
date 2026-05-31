@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="232" height="56" viewBox="0 0 232 56" role="img" aria-label="Fluxito">
+  <!-- Wordmark: "flux" (mono, medium) + "ito" (italic) + signature dot.
+       Mirrors the in-app CSS wordmark; the dot is a true vector circle so it
+       renders identically even where the font stack falls back. -->
+  <text x="8" y="38" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace"
+        font-size="40" font-weight="500" letter-spacing="-0.02em" fill="#101114">flux<tspan
+        font-family="Georgia,'Times New Roman',serif" font-style="italic" font-weight="500">ito</tspan></text>
+  <circle cx="208" cy="36" r="5" fill="#2557f6"/>
+</svg>

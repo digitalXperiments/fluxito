@@ -258,6 +258,12 @@ TUTORIAL_CATEGORIES = [
                 "Add Fluxito to Claude, ChatGPT, Cursor, or another MCP client",
             ),
             (
+                "fluxito-skill",
+                "Add the Fluxito Skill",
+                "~5 min",
+                "Install the Agent Skill so your AI operates Fluxito the right way",
+            ),
+            (
                 "platform-setup-guides",
                 "Platform setup guides",
                 "~10 min",

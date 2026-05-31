@@ -108,6 +108,43 @@ async def test_check_rate_limit_blocks_over_limit(_patch_db, db_session_factory,
     assert "retry_after_seconds" in blocked
 
 
+@pytest.mark.asyncio
+async def test_check_rate_limit_blocks_over_daily_limit(_patch_db, db_session_factory, monkeypatch):
+    """check_rate_limit enforces the per-day window independently of min/hour."""
+    import app.auth.rate_limiter as rl
+
+    class _FakeRedis:
+        def __init__(self):
+            self.counts = {}
+
+        async def incr(self, key):
+            self.counts[key] = self.counts.get(key, 0) + 1
+            return self.counts[key]
+
+        async def expire(self, key, ttl):
+            return True
+
+        async def get(self, key):
+            return None
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(app_state, "redis_client", fake, raising=False)
+    # Minute/hour high so only the per-day cap can trip.
+    monkeypatch.setattr(
+        rl, "_cached_limits", {"default": {"per_min": 100, "per_hour": 100, "per_day": 2}}, raising=False
+    )
+    monkeypatch.setattr(rl, "_cached_limits_ts", 9e18, raising=False)
+
+    uid = "u-day"
+    assert await rl.check_rate_limit(uid) is None  # 1st
+    assert await rl.check_rate_limit(uid) is None  # 2nd
+    blocked = await rl.check_rate_limit(uid)  # 3rd → over daily cap
+    assert blocked is not None
+    assert blocked["error_type"] == "rate_limited"
+    assert "Daily" in blocked["message"]
+    assert blocked["limit_per_day"] == 2
+
+
 @pytest.fixture
 async def _http_client(_patch_db):
     import httpx
@@ -157,12 +194,13 @@ async def test_rate_limits_route_writes_settings(_http_client, db_session_factor
         new=AsyncMock(return_value=_ctx(sid, "super-rl@example.com")),
     ):
         resp = await _http_client.patch(
-            "/api/admin/settings/rate-limits", json={"per_min": 42, "per_hour": 999}
+            "/api/admin/settings/rate-limits", json={"per_min": 42, "per_hour": 999, "per_day": 5000}
         )
     assert resp.status_code == 200, resp.text
     async with db_session_factory() as db:
         assert int(await get_runtime_setting(db, "rate_limit_per_min", default=0)) == 42
         assert int(await get_runtime_setting(db, "rate_limit_per_hour", default=0)) == 999
+        assert int(await get_runtime_setting(db, "rate_limit_per_day", default=0)) == 5000
 
 
 @pytest.mark.asyncio
@@ -189,8 +227,10 @@ async def test_rate_limits_get_returns_values(_http_client, db_session_factory):
         "app.api.admin_routes._resolve_user_ctx",
         new=AsyncMock(return_value=_ctx(sid, "super-rl3@example.com")),
     ):
-        await _http_client.patch("/api/admin/settings/rate-limits", json={"per_min": 11, "per_hour": 222})
+        await _http_client.patch(
+            "/api/admin/settings/rate-limits", json={"per_min": 11, "per_hour": 222, "per_day": 3333}
+        )
         resp = await _http_client.get("/api/admin/settings/rate-limits")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["per_min"] == 11 and data["per_hour"] == 222
+    assert data["per_min"] == 11 and data["per_hour"] == 222 and data["per_day"] == 3333

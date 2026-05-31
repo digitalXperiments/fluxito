@@ -20,6 +20,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app.branding import announcement as _announcement_global
 from app.branding import brand as _brand_global
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,9 @@ templates.env.globals["asset_hash"] = _asset_hash
 
 # Expose instance branding (name, logo, accent) to all templates
 templates.env.globals["brand"] = _brand_global
+
+# Expose the site-wide announcement banner to all templates
+templates.env.globals["announcement"] = _announcement_global
 
 
 # ---------- Render helpers ---------------------------------------------------

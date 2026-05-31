@@ -74,6 +74,42 @@ def _verify_csrf_token(token: str) -> bool:
         return False
 
 
+def _all_csrf_cookie_values(request) -> list[str]:
+    """Return EVERY ``csrf_token`` value from the raw Cookie header.
+
+    A browser can hold multiple cookies with the same name but different
+    domain/path scoping (e.g. a stale ``Domain=.example.com`` cookie left over
+    from an earlier deploy alongside the current host-only one). Both are sent
+    on the request, but ``request.cookies`` (``http.cookies.SimpleCookie``)
+    collapses them to a single value — and JS ``document.cookie`` reads a
+    *different* one — which breaks double-submit validation with a spurious
+    "token mismatch". Parsing the raw header lets us accept the header token if
+    it matches ANY cookie the browser actually sent, which preserves
+    double-submit security (the attacker still cannot read the victim's cookies)
+    while self-healing duplicate/legacy cookies.
+    """
+    raw = request.headers.get("cookie", "") or ""
+    values: list[str] = []
+    for part in raw.split(";"):
+        name, sep, val = part.strip().partition("=")
+        if sep and name.strip() == _CSRF_COOKIE_NAME:
+            values.append(val.strip())
+    return values
+
+
+def _validate_double_submit(cookie_values: "list[str]", header_token: "str | None") -> "str | None":
+    """Shared double-submit check. Returns an error message, or None if valid."""
+    if not cookie_values or not header_token:
+        return "CSRF token missing. Please refresh the page and try again."
+    # The submitted header must equal one of the cookies the browser sent.
+    if not any(hmac.compare_digest(cv, header_token) for cv in cookie_values):
+        return "CSRF token mismatch. Please refresh the page and try again."
+    # ...and that token must be one we actually minted (valid signature).
+    if not _verify_csrf_token(header_token):
+        return "Invalid CSRF token. Please refresh the page and try again."
+    return None
+
+
 def csrf_precheck_asgi(scope) -> "JSONResponse | None":
     """Pure-ASGI CSRF pre-check — returns a 403 JSONResponse or None.
 
@@ -97,43 +133,20 @@ def csrf_precheck_asgi(scope) -> "JSONResponse | None":
     if method in _SAFE_METHODS or any(path.startswith(p) for p in _EXEMPT_PREFIXES):
         return None
 
-    cookie_token = request.cookies.get(_CSRF_COOKIE_NAME)
+    cookie_values = _all_csrf_cookie_values(request)
     header_token = request.headers.get(_CSRF_HEADER_NAME)
-    client_ip = _client_ip(request)
 
-    if not cookie_token or not header_token:
+    error_message = _validate_double_submit(cookie_values, header_token)
+    if error_message is not None:
         logger.warning(
-            "CSRF validation failed: missing %s (path=%s, ip=%s)",
-            "cookie" if not cookie_token else "header",
+            "CSRF validation failed: %s (path=%s, ip=%s, cookies=%d)",
+            error_message,
             path,
-            client_ip,
+            _client_ip(request),
+            len(cookie_values),
         )
         return JSONResponse(
-            {
-                "error": True,
-                "error_type": "csrf_error",
-                "message": "CSRF token missing. Please refresh the page and try again.",
-            },
-            status_code=403,
-        )
-    if not hmac.compare_digest(cookie_token, header_token):
-        logger.warning("CSRF validation failed: token mismatch (path=%s, ip=%s)", path, client_ip)
-        return JSONResponse(
-            {
-                "error": True,
-                "error_type": "csrf_error",
-                "message": "CSRF token mismatch. Please refresh the page and try again.",
-            },
-            status_code=403,
-        )
-    if not _verify_csrf_token(cookie_token):
-        logger.warning("CSRF validation failed: invalid signature (path=%s, ip=%s)", path, client_ip)
-        return JSONResponse(
-            {
-                "error": True,
-                "error_type": "csrf_error",
-                "message": "Invalid CSRF token. Please refresh the page and try again.",
-            },
+            {"error": True, "error_type": "csrf_error", "message": error_message},
             status_code=403,
         )
     return None
@@ -155,51 +168,21 @@ async def csrf_middleware(request: Request, call_next) -> Response:
         _ensure_csrf_cookie(request, response)
         return response
 
-    # State-changing request — validate CSRF token
-    cookie_token = request.cookies.get(_CSRF_COOKIE_NAME)
+    # State-changing request — validate CSRF token (double-submit, multi-cookie tolerant)
+    cookie_values = _all_csrf_cookie_values(request)
     header_token = request.headers.get(_CSRF_HEADER_NAME)
-    client_ip = _client_ip(request)
 
-    if not cookie_token or not header_token:
+    error_message = _validate_double_submit(cookie_values, header_token)
+    if error_message is not None:
         logger.warning(
-            "CSRF validation failed: missing %s (path=%s, ip=%s)",
-            "cookie" if not cookie_token else "header",
+            "CSRF validation failed: %s (path=%s, ip=%s, cookies=%d)",
+            error_message,
             path,
-            client_ip,
+            _client_ip(request),
+            len(cookie_values),
         )
         return JSONResponse(
-            {
-                "error": True,
-                "error_type": "csrf_error",
-                "message": "CSRF token missing. Please refresh the page and try again.",
-            },
-            status_code=403,
-        )
-
-    # Use constant-time comparison to prevent timing attacks
-    if not hmac.compare_digest(cookie_token, header_token):
-        logger.warning(
-            "CSRF validation failed: token mismatch (path=%s, ip=%s)",
-            path,
-            client_ip,
-        )
-        return JSONResponse(
-            {
-                "error": True,
-                "error_type": "csrf_error",
-                "message": "CSRF token mismatch. Please refresh the page and try again.",
-            },
-            status_code=403,
-        )
-
-    if not _verify_csrf_token(cookie_token):
-        logger.warning("CSRF validation failed: invalid signature (path=%s, ip=%s)", path, client_ip)
-        return JSONResponse(
-            {
-                "error": True,
-                "error_type": "csrf_error",
-                "message": "Invalid CSRF token. Please refresh the page and try again.",
-            },
+            {"error": True, "error_type": "csrf_error", "message": error_message},
             status_code=403,
         )
 

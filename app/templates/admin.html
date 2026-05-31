@@ -15,11 +15,19 @@
   <div class="tabs" style="margin-bottom:24px;">
     <button class="tab is-active" data-tab="users" onclick="adminTab('users')">Users</button>
     <button class="tab" data-tab="requests" onclick="adminTab('requests')">Access Requests</button>
+    <button class="tab" data-tab="signin" onclick="adminTab('signin')">Sign-in</button>
     <button class="tab" data-tab="ratelimits" onclick="adminTab('ratelimits')">Rate Limits</button>
+    <button class="tab" data-tab="operations" onclick="adminTab('operations')">Operations</button>
     <button class="tab" data-tab="branding" onclick="adminTab('branding')">Branding</button>
   </div>
 
   <section data-panel="users">
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px">
+      <label class="f-field">Invite email<input id="invEmail" type="email" class="f-input" style="width:240px" placeholder="person@company.com"></label>
+      <label class="f-field">Name (optional)<input id="invName" class="f-input" style="width:180px" placeholder="Jane Doe"></label>
+      <button class="btn primary" onclick="inviteUser()">Invite user</button>
+    </div>
+    <div id="invMsg" class="ps-msg" style="display:none"></div>
     <table class="ps-table"><thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Super-admin</th><th></th></tr></thead>
       <tbody id="usersBody"><tr><td colspan="5">Loading…</td></tr></tbody>
     </table>
@@ -36,14 +44,41 @@
     </table>
   </section>
 
+  <section data-panel="signin" style="display:none">
+    <p style="color:var(--text-muted);margin-bottom:16px">Control which sign-in methods appear on the public sign-in page. At least one method must stay enabled.</p>
+    <div id="amMsg" class="ps-msg" style="display:none"></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <input type="checkbox" id="amGoogle"> Allow “Continue with Google”
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <input type="checkbox" id="amPassword"> Allow email + password sign-in
+    </label>
+    <button class="btn primary" onclick="saveAuthMethods()">Save</button>
+    <p style="color:var(--text-muted);margin-top:18px;font-size:12.5px">Tip: the <strong>Access Requests</strong> tab’s “Require access approval” toggle hides “Create account” on the sign-in page (invite-only beta).</p>
+  </section>
+
   <section data-panel="ratelimits" style="display:none">
-    <p style="color:var(--text-muted);margin-bottom:16px">Per-user limits on MCP / AI tool calls. Super-admins are exempt. Changes take effect within ~60s.</p>
+    <p style="color:var(--text-muted);margin-bottom:16px">Per-user limits on MCP / AI tool calls. Super-admins are exempt. Changes take effect immediately. Limits must be ordered minute ≤ hour ≤ day.</p>
     <div id="rlMsg" class="ps-msg" style="display:none"></div>
     <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
-      <label class="f-field">Requests per minute<input id="rlMin" type="number" min="1" class="f-input" style="width:140px"></label>
-      <label class="f-field">Requests per hour<input id="rlHour" type="number" min="1" class="f-input" style="width:140px"></label>
+      <label class="f-field">Requests per minute<input id="rlMin" type="number" min="1" class="f-input" style="width:130px"></label>
+      <label class="f-field">Requests per hour<input id="rlHour" type="number" min="1" class="f-input" style="width:130px"></label>
+      <label class="f-field">Requests per day<input id="rlDay" type="number" min="1" class="f-input" style="width:130px"></label>
       <button class="btn primary" onclick="saveRateLimits()">Save</button>
     </div>
+  </section>
+
+  <section data-panel="operations" style="display:none">
+    <p style="color:var(--text-muted);margin-bottom:16px">Instance-wide operational controls.</p>
+    <div id="opMsg" class="ps-msg" style="display:none"></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <input type="checkbox" id="opMaintenance">
+      Maintenance mode — only super-admins can use the app; everyone else sees a maintenance page.
+    </label>
+    <label class="f-field" style="max-width:520px">Announcement banner (shown to all signed-in users; blank to hide)
+      <textarea id="opBanner" class="f-input" rows="2" maxlength="280" placeholder="e.g. Fluxito is in beta — expect frequent changes."></textarea>
+    </label>
+    <button class="btn primary" style="margin-top:12px" onclick="saveOperations()">Save</button>
   </section>
 
   <section data-panel="branding" style="display:none">
@@ -129,14 +164,62 @@ async function loadRateLimits(){
     const d = await api('/api/admin/settings/rate-limits');
     document.getElementById('rlMin').value = d.per_min;
     document.getElementById('rlHour').value = d.per_hour;
+    document.getElementById('rlDay').value = d.per_day;
   }catch(e){ /* leave blank on error */ }
 }
 async function saveRateLimits(){
   const per_min = parseInt(document.getElementById('rlMin').value, 10);
   const per_hour = parseInt(document.getElementById('rlHour').value, 10);
+  const per_day = parseInt(document.getElementById('rlDay').value, 10);
   const m = document.getElementById('rlMsg');
   try{
-    await api('/api/admin/settings/rate-limits', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({per_min, per_hour})});
+    await api('/api/admin/settings/rate-limits', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({per_min, per_hour, per_day})});
+    m.textContent = 'Saved.'; m.style.display='block';
+  }catch(e){ m.textContent = e.message; m.style.display='block'; }
+}
+async function inviteUser(){
+  const email = document.getElementById('invEmail').value.trim();
+  const name = document.getElementById('invName').value.trim();
+  const m = document.getElementById('invMsg');
+  try{
+    const d = await api('/api/admin/users/invite', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, name})});
+    m.textContent = d.temp_password
+      ? `Invited ${d.email}. Temporary password (shown once): ${d.temp_password}`
+      : `Invited ${d.email}.`;
+    m.style.display='block';
+    document.getElementById('invEmail').value=''; document.getElementById('invName').value='';
+    loadUsers();
+  }catch(e){ m.textContent = e.message; m.style.display='block'; }
+}
+async function loadAuthMethods(){
+  try{
+    const d = await api('/api/admin/settings/auth-methods');
+    document.getElementById('amGoogle').checked = !!d.google_enabled;
+    document.getElementById('amPassword').checked = !!d.password_enabled;
+  }catch(e){ /* leave default */ }
+}
+async function saveAuthMethods(){
+  const google_enabled = document.getElementById('amGoogle').checked;
+  const password_enabled = document.getElementById('amPassword').checked;
+  const m = document.getElementById('amMsg');
+  try{
+    await api('/api/admin/settings/auth-methods', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({google_enabled, password_enabled})});
+    m.textContent = 'Saved.'; m.style.display='block';
+  }catch(e){ m.textContent = e.message; m.style.display='block'; }
+}
+async function loadOperations(){
+  try{
+    const d = await api('/api/admin/settings/operations');
+    document.getElementById('opMaintenance').checked = !!d.maintenance_mode;
+    document.getElementById('opBanner').value = d.announcement_banner || '';
+  }catch(e){ /* leave default */ }
+}
+async function saveOperations(){
+  const maintenance_mode = document.getElementById('opMaintenance').checked;
+  const announcement_banner = document.getElementById('opBanner').value.trim();
+  const m = document.getElementById('opMsg');
+  try{
+    await api('/api/admin/settings/operations', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({maintenance_mode, announcement_banner})});
     m.textContent = 'Saved.'; m.style.display='block';
   }catch(e){ m.textContent = e.message; m.style.display='block'; }
 }
@@ -158,6 +241,6 @@ async function saveBranding(){
     m.textContent = 'Saved. Reload to see changes.'; m.style.display='block';
   }catch(e){ m.textContent = e.message; m.style.display='block'; }
 }
-loadUsers(); loadRequests(); loadRateLimits(); loadBranding();
+loadUsers(); loadRequests(); loadRateLimits(); loadBranding(); loadAuthMethods(); loadOperations();
 </script>
 {% endblock %}

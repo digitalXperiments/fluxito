@@ -379,3 +379,60 @@ async def test_toggle_gate(_http_client, db_session_factory):
     finally:
         with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=ctx)):
             await _http_client.patch("/api/admin/settings/require-access-approval", json={"enabled": False})
+
+
+async def _make_project(db_session_factory, owner_id, *, name="Proj", slug=None):
+    from app.models.project import Project
+
+    async with db_session_factory() as db:
+        p = Project(name=name, slug=slug or f"proj-{uuid.uuid4().hex[:8]}", owner_id=uuid.UUID(owner_id))
+        db.add(p)
+        await db.flush()
+        pid = str(p.id)
+        await db.commit()
+        return pid
+
+
+async def _add_audit_row(db_session_factory, user_id, *, project_id=None, tool_name="analytics_read"):
+    from app.models.audit import ToolCallAudit
+
+    async with db_session_factory() as db:
+        row = ToolCallAudit(
+            user_id=uuid.UUID(user_id),
+            project_id=uuid.UUID(project_id) if project_id else None,
+            tool_name=tool_name,
+            status="success",
+            is_write=False,
+            duration_ms=12,
+        )
+        db.add(row)
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_activity_log_not_hidden_by_active_project_cookie(_http_client, db_session_factory):
+    """Regression: MCP tool calls are recorded against the AI client's active
+    project (or NULL), which may differ from the web active_project_id cookie.
+    The activity log must NOT silently filter by that cookie, or the user sees
+    nothing despite making many tool calls."""
+    from unittest.mock import AsyncMock, patch
+
+    uid = await _make_user(db_session_factory, "operator@example.com")
+    other_project = await _make_project(db_session_factory, uid)  # what the AI client logged against
+    await _add_audit_row(db_session_factory, uid, project_id=other_project)
+    await _add_audit_row(db_session_factory, uid, project_id=None, tool_name="run_audit")
+
+    ctx = type("C", (), {"user_id": uid, "email": "operator@example.com"})()
+    # Browser has a DIFFERENT project selected — must not hide the rows above.
+    cookie_project = str(uuid.uuid4())
+    with patch("app.api.audit_routes._resolve_user_ctx", new=AsyncMock(return_value=ctx)):
+        resp = await _http_client.get(
+            "/api/activity-log", headers={"Cookie": f"active_project_id={cookie_project}"}
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["count"] == 2
+
+    # Explicit ?project_id= filter still works.
+    with patch("app.api.audit_routes._resolve_user_ctx", new=AsyncMock(return_value=ctx)):
+        resp = await _http_client.get(f"/api/activity-log?project_id={other_project}")
+    assert resp.json()["count"] == 1

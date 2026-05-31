@@ -34,6 +34,18 @@
   {% if brand().accent %}
   <style>:root{ --accent: {{ brand().accent }}; --accent-hover: {{ brand().accent }}; }</style>
   {% endif %}
+  <style>
+    .beta-pill {
+      display: inline-block; margin-left: 8px; padding: 2px 7px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+      text-transform: uppercase; font-family: var(--mono, monospace);
+      color: var(--blue, #2557f6);
+      background: color-mix(in srgb, var(--blue, #2557f6) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--blue, #2557f6) 30%, transparent);
+      border-radius: 999px; vertical-align: middle; line-height: 1.4;
+    }
+    .sidebar-header { display: flex; align-items: center; }
+  </style>
   {% block head_extra %}{% endblock %}
 </head>
 <body class="{% if user %}has-sidebar{% endif %}">
@@ -86,6 +98,7 @@
       <a href="/home" class="wordmark">
         {{ wordmark() }}
       </a>
+      {% if brand().name == 'Fluxito' %}<span class="beta-pill" title="Fluxito is in public beta">Beta</span>{% endif %}
     </div>
 
     {# ── Project switcher (same data, compact form) ── #}
@@ -296,6 +309,26 @@
   </nav>
   {% endif %}
   {% endblock %}
+
+  {% if user and announcement() %}
+  <div class="announcement-banner" role="status">
+    <span class="announcement-dot" aria-hidden="true"></span>
+    <span>{{ announcement() }}</span>
+  </div>
+  <style>
+    .announcement-banner {
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 18px; font-size: 13px; line-height: 1.45;
+      background: color-mix(in srgb, var(--blue, #2557f6) 10%, var(--bg, #fff));
+      border-bottom: 1px solid color-mix(in srgb, var(--blue, #2557f6) 24%, var(--line, #e4e9f1));
+      color: var(--ink, #101114);
+    }
+    .announcement-dot {
+      width: 7px; height: 7px; border-radius: 99px; flex-shrink: 0;
+      background: var(--blue, #2557f6);
+    }
+  </style>
+  {% endif %}
 
   <main class="main">
     {% block main %}{% endblock %}
