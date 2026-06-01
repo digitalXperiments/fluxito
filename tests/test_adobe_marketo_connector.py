@@ -195,3 +195,39 @@ async def test_unhandled_success_false_code_returns_error(monkeypatch):
     conn = _connector_with_token(monkeypatch, handler)
     result = await conn.list_lead_lists(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
     assert result["error"] is True
+
+
+@pytest.mark.asyncio
+async def test_audit_instance_reports_quota(monkeypatch):
+    def handler(url, headers, params):
+        if url.endswith("/rest/v1/stats/usage.json"):
+            return _resp(200, {"success": True, "result": [{"total": 9000}]})
+        if url.endswith("/rest/asset/v1/programs.json"):
+            return _resp(200, {"success": True, "result": [{"id": 1, "name": "P", "status": "on"}]})
+        return _resp(200, {"success": True, "result": []})
+
+    conn = _connector_with_token(monkeypatch, handler)
+    result = await conn.audit_instance(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
+
+    assert "api_calls_used_today" in result
+    assert result["api_calls_used_today"] == 9000
+    assert result["program_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_check_data_quality_counts_missing_fields(monkeypatch):
+    def handler(url, headers, params):
+        return _resp(200, {
+            "success": True,
+            "result": [
+                {"id": 1, "email": "a@b.com", "company": "Acme"},
+                {"id": 2, "email": None, "company": None},
+            ],
+        })
+
+    conn = _connector_with_token(monkeypatch, handler)
+    result = await conn.check_data_quality(
+        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET, sample_emails=["a@b.com", "x@y.com"]
+    )
+    assert result["leads_checked"] == 2
+    assert result["missing_email"] == 1

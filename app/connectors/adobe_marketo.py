@@ -259,3 +259,52 @@ class AdobeMarketoConnector:
         return await self._request(
             instance_url, client_id, client_secret, "GET", "/rest/asset/v1/forms.json", params={"maxReturn": limit}
         )
+
+    # ------------------------------------------------------------------
+    # Layer 2: Audit
+    # ------------------------------------------------------------------
+    @friendly_errors("Adobe Marketo Engage")
+    async def audit_instance(self, instance_url: str, client_id: str, client_secret: str) -> dict:
+        """Health snapshot: daily API usage, program inventory + stale/off programs."""
+        usage = await self._request(
+            instance_url, client_id, client_secret, "GET", "/rest/v1/stats/usage.json"
+        )
+        programs = await self._request(
+            instance_url, client_id, client_secret, "GET",
+            "/rest/asset/v1/programs.json", params={"maxReturn": 200},
+        )
+        api_calls = 0
+        if not usage.get("error"):
+            rows = usage.get("result") or []
+            if rows and isinstance(rows[0], dict):
+                api_calls = rows[0].get("total", 0)
+        progs = [] if programs.get("error") else (programs.get("result") or [])
+        off_programs = [p.get("name") for p in progs if str(p.get("status", "")).lower() in ("off", "")]
+        return {
+            "error": False,
+            "api_calls_used_today": api_calls,
+            "program_count": len(progs),
+            "off_or_unknown_programs": off_programs,
+            "warnings": (["No programs found"] if not progs else []),
+        }
+
+    @friendly_errors("Adobe Marketo Engage")
+    async def check_data_quality(
+        self, instance_url: str, client_id: str, client_secret: str, sample_emails: list[str] | None = None
+    ) -> dict:
+        """Null-field rates on core lead fields over a sampled set of leads."""
+        leads_resp = await self.get_leads(
+            instance_url, client_id, client_secret,
+            filter_type="email", filter_values=sample_emails, fields=["id", "email", "company"], limit=300,
+        )
+        if leads_resp.get("error"):
+            return leads_resp
+        leads = leads_resp.get("result") or []
+        missing_email = sum(1 for lead in leads if not lead.get("email"))
+        missing_company = sum(1 for lead in leads if not lead.get("company"))
+        return {
+            "error": False,
+            "leads_checked": len(leads),
+            "missing_email": missing_email,
+            "missing_company": missing_company,
+        }
