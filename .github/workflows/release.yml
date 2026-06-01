@@ -211,18 +211,34 @@ jobs:
           set -euo pipefail
           TAG="${{ needs.prepare.outputs.tag }}"
           VERSION="${{ needs.prepare.outputs.full }}"
-          # Use the curated notes for this version straight out of CHANGELOG.md.
-          # The ## [VERSION] section is authored + committed before the push that
-          # triggered this release (see CLAUDE.md "Releasing" policy), so no bot
-          # ever commits back to main.
-          awk -v pfx="## [$VERSION]" '
-            index($0, pfx) == 1 { cap = 1; next }
-            cap && /^## \[/ { exit }
-            cap { print }
-          ' CHANGELOG.md > /tmp/notes.md
+
+          # Pull the curated notes for this release out of CHANGELOG.md. We look
+          # for a "## [VERSION]" heading first (the policy in CLAUDE.md: the
+          # section is renamed from [Unreleased] and committed before the push
+          # that triggered this release). If that section is missing — e.g. the
+          # rename was forgotten — fall back to "## [Unreleased]" so the release
+          # still ships the real changes instead of a useless placeholder.
+          extract() {
+            awk -v pfx="## [$1]" '
+              index($0, pfx) == 1 { cap = 1; next }
+              cap && /^## \[/ { exit }
+              cap { print }
+            ' CHANGELOG.md
+          }
+
+          extract "$VERSION" > /tmp/notes.md
           if [ ! -s /tmp/notes.md ]; then
-            echo "Release $TAG" > /tmp/notes.md
+            echo "::warning::No '## [$VERSION]' section in CHANGELOG.md; falling back to [Unreleased]. Rename the section before pushing (see CLAUDE.md)."
+            extract "Unreleased" > /tmp/notes.md
           fi
+
+          # Never publish a release with empty notes — fail so it's visible and
+          # the changelog gets fixed, rather than silently shipping a placeholder.
+          if [ ! -s /tmp/notes.md ]; then
+            echo "::error::No release notes found for $VERSION (neither '## [$VERSION]' nor '## [Unreleased]' has content in CHANGELOG.md)."
+            exit 1
+          fi
+
           gh release create "$TAG" \
             --title "$TAG" \
             --notes-file /tmp/notes.md \
