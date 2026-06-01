@@ -147,6 +147,18 @@ MARKETING_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "get_adsquad_performance": ("marketing_read", "get_adsquad_performance"),
     "get_keyword_performance": ("marketing_read", "get_keyword_performance"),
     "get_conversion_actions": ("marketing_read", "get_conversion_actions"),
+    # Adobe Marketo Engage (marketing automation) — read
+    "marketo_get_leads": ("marketing_read", "get_leads", {"platform": "marketo"}),
+    "marketo_get_lead": ("marketing_read", "get_lead_by_id", {"platform": "marketo"}),
+    "marketo_list_lists": ("marketing_read", "list_lead_lists", {"platform": "marketo"}),
+    "marketo_get_list_leads": ("marketing_read", "get_list_leads", {"platform": "marketo"}),
+    "marketo_get_lead_activities": ("marketing_read", "get_lead_activities", {"platform": "marketo"}),
+    "marketo_list_campaigns": ("marketing_read", "list_campaigns", {"platform": "marketo"}),
+    "marketo_list_programs": ("marketing_read", "list_programs", {"platform": "marketo"}),
+    "marketo_get_program": ("marketing_read", "get_program", {"platform": "marketo"}),
+    "marketo_list_emails": ("marketing_read", "list_emails", {"platform": "marketo"}),
+    "marketo_list_landing_pages": ("marketing_read", "list_landing_pages", {"platform": "marketo"}),
+    "marketo_list_forms": ("marketing_read", "list_forms", {"platform": "marketo"}),
 }
 
 # marketing_write
@@ -154,6 +166,12 @@ MARKETING_WRITE_ROUTES: dict[str, tuple[str, str | None]] = {
     "update_campaign_budget": ("marketing_write", "update_campaign_budget"),
     "update_campaign_status": ("marketing_write", "update_campaign_status"),
     "create_campaign": ("marketing_write", "create_campaign"),
+    # Adobe Marketo Engage — write
+    "marketo_upsert_leads": ("marketing_write", "create_or_update_leads", {"platform": "marketo"}),
+    "marketo_add_to_list": ("marketing_write", "add_leads_to_list", {"platform": "marketo"}),
+    "marketo_remove_from_list": ("marketing_write", "remove_leads_from_list", {"platform": "marketo"}),
+    "marketo_request_campaign": ("marketing_write", "request_campaign", {"platform": "marketo"}),
+    "marketo_schedule_campaign": ("marketing_write", "schedule_campaign", {"platform": "marketo"}),
 }
 
 # warehouse_read (BigQuery + Redshift + Snowflake) — schema + metadata only.
@@ -337,6 +355,9 @@ AUDIT_ROUTES: dict[str, tuple] = {
     # ── Paid marketing ─────────────────────────────────────────────────
     "marketing_audit_budget_utilization": ("marketing_audit", "audit_budget_utilization"),
     "marketing_audit_quality_scores": ("marketing_audit", "audit_quality_scores"),
+    # Adobe Marketo Engage — audit
+    "marketo_audit_instance": ("marketing_audit", "audit_instance", {"platform": "marketo"}),
+    "marketo_check_data_quality": ("marketing_audit", "check_data_quality", {"platform": "marketo"}),
     # ── Warehouse ──────────────────────────────────────────────────────
     "warehouse_audit_dataset": ("warehouse_audit", "audit_dataset"),
     "warehouse_audit_schema": ("warehouse_audit", "audit_schema"),
@@ -489,6 +510,15 @@ Actions:
   get_adsquad_performance    — Snap adsquad-level
   get_keyword_performance    — Google Ads keyword-level
   get_conversion_actions     — List conversion actions
+
+Adobe Marketo Engage actions (prefix `marketo_`, marketing automation; no account_id):
+  marketo_get_leads           — filters={filter_type,filter_values[],fields[]}, limit
+  marketo_get_lead            — resource_id (lead id), filters={fields[]}
+  marketo_list_lists          — static/smart lists
+  marketo_get_list_leads      — resource_id (list id), limit
+  marketo_get_lead_activities — filters={activity_type_ids[],list_id,since_datetime}, limit
+  marketo_list_campaigns / marketo_list_programs / marketo_get_program (resource_id=program id)
+  marketo_list_emails / marketo_list_landing_pages / marketo_list_forms
 """
 
 MARKETING_WRITE_DOC = """
@@ -498,6 +528,13 @@ Actions:
   update_campaign_budget   — params: platform, account_id, campaign_id, new_budget
   update_campaign_status   — params: platform, account_id, campaign_id, status (PAUSED|ENABLED)
   create_campaign          — params: platform, account_id, spec dict
+
+Adobe Marketo Engage actions (prefix `marketo_`; resource_id = list/campaign id, payload carries the body):
+  marketo_upsert_leads     — payload={leads[], lookup_field?, action?}
+  marketo_add_to_list      — resource_id (list id), payload={lead_ids[]}
+  marketo_remove_from_list — resource_id (list id), payload={lead_ids[]}
+  marketo_request_campaign — resource_id (campaign id), payload={lead_ids[], tokens?}
+  marketo_schedule_campaign— resource_id (campaign id), payload={run_at?, tokens?}
 """
 
 WAREHOUSE_READ_DOC = """
@@ -832,6 +869,10 @@ Actions (grouped):
   PAID MARKETING (Google Ads + Meta + TikTok + Snap)
     marketing_audit_budget_utilization, marketing_audit_quality_scores,
     marketing_connection_health
+
+  MARKETING AUTOMATION (Adobe Marketo Engage)
+    marketo_audit_instance     — API usage vs quota + program inventory
+    marketo_check_data_quality — null-field rates on core lead fields
 
   WAREHOUSE (BigQuery + Redshift + Snowflake)
     Note: most warehouse audits are engine-specific. Pass `engine` in params.
