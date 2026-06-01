@@ -535,6 +535,11 @@ def register_all_tools(mcp_server):
 
     register_search_console_tools(mcp_server)
 
+    # ── Bing Webmaster Tools (Bing organic search) ───────────────────────────
+    from app.tools.bing_webmaster_tools import register_bing_webmaster_tools
+
+    register_bing_webmaster_tools(mcp_server)
+
     # ── Solution Design Reference (SDR) ────────────────────────────────────
     from app.tools.sdr_tools import register_sdr_tools
 
@@ -665,6 +670,9 @@ def register_all_tools(mcp_server):
             u.has_meta = project_ctx.has_meta
             u.has_tiktok = project_ctx.has_tiktok
             u.has_snap = project_ctx.has_snap
+            u.has_x = project_ctx.has_x
+            u.has_reddit = project_ctx.has_reddit
+            u.has_bing = project_ctx.has_bing
             u.has_amplitude = project_ctx.has_amplitude
             u.has_adobe_analytics = project_ctx.has_adobe_analytics
             u.has_adobe_launch = project_ctx.has_adobe_launch
@@ -685,6 +693,9 @@ def register_all_tools(mcp_server):
                     ("Meta Ads", project_ctx.has_meta),
                     ("TikTok Ads", project_ctx.has_tiktok),
                     ("Snap Ads", project_ctx.has_snap),
+                    ("X Ads", project_ctx.has_x),
+                    ("Reddit Ads", project_ctx.has_reddit),
+                    ("Bing Webmaster Tools", project_ctx.has_bing),
                     ("Amplitude", project_ctx.has_amplitude),
                     ("Adobe Analytics", project_ctx.has_adobe_analytics),
                     ("Adobe Launch", project_ctx.has_adobe_launch),

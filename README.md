@@ -105,7 +105,10 @@ the in-app **Admin → Updates** panel (super-admin only), or:
 docker compose pull && docker compose up -d
 ```
 
-### Build from source (developers / forkers)
+### Run from source (self-hosted / track main)
+
+This is the path for running the latest `main` (or your own fork) in production: you
+build the images locally from your checkout instead of pulling the published release.
 
 ```bash
 git clone https://github.com/digitalXperiments/fluxito.git
@@ -144,6 +147,39 @@ can always update manually instead:
 ```bash
 docker compose pull && docker compose up -d
 ```
+
+### Updating a source install (git pull)
+
+If you run from source (tracking `main`), update by pulling and rebuilding:
+
+```bash
+cd /path/to/fluxito
+git pull
+docker compose up -d --build
+```
+
+This rebuilds the images from the new code, recreates the app/nginx containers, and
+runs database migrations automatically on startup (`alembic upgrade head`). The
+Postgres, Redis, and update-state **named volumes persist across rebuilds**, so your
+data is safe — the old container keeps serving during the build, and only the brief
+recreate causes downtime.
+
+To avoid typing both compose files every time, set this once in your `.env` so
+`docker compose` always builds from source on that host:
+
+```
+COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml
+```
+
+If `COMPOSE_FILE` isn't set in `.env`, run the full form instead:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+> **Never use `docker compose down -v`** to update — the `-v` deletes the named
+> volumes (your database). Plain `docker compose up -d --build` never touches
+> volumes. Back up your database before applying an update that includes migrations.
 
 ### Air-gapped installs
 

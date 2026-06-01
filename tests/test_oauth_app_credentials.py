@@ -172,7 +172,7 @@ async def test_upsert_then_delete_round_trip(db_session_factory):
 
 
 # ---------------------------------------------------------------------------
-# 6. list_oauth_app_status returns all 6 platforms with correct source
+# 6. list_oauth_app_status returns all supported platforms with correct source
 # ---------------------------------------------------------------------------
 
 
@@ -194,6 +194,16 @@ async def test_list_status_returns_all_platforms(db_session_factory):
             assert entry["client_id_masked"] is None
         else:
             assert entry["client_id_masked"] is not None
+
+
+def test_x_ads_is_supported_oauth_app_platform():
+    """X Ads can be configured as an install-wide OAuth app."""
+    assert "x" in SUPPORTED_PLATFORMS
+
+
+def test_reddit_ads_is_supported_oauth_app_platform():
+    """Reddit Ads can be configured as an install-wide OAuth app."""
+    assert "reddit" in SUPPORTED_PLATFORMS
 
 
 # ---------------------------------------------------------------------------
@@ -509,12 +519,12 @@ class TestIntegrationsRoutes:
         assert resp.status_code == 403
 
     # ------------------------------------------------------------------
-    # 3. Admin → 200, items length == 6
+    # 3. Admin → 200, one item per SUPPORTED_PLATFORMS
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
     async def test_list_admin_returns_200(self, http_client, _admin_user):
-        """GET /api/integrations as project-owner returns 200 with 6 platform items."""
+        """GET /api/integrations as project-owner returns 200 with one item per platform."""
         with patch(
             "app.api.integrations_routes._resolve_user",
             new=AsyncMock(return_value=_admin_user),
@@ -523,7 +533,7 @@ class TestIntegrationsRoutes:
         assert resp.status_code == 200
         data = resp.json()
         assert "items" in data
-        assert len(data["items"]) == 6  # one per SUPPORTED_PLATFORMS
+        assert len(data["items"]) == len(SUPPORTED_PLATFORMS)  # one per SUPPORTED_PLATFORMS
 
     # ------------------------------------------------------------------
     # 4. POST creates a DB row → 200

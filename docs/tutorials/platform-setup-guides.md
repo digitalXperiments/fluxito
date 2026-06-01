@@ -35,7 +35,18 @@ Each paid platform needs its own OAuth app.
 | [TikTok Ads](tiktok-ads.md) | TikTok campaign performance |
 | [LinkedIn Ads](linkedin-ads.md) | LinkedIn campaign performance |
 | [Pinterest Ads](pinterest-ads.md) | Pinterest advertising data |
+| [X Ads](x-ads.md) | X campaign and line item performance |
+| [Reddit Ads](reddit-ads.md) | Reddit campaign and ad group performance |
 | [Snap Ads](snap-ads.md) | Snapchat marketing API |
+
+## SEO and webmaster tools
+
+These connectors read search and SEO performance, not paid media. [Search Console](search-console.md) uses the shared Google OAuth app (see Google platforms above); Bing Webmaster Tools uses its own Microsoft OAuth app.
+
+| Guide | Use it for |
+|---|---|
+| [Search Console](search-console.md) | Google search clicks, impressions, queries, pages, sitemap and mover audits |
+| [Bing Webmaster Tools](bing-webmaster.md) | Bing search query stats, crawl stats, index coverage, and link counts |
 
 ## Warehouses
 

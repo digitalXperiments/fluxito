@@ -19,6 +19,9 @@
 {%- elif s in ['snap', 'snapchat'] -%}snap
 {%- elif s == 'linkedin' -%}linkedin
 {%- elif s == 'pinterest' -%}pinterest
+{%- elif s == 'reddit' -%}reddit
+{%- elif s == 'x' -%}x
+{%- elif s == 'bing' -%}bing
 {%- elif s == 'bigquery' -%}bq
 {%- elif s == 'redshift' -%}rs
 {%- elif s == 'snowflake' -%}sf
@@ -34,11 +37,8 @@
     <div>
       <span class="label">Connections</span>
       <h1>
-        {% if connections %}{{ connections|length }} connected.{% else %}Link your <em class="serif-italic">first platform.</em>{% endif %}
-        {% if platforms_avail %}
-          {% set remaining = platforms_avail | rejectattr('count') | list | length %}
-          {% if remaining > 0 and connections %}<em class="serif-italic">{{ remaining }} to go.</em>{% endif %}
-        {% endif %}
+        {% if connected_count and connected_count > 0 %}{{ connected_count }} connected.{% else %}Link your <em class="serif-italic">first platform.</em>{% endif %}
+        {% if remaining_count and remaining_count > 0 and connected_count and connected_count > 0 %}<em class="serif-italic">{{ remaining_count }} to go.</em>{% endif %}
       </h1>
       <p>Each connection belongs to this project. Teammates inherit read access — never your personal credentials. Write operations are scope-gated per platform.</p>
     </div>
@@ -133,7 +133,7 @@
         </div>
         <h4>{{ p.name }}</h4>
         <div class="desc">{{ p.desc }}</div>
-        <div class="conn-actions" style="margin-top:14px">
+        <div class="conn-actions">
           <span class="btn sm block" style="width:100%">
             {% if p.count %}Add another{% else %}Connect {{ p.name }}{% endif %} <span class="arrow">→</span>
           </span>

@@ -160,12 +160,14 @@ async def lifespan(app: FastAPI):
     from app.connectors.adobe_launch import AdobeLaunchConnector
     from app.connectors.amplitude import AmplitudeConnector
     from app.connectors.bigquery import BigQueryConnector
+    from app.connectors.bing_webmaster import BingWebmasterConnector
     from app.connectors.ga4 import GA4Connector
     from app.connectors.google_ads import GoogleAdsConnector
     from app.connectors.gtm import GTMConnector
     from app.connectors.linkedin_ads import LinkedInAdsConnector
     from app.connectors.meta_ads import MetaAdsConnector
     from app.connectors.pinterest_ads import PinterestAdsConnector
+    from app.connectors.reddit_ads import RedditAdsConnector
     from app.connectors.redshift import RedshiftConnector
     from app.connectors.search_console import SearchConsoleConnector
     from app.connectors.snap_ads import SnapAdsConnector
@@ -188,6 +190,8 @@ async def lifespan(app: FastAPI):
     app_state.snap_connector = SnapAdsConnector()
     app_state.linkedin_connector = LinkedInAdsConnector()
     app_state.pinterest_connector = PinterestAdsConnector()
+    app_state.reddit_connector = RedditAdsConnector()
+    app_state.bing_connector = BingWebmasterConnector()
     app_state.amplitude_connector = AmplitudeConnector()
     app_state.adobe_analytics_connector = AdobeAnalyticsConnector()
     app_state.adobe_launch_connector = AdobeLaunchConnector()
@@ -424,10 +428,19 @@ app.include_router(admin_router)
 app.include_router(access_request_router)
 app.include_router(update_router)
 
-from app.api import linkedin_oauth_routes, pinterest_oauth_routes
+from app.api import (
+    bing_oauth_routes,
+    linkedin_oauth_routes,
+    pinterest_oauth_routes,
+    reddit_oauth_routes,
+    x_oauth_routes,
+)
 
 app.include_router(linkedin_oauth_routes.router)
 app.include_router(pinterest_oauth_routes.router)
+app.include_router(reddit_oauth_routes.router)
+app.include_router(x_oauth_routes.router)
+app.include_router(bing_oauth_routes.router)
 
 
 # ---------------------------------------------------------------------------
@@ -820,6 +833,9 @@ def _sync_user_ctx_flags(user_ctx, pctx) -> None:
         "has_snap",
         "has_linkedin",
         "has_pinterest",
+        "has_x",
+        "has_reddit",
+        "has_bing",
         "has_amplitude",
         "has_adobe_analytics",
         "has_adobe_launch",

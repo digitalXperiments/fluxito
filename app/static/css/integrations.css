@@ -37,6 +37,9 @@
 .intg-head-snap      { background: linear-gradient(135deg, #FFFC00, #f5e900); color: #1A1A1A; }
 .intg-head-linkedin  { background: linear-gradient(135deg, #0A66C2, #00438a); color: #fff; }
 .intg-head-pinterest { background: linear-gradient(135deg, #E60023, #ad001a); color: #fff; }
+.intg-head-reddit    { background: linear-gradient(135deg, #FF4500, #cc3700); color: #fff; }
+.intg-head-x         { background: linear-gradient(135deg, #111111, #555555); color: #fff; }
+.intg-head-bing      { background: linear-gradient(135deg, #008373, #00614f); color: #fff; }
 
 .intg-platform-name {
   font-weight: 600;

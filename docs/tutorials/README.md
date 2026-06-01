@@ -66,6 +66,7 @@ Each platform requires its own OAuth app. App Review timelines are noted for pla
 | [tiktok-ads.md](tiktok-ads.md) | Business API app creation, permissions, redirect URI, production review note. | ~20 min setup; 1–2 week review |
 | [linkedin-ads.md](linkedin-ads.md) | App creation, company page verification, Marketing Developer Platform request, redirect URI. | ~20 min setup; 1–5 day review |
 | [pinterest-ads.md](pinterest-ads.md) | Developer portal app registration, scope configuration, redirect URI, production review note. | ~15 min setup; 1–5 day review |
+| [x-ads.md](x-ads.md) | X developer app setup, OAuth 1.0a callback, Ads API access, account permission checks. | ~20 min setup; access review varies |
 | [snap-ads.md](snap-ads.md) | App creation, Ads API capability, confidential client setup, redirect URI. | ~20 min setup; variable review |
 
 ---

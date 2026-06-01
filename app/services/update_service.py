@@ -81,6 +81,10 @@ async def check_for_update() -> dict:
         if not await update_checks_enabled():
             base["checks_enabled"] = False
             return base
+        # Defense-in-depth: if the version is a non-release/local build
+        # (CHANGELOG unreadable), we can't compare meaningfully — suppress the dot.
+        if "+local" in current:
+            return base
         payload = await _get_cached_or_fetch()
         if not payload or not payload.get("tag_name"):
             return base

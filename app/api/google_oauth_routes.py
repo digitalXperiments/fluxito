@@ -17,6 +17,7 @@ import logging
 import secrets
 import uuid
 from datetime import datetime
+from types import SimpleNamespace
 
 import httpx
 from cryptography.fernet import Fernet
@@ -50,6 +51,68 @@ from app.utils import safe_next_url
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ── Canonical GRANULAR connector model ──────────────────────────────
+# The single source of truth for how many distinct connectors exist and
+# how "connected" is counted. Each connector counts as ONE — and Google's
+# four services (GA4, GTM, Google Ads, Search Console) each count
+# SEPARATELY even though one Google OAuth grants them together. This is the
+# only place the connected/total numbers are derived; BOTH the /home KPI and
+# the /connect page header read from the same helper so they can never drift.
+#
+# Each entry is (key, label, has_flags) where `has_flags` is a tuple of
+# attribute names on the resolved project/user context (or any flags object)
+# — the connector counts as connected if ANY of those attrs is truthy. The
+# attribute names MUST match the `has_*` fields on ProjectContext/UserContext
+# in app.auth.mcp_session_manager (and the lightweight flags objects the
+# /home and /connect routes build from their own DB queries). Adobe maps to
+# two flags (analytics + launch) but still counts as a single connector.
+GRANULAR_CONNECTOR_CATALOG: list[tuple[str, str, tuple[str, ...]]] = [
+    # Google services — split, each counts as one
+    ("ga4", "GA4", ("has_ga4",)),
+    ("gtm", "GTM", ("has_gtm",)),
+    ("google_ads", "Google Ads", ("has_ads",)),
+    ("search_console", "Search Console", ("has_gsc",)),
+    # Data warehouses
+    ("bigquery", "BigQuery", ("has_bq",)),
+    ("redshift", "Redshift", ("has_redshift",)),
+    ("snowflake", "Snowflake", ("has_snowflake",)),
+    # Product analytics
+    ("amplitude", "Amplitude", ("has_amplitude",)),
+    ("adobe", "Adobe", ("has_adobe_analytics", "has_adobe_launch")),
+    # Ad platforms
+    ("meta", "Meta Ads", ("has_meta",)),
+    ("tiktok", "TikTok Ads", ("has_tiktok",)),
+    ("snap", "Snapchat Ads", ("has_snap",)),
+    ("x", "X Ads", ("has_x",)),
+    ("reddit", "Reddit Ads", ("has_reddit",)),
+    ("linkedin", "LinkedIn Ads", ("has_linkedin",)),
+    ("pinterest", "Pinterest Ads", ("has_pinterest",)),
+    ("bing", "Bing Webmaster Tools", ("has_bing",)),
+]
+
+# Total number of distinct granular connectors (denominator on both pages).
+TOTAL_CONNECTOR_COUNT = len(GRANULAR_CONNECTOR_CATALOG)
+
+
+def count_granular_connectors(flags) -> tuple[int, int]:
+    """Count connected connectors granularly from a flags object.
+
+    `flags` is any object carrying the ``has_*`` attributes named in
+    GRANULAR_CONNECTOR_CATALOG — a ProjectContext/UserContext, or a
+    lightweight namespace built by a route from its own DB queries. A
+    connector counts as connected if ANY of its catalog `has_flags`
+    attributes is truthy. Returns ``(connected_count, total_count)`` where
+    total is the full granular catalog size (Google's 4 services counted
+    separately). This is the SINGLE source of truth shared by the /home KPI
+    and the /connect page header.
+    """
+    connected = 0
+    for _key, _label, attrs in GRANULAR_CONNECTOR_CATALOG:
+        if any(getattr(flags, a, False) for a in attrs):
+            connected += 1
+    return connected, TOTAL_CONNECTOR_COUNT
 
 
 async def _load_user_view(user_ctx) -> dict:
@@ -358,6 +421,7 @@ async def home(request: Request):
     snap_conns = [c for c in oauth_conns if c.provider == "snap"]
     linkedin_conns = [c for c in oauth_conns if c.provider == "linkedin"]
     pinterest_conns = [c for c in oauth_conns if c.provider == "pinterest"]
+    x_conns = [c for c in oauth_conns if c.provider == "x"]
     google_conns = [c for c in oauth_conns if (c.provider or "google") in ("google", None, "")]
 
     # Determine which Google services are enabled based on granted scopes
@@ -376,172 +440,36 @@ async def home(request: Request):
         if any("webmasters" in s for s in scopes):
             google_has_gsc = True
 
-    # Count connected platforms based on actual enabled services
-    google_svc_count = sum([google_has_ga4, google_has_gtm, google_has_ads, google_has_gsc])
-    total_conns = (
-        google_svc_count
-        + len(bq_conns)
-        + len(meta_conns)
-        + len(tiktok_conns)
-        + len(snap_conns)
-        + len(linkedin_conns)
-        + len(pinterest_conns)
-        + len(amp_conns)
-        + len(adobe_conns)
-        + len(rs_conns)
-        + len(sf_conns)
+    # Count connectors GRANULARLY the SAME way /connect does: each connector
+    # counts as ONE, and Google's four services (GA4/GTM/Ads/Search Console)
+    # each count SEPARATELY. Build a lightweight flags object carrying the
+    # has_* attributes named in GRANULAR_CONNECTOR_CATALOG, then derive
+    # (connected, total) via the shared counter so /home and /connect can
+    # never drift. reddit/bing are project-scoped OAuth providers; derive
+    # them from oauth_conns the same way the other ad platforms are.
+    reddit_conns = [c for c in oauth_conns if c.provider == "reddit"]
+    bing_conns = [c for c in oauth_conns if c.provider == "bing"]
+    conn_flags = SimpleNamespace(
+        has_ga4=google_has_ga4,
+        has_gtm=google_has_gtm,
+        has_ads=google_has_ads,
+        has_gsc=google_has_gsc,
+        has_bq=bool(bq_conns),
+        has_redshift=bool(rs_conns),
+        has_snowflake=bool(sf_conns),
+        has_amplitude=bool(amp_conns),
+        has_adobe_analytics=bool(adobe_conns),
+        has_adobe_launch=bool(adobe_conns),
+        has_meta=bool(meta_conns),
+        has_tiktok=bool(tiktok_conns),
+        has_snap=bool(snap_conns),
+        has_x=bool(x_conns),
+        has_reddit=bool(reddit_conns),
+        has_linkedin=bool(linkedin_conns),
+        has_pinterest=bool(pinterest_conns),
+        has_bing=bool(bing_conns),
     )
-    # Count GA4/GTM/Ads resources for project-scoped Google connections
-    project_google_conn_ids = [c.id for c in google_conns]
-    ga4_total = 0
-    gtm_total = 0
-    ads_total = 0
-    gsc_total = 0
-    if project_google_conn_ids:
-        try:
-            from app.auth.mcp_session_manager import count_google_resources_for_connections
-
-            async with app_state.db_session_factory() as db:
-                counts = await count_google_resources_for_connections(db, project_google_conn_ids)
-            ga4_total = counts["ga4"]
-            gtm_total = counts["gtm"]
-            ads_total = counts["ads"]
-            gsc_total = counts["gsc"]
-        except Exception:
-            pass
-
-    # ── Capability-based stat groups (AI-tool agnostic) ─────────────
-    # Group platforms by what they do, not by vendor, so the stats
-    # stay meaningful whether a user is on Google, Meta, BigQuery, etc.
-    analytics_tools: list[str] = []
-    if ga4_total or google_has_ga4:
-        analytics_tools.append("GA4")
-    if amp_conns:
-        analytics_tools.append("Amplitude")
-    if adobe_conns:
-        analytics_tools.append("Adobe Analytics")
-
-    tagging_tools: list[str] = []
-    if gtm_total or google_has_gtm:
-        tagging_tools.append("GTM")
-
-    ad_tools: list[str] = []
-    if ads_total or google_has_ads:
-        ad_tools.append("Google Ads")
-    if meta_conns:
-        ad_tools.append("Meta Ads")
-    if tiktok_conns:
-        ad_tools.append("TikTok Ads")
-    if snap_conns:
-        ad_tools.append("Snapchat")
-    if linkedin_conns:
-        ad_tools.append("LinkedIn Ads")
-    if pinterest_conns:
-        ad_tools.append("Pinterest Ads")
-
-    warehouse_tools: list[str] = []
-    if bq_conns:
-        warehouse_tools.append("BigQuery")
-    if rs_conns:
-        warehouse_tools.append("Redshift")
-    if sf_conns:
-        warehouse_tools.append("Snowflake")
-
-    def _stat(label, count, tools, empty_hint, accent, icon):
-        return {
-            "label": label,
-            "count": count,
-            "sub": ", ".join(tools) if tools else empty_hint,
-            "is_empty": count == 0,
-            "accent": accent,
-            "icon": icon,
-        }
-
-    stats = [
-        _stat(
-            "Analytics",
-            len(analytics_tools),
-            analytics_tools,
-            "Connect GA4, Amplitude, or Adobe",
-            "#6366f1",
-            "chart",
-        ),
-        _stat(
-            "Tag managers",
-            len(tagging_tools),
-            tagging_tools,
-            "Connect GTM",
-            "#0ea5e9",
-            "tag",
-        ),
-        _stat(
-            "Ad platforms",
-            len(ad_tools),
-            ad_tools,
-            "Connect Google, Meta, TikTok, or Snap",
-            "#f59e0b",
-            "megaphone",
-        ),
-        _stat(
-            "Data warehouses",
-            len(warehouse_tools),
-            warehouse_tools,
-            "Connect BigQuery, Redshift, or Snowflake",
-            "#10b981",
-            "database",
-        ),
-    ]
-
-    platforms = [
-        {
-            "slug": "ga4",
-            "name": "GA4",
-            "desc": "Google Analytics 4",
-            "count": ga4_total,
-            "via_google": bool(not ga4_total and google_has_ga4),
-        },
-        {
-            "slug": "gtm",
-            "name": "GTM",
-            "desc": "Tag Manager containers",
-            "count": gtm_total,
-            "via_google": bool(not gtm_total and google_has_gtm),
-        },
-        {
-            "slug": "google_ads",
-            "name": "Google Ads",
-            "desc": "Ads accounts",
-            "count": ads_total,
-            "via_google": bool(not ads_total and google_has_ads),
-        },
-        {
-            "slug": "search_console",
-            "name": "Search Console",
-            "desc": "Organic search & sitemaps",
-            "count": gsc_total,
-            "via_google": bool(not gsc_total and google_has_gsc),
-        },
-        {"slug": "amplitude", "name": "Amplitude", "desc": "Product analytics", "count": len(amp_conns)},
-        {"slug": "adobe", "name": "Adobe", "desc": "Analytics + Launch", "count": len(adobe_conns)},
-        {"slug": "bigquery", "name": "BigQuery", "desc": "Service-account datasets", "count": len(bq_conns)},
-        {"slug": "redshift", "name": "Redshift", "desc": "Data warehouse", "count": len(rs_conns)},
-        {"slug": "snowflake", "name": "Snowflake", "desc": "Data warehouse", "count": len(sf_conns)},
-        {"slug": "meta", "name": "Meta Ads", "desc": "Facebook & Instagram", "count": len(meta_conns)},
-        {"slug": "tiktok", "name": "TikTok Ads", "desc": "Campaigns & insights", "count": len(tiktok_conns)},
-        {"slug": "snap", "name": "Snapchat", "desc": "Campaigns & pixel", "count": len(snap_conns)},
-        {
-            "slug": "linkedin",
-            "name": "LinkedIn Ads",
-            "desc": "Campaigns & Insight Tag",
-            "count": len(linkedin_conns),
-        },
-        {
-            "slug": "pinterest",
-            "name": "Pinterest Ads",
-            "desc": "Campaigns & pixel",
-            "count": len(pinterest_conns),
-        },
-    ]
+    connected_count, total_connector_count = count_granular_connectors(conn_flags)
 
     user_view = await _load_user_view(user_ctx)
 
@@ -553,12 +481,8 @@ async def home(request: Request):
         "dashboard_home.html",
         {
             "user": user_view,
-            "total_conns": total_conns,
-            "ga4_total": ga4_total,
-            "gtm_total": gtm_total,
-            "ads_total": ads_total,
-            "platforms": platforms,
-            "stats": stats,
+            "total_conns": connected_count,
+            "total_platforms": total_connector_count,
         },
     )
 
@@ -992,6 +916,9 @@ async def connect_page(request: Request):
     snap_count = 0
     linkedin_count = 0
     pinterest_count = 0
+    x_count = 0
+    reddit_count = 0
+    bing_count = 0
     connections_view = []
     bq_rows = []
     oauth_rows = []
@@ -1070,20 +997,44 @@ async def connect_page(request: Request):
         snap_count = len([c for c in oauth_rows if c.provider == "snap"])
         linkedin_count = len([c for c in oauth_rows if c.provider == "linkedin"])
         pinterest_count = len([c for c in oauth_rows if c.provider == "pinterest"])
+        x_count = len([c for c in oauth_rows if c.provider == "x"])
+        reddit_count = len([c for c in oauth_rows if c.provider == "reddit"])
+        bing_count = len([c for c in oauth_rows if c.provider == "bing"])
 
         name_map = {
             "google": "Google Suite",
             "meta": "Meta Ads",
             "tiktok": "TikTok Ads",
             "snap": "Snapchat Ads",
+            "x": "X Ads",
+            "bing": "Bing Webmaster Tools",
+            "reddit": "Reddit Ads",
+            "linkedin": "LinkedIn Ads",
+            "pinterest": "Pinterest Ads",
             "bigquery": "BigQuery",
         }
-        icon_map = {"google": "🔗", "meta": "📘", "tiktok": "🎵", "snap": "👻", "bigquery": "🗄️"}
+        icon_map = {
+            "google": "🔗",
+            "meta": "📘",
+            "tiktok": "🎵",
+            "snap": "👻",
+            "x": "X",
+            "bing": "🔎",
+            "reddit": "👽",
+            "linkedin": "💼",
+            "pinterest": "📌",
+            "bigquery": "🗄️",
+        }
         delete_endpoint = {
             "google": "/api/connections/{id}",
             "meta": "/api/connections/meta/{id}",
             "tiktok": "/api/connections/tiktok/{id}",
             "snap": "/api/connections/snap/{id}",
+            "x": "/api/connections/x/{id}",
+            "bing": "/api/connections/bing/{id}",
+            "reddit": "/api/connections/reddit/{id}",
+            "linkedin": "/api/connections/linkedin/{id}",
+            "pinterest": "/api/connections/pinterest/{id}",
             "bigquery": "/api/connections/bigquery/{id}",
         }
         edit_url_map = {
@@ -1091,6 +1042,11 @@ async def connect_page(request: Request):
             "meta": "/connect/meta",
             "tiktok": "/connect/tiktok",
             "snap": "/connect/snap",
+            "x": "/connect/x",
+            "bing": "/connect/bing",
+            "reddit": "/connect/reddit",
+            "linkedin": "/connect/linkedin",
+            "pinterest": "/connect/pinterest",
             "bigquery": "/connect/bigquery",
         }
         for c in oauth_rows:
@@ -1136,7 +1092,7 @@ async def connect_page(request: Request):
                     "detail": f"{len(c.scopes or [])} scopes granted" if (c.scopes) else "",
                     "icon": icon_map.get(prov, "🔗"),
                     "is_active": c.connection_status == "active",
-                    "delete_url": delete_endpoint[prov].format(id=c.id),
+                    "delete_url": delete_endpoint.get(prov, f"/api/connections/{prov}/{{id}}").format(id=c.id),
                     "edit_url": edit_url,
                     "services": services,
                 }
@@ -1309,6 +1265,24 @@ async def connect_page(request: Request):
             "primary": False,
         },
         {
+            "slug": "x",
+            "name": "X Ads",
+            "icon": "X",
+            "desc": "Campaigns, line items, analytics",
+            "url": "/connect/x",
+            "count": x_count,
+            "primary": False,
+        },
+        {
+            "slug": "reddit",
+            "name": "Reddit Ads",
+            "icon": "👽",
+            "desc": "Campaign & ad group performance",
+            "url": "/connect/reddit",
+            "count": reddit_count,
+            "primary": False,
+        },
+        {
             "slug": "linkedin",
             "name": "LinkedIn Ads",
             "icon": "💼",
@@ -1324,6 +1298,15 @@ async def connect_page(request: Request):
             "desc": "Campaigns & pixel",
             "url": "/connect/pinterest",
             "count": pinterest_count,
+            "primary": False,
+        },
+        {
+            "slug": "bing",
+            "name": "Bing Webmaster Tools",
+            "icon": "🔎",
+            "desc": "Search performance, crawl stats, index coverage",
+            "url": "/connect/bing",
+            "count": bing_count,
             "primary": False,
         },
     ]
@@ -1343,6 +1326,50 @@ async def connect_page(request: Request):
                     google_active_tier = "Read-only"
                 break
 
+    # GRANULAR connection count — the header's "X connected. Y to go." must
+    # show the SAME numbers as the /home KPI. Google's four services count
+    # SEPARATELY, derived from the granted scopes on the Google OAuth rows;
+    # every other connector counts as one via its provider/credential count.
+    # Both pages feed the shared count_granular_connectors() helper so they
+    # can never drift.
+    google_has_ga4 = False
+    google_has_gtm = False
+    google_has_ads = False
+    google_has_gsc = False
+    for c in oauth_rows:
+        if (c.provider or "google") not in ("google", None, ""):
+            continue
+        scopes = c.scopes or []
+        if any("analytics" in s for s in scopes):
+            google_has_ga4 = True
+        if any("tagmanager" in s for s in scopes):
+            google_has_gtm = True
+        if "https://www.googleapis.com/auth/adwords" in scopes:
+            google_has_ads = True
+        if any("webmasters" in s for s in scopes):
+            google_has_gsc = True
+    conn_flags = SimpleNamespace(
+        has_ga4=google_has_ga4,
+        has_gtm=google_has_gtm,
+        has_ads=google_has_ads,
+        has_gsc=google_has_gsc,
+        has_bq=bool(bq_count),
+        has_redshift=bool(redshift_count),
+        has_snowflake=bool(snowflake_count),
+        has_amplitude=bool(amplitude_count),
+        has_adobe_analytics=bool(adobe_count),
+        has_adobe_launch=bool(adobe_count),
+        has_meta=bool(meta_count),
+        has_tiktok=bool(tiktok_count),
+        has_snap=bool(snap_count),
+        has_x=bool(x_count),
+        has_reddit=bool(reddit_count),
+        has_linkedin=bool(linkedin_count),
+        has_pinterest=bool(pinterest_count),
+        has_bing=bool(bing_count),
+    )
+    connected_count, total_connector_count = count_granular_connectors(conn_flags)
+
     response = render(
         request,
         "connect.html",
@@ -1350,6 +1377,9 @@ async def connect_page(request: Request):
             "user": user_view,
             "connections": connections_view,
             "platforms_avail": platforms_avail,
+            "connected_count": connected_count,
+            "total_connector_count": total_connector_count,
+            "remaining_count": total_connector_count - connected_count,
             "has_google": google_count > 0,
             "google_active_tier": google_active_tier,
             "active_project_id": active_pid,

@@ -14,7 +14,12 @@ from typing import Literal
 
 import app.app_state as state
 from app.cache import cached_tool_response
-from app.tools.shared_helpers import get_current_user, get_google_conn_id, get_provider_token
+from app.tools.shared_helpers import (
+    get_current_user,
+    get_google_conn_id,
+    get_provider_oauth1_tokens,
+    get_provider_token,
+)
 
 
 def _get_user():
@@ -27,6 +32,10 @@ def _get_google_conn_id():
 
 def _get_provider_token(provider_str: str) -> str | None:
     return get_provider_token(provider_str)
+
+
+def _get_provider_oauth1_tokens(provider_str: str) -> tuple[str, str] | None:
+    return get_provider_oauth1_tokens(provider_str)
 
 
 def _unauthorized_response(platform: str):
@@ -47,7 +56,7 @@ def _unauthorized_response(platform: str):
 def register_marketing_tools(mcp_server):
     @mcp_server.tool("marketing_read")
     async def marketing_read(
-        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest"],
+        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit"],
         action: str,
         account_id: str | None = None,
         date_range_start: str | None = None,
@@ -58,7 +67,7 @@ def register_marketing_tools(mcp_server):
     ) -> dict:
         """Reads ad platform data. Use marketing_audit for health checks, marketing_write for changes.
 
-        platform: google | meta | tiktok | snap. Dates: YYYY-MM-DD.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit. Dates: YYYY-MM-DD.
 
         All platforms: list_accounts, get_campaign_performance(account_id+dates)
         Google only: get_ad_group_performance(+dates,campaign_id?), get_conversion_actions(account_id), get_keyword_performance(+dates,campaign_id?)
@@ -82,6 +91,8 @@ def register_marketing_tools(mcp_server):
             "snap": {"list_accounts", "get_campaign_performance", "get_adsquad_performance"},
             "linkedin": {"list_accounts", "get_campaign_performance", "get_adgroup_performance"},
             "pinterest": {"list_accounts", "get_campaign_performance", "get_adgroup_performance"},
+            "x": {"list_accounts", "get_campaign_performance", "get_line_item_performance"},
+            "reddit": {"list_accounts", "get_campaign_performance", "get_adgroup_performance"},
         }
         valid_actions = _VALID_MARKETING_READ_ACTIONS.get(platform, set())
         if action not in valid_actions:
@@ -372,11 +383,103 @@ def register_marketing_tools(mcp_server):
                 "message": f"Unknown action '{action}' for Pinterest Ads. Supported: list_accounts, get_campaign_performance, get_adgroup_performance",
             }
 
+        elif platform == "x":
+            oauth1_tokens = _get_provider_oauth1_tokens("x")
+            if not oauth1_tokens:
+                return _unauthorized_response("x")
+            from app.auth.oauth_app_credentials import get_oauth_app_credentials_cached
+            from app.connectors.x_ads import XAdsConnector, XOAuth1Token
+
+            async with state.db_session_factory() as db:
+                creds = await get_oauth_app_credentials_cached(db, "x")
+            x_ads = XAdsConnector(creds.client_id, creds.client_secret)
+            x_token = XOAuth1Token(token=oauth1_tokens[0], token_secret=oauth1_tokens[1])
+            uid = user.user_id if user else "anon"
+            if action == "list_accounts":
+                return await cached_tool_response(
+                    f"cache:x:accounts:{uid}",
+                    600,
+                    x_ads.list_accounts,
+                    x_token,
+                )
+            if not account_id:
+                return {"error": True, "message": f"account_id is required for '{action}'"}
+            if action == "get_campaign_performance":
+                mets_key = ",".join(sorted(metrics)) if metrics else "default"
+                return await cached_tool_response(
+                    f"cache:x:campaigns:{uid}:{account_id}:{date_range_start}:{date_range_end}:{mets_key}",
+                    60,
+                    x_ads.get_campaign_performance,
+                    x_token,
+                    account_id,
+                    date_range_start,
+                    date_range_end,
+                    metrics,
+                )
+            elif action == "get_line_item_performance":
+                return await cached_tool_response(
+                    f"cache:x:line_items:{uid}:{account_id}:{date_range_start}:{date_range_end}:{campaign_id}",
+                    60,
+                    x_ads.get_line_item_performance,
+                    x_token,
+                    account_id,
+                    date_range_start,
+                    date_range_end,
+                    campaign_id,
+                )
+            return {
+                "error": True,
+                "message": f"Unknown action '{action}' for X Ads. Supported: list_accounts, get_campaign_performance, get_line_item_performance",
+            }
+
+        elif platform == "reddit":
+            token = _get_provider_token("reddit")
+            if not token:
+                return _unauthorized_response("reddit")
+            reddit = state.reddit_connector
+            uid = user.user_id if user else "anon"
+            if action == "list_accounts":
+                return await cached_tool_response(
+                    f"cache:reddit:accounts:{uid}",
+                    600,
+                    reddit.list_ad_accounts,
+                    token,
+                )
+            if not account_id:
+                return {"error": True, "message": f"account_id is required for '{action}'"}
+            if action == "get_campaign_performance":
+                mets_key = ",".join(sorted(metrics)) if metrics else "default"
+                return await cached_tool_response(
+                    f"cache:reddit:campaigns:{uid}:{account_id}:{date_range_start}:{date_range_end}:{mets_key}",
+                    60,
+                    reddit.get_campaign_performance,
+                    token,
+                    account_id,
+                    date_range_start,
+                    date_range_end,
+                    metrics,
+                )
+            elif action == "get_adgroup_performance":
+                return await cached_tool_response(
+                    f"cache:reddit:adgroups:{uid}:{account_id}:{date_range_start}:{date_range_end}:{campaign_id}:{limit}",
+                    60,
+                    reddit.get_adgroup_performance,
+                    token,
+                    account_id,
+                    date_range_start,
+                    date_range_end,
+                    campaign_id,
+                )
+            return {
+                "error": True,
+                "message": f"Unknown action '{action}' for Reddit Ads. Supported: list_accounts, get_campaign_performance, get_adgroup_performance",
+            }
+
         return {"error": True, "message": f"Unknown platform: {platform}"}
 
     @mcp_server.tool("marketing_audit")
     async def marketing_audit(
-        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest"],
+        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit"],
         action: str,
         account_id: str,
         date_range_start: str | None = None,
@@ -385,7 +488,7 @@ def register_marketing_tools(mcp_server):
     ) -> dict:
         """Audits marketing health: tracking, budgets, quality scores.
 
-        platform: google | meta | tiktok | snap. All: audit_tracking_setup(account_id).
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit. All: audit_tracking_setup(account_id).
         Google only: audit_budget_utilization(account_id+dates), audit_quality_scores(account_id,campaign_id?)
         """
         user = _get_user()
@@ -466,6 +569,35 @@ def register_marketing_tools(mcp_server):
                 "message": f"Unknown action '{action}' for Pinterest Ads audit. Supported: audit_tracking_setup",
             }
 
+        elif platform == "x":
+            oauth1_tokens = _get_provider_oauth1_tokens("x")
+            if not oauth1_tokens:
+                return _unauthorized_response("x")
+            if action == "audit_tracking_setup":
+                from app.auth.oauth_app_credentials import get_oauth_app_credentials_cached
+                from app.connectors.x_ads import XAdsConnector, XOAuth1Token
+
+                async with state.db_session_factory() as db:
+                    creds = await get_oauth_app_credentials_cached(db, "x")
+                return await XAdsConnector(creds.client_id, creds.client_secret).audit_tracking_setup(
+                    XOAuth1Token(token=oauth1_tokens[0], token_secret=oauth1_tokens[1]), account_id
+                )
+            return {
+                "error": True,
+                "message": f"Unknown action '{action}' for X Ads audit. Supported: audit_tracking_setup",
+            }
+
+        elif platform == "reddit":
+            token = _get_provider_token("reddit")
+            if not token:
+                return _unauthorized_response("reddit")
+            if action == "audit_tracking_setup":
+                return await state.reddit_connector.audit_tracking_setup(token, account_id)
+            return {
+                "error": True,
+                "message": f"Unknown action '{action}' for Reddit Ads audit. Supported: audit_tracking_setup",
+            }
+
         elif platform == "gtm":
             return {
                 "error": True,
@@ -480,7 +612,7 @@ def register_marketing_tools(mcp_server):
 
     @mcp_server.tool("marketing_write")
     async def marketing_write(
-        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest"],
+        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit"],
         action: str,
         account_id: str,
         campaign_id: str | None = None,
@@ -494,7 +626,7 @@ def register_marketing_tools(mcp_server):
     ) -> dict:
         """Write operations for ad platforms. Google requires 'full' tier.
 
-        platform: google | meta | tiktok | snap.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit.
         create_campaign: campaign_name, advertising_channel_type(SEARCH|DISPLAY|SHOPPING|VIDEO|PERFORMANCE_MAX), daily_budget_usd, start_date
         update_campaign_status: campaign_id, status(ENABLED|PAUSED)
         update_campaign_budget: campaign_id, daily_budget_usd
@@ -702,6 +834,56 @@ def register_marketing_tools(mcp_server):
             return {
                 "error": True,
                 "message": f"Unknown action '{action}' for Pinterest Ads write. Supported: update_campaign_status, update_campaign_budget",
+            }
+
+        elif platform == "x":
+            oauth1_tokens = _get_provider_oauth1_tokens("x")
+            if not oauth1_tokens:
+                return _unauthorized_response("x")
+            if action == "update_campaign_status":
+                if not campaign_id or not status:
+                    return {
+                        "error": True,
+                        "message": "campaign_id and status are required for update_campaign_status",
+                    }
+                from app.auth.oauth_app_credentials import get_oauth_app_credentials_cached
+                from app.connectors.x_ads import XAdsConnector, XOAuth1Token
+
+                async with state.db_session_factory() as db:
+                    creds = await get_oauth_app_credentials_cached(db, "x")
+                return await XAdsConnector(creds.client_id, creds.client_secret).update_campaign_status(
+                    XOAuth1Token(token=oauth1_tokens[0], token_secret=oauth1_tokens[1]),
+                    account_id,
+                    campaign_id,
+                    status,
+                )
+            return {
+                "error": True,
+                "message": f"Unknown action '{action}' for X Ads write. Supported: update_campaign_status",
+            }
+
+        elif platform == "reddit":
+            token = _get_provider_token("reddit")
+            if not token:
+                return _unauthorized_response("reddit")
+            reddit = state.reddit_connector
+            if action == "update_campaign_status":
+                if not campaign_id or not status:
+                    return {
+                        "error": True,
+                        "message": "campaign_id and status are required for update_campaign_status",
+                    }
+                return await reddit.update_campaign_status(token, account_id, campaign_id, status)
+            elif action == "update_campaign_budget":
+                if not campaign_id or daily_budget_usd is None:
+                    return {
+                        "error": True,
+                        "message": "campaign_id and daily_budget_usd are required for update_campaign_budget",
+                    }
+                return await reddit.update_campaign_budget(token, account_id, campaign_id, daily_budget_usd)
+            return {
+                "error": True,
+                "message": f"Unknown action '{action}' for Reddit Ads write. Supported: update_campaign_status, update_campaign_budget",
             }
 
         return {"error": True, "message": f"Unknown platform: {platform}"}

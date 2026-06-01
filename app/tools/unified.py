@@ -170,14 +170,28 @@ WAREHOUSE_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "get_warehouse_usage": ("warehouse_read", "get_warehouse_usage"),
 }
 
-# seo_read (Google Search Console today; Bing / Ahrefs / SEMrush tomorrow) — queries only.
+# seo_read (Google Search Console + Bing Webmaster Tools) — queries only.
 # Audits (top_movers, striking_distance, etc.) moved to run_audit.
+# Route key format: <platform>_<action> for Bing; bare action for GSC (backwards-compat).
 SEO_READ_ROUTES: dict[str, tuple[str, str | None]] = {
+    # Google Search Console actions (bare names preserved for backwards-compatibility)
     "list_sites": ("search_console_read", "list_sites"),
     "search_analytics": ("search_console_read", "search_analytics"),
     "list_sitemaps": ("search_console_read", "list_sitemaps"),
     "get_sitemap": ("search_console_read", "get_sitemap"),
     "inspect_url": ("search_console_read", "inspect_url"),
+    # Google Search Console actions (explicit platform prefix)
+    "gsc_list_sites": ("search_console_read", "list_sites"),
+    "gsc_search_analytics": ("search_console_read", "search_analytics"),
+    "gsc_list_sitemaps": ("search_console_read", "list_sitemaps"),
+    "gsc_get_sitemap": ("search_console_read", "get_sitemap"),
+    "gsc_inspect_url": ("search_console_read", "inspect_url"),
+    # Bing Webmaster Tools actions
+    "bing_list_sites": ("bing_webmaster_read", "list_sites"),
+    "bing_get_query_stats": ("bing_webmaster_read", "get_query_stats"),
+    "bing_get_crawl_stats": ("bing_webmaster_read", "get_crawl_stats"),
+    "bing_get_index_coverage": ("bing_webmaster_read", "get_index_coverage"),
+    "bing_get_link_counts": ("bing_webmaster_read", "get_link_counts"),
 }
 
 # seo_write
@@ -523,22 +537,43 @@ Actions: run_query (default), preview_table, dry_run (BigQuery),
 """
 
 SEO_READ_DOC = """
-Read organic-search data. Backed by Google Search Console today; designed to
-absorb Bing Webmaster Tools / Ahrefs / SEMrush under the same action set
-(switch via `params.platform`).
+Read organic-search data across Google Search Console and Bing Webmaster Tools.
+Use action names prefixed with `gsc_` or `bing_` to target a specific platform.
+Bare action names (list_sites, search_analytics, etc.) default to Google Search Console
+for backwards-compatibility.
 
 For audits (top_movers, striking_distance, CTR outliers, sitemap health,
 GSC↔GA4 cross-reference) → use `run_audit` with the `seo_*` action prefix.
 
-Actions:
-  list_sites       — Enumerate verified sites/properties
-  search_analytics — Impressions/clicks/CTR/position. params: site_url,
-                     start_date, end_date, dimensions[] (query|page|country|device|
-                     date|searchAppearance), search_type, row_limit, start_row,
-                     dimension_filter_groups, aggregation_type, data_state
-  list_sitemaps    — params: site_url
-  get_sitemap      — params: site_url, feedpath
-  inspect_url      — URL Inspection API. params: site_url, inspection_url, language_code
+GOOGLE SEARCH CONSOLE actions (prefix `gsc_` or use bare names):
+  list_sites / gsc_list_sites
+                   — Enumerate verified GSC properties
+  search_analytics / gsc_search_analytics
+                   — Impressions/clicks/CTR/position. params: site_url,
+                     start_date, end_date, dimensions[] (query|page|country|
+                     device|date|searchAppearance), search_type, row_limit,
+                     start_row, dimension_filter_groups, aggregation_type,
+                     data_state
+  list_sitemaps / gsc_list_sitemaps
+                   — params: site_url
+  get_sitemap / gsc_get_sitemap
+                   — params: site_url, feedpath
+  inspect_url / gsc_inspect_url
+                   — URL Inspection API. params: site_url, inspection_url,
+                     language_code
+
+BING WEBMASTER TOOLS actions (prefix `bing_`):
+  bing_list_sites  — Enumerate verified Bing Webmaster sites
+  bing_get_query_stats
+                   — Keyword/query performance. params: site_url,
+                     start_date, end_date (YYYY-MM-DD), search_type,
+                     page (default 0), page_size (default 100)
+  bing_get_crawl_stats
+                   — Crawl statistics. params: site_url
+  bing_get_index_coverage
+                   — Index coverage data. params: site_url
+  bing_get_link_counts
+                   — Inbound link counts. params: site_url
 """
 
 SEO_WRITE_DOC = """
@@ -937,10 +972,11 @@ def rewire_unified_surface(mcp_server) -> None:
         "warehouse_read",
         "warehouse_audit",
         "warehouse_query",
-        # search console
+        # search console + bing webmaster
         "search_console_read",
         "search_console_audit",
         "search_console_write",
+        "bing_webmaster_read",
         # dashboards — reads are dispatched via dashboard_read; card-native
         # deploy tools (dashboard_deploy_batch, dashboard_manage_scopes,
         # dashboard_rotate_token) are NOT absorbed
@@ -1075,6 +1111,11 @@ def rewire_unified_surface(mcp_server) -> None:
             ("Meta Ads", p.has_meta, f"{base}/connect/meta"),
             ("TikTok Ads", p.has_tiktok, f"{base}/connect/tiktok"),
             ("Snapchat Ads", p.has_snap, f"{base}/connect/snap"),
+            ("LinkedIn Ads", getattr(p, "has_linkedin", False), f"{base}/connect/linkedin"),
+            ("Pinterest Ads", getattr(p, "has_pinterest", False), f"{base}/connect/pinterest"),
+            ("X Ads", getattr(p, "has_x", False), f"{base}/connect/x"),
+            ("Reddit Ads", getattr(p, "has_reddit", False), f"{base}/connect/reddit"),
+            ("Bing Webmaster Tools", getattr(p, "has_bing", False), f"{base}/connect/bing"),
             ("Amplitude", p.has_amplitude, f"{base}/connect/amplitude"),
             ("Adobe Analytics", p.has_adobe_analytics, f"{base}/connect/adobe"),
             ("Adobe Launch", p.has_adobe_launch, f"{base}/connect/adobe"),
