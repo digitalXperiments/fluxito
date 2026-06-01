@@ -20,6 +20,7 @@ Written for marketing analysts, growth leads, and analytics operators who want t
 |---|---|---|
 | [projects-and-connections.md](projects-and-connections.md) | Create projects, configure platform apps, connect accounts, and keep active project scope clear. | ~8 min |
 | [connect-ai-mcp.md](connect-ai-mcp.md) | Add Fluxito to Claude, ChatGPT, Cursor, Windsurf, or any MCP-compatible AI client. | ~10 min |
+| [fluxito-skill.md](fluxito-skill.md) | Install the Fluxito Skill so your AI follows the correct method, schema, and guardrails. | ~5 min |
 | [platform-setup-guides.md](platform-setup-guides.md) | Hub for Google, paid media, warehouse, analytics, and tag-manager connector setup. | ~10 min |
 | [business-context.md](business-context.md) | Write the Markdown context document the AI uses to understand your business rules. | ~10 min |
 
@@ -68,6 +69,8 @@ Each platform requires its own OAuth app. App Review timelines are noted for pla
 | [pinterest-ads.md](pinterest-ads.md) | Developer portal app registration, scope configuration, redirect URI, production review note. | ~15 min setup; 1–5 day review |
 | [x-ads.md](x-ads.md) | X developer app setup, OAuth 1.0a callback, Ads API access, account permission checks. | ~20 min setup; access review varies |
 | [snap-ads.md](snap-ads.md) | App creation, Ads API capability, confidential client setup, redirect URI. | ~20 min setup; variable review |
+| [reddit-ads.md](reddit-ads.md) | Reddit Ads API app, OAuth credentials, account access verification. | ~15 min setup |
+| [bing-webmaster.md](bing-webmaster.md) | Bing Webmaster Tools API key, site verification, usage limits. | ~10 min |
 
 ---
 
@@ -91,6 +94,7 @@ No OAuth app required.
 | [amplitude.md](amplitude.md) | API Key and Secret Key per project; multi-project setup. | ~5 min |
 | [adobe-analytics.md](adobe-analytics.md) | Adobe Developer Console project, OAuth Server-to-Server credential, Admin Console product profile grant. | ~25 min |
 | [adobe-launch.md](adobe-launch.md) | Reuse or create Adobe I/O project for Experience Platform Tags; product profile rights. | ~15 min (~5 min if reusing Analytics project) |
+| [adobe-marketo.md](adobe-marketo.md) | Marketo LaunchPoint custom service (API-only user + role), Client ID/Secret, REST endpoint. Own credentials — not Adobe IMS. | ~15 min |
 
 ---
 
@@ -101,4 +105,5 @@ No OAuth app required.
 - **SDR drives tracking audits:** complete [sdr-generation.md](sdr-generation.md) before asking for GA4/GTM implementation drift checks.
 - **Google connectors share one OAuth client:** once you complete [google-cloud-setup.md](google-cloud-setup.md) and connect a Google account, that single connection covers GA4, GTM, Google Ads, Search Console, and BigQuery (OAuth mode).
 - **Adobe Analytics and Adobe Launch share one Adobe I/O project:** complete [adobe-analytics.md](adobe-analytics.md) first, then [adobe-launch.md](adobe-launch.md) reuses the same three credentials with one additional Admin Console step.
+- **Adobe Marketo Engage is separate from the other Adobe connectors:** [adobe-marketo.md](adobe-marketo.md) uses Marketo's own LaunchPoint credentials and REST endpoint, not the Adobe I/O project — there are no shared credentials with Adobe Analytics/Launch.
 - **BigQuery service account vs Google OAuth:** BigQuery is the only Google connector with an alternative credential mode. See [bigquery.md](bigquery.md) for both options.

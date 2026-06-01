@@ -708,6 +708,7 @@ def register_all_tools(mcp_server):
             u.has_amplitude = project_ctx.has_amplitude
             u.has_adobe_analytics = project_ctx.has_adobe_analytics
             u.has_adobe_launch = project_ctx.has_adobe_launch
+            u.has_adobe_marketo = project_ctx.has_adobe_marketo
             u.has_redshift = project_ctx.has_redshift
             u.has_snowflake = project_ctx.has_snowflake
             u.connections = project_ctx.connections
@@ -732,6 +733,7 @@ def register_all_tools(mcp_server):
                     ("Amplitude", project_ctx.has_amplitude),
                     ("Adobe Analytics", project_ctx.has_adobe_analytics),
                     ("Adobe Launch", project_ctx.has_adobe_launch),
+                    ("Adobe Marketo Engage", project_ctx.has_adobe_marketo),
                     ("Redshift", project_ctx.has_redshift),
                     ("Snowflake", project_ctx.has_snowflake),
                 ]

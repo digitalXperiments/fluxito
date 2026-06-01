@@ -34,6 +34,7 @@ from app.models.connection import OAuthConnection
 from app.models.credential_connection import (
     AdobeConnection,
     AmplitudeConnection,
+    MarketoConnection,
     RedshiftConnection,
     SnowflakeConnection,
 )
@@ -152,6 +153,7 @@ class UserContext:
     has_amplitude: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
+    has_adobe_marketo: bool = False
     has_redshift: bool = False
     has_snowflake: bool = False
     connections: list[ConnectionInfo] = field(default_factory=list)
@@ -209,6 +211,7 @@ class ProjectContext:
     has_amplitude: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
+    has_adobe_marketo: bool = False
     has_redshift: bool = False
     has_snowflake: bool = False
     # Connection details
@@ -426,7 +429,7 @@ async def _load_connections_and_resources(
     Returns: (
         all_connections_orm, google_connections,
         has_bq, has_amplitude, has_adobe_analytics, has_adobe_launch,
-        has_redshift, has_snowflake, has_meta, has_tiktok, has_snap,
+        has_adobe_marketo, has_redshift, has_snowflake, has_meta, has_tiktok, has_snap,
         has_linkedin, has_pinterest, has_x, has_reddit, has_bing, has_apple,
         has_ga4, has_gtm, has_ads, has_gsc,
         ga4_props, gtm_cons, ads_accs, gsc_sites
@@ -472,6 +475,13 @@ async def _load_connections_and_resources(
     adobe_conns = result.scalars().all()
     has_adobe_analytics = any(c.has_analytics for c in adobe_conns)
     has_adobe_launch = any(c.has_launch for c in adobe_conns)
+
+    result = await db.execute(
+        select(MarketoConnection)
+        .where(owner_filter_column == owner_id, MarketoConnection.is_active == True)
+        .limit(1)
+    )
+    has_adobe_marketo = result.scalar_one_or_none() is not None
 
     result = await db.execute(
         select(RedshiftConnection)
@@ -578,6 +588,7 @@ async def _load_connections_and_resources(
         has_amplitude,
         has_adobe_analytics,
         has_adobe_launch,
+        has_adobe_marketo,
         has_redshift,
         has_snowflake,
         has_meta,
@@ -682,6 +693,7 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             has_amplitude,
             has_adobe_analytics,
             has_adobe_launch,
+            has_adobe_marketo,
             has_redshift,
             has_snowflake,
             has_meta,
@@ -738,6 +750,7 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             has_amplitude=has_amplitude,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
+            has_adobe_marketo=has_adobe_marketo,
             has_redshift=has_redshift,
             has_snowflake=has_snowflake,
             connections=connections,
@@ -798,6 +811,7 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             has_amplitude,
             has_adobe_analytics,
             has_adobe_launch,
+            has_adobe_marketo,
             has_redshift,
             has_snowflake,
             has_meta,
@@ -855,6 +869,7 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             has_amplitude=has_amplitude,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
+            has_adobe_marketo=has_adobe_marketo,
             has_redshift=has_redshift,
             has_snowflake=has_snowflake,
             connections=connections,
@@ -983,6 +998,7 @@ _PROJECT_FLAG_ATTRS = (
     "has_amplitude",
     "has_adobe_analytics",
     "has_adobe_launch",
+    "has_adobe_marketo",
     "has_redshift",
     "has_snowflake",
     "connections",

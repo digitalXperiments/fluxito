@@ -355,6 +355,7 @@ TUTORIAL_CATEGORIES = [
             ("amplitude", "Amplitude", "~5 min", "API key + secret"),
             ("adobe-analytics", "Adobe Analytics", "~25 min", "Adobe I/O project"),
             ("adobe-launch", "Adobe Launch", "~15 min", "Shares Adobe I/O credentials"),
+            ("adobe-marketo", "Adobe Marketo Engage", "~15 min", "Marketo LaunchPoint service"),
         ],
     },
 ]

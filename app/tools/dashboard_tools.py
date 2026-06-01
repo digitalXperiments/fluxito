@@ -58,6 +58,7 @@ VALID_PLATFORMS = {
     "search_console",
     "gtm",
     "adobe_launch",
+    "adobe_marketo",
 }
 VALID_TOOLS = {
     "analytics_read",

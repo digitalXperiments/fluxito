@@ -1,15 +1,15 @@
 """Add Apple Ads OAuth app platform.
 
-Revision ID: 048_apple_ads_oauth_platform
-Revises: 047_bing_oauth_platform
+Revision ID: 049_apple_ads_oauth_platform
+Revises: 048_marketo_connections
 
 Note: keep revision IDs <= 32 chars — alembic_version.version_num is VARCHAR(32).
 """
 
 from alembic import op
 
-revision = "048_apple_ads_oauth_platform"
-down_revision = "047_bing_oauth_platform"
+revision = "049_apple_ads_oauth_platform"
+down_revision = "048_marketo_connections"
 branch_labels = None
 depends_on = None
 
