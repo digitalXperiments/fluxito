@@ -1,0 +1,160 @@
+"""
+Tests for AdobeMarketoConnector.
+
+Mirrors the style of test_bing_webmaster_connector.py:
+  - monkeypatch httpx.AsyncClient with an async-context-manager shim
+  - assert correct URLs / params / return shapes
+"""
+
+import json
+
+import pytest
+
+from app.connectors.adobe_marketo import AdobeMarketoConnector
+
+_INSTANCE = "https://123-ABC-456.mktorest.com"
+_CLIENT_ID = "cid"
+_CLIENT_SECRET = "csecret"
+_TOKEN = "marketo-access-token"
+
+
+class _FakeClientBase:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return None
+
+
+def _resp(status: int, body: dict):
+    class _R:
+        status_code = status
+        text = json.dumps(body)
+
+        def json(self):
+            return body
+
+    return _R()
+
+
+def _connector_with_token(monkeypatch, get_handler):
+    """Return a connector whose token endpoint is satisfied and whose REST GETs go to get_handler."""
+
+    class FakeClient(_FakeClientBase):
+        async def get(self, url, *, headers=None, params=None):
+            if "/identity/oauth/token" in url:
+                return _resp(200, {"access_token": _TOKEN, "expires_in": 3600})
+            return get_handler(url, headers, params)
+
+    monkeypatch.setattr("app.connectors.adobe_marketo.httpx.AsyncClient", FakeClient)
+    return AdobeMarketoConnector()
+
+
+@pytest.mark.asyncio
+async def test_token_is_fetched_with_client_credentials(monkeypatch):
+    captured = {}
+
+    class FakeClient(_FakeClientBase):
+        async def get(self, url, *, headers=None, params=None):
+            captured["url"] = url
+            captured["params"] = params or {}
+            return _resp(200, {"access_token": _TOKEN, "expires_in": 3600})
+
+    monkeypatch.setattr("app.connectors.adobe_marketo.httpx.AsyncClient", FakeClient)
+
+    conn = AdobeMarketoConnector()
+    result = await conn._get_marketo_token(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
+
+    assert captured["url"] == f"{_INSTANCE}/identity/oauth/token"
+    assert captured["params"]["grant_type"] == "client_credentials"
+    assert captured["params"]["client_id"] == _CLIENT_ID
+    assert captured["params"]["client_secret"] == _CLIENT_SECRET
+    assert result == {"token": _TOKEN}
+
+
+@pytest.mark.asyncio
+async def test_token_is_cached_per_instance(monkeypatch):
+    calls = {"n": 0}
+
+    class FakeClient(_FakeClientBase):
+        async def get(self, url, *, headers=None, params=None):
+            calls["n"] += 1
+            return _resp(200, {"access_token": _TOKEN, "expires_in": 3600})
+
+    monkeypatch.setattr("app.connectors.adobe_marketo.httpx.AsyncClient", FakeClient)
+
+    conn = AdobeMarketoConnector()
+    await conn._get_marketo_token(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
+    await conn._get_marketo_token(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
+    assert calls["n"] == 1  # second call served from cache
+
+
+@pytest.mark.asyncio
+async def test_get_leads_sends_filter_and_bearer(monkeypatch):
+    captured = {}
+
+    def handler(url, headers, params):
+        captured["url"] = url
+        captured["headers"] = headers or {}
+        captured["params"] = params or {}
+        return _resp(200, {"success": True, "result": [{"id": 1, "email": "a@b.com"}]})
+
+    conn = _connector_with_token(monkeypatch, handler)
+    result = await conn.get_leads(
+        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET,
+        filter_type="email", filter_values=["a@b.com"], fields=["id", "email"], limit=10,
+    )
+
+    assert captured["url"] == f"{_INSTANCE}/rest/v1/leads.json"
+    assert captured["headers"]["Authorization"] == f"Bearer {_TOKEN}"
+    assert captured["params"]["filterType"] == "email"
+    assert captured["params"]["filterValues"] == "a@b.com"
+    assert captured["params"]["fields"] == "id,email"
+    assert captured["params"]["batchSize"] == 10
+    assert result["result"] == [{"id": 1, "email": "a@b.com"}]
+
+
+@pytest.mark.asyncio
+async def test_list_lead_lists_calls_lists_endpoint(monkeypatch):
+    captured = {}
+
+    def handler(url, headers, params):
+        captured["url"] = url
+        return _resp(200, {"success": True, "result": [{"id": 7, "name": "VIPs"}]})
+
+    conn = _connector_with_token(monkeypatch, handler)
+    result = await conn.list_lead_lists(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
+
+    assert captured["url"] == f"{_INSTANCE}/rest/v1/lists.json"
+    assert result["result"][0]["name"] == "VIPs"
+
+
+@pytest.mark.asyncio
+async def test_list_programs_uses_asset_endpoint(monkeypatch):
+    captured = {}
+
+    def handler(url, headers, params):
+        captured["url"] = url
+        captured["params"] = params or {}
+        return _resp(200, {"success": True, "result": [{"id": 3, "name": "Q3 Nurture"}]})
+
+    conn = _connector_with_token(monkeypatch, handler)
+    result = await conn.list_programs(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET, limit=20)
+
+    assert captured["url"] == f"{_INSTANCE}/rest/asset/v1/programs.json"
+    assert captured["params"]["maxReturn"] == 20
+    assert result["result"][0]["id"] == 3
+
+
+@pytest.mark.asyncio
+async def test_api_error_returns_structured_error(monkeypatch):
+    def handler(url, headers, params):
+        return _resp(401, {"success": False, "errors": [{"code": "601", "message": "Access token invalid"}]})
+
+    conn = _connector_with_token(monkeypatch, handler)
+    result = await conn.list_lead_lists(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
+    assert result["error"] is True
+    assert result["status_code"] == 401
