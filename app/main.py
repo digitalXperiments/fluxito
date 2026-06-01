@@ -158,6 +158,7 @@ async def lifespan(app: FastAPI):
     from app.auth.google_token_manager import GoogleTokenManager
     from app.connectors.adobe_analytics import AdobeAnalyticsConnector
     from app.connectors.adobe_launch import AdobeLaunchConnector
+    from app.connectors.adobe_marketo import AdobeMarketoConnector
     from app.connectors.amplitude import AmplitudeConnector
     from app.connectors.bigquery import BigQueryConnector
     from app.connectors.bing_webmaster import BingWebmasterConnector
@@ -195,6 +196,7 @@ async def lifespan(app: FastAPI):
     app_state.amplitude_connector = AmplitudeConnector()
     app_state.adobe_analytics_connector = AdobeAnalyticsConnector()
     app_state.adobe_launch_connector = AdobeLaunchConnector()
+    app_state.adobe_marketo_connector = AdobeMarketoConnector()
 
     await _init_sentry_from_runtime_settings()
     app_state.redshift_connector = RedshiftConnector()
@@ -839,6 +841,7 @@ def _sync_user_ctx_flags(user_ctx, pctx) -> None:
         "has_amplitude",
         "has_adobe_analytics",
         "has_adobe_launch",
+        "has_adobe_marketo",
         "has_redshift",
         "has_snowflake",
         "connections",
