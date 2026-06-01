@@ -4577,6 +4577,7 @@ select.f-input {
   --p-reddit:    #FF4500;
   --p-x:         #111111;
   --p-bing:      #008373;
+  --p-apple:     #111111;
   --p-sc:     #34A853;
   --p-bq:     #669DF6;
   --p-rs:     #CC2A36;
@@ -4643,6 +4644,7 @@ html[data-theme="dark"] .pbadge.snap { color: #1A1A1A; /* keep dark text on yell
 .pbadge.reddit    { background: var(--p-reddit); }
 .pbadge.x         { background: var(--p-x); }
 .pbadge.bing      { background: var(--p-bing); }
+.pbadge.apple     { background: var(--p-apple); }
 .pbadge.sc     { background: var(--p-sc); }
 .pbadge.bq     { background: var(--p-bq); }
 .pbadge.rs     { background: var(--p-rs); }

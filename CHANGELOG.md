@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.9] — 2026-06-02
+
+### Added
+- **Apple Search Ads** integration — connect via OAuth 2 client credentials, then
+  read App Store campaign and ad-group performance and audit conversion/tracking
+  setup through the `marketing_read` / `marketing_audit` tools.
+- Per-instance OAuth app credentials for Apple Search Ads (admin **Integrations** panel).
+
+### Changed
+- **Connections page now showcases the tools inside each platform.** Instead of an
+  opaque "Google Suite" label, the Google card lists its products as labelled icon
+  chips — Analytics, Tag Manager, Ads, Search Console — and the Adobe card lists
+  Analytics and Launch (with Marketo and Adobe Campaign shown as "coming soon"), so
+  it's clear at a glance what each connection unlocks. BigQuery remains its own
+  separate card (it is Google-branded but uses its own service-account setup).
+
 ## [1.0.7] — 2026-06-01
 
 ### Added

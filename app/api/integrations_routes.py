@@ -52,6 +52,7 @@ DEV_CONSOLE_URL = {
     "x": "https://developer.x.com/en/portal/projects-and-apps",
     "reddit": "https://www.reddit.com/prefs/apps",
     "bing": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
+    "apple": "https://ads.apple.com/cm/app/settings/api",
 }
 
 # Maps each OAuth platform to its tutorial markdown file(s).
@@ -73,6 +74,7 @@ PLATFORM_TUTORIALS: dict[str, list[str]] = {
     "x": ["x-ads"],
     "reddit": ["reddit-ads"],
     "bing": ["bing-webmaster"],
+    "apple": ["apple-ads"],
 }
 
 
@@ -92,6 +94,7 @@ def _redirect_uris_for(platform: str) -> list[str]:
         "x": [f"{base}/auth/x/callback"],
         "reddit": [f"{base}/auth/reddit/callback"],
         "bing": [f"{base}/auth/bing/callback"],
+        "apple": [],
     }
     return by_platform[platform]
 
@@ -333,6 +336,7 @@ TUTORIAL_CATEGORIES = [
             ("linkedin-ads", "LinkedIn Ads", "~20 min", "Requires app review"),
             ("pinterest-ads", "Pinterest Ads", "~15 min", "Requires app review"),
             ("x-ads", "X Ads", "~20 min", "Uses OAuth 1.0a and Ads API access"),
+            ("apple-ads", "Apple Ads", "~15 min", "Uses OAuth 2 client credentials"),
             ("snap-ads", "Snap Ads", "~20 min", "Snapchat marketing API"),
         ],
     },

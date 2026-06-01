@@ -16,6 +16,7 @@
     reddit:    { bg: 'linear-gradient(135deg,#FF4500,#cc3700)', color: '#fff', shadow: '0 4px 20px rgba(255,69,0,0.35)' },
     x:         { bg: 'linear-gradient(135deg,#111111,#555555)', color: '#fff', shadow: '0 4px 20px rgba(0,0,0,0.25)' },
     bing:      { bg: 'linear-gradient(135deg,#008373,#00614f)', color: '#fff', shadow: '0 4px 20px rgba(0,131,115,0.35)' },
+    apple:     { bg: 'linear-gradient(135deg,#111111,#6b7280)', color: '#fff', shadow: '0 4px 20px rgba(17,24,39,0.30)' },
   };
 
   var _currentPlatform = null;

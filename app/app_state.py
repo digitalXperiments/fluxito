@@ -38,6 +38,7 @@ pinterest_connector: Any = None
 x_connector: Any = None
 reddit_connector: Any = None
 bing_connector: Any = None
+apple_connector: Any = None
 amplitude_connector: Any = None
 adobe_analytics_connector: Any = None
 adobe_launch_connector: Any = None

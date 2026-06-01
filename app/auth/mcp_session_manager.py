@@ -148,6 +148,7 @@ class UserContext:
     has_x: bool = False
     has_reddit: bool = False
     has_bing: bool = False
+    has_apple: bool = False
     has_amplitude: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
@@ -204,6 +205,7 @@ class ProjectContext:
     has_x: bool = False
     has_reddit: bool = False
     has_bing: bool = False
+    has_apple: bool = False
     has_amplitude: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
@@ -425,7 +427,7 @@ async def _load_connections_and_resources(
         all_connections_orm, google_connections,
         has_bq, has_amplitude, has_adobe_analytics, has_adobe_launch,
         has_redshift, has_snowflake, has_meta, has_tiktok, has_snap,
-        has_linkedin, has_pinterest, has_x, has_reddit, has_bing,
+        has_linkedin, has_pinterest, has_x, has_reddit, has_bing, has_apple,
         has_ga4, has_gtm, has_ads, has_gsc,
         ga4_props, gtm_cons, ads_accs, gsc_sites
     )
@@ -449,6 +451,7 @@ async def _load_connections_and_resources(
     has_x = "x" in providers
     has_reddit = "reddit" in providers
     has_bing = "bing" in providers
+    has_apple = "apple" in providers
 
     # Check credential-based connections
     result = await db.execute(
@@ -585,6 +588,7 @@ async def _load_connections_and_resources(
         has_x,
         has_reddit,
         has_bing,
+        has_apple,
         has_ga4,
         has_gtm,
         has_ads,
@@ -688,6 +692,7 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             has_x,
             has_reddit,
             has_bing,
+            has_apple,
             has_ga4,
             has_gtm,
             has_ads,
@@ -729,6 +734,7 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             has_x=has_x,
             has_reddit=has_reddit,
             has_bing=has_bing,
+            has_apple=has_apple,
             has_amplitude=has_amplitude,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
@@ -802,6 +808,7 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             has_x,
             has_reddit,
             has_bing,
+            has_apple,
             has_ga4,
             has_gtm,
             has_ads,
@@ -844,6 +851,7 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             has_x=has_x,
             has_reddit=has_reddit,
             has_bing=has_bing,
+            has_apple=has_apple,
             has_amplitude=has_amplitude,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
@@ -971,6 +979,7 @@ _PROJECT_FLAG_ATTRS = (
     "has_x",
     "has_reddit",
     "has_bing",
+    "has_apple",
     "has_amplitude",
     "has_adobe_analytics",
     "has_adobe_launch",

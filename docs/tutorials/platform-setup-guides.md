@@ -37,6 +37,7 @@ Each paid platform needs its own OAuth app.
 | [Pinterest Ads](pinterest-ads.md) | Pinterest advertising data |
 | [X Ads](x-ads.md) | X campaign and line item performance |
 | [Reddit Ads](reddit-ads.md) | Reddit campaign and ad group performance |
+| [Apple Ads](apple-ads.md) | App Store campaign and ad group performance |
 | [Snap Ads](snap-ads.md) | Snapchat marketing API |
 
 ## SEO and webmaster tools

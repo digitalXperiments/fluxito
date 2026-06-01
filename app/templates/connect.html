@@ -104,7 +104,13 @@
     <div class="gs-icon">{{ platform_icon("google", 26) }}</div>
     <div class="gs-body">
       <h4>Google Suite</h4>
-      <div class="desc">Choose which services to enable — GA4, Google Tag Manager, Google Ads — then sign in with your Google account.</div>
+      <div class="desc">Choose which services to enable, then sign in with your Google account.</div>
+      <div class="svc-tags" aria-label="Included tools">
+        <span class="svc-tag"><span class="svc-tag-ic">{{ platform_icon("ga4", 14) }}</span>Analytics</span>
+        <span class="svc-tag"><span class="svc-tag-ic">{{ platform_icon("gtm", 14) }}</span>Tag Manager</span>
+        <span class="svc-tag"><span class="svc-tag-ic">{{ platform_icon("google_ads", 14) }}</span>Ads</span>
+        <span class="svc-tag"><span class="svc-tag-ic">{{ platform_icon("search_console", 14) }}</span>Search Console</span>
+      </div>
     </div>
     <div class="gs-cta">
       <span class="btn primary sm">Connect <span class="arrow">→</span></span>
@@ -133,6 +139,16 @@
         </div>
         <h4>{{ p.name }}</h4>
         <div class="desc">{{ p.desc }}</div>
+        {% if p.products %}
+        <div class="svc-tags" aria-label="Included tools">
+          {% for pr in p.products %}
+          <span class="svc-tag {% if pr.soon %}is-soon{% endif %}"
+                title="{{ pr.name }}{% if pr.soon %} — coming soon{% endif %}">
+            <span class="svc-tag-ic">{{ platform_icon(pr.slug, 14) }}</span>{{ pr.name }}{% if pr.soon %} · soon{% endif %}
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
         <div class="conn-actions">
           <span class="btn sm block" style="width:100%">
             {% if p.count %}Add another{% else %}Connect {{ p.name }}{% endif %} <span class="arrow">→</span>
@@ -182,6 +198,19 @@
   background: transparent;
   border-style: dashed;
 }
+
+/* Product chips — showcase the named tools a single connection unlocks */
+.svc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.svc-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px 3px 5px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg-2);
+  font-size: 11.5px; color: var(--ink-soft); white-space: nowrap;
+}
+.svc-tag-ic { display: inline-flex; width: 14px; height: 14px; }
+.svc-tag-ic svg { display: block; width: 14px; height: 14px; }
+.svc-tag.is-soon { opacity: 0.5; border-style: dashed; }
 
 /* Kebab menu — kept functional but recolored to editorial tokens */
 .kebab-wrap { position: relative; }
