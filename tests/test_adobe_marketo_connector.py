@@ -212,6 +212,7 @@ async def test_audit_instance_reports_quota(monkeypatch):
     assert "api_calls_used_today" in result
     assert result["api_calls_used_today"] == 9000
     assert result["program_count"] == 1
+    assert result["off_or_unknown_programs"] == []  # status "on" is not flagged
 
 
 @pytest.mark.asyncio
@@ -231,3 +232,4 @@ async def test_check_data_quality_counts_missing_fields(monkeypatch):
     )
     assert result["leads_checked"] == 2
     assert result["missing_email"] == 1
+    assert result["missing_company"] == 1
