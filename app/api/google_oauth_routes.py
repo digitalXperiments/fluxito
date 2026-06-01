@@ -924,6 +924,7 @@ async def connect_page(request: Request):
     connections_view = []
     bq_rows = []
     oauth_rows = []
+    marketo_rows = []
     if user_ctx is not None:
         try:
             db_session = app_state.db_session_factory()
