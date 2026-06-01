@@ -35,6 +35,9 @@ snap_connector: Any = None
 # New platform connectors
 linkedin_connector: Any = None
 pinterest_connector: Any = None
+x_connector: Any = None
+reddit_connector: Any = None
+bing_connector: Any = None
 amplitude_connector: Any = None
 adobe_analytics_connector: Any = None
 adobe_launch_connector: Any = None

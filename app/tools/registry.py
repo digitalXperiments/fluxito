@@ -230,7 +230,7 @@ def _install_tool_hook(mcp_server):
     tool_manager = mcp_server._tool_manager
     _original_call = tool_manager.call_tool
 
-    async def _instrumented_call(name, arguments, *args, **kwargs):
+    async def _instrumented_call_raw(name, arguments, *args, **kwargs):
         # --- Reliability layer ─────────────────────────────────────────────
         # Circuit breaker keyed by tool name — prevents a hot broken tool
         # from saturating the worker. Allows one probe after cooldown.
@@ -481,6 +481,37 @@ def _install_tool_hook(mcp_server):
 
         return result
 
+    async def _instrumented_call(name, arguments, *args, **kwargs):
+        # FastMCP's ``call_tool`` invokes the tool manager with
+        # ``convert_result=True`` and expects already-converted content
+        # (a list of content blocks, or a ``(content, structured)`` tuple).
+        #
+        # We deliberately run the wrapped tool with ``convert_result=False``
+        # so the instrumentation layer — most importantly the audit trail —
+        # observes the RAW dict/list/str the tool returned (needed to derive
+        # response summaries and the success/error/denied status). Only once
+        # auditing is done do we convert exactly as FastMCP would, so the
+        # value handed back to the SDK is byte-for-byte what it expects.
+        _want_convert = kwargs.pop("convert_result", False)
+        raw = await _instrumented_call_raw(name, arguments, *args, **kwargs)
+        if not _want_convert:
+            return raw
+        tool = tool_manager.get_tool(name)
+        if tool is None:
+            return raw
+        try:
+            return tool.fn_metadata.convert_result(raw)
+        except Exception:
+            # Never let result conversion break a call — return the raw value
+            # and let the lowlevel server fall back to generic serialization.
+            return raw
+
+    # Actually install the hook. Without this assignment the entire
+    # instrumentation layer (audit trail, circuit breaker, per-tool timeout,
+    # per-call active-project resolution, source-client capture) is dead code
+    # and the Activity Log never receives a single tool-call record.
+    tool_manager.call_tool = _instrumented_call
+
 
 def register_all_tools(mcp_server):
     from app.config import settings
@@ -534,6 +565,11 @@ def register_all_tools(mcp_server):
     from app.tools.search_console_tools import register_search_console_tools
 
     register_search_console_tools(mcp_server)
+
+    # ── Bing Webmaster Tools (Bing organic search) ───────────────────────────
+    from app.tools.bing_webmaster_tools import register_bing_webmaster_tools
+
+    register_bing_webmaster_tools(mcp_server)
 
     # ── Solution Design Reference (SDR) ────────────────────────────────────
     from app.tools.sdr_tools import register_sdr_tools
@@ -665,6 +701,9 @@ def register_all_tools(mcp_server):
             u.has_meta = project_ctx.has_meta
             u.has_tiktok = project_ctx.has_tiktok
             u.has_snap = project_ctx.has_snap
+            u.has_x = project_ctx.has_x
+            u.has_reddit = project_ctx.has_reddit
+            u.has_bing = project_ctx.has_bing
             u.has_amplitude = project_ctx.has_amplitude
             u.has_adobe_analytics = project_ctx.has_adobe_analytics
             u.has_adobe_launch = project_ctx.has_adobe_launch
@@ -685,6 +724,9 @@ def register_all_tools(mcp_server):
                     ("Meta Ads", project_ctx.has_meta),
                     ("TikTok Ads", project_ctx.has_tiktok),
                     ("Snap Ads", project_ctx.has_snap),
+                    ("X Ads", project_ctx.has_x),
+                    ("Reddit Ads", project_ctx.has_reddit),
+                    ("Bing Webmaster Tools", project_ctx.has_bing),
                     ("Amplitude", project_ctx.has_amplitude),
                     ("Adobe Analytics", project_ctx.has_adobe_analytics),
                     ("Adobe Launch", project_ctx.has_adobe_launch),

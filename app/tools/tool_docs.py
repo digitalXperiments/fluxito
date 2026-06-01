@@ -153,7 +153,7 @@ WAREHOUSE (BigQuery / Redshift / Snowflake)
   warehouse_check_clustering_health BQ partitioning / Redshift sort-dist
                                     params: engine, dataset_id
 
-SEO / SEARCH CONSOLE
+SEO / SEARCH CONSOLE (Google only — Bing audits not yet implemented)
   seo_top_movers               params: site_url, start_date, end_date,
                                        compare_start_date, compare_end_date,
                                        dimension (query|page), limit

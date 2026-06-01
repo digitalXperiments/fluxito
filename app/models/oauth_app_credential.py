@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
 
-SUPPORTED_PLATFORMS = ("google", "meta", "tiktok", "snap", "linkedin", "pinterest")
+SUPPORTED_PLATFORMS = ("google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "bing")
 
 
 class OAuthAppCredential(Base):
@@ -40,7 +40,7 @@ class OAuthAppCredential(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "platform IN ('google', 'meta', 'tiktok', 'snap', 'linkedin', 'pinterest')",
+            "platform IN ('google', 'meta', 'tiktok', 'snap', 'linkedin', 'pinterest', 'x', 'reddit', 'bing')",
             name="ck_oauth_app_credentials_platform_valid",
         ),
     )

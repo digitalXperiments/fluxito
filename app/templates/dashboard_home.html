@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "partials/platform_icons.html" import platform_icon %}
 {% block title %}Home — Fluxito{% endblock %}
 {% set active = 'home' %}
 
@@ -41,7 +40,7 @@
 
   {# ── KPI row ── #}
   {% set connected_count = total_conns %}
-  {% set total_count = platforms | list | length %}
+  {% set total_count = total_platforms %}
   <div class="kpi-row">
     <div class="kpi">
       <span class="label">Connections</span>
@@ -159,62 +158,17 @@
     </a>
   </div>
 
-  {# ── Platforms & Connections summary ── #}
-  {% set connected_platforms = platforms | selectattr('count') | list + platforms | rejectattr('count') | selectattr('via_google') | list %}
-  {% set not_connected_platforms = platforms | rejectattr('count') | rejectattr('via_google') | list %}
-  <div class="section-head home-section-head">
-    <div class="section-head-row">
-      <div>
-        <div class="label">Platforms &amp; Connections</div>
-        <h2>
-          {{ connected_platforms|length }} connected.
-          {% if not_connected_platforms|length > 0 %}<em class="serif-italic">{{ not_connected_platforms|length }} to go.</em>{% endif %}
-        </h2>
-      </div>
-      <a href="/connect" class="btn primary sm">+ Add connection</a>
-    </div>
-  </div>
-
-  <div class="conn-summary">
-    <div class="conn-summary-row">
-      <span class="conn-summary-label">Connected</span>
-      {% for p in connected_platforms %}
-        <span class="conn-summary-pill">
-          <span class="conn-summary-icon">{{ platform_icon(p.slug, 14) }}</span>
-          {{ p.name }}
-        </span>
-      {% else %}
-        <span class="conn-summary-empty">No platforms connected yet.</span>
-      {% endfor %}
-    </div>
-
-    {% if stats %}
-    <div class="conn-stats-grid">
-      {% for s in stats %}
-      <a href="/connect" class="conn-stat-card {% if s.is_empty %}is-empty{% endif %}">
-        <span class="conn-stat-lbl">{{ s.label }}</span>
-        <span class="conn-stat-num mono">{{ s.count }}</span>
-        <span class="conn-stat-sub">{{ s.sub }}</span>
-      </a>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if not_connected_platforms %}
-    <div class="conn-hint">
-      {{ not_connected_platforms|length }} not connected —
-      {% for p in not_connected_platforms %}{{ p.name }}{% if not loop.last %}, {% endif %}{% endfor %}.
-      <a href="/connect">Connect more →</a>
-    </div>
-    {% endif %}
-  </div>
-
 </main>
 
 <style>
 .home-main {
   --home-gap: 28px;
   --home-gap-sm: 18px;
+  /* Inter-section rhythm — larger, even gap between the three remaining
+     sections (KPI row · AI+next split · workspace) now that the bottom
+     Platforms & Connections section is gone. One step up the same scale.
+     Derived from scale tokens: 28px + 18px = 46px ≈ 48px original. */
+  --home-section-gap: calc(var(--home-gap) + var(--home-gap-sm));
   --home-card-pad-x: 20px;
 }
 
@@ -265,7 +219,7 @@
 
 /* Section head */
 .home-section-head {
-  margin-top: calc(var(--home-gap) + 6px);
+  margin-top: var(--home-section-gap);
   margin-bottom: var(--home-gap-sm);
 }
 .home-section-head h2 {
@@ -276,18 +230,10 @@
   color: var(--ink);
   line-height: 1.05;
 }
-.section-head-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: end;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
 /* Above-the-fold panels */
 .home-main .home-split {
   gap: 24px;
-  margin-top: var(--home-gap);
+  margin-top: var(--home-section-gap);
 }
 
 .home-main .home-card {
@@ -343,71 +289,12 @@
 @media (max-width: 700px) { .workspace-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .workspace-grid { grid-template-columns: 1fr; } }
 
-/* Connection summary panel */
-.conn-summary {
-  padding: 18px 20px 20px;
-  border: 1px solid var(--line); border-radius: var(--r-m);
-  background: var(--bg);
-}
-.conn-summary-row {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  min-height: 42px;
-  padding-bottom: 18px; border-bottom: 1px dashed var(--line);
-}
-.conn-summary-label {
-  color: var(--muted); font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  font-family: var(--mono); margin-right: 4px;
-}
-.conn-summary-pill {
-  display: inline-flex; align-items: center; gap: 8px;
-  background: var(--bg-2); border: 1px solid var(--line);
-  padding: 5px 12px; border-radius: 999px;
-  font-size: 13px; font-weight: 500; color: var(--ink);
-}
-.conn-summary-icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 14px; height: 14px;
-}
-.conn-summary-empty {
-  font-size: 13px; color: var(--muted); font-style: italic;
-}
-
-.conn-stats-grid {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px; padding-top: 18px;
-}
-.conn-stat-card {
-  display: flex; flex-direction: column; gap: 4px;
-  min-height: 104px;
-  padding: 15px 16px;
-  background: var(--bg); border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  text-decoration: none; color: inherit;
-  transition: border-color 0.15s ease;
-}
-.conn-stat-card:hover { border-color: var(--ink); }
-.conn-stat-card.is-empty { opacity: 0.7; }
-.conn-stat-lbl {
-  font-size: 10.5px; font-weight: 500; font-family: var(--mono);
-  text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
-}
-.conn-stat-num { font-size: 24px; font-weight: 500; color: var(--ink); line-height: 1.1; }
-.conn-stat-card.is-empty .conn-stat-num { color: var(--muted-2); }
-.conn-stat-sub {
-  font-size: 12px; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.conn-hint {
-  margin-top: 16px; font-size: 13px; color: var(--muted);
-}
-.conn-hint a { color: var(--ink); font-weight: 500; text-decoration: none; border-bottom: 1px solid var(--line-2); }
-
-@media (max-width: 900px) { .conn-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) {
   .home-main {
     --home-gap: 22px;
     --home-gap-sm: 14px;
+    /* 22px + 14px = 36px — matches original literal */
+    --home-section-gap: calc(var(--home-gap) + var(--home-gap-sm));
   }
   .home-main .kpi {
     padding: 18px 20px;
@@ -419,13 +306,6 @@
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 520px) {
-  .section-head-row .btn {
-    width: 100%;
-    justify-content: center;
-  }
-}
-@media (max-width: 480px) { .conn-stats-grid { grid-template-columns: 1fr; } }
 </style>
 
 <script>

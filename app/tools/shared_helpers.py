@@ -81,6 +81,32 @@ def get_provider_token(provider_str: str) -> str | None:
     return None
 
 
+def get_provider_oauth1_tokens(provider_str: str) -> tuple[str, str] | None:
+    """Return decrypted OAuth 1.0a access token and token secret for a provider."""
+    project = get_current_project()
+    connections = None
+    if project and project.connections:
+        connections = project.connections
+    else:
+        user = get_current_user()
+        if user and user.connections:
+            connections = user.connections
+
+    if not connections:
+        return None
+
+    for conn in connections:
+        if getattr(conn, "provider", "") == provider_str:
+            try:
+                return (
+                    state.token_manager.decrypt(conn.access_token_encrypted),
+                    state.token_manager.decrypt(conn.refresh_token_encrypted),
+                )
+            except Exception:
+                return None
+    return None
+
+
 # ---------------------------------------------------------------------------
 # "No connection" response factory
 # ---------------------------------------------------------------------------

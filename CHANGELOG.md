@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **X (Twitter) Ads** integration — connect via OAuth, then read campaign and
+  line-item performance, audit conversion-tracking setup, and pause/activate
+  campaigns through the `marketing_read` / `marketing_audit` / `marketing_write` tools.
+- **Reddit Ads** integration — connect via OAuth, then read campaign and ad-group
+  performance, audit pixel/conversion tracking, and update campaign status and daily
+  budget through the marketing tools.
+- **Bing Webmaster Tools** integration — connect via Microsoft OAuth, then read
+  verified sites, search query stats, crawl stats, index coverage, and link counts
+  through the `seo_read` tool (`bing_*` actions), alongside Google Search Console.
+- Per-instance OAuth app credentials for X, Reddit, and Bing (admin **Integrations** panel).
+
+### Fixed
+- **Activity Log** now records MCP tool calls. The instrumentation hook that writes
+  each tool call to the audit trail was never actually installed, so the Activity Log
+  stayed empty no matter how many tools were used. Wiring it up also re-activates the
+  per-tool timeouts, circuit breaker, and per-call active-project resolution that share
+  the same hook.
+
 ## [1.0.6] — 2026-06-01
 
 ### Changed

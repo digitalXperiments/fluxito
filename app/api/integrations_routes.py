@@ -49,6 +49,9 @@ DEV_CONSOLE_URL = {
     "snap": "https://kit.snapchat.com/manage/apps",
     "linkedin": "https://www.linkedin.com/developers/apps",
     "pinterest": "https://developers.pinterest.com/apps/",
+    "x": "https://developer.x.com/en/portal/projects-and-apps",
+    "reddit": "https://www.reddit.com/prefs/apps",
+    "bing": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
 }
 
 # Maps each OAuth platform to its tutorial markdown file(s).
@@ -67,6 +70,9 @@ PLATFORM_TUTORIALS: dict[str, list[str]] = {
     "snap": ["snap-ads"],
     "linkedin": ["linkedin-ads"],
     "pinterest": ["pinterest-ads"],
+    "x": ["x-ads"],
+    "reddit": ["reddit-ads"],
+    "bing": ["bing-webmaster"],
 }
 
 
@@ -83,6 +89,9 @@ def _redirect_uris_for(platform: str) -> list[str]:
         "snap": [f"{base}/auth/snap/callback"],
         "linkedin": [f"{base}/auth/linkedin/callback"],
         "pinterest": [f"{base}/auth/pinterest/callback"],
+        "x": [f"{base}/auth/x/callback"],
+        "reddit": [f"{base}/auth/reddit/callback"],
+        "bing": [f"{base}/auth/bing/callback"],
     }
     return by_platform[platform]
 
@@ -323,6 +332,7 @@ TUTORIAL_CATEGORIES = [
             ("tiktok-ads", "TikTok Ads", "~20 min", "Requires app review"),
             ("linkedin-ads", "LinkedIn Ads", "~20 min", "Requires app review"),
             ("pinterest-ads", "Pinterest Ads", "~15 min", "Requires app review"),
+            ("x-ads", "X Ads", "~20 min", "Uses OAuth 1.0a and Ads API access"),
             ("snap-ads", "Snap Ads", "~20 min", "Snapchat marketing API"),
         ],
     },
