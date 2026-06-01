@@ -28,6 +28,9 @@ class _FakeClientBase:
     async def __aexit__(self, *args):
         return None
 
+    async def post(self, url, *, headers=None, params=None, json=None):
+        raise NotImplementedError("post not stubbed for this test")
+
 
 def _resp(status: int, body: dict):
     class _R:
@@ -158,3 +161,37 @@ async def test_api_error_returns_structured_error(monkeypatch):
     result = await conn.list_lead_lists(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
     assert result["error"] is True
     assert result["status_code"] == 401
+
+
+@pytest.mark.asyncio
+async def test_in_body_601_triggers_token_refresh_and_retry(monkeypatch):
+    state = {"rest_calls": 0, "token_calls": 0}
+
+    class FakeClient(_FakeClientBase):
+        async def get(self, url, *, headers=None, params=None):
+            if "/identity/oauth/token" in url:
+                state["token_calls"] += 1
+                return _resp(200, {"access_token": _TOKEN, "expires_in": 3600})
+            state["rest_calls"] += 1
+            if state["rest_calls"] == 1:
+                return _resp(200, {"success": False, "errors": [{"code": "601", "message": "expired"}]})
+            return _resp(200, {"success": True, "result": [{"id": 1}]})
+
+    monkeypatch.setattr("app.connectors.adobe_marketo.httpx.AsyncClient", FakeClient)
+    conn = AdobeMarketoConnector()
+    result = await conn.list_lead_lists(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
+
+    assert state["rest_calls"] == 2  # retried once
+    assert state["token_calls"] == 2  # token re-fetched after cache eviction
+    assert "error" not in result
+    assert result["result"] == [{"id": 1}]
+
+
+@pytest.mark.asyncio
+async def test_unhandled_success_false_code_returns_error(monkeypatch):
+    def handler(url, headers, params):
+        return _resp(200, {"success": False, "errors": [{"code": "610", "message": "Field not accessible"}]})
+
+    conn = _connector_with_token(monkeypatch, handler)
+    result = await conn.list_lead_lists(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET)
+    assert result["error"] is True
