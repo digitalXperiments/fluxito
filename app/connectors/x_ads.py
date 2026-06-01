@@ -163,7 +163,9 @@ class XAdsConnector:
                     metrics_data = id_data[0].get("metrics", {}) if id_data else row.get("metrics", {})
                     stats_by_id[entity_id] = metrics_data or {}
             else:
-                logger.warning("X Ads campaign stats failed: %s %s", stats_resp.status_code, stats_resp.text[:200])
+                logger.warning(
+                    "X Ads campaign stats failed: %s %s", stats_resp.status_code, stats_resp.text[:200]
+                )
 
         result_campaigns = []
         for campaign in campaigns:
@@ -294,4 +296,9 @@ class XAdsConnector:
         err = self._check(resp, "update_campaign_status")
         if err:
             return err
-        return {"campaign_id": campaign_id, "account_id": account_id, "new_status": normalized, "updated": True}
+        return {
+            "campaign_id": campaign_id,
+            "account_id": account_id,
+            "new_status": normalized,
+            "updated": True,
+        }

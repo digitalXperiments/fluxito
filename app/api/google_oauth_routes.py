@@ -1092,7 +1092,9 @@ async def connect_page(request: Request):
                     "detail": f"{len(c.scopes or [])} scopes granted" if (c.scopes) else "",
                     "icon": icon_map.get(prov, "🔗"),
                     "is_active": c.connection_status == "active",
-                    "delete_url": delete_endpoint.get(prov, f"/api/connections/{prov}/{{id}}").format(id=c.id),
+                    "delete_url": delete_endpoint.get(prov, f"/api/connections/{prov}/{{id}}").format(
+                        id=c.id
+                    ),
                     "edit_url": edit_url,
                     "services": services,
                 }

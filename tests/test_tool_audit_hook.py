@@ -69,9 +69,7 @@ async def test_hook_writes_audit_row_for_successful_call(db_session_factory, _wi
     user_tok = app_state.current_user_ctx.set({"user_id": str(uid)})
     try:
         # Mirror exactly how FastMCP.call_tool invokes the tool manager.
-        result = await server._tool_manager.call_tool(
-            "noop_read", {}, context=None, convert_result=True
-        )
+        result = await server._tool_manager.call_tool("noop_read", {}, context=None, convert_result=True)
     finally:
         app_state.current_user_ctx.reset(user_tok)
 
@@ -82,9 +80,7 @@ async def test_hook_writes_audit_row_for_successful_call(db_session_factory, _wi
 
     # An audit row must have been written.
     async with db_session_factory() as db:
-        rows = (
-            await db.execute(select(ToolCallAudit).where(ToolCallAudit.user_id == uid))
-        ).scalars().all()
+        rows = (await db.execute(select(ToolCallAudit).where(ToolCallAudit.user_id == uid))).scalars().all()
     assert len(rows) == 1
     row = rows[0]
     assert row.tool_name == "noop_read"
@@ -100,15 +96,11 @@ async def test_hook_records_denied_status_from_raw_result(db_session_factory, _w
 
     user_tok = app_state.current_user_ctx.set({"user_id": str(uid)})
     try:
-        await server._tool_manager.call_tool(
-            "noop_denied", {}, context=None, convert_result=True
-        )
+        await server._tool_manager.call_tool("noop_denied", {}, context=None, convert_result=True)
     finally:
         app_state.current_user_ctx.reset(user_tok)
 
     async with db_session_factory() as db:
-        row = (
-            await db.execute(select(ToolCallAudit).where(ToolCallAudit.user_id == uid))
-        ).scalar_one()
+        row = (await db.execute(select(ToolCallAudit).where(ToolCallAudit.user_id == uid))).scalar_one()
     # scope_denied maps to "denied" — only possible if audit saw the raw dict.
     assert row.status == "denied"

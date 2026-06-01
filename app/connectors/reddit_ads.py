@@ -158,9 +158,7 @@ class RedditAdsConnector:
                     # Reddit stats response: {"data": {"clicks": N, "impressions": N,
                     # "spend_micro_usd": N, "total_conversions": N, ...}}
                     stats_raw = stats_resp.json()
-                    inner = (
-                        stats_raw.get("data") or stats_raw.get("stats") or stats_raw or {}
-                    )
+                    inner = stats_raw.get("data") or stats_raw.get("stats") or stats_raw or {}
                     if isinstance(inner, list):
                         inner = inner[0] if inner else {}
                     spend_micro = inner.get("spend_micro_usd", 0) or 0
@@ -256,9 +254,7 @@ class RedditAdsConnector:
                 )
                 if stats_resp.status_code == 200:
                     stats_raw = stats_resp.json()
-                    inner = (
-                        stats_raw.get("data") or stats_raw.get("stats") or stats_raw or {}
-                    )
+                    inner = stats_raw.get("data") or stats_raw.get("stats") or stats_raw or {}
                     if isinstance(inner, list):
                         inner = inner[0] if inner else {}
                     spend_micro = inner.get("spend_micro_usd", 0) or 0

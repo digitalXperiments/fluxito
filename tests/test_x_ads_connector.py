@@ -38,9 +38,7 @@ async def test_list_accounts_sends_oauth1_authorization_header(monkeypatch):
     connector = XAdsConnector(consumer_key="ck", consumer_secret="cs")
     result = await connector.list_accounts(XOAuth1Token(token="at", token_secret="ats"))
 
-    assert result["accounts"] == [
-        {"account_id": "abc123", "name": "Main account", "status": "ACCEPTED"}
-    ]
+    assert result["accounts"] == [{"account_id": "abc123", "name": "Main account", "status": "ACCEPTED"}]
     auth = captured["headers"]["Authorization"]
     assert auth.startswith("OAuth ")
     assert 'oauth_consumer_key="ck"' in auth

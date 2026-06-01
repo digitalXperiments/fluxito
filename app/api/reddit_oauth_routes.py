@@ -20,7 +20,11 @@ from app.api.google_oauth_routes import (
     _render_interstitial,
     get_uid_from_request,
 )
-from app.auth.mcp_session_manager import build_user_context, invalidate_user_context_cache, require_valid_mcp_token
+from app.auth.mcp_session_manager import (
+    build_user_context,
+    invalidate_user_context_cache,
+    require_valid_mcp_token,
+)
 from app.models.connection import OAuthConnection
 
 router = APIRouter(tags=["reddit-oauth"])
@@ -152,7 +156,9 @@ async def reddit_callback(
     refresh_token = token_json.get("refresh_token", "")
     expires_in = token_json.get("expires_in")
     if not access_token:
-        return HTMLResponse("<h2>Reddit OAuth token response was missing an access token.</h2>", status_code=400)
+        return HTMLResponse(
+            "<h2>Reddit OAuth token response was missing an access token.</h2>", status_code=400
+        )
 
     label = "Reddit Ads"
     async with httpx.AsyncClient(timeout=20) as client:

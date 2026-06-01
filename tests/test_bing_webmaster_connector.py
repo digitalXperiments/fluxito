@@ -172,9 +172,7 @@ async def test_get_crawl_stats_sends_site_url(monkeypatch):
 
     monkeypatch.setattr("app.connectors.bing_webmaster.httpx.AsyncClient", FakeClient)
 
-    result = await BingWebmasterConnector().get_crawl_stats(
-        access_token=_TOKEN, site_url=_SITE_URL
-    )
+    result = await BingWebmasterConnector().get_crawl_stats(access_token=_TOKEN, site_url=_SITE_URL)
 
     assert captured["url"] == f"{_BING_BASE}/GetCrawlStats"
     assert captured["params"]["siteUrl"] == _SITE_URL
@@ -199,9 +197,7 @@ async def test_get_index_coverage_calls_correct_endpoint(monkeypatch):
 
     monkeypatch.setattr("app.connectors.bing_webmaster.httpx.AsyncClient", FakeClient)
 
-    result = await BingWebmasterConnector().get_index_coverage(
-        access_token=_TOKEN, site_url=_SITE_URL
-    )
+    result = await BingWebmasterConnector().get_index_coverage(access_token=_TOKEN, site_url=_SITE_URL)
 
     assert captured["url"] == f"{_BING_BASE}/GetIndexCoverage"
     assert captured["params"]["siteUrl"] == _SITE_URL
@@ -226,9 +222,7 @@ async def test_get_link_counts_calls_correct_endpoint(monkeypatch):
 
     monkeypatch.setattr("app.connectors.bing_webmaster.httpx.AsyncClient", FakeClient)
 
-    result = await BingWebmasterConnector().get_link_counts(
-        access_token=_TOKEN, site_url=_SITE_URL
-    )
+    result = await BingWebmasterConnector().get_link_counts(access_token=_TOKEN, site_url=_SITE_URL)
 
     assert captured["url"] == f"{_BING_BASE}/GetLinkCounts"
     assert captured["params"]["siteUrl"] == _SITE_URL

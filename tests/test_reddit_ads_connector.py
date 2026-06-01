@@ -98,11 +98,7 @@ async def test_list_ad_accounts_sends_bearer_token_and_user_agent(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_campaign_performance_returns_expected_shape(monkeypatch):
     """get_campaign_performance merges campaigns list with per-campaign stats."""
-    campaigns_body = {
-        "data": [
-            {"id": _CAMPAIGN_ID, "name": "Test Campaign", "configured_status": "ACTIVE"}
-        ]
-    }
+    campaigns_body = {"data": [{"id": _CAMPAIGN_ID, "name": "Test Campaign", "configured_status": "ACTIVE"}]}
     stats_body = {
         "data": {
             "impressions": 1000,
@@ -160,9 +156,7 @@ async def test_get_campaign_performance_invalid_dates(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_campaign_performance_stats_failure_still_returns_zeros(monkeypatch):
     """Stats endpoint failure falls back to zero metrics gracefully."""
-    campaigns_body = {
-        "data": [{"id": _CAMPAIGN_ID, "name": "Test Campaign", "configured_status": "ACTIVE"}]
-    }
+    campaigns_body = {"data": [{"id": _CAMPAIGN_ID, "name": "Test Campaign", "configured_status": "ACTIVE"}]}
 
     class FakeClient(_FakeClientBase):
         async def get(self, url, *, headers=None, params=None):
@@ -337,9 +331,7 @@ async def test_update_campaign_status_sends_correct_payload(monkeypatch):
 
     monkeypatch.setattr("app.connectors.reddit_ads.httpx.AsyncClient", FakeClient)
 
-    result = await RedditAdsConnector().update_campaign_status(
-        _TOKEN, _ACCOUNT_ID, _CAMPAIGN_ID, "paused"
-    )
+    result = await RedditAdsConnector().update_campaign_status(_TOKEN, _ACCOUNT_ID, _CAMPAIGN_ID, "paused")
 
     assert result == {
         "campaign_id": _CAMPAIGN_ID,
@@ -348,9 +340,7 @@ async def test_update_campaign_status_sends_correct_payload(monkeypatch):
         "updated": True,
     }
     assert captured["json"] == {"configured_status": "PAUSED"}
-    expected_url = (
-        f"https://ads-api.reddit.com/api/v3/ad_accounts/{_ACCOUNT_ID}/campaigns/{_CAMPAIGN_ID}"
-    )
+    expected_url = f"https://ads-api.reddit.com/api/v3/ad_accounts/{_ACCOUNT_ID}/campaigns/{_CAMPAIGN_ID}"
     assert captured["url"] == expected_url
     assert captured["headers"]["Authorization"] == f"Bearer {_TOKEN}"
 
@@ -358,9 +348,7 @@ async def test_update_campaign_status_sends_correct_payload(monkeypatch):
 @pytest.mark.asyncio
 async def test_update_campaign_status_rejects_invalid_status(monkeypatch):
     """update_campaign_status returns an error dict for an unsupported status value."""
-    result = await RedditAdsConnector().update_campaign_status(
-        _TOKEN, _ACCOUNT_ID, _CAMPAIGN_ID, "DELETED"
-    )
+    result = await RedditAdsConnector().update_campaign_status(_TOKEN, _ACCOUNT_ID, _CAMPAIGN_ID, "DELETED")
     assert result.get("error") is True
     assert "ACTIVE or PAUSED" in result["message"]
 
@@ -375,9 +363,7 @@ async def test_update_campaign_status_active(monkeypatch):
 
     monkeypatch.setattr("app.connectors.reddit_ads.httpx.AsyncClient", FakeClient)
 
-    result = await RedditAdsConnector().update_campaign_status(
-        _TOKEN, _ACCOUNT_ID, _CAMPAIGN_ID, "ACTIVE"
-    )
+    result = await RedditAdsConnector().update_campaign_status(_TOKEN, _ACCOUNT_ID, _CAMPAIGN_ID, "ACTIVE")
     assert result["new_status"] == "ACTIVE"
     assert result["updated"] is True
 

@@ -157,6 +157,7 @@ async def disconnect_bing_connection(conn_id: str, request: Request):
     user_ctx = await _resolve_user_ctx(request)
     if not user_ctx:
         from fastapi.responses import JSONResponse as _JSONResponse
+
         return _JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     from sqlalchemy import update as _update

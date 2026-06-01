@@ -19,7 +19,11 @@ from app.api.google_oauth_routes import (
     _render_interstitial,
     get_uid_from_request,
 )
-from app.auth.mcp_session_manager import build_user_context, invalidate_user_context_cache, require_valid_mcp_token
+from app.auth.mcp_session_manager import (
+    build_user_context,
+    invalidate_user_context_cache,
+    require_valid_mcp_token,
+)
 from app.connectors.x_ads import XAdsConnector, XOAuth1Token
 from app.models.connection import OAuthConnection
 
@@ -110,7 +114,9 @@ async def x_authorize(request: Request):
     oauth_token = token_data.get("oauth_token", [""])[0]
     oauth_token_secret = token_data.get("oauth_token_secret", [""])[0]
     if not oauth_token or not oauth_token_secret:
-        return HTMLResponse("<h2>X OAuth request token response was missing token data.</h2>", status_code=400)
+        return HTMLResponse(
+            "<h2>X OAuth request token response was missing token data.</h2>", status_code=400
+        )
 
     await app_state.redis_client.setex(
         f"x_oauth_request:{oauth_token}",
