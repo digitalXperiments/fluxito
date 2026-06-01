@@ -521,7 +521,6 @@ def register_marketing_tools(mcp_server):
             }
 
         elif platform == "marketo":
-            user = _get_user()
             if not user or not getattr(user, "has_adobe_marketo", False):
                 return _no_marketo()
             conn_id, instance_url, client_id, client_secret = await _get_marketo_conn(user.user_id)
@@ -578,7 +577,7 @@ def register_marketing_tools(mcp_server):
     async def marketing_audit(
         platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"],
         action: str,
-        account_id: str,
+        account_id: str | None = None,
         date_range_start: str | None = None,
         date_range_end: str | None = None,
         campaign_id: str | None = None,
@@ -589,6 +588,12 @@ def register_marketing_tools(mcp_server):
         Google only: audit_budget_utilization(account_id+dates), audit_quality_scores(account_id,campaign_id?)
         """
         user = _get_user()
+        if platform != "marketo" and not account_id:
+            return {
+                "error": True,
+                "error_type": "bad_request",
+                "message": f"account_id is required for {platform} {action}.",
+            }
 
         if platform == "google":
             if not user or not user.has_ads:
@@ -706,7 +711,6 @@ def register_marketing_tools(mcp_server):
             }
 
         elif platform == "marketo":
-            user = _get_user()
             if not user or not getattr(user, "has_adobe_marketo", False):
                 return _no_marketo()
             conn_id, instance_url, client_id, client_secret = await _get_marketo_conn(user.user_id)
@@ -726,7 +730,7 @@ def register_marketing_tools(mcp_server):
     async def marketing_write(
         platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"],
         action: str,
-        account_id: str,
+        account_id: str | None = None,
         campaign_id: str | None = None,
         campaign_name: str | None = None,
         status: str | None = None,
@@ -747,6 +751,12 @@ def register_marketing_tools(mcp_server):
         Marketo actions: create_or_update_leads, add_leads_to_list, remove_leads_from_list, request_campaign, schedule_campaign
         """
         user = _get_user()
+        if platform != "marketo" and not account_id:
+            return {
+                "error": True,
+                "error_type": "bad_request",
+                "message": f"account_id is required for {platform} {action}.",
+            }
 
         if platform == "google":
             if not user or not user.has_ads:
@@ -1002,7 +1012,6 @@ def register_marketing_tools(mcp_server):
             }
 
         elif platform == "marketo":
-            user = _get_user()
             if not user or not getattr(user, "has_adobe_marketo", False):
                 return _no_marketo()
             conn_id, instance_url, client_id, client_secret = await _get_marketo_conn(user.user_id)

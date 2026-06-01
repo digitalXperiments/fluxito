@@ -30,6 +30,14 @@ class _StubConnector:
         self.calls.append(("create_or_update_leads", kw))
         return {"result": [{"id": 1, "status": "created"}]}
 
+    async def audit_instance(self, instance_url, client_id, client_secret, **kw):
+        self.calls.append(("audit_instance", kw))
+        return {"ok": True}
+
+    async def add_leads_to_list(self, instance_url, client_id, client_secret, **kw):
+        self.calls.append(("add_leads_to_list", kw))
+        return {"result": [{"id": 1, "status": "added"}]}
+
 
 class _User:
     user_id = "u1"
@@ -72,8 +80,26 @@ async def test_marketing_write_marketo_upsert(wired):
     result = await mcp.tools["marketing_write"](
         platform="marketo",
         action="create_or_update_leads",
-        account_id="ignored",
         payload={"leads": [{"email": "a@b.com"}], "lookup_field": "email"},
     )
     assert result["result"][0]["status"] == "created"
     assert conn.calls[0][0] == "create_or_update_leads"
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_marketo_no_account_id(wired):
+    mcp, conn = wired
+    result = await mcp.tools["marketing_write"](
+        platform="marketo", action="add_leads_to_list",
+        resource_id="9", payload={"lead_ids": ["1", "2"]},
+    )
+    assert conn.calls[0][0] == "add_leads_to_list"
+    assert "error" not in result
+
+
+@pytest.mark.asyncio
+async def test_marketing_audit_marketo(wired):
+    mcp, conn = wired
+    result = await mcp.tools["marketing_audit"](platform="marketo", action="audit_instance")
+    assert conn.calls[0][0] == "audit_instance"
+    assert result.get("ok") is True
