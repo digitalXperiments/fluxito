@@ -105,3 +105,36 @@ async def test_marketing_audit_marketo(wired):
     result = await mcp.tools["marketing_audit"](platform="marketo", action="audit_instance")
     assert conn.calls[0][0] == "audit_instance"
     assert result.get("ok") is True
+
+
+# ---------------------------------------------------------------------------
+# Route-table ↔ connector drift guard
+# ---------------------------------------------------------------------------
+def test_unified_marketo_routes_map_to_real_connector_methods():
+    """Every marketo_* flat action routes to (marketing_*, <real connector method>, {platform: marketo}).
+
+    Guards against typos / drift between unified.py routes, the marketing_tools
+    branches, and the AdobeMarketoConnector API.
+    """
+    from app.connectors.adobe_marketo import AdobeMarketoConnector
+    from app.tools.unified import (
+        AUDIT_ROUTES,
+        MARKETING_READ_ROUTES,
+        MARKETING_WRITE_ROUTES,
+    )
+
+    expected_tool = {
+        id(MARKETING_READ_ROUTES): "marketing_read",
+        id(MARKETING_WRITE_ROUTES): "marketing_write",
+        id(AUDIT_ROUTES): "marketing_audit",
+    }
+    for routes in (MARKETING_READ_ROUTES, MARKETING_WRITE_ROUTES, AUDIT_ROUTES):
+        marketo_routes = {k: v for k, v in routes.items() if k.startswith("marketo_")}
+        assert marketo_routes, "expected marketo_* routes in this table"
+        for action_name, route in marketo_routes.items():
+            legacy_tool, legacy_action, extra = route
+            assert legacy_tool == expected_tool[id(routes)], action_name
+            assert extra.get("platform") == "marketo", action_name
+            assert hasattr(
+                AdobeMarketoConnector, legacy_action
+            ), f"{action_name} -> connector has no method {legacy_action!r}"
