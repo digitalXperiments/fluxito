@@ -1156,6 +1156,7 @@ def rewire_unified_surface(mcp_server) -> None:
             ("Pinterest Ads", getattr(p, "has_pinterest", False), f"{base}/connect/pinterest"),
             ("X Ads", getattr(p, "has_x", False), f"{base}/connect/x"),
             ("Reddit Ads", getattr(p, "has_reddit", False), f"{base}/connect/reddit"),
+            ("Apple Ads", getattr(p, "has_apple", False), f"{base}/connect/apple"),
             ("Bing Webmaster Tools", getattr(p, "has_bing", False), f"{base}/connect/bing"),
             ("Amplitude", p.has_amplitude, f"{base}/connect/amplitude"),
             ("Adobe Analytics", p.has_adobe_analytics, f"{base}/connect/adobe"),

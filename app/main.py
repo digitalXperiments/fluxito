@@ -160,6 +160,7 @@ async def lifespan(app: FastAPI):
     from app.connectors.adobe_launch import AdobeLaunchConnector
     from app.connectors.adobe_marketo import AdobeMarketoConnector
     from app.connectors.amplitude import AmplitudeConnector
+    from app.connectors.apple_ads import AppleAdsConnector
     from app.connectors.bigquery import BigQueryConnector
     from app.connectors.bing_webmaster import BingWebmasterConnector
     from app.connectors.ga4 import GA4Connector
@@ -193,6 +194,7 @@ async def lifespan(app: FastAPI):
     app_state.pinterest_connector = PinterestAdsConnector()
     app_state.reddit_connector = RedditAdsConnector()
     app_state.bing_connector = BingWebmasterConnector()
+    app_state.apple_connector = AppleAdsConnector()
     app_state.amplitude_connector = AmplitudeConnector()
     app_state.adobe_analytics_connector = AdobeAnalyticsConnector()
     app_state.adobe_launch_connector = AdobeLaunchConnector()
@@ -431,6 +433,7 @@ app.include_router(access_request_router)
 app.include_router(update_router)
 
 from app.api import (
+    apple_oauth_routes,
     bing_oauth_routes,
     linkedin_oauth_routes,
     pinterest_oauth_routes,
@@ -443,6 +446,7 @@ app.include_router(pinterest_oauth_routes.router)
 app.include_router(reddit_oauth_routes.router)
 app.include_router(x_oauth_routes.router)
 app.include_router(bing_oauth_routes.router)
+app.include_router(apple_oauth_routes.router)
 
 
 # ---------------------------------------------------------------------------
@@ -838,6 +842,7 @@ def _sync_user_ctx_flags(user_ctx, pctx) -> None:
         "has_x",
         "has_reddit",
         "has_bing",
+        "has_apple",
         "has_amplitude",
         "has_adobe_analytics",
         "has_adobe_launch",

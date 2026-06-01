@@ -86,7 +86,7 @@ def register_marketing_tools(mcp_server):
     @mcp_server.tool("marketing_read")
     async def marketing_read(
         platform: Literal[
-            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"
+            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "apple", "marketo"
         ],
         action: str,
         account_id: str | None = None,
@@ -100,7 +100,7 @@ def register_marketing_tools(mcp_server):
     ) -> dict:
         """Reads ad platform data. Use marketing_audit for health checks, marketing_write for changes.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | marketo. Dates: YYYY-MM-DD.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo. Dates: YYYY-MM-DD.
 
         All platforms: list_accounts, get_campaign_performance(account_id+dates)
         Google only: get_ad_group_performance(+dates,campaign_id?), get_conversion_actions(account_id), get_keyword_performance(+dates,campaign_id?)
@@ -127,6 +127,7 @@ def register_marketing_tools(mcp_server):
             "pinterest": {"list_accounts", "get_campaign_performance", "get_adgroup_performance"},
             "x": {"list_accounts", "get_campaign_performance", "get_line_item_performance"},
             "reddit": {"list_accounts", "get_campaign_performance", "get_adgroup_performance"},
+            "apple": {"list_accounts", "get_campaign_performance", "get_adgroup_performance"},
             "marketo": {
                 "get_leads",
                 "get_lead_by_id",
@@ -522,6 +523,48 @@ def register_marketing_tools(mcp_server):
                 "message": f"Unknown action '{action}' for Reddit Ads. Supported: list_accounts, get_campaign_performance, get_adgroup_performance",
             }
 
+        elif platform == "apple":
+            token = _get_provider_token("apple")
+            if not token:
+                return _unauthorized_response("apple")
+            apple = state.apple_connector
+            uid = user.user_id if user else "anon"
+            if action == "list_accounts":
+                return await cached_tool_response(
+                    f"cache:apple:accounts:{uid}",
+                    600,
+                    apple.list_accounts,
+                    token,
+                )
+            if not account_id:
+                return {"error": True, "message": f"account_id is required for '{action}'"}
+            if action == "get_campaign_performance":
+                mets_key = ",".join(sorted(metrics)) if metrics else "default"
+                return await cached_tool_response(
+                    f"cache:apple:campaigns:{uid}:{account_id}:{date_range_start}:{date_range_end}:{mets_key}",
+                    60,
+                    apple.get_campaign_performance,
+                    token,
+                    account_id,
+                    date_range_start,
+                    date_range_end,
+                    metrics,
+                )
+            elif action == "get_adgroup_performance":
+                return await cached_tool_response(
+                    f"cache:apple:adgroups:{uid}:{account_id}:{date_range_start}:{date_range_end}:{campaign_id}:{limit}",
+                    60,
+                    apple.get_adgroup_performance,
+                    token,
+                    account_id,
+                    date_range_start,
+                    date_range_end,
+                    campaign_id,
+                )
+            return {
+                "error": True,
+                "message": f"Unknown action '{action}' for Apple Ads. Supported: list_accounts, get_campaign_performance, get_adgroup_performance",
+            }
         elif platform == "marketo":
             if not user or not getattr(user, "has_adobe_marketo", False):
                 return _no_marketo()
@@ -578,7 +621,7 @@ def register_marketing_tools(mcp_server):
     @mcp_server.tool("marketing_audit")
     async def marketing_audit(
         platform: Literal[
-            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"
+            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "apple", "marketo"
         ],
         action: str,
         account_id: str | None = None,
@@ -588,7 +631,7 @@ def register_marketing_tools(mcp_server):
     ) -> dict:
         """Audits marketing health: tracking, budgets, quality scores.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit. All: audit_tracking_setup(account_id).
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple. All: audit_tracking_setup(account_id).
         Google only: audit_budget_utilization(account_id+dates), audit_quality_scores(account_id,campaign_id?)
         """
         user = _get_user()
@@ -704,6 +747,17 @@ def register_marketing_tools(mcp_server):
                 "message": f"Unknown action '{action}' for Reddit Ads audit. Supported: audit_tracking_setup",
             }
 
+        elif platform == "apple":
+            token = _get_provider_token("apple")
+            if not token:
+                return _unauthorized_response("apple")
+            if action == "audit_tracking_setup":
+                return await state.apple_connector.audit_tracking_setup(token, account_id)
+            return {
+                "error": True,
+                "message": f"Unknown action '{action}' for Apple Ads audit. Supported: audit_tracking_setup",
+            }
+
         elif platform == "gtm":
             return {
                 "error": True,
@@ -733,7 +787,7 @@ def register_marketing_tools(mcp_server):
     @mcp_server.tool("marketing_write")
     async def marketing_write(
         platform: Literal[
-            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"
+            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "apple", "marketo"
         ],
         action: str,
         account_id: str | None = None,
@@ -750,7 +804,7 @@ def register_marketing_tools(mcp_server):
     ) -> dict:
         """Write operations for ad platforms. Google requires 'full' tier.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | marketo.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo.
         create_campaign: campaign_name, advertising_channel_type(SEARCH|DISPLAY|SHOPPING|VIDEO|PERFORMANCE_MAX), daily_budget_usd, start_date
         update_campaign_status: campaign_id, status(ENABLED|PAUSED)
         update_campaign_budget: campaign_id, daily_budget_usd
@@ -1017,6 +1071,23 @@ def register_marketing_tools(mcp_server):
                 "message": f"Unknown action '{action}' for Reddit Ads write. Supported: update_campaign_status, update_campaign_budget",
             }
 
+        elif platform == "apple":
+            token = _get_provider_token("apple")
+            if not token:
+                return _unauthorized_response("apple")
+            if action == "update_campaign_status":
+                if not campaign_id or not status:
+                    return {
+                        "error": True,
+                        "message": "campaign_id and status are required for update_campaign_status",
+                    }
+                return await state.apple_connector.update_campaign_status(
+                    token, account_id, campaign_id, status
+                )
+            return {
+                "error": True,
+                "message": f"Unknown action '{action}' for Apple Ads write. Supported: update_campaign_status",
+            }
         elif platform == "marketo":
             if not user or not getattr(user, "has_adobe_marketo", False):
                 return _no_marketo()

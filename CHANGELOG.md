@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.9] — 2026-06-02
+
 ### Added
+- **Apple Search Ads** integration — connect via OAuth 2 client credentials, then
+  read App Store campaign and ad-group performance and audit conversion/tracking
+  setup through the `marketing_read` / `marketing_audit` tools.
+- Per-instance OAuth app credentials for Apple Search Ads (admin **Integrations** panel).
 - **Adobe Marketo Engage** integration — connect Marketo via its own LaunchPoint
   credentials and REST endpoint (separate from Adobe Analytics/Launch, which use
   Adobe IMS). Once connected, read leads, lists, lead activities (opens, clicks,
@@ -17,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `marketing_read` / `marketing_audit` / `marketing_write` tools (`marketo_*` actions)
   and `run_audit`. Includes a `/connect/marketo` setup page and a step-by-step
   LaunchPoint setup tutorial.
+
+### Changed
+- **Connections page now showcases the tools inside each platform.** Instead of an
+  opaque "Google Suite" label, the Google card lists its products as labelled icon
+  chips — Analytics, Tag Manager, Ads, Search Console — and the Adobe card lists
+  Analytics and Launch (with Adobe Campaign shown as "coming soon"), so it's clear at
+  a glance what each connection unlocks. BigQuery remains its own separate card (it is
+  Google-branded but uses its own service-account setup).
 
 ## [1.0.7] — 2026-06-01
 

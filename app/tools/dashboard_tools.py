@@ -51,6 +51,7 @@ VALID_PLATFORMS = {
     "meta_ads",
     "tiktok_ads",
     "snap_ads",
+    "apple_ads",
     "google_ads",
     "amplitude",
     "adobe_analytics",
@@ -108,6 +109,7 @@ _CARD_PARAM_REQUIREMENTS: dict[tuple[str, str], list[str]] = {
     ("tiktok", "get_campaign_performance"): ["advertiser_id", "start_date", "end_date"],
     ("snap", "get_campaigns"): ["ad_account_id"],
     ("snap", "get_campaign_performance"): ["ad_account_id", "start_date", "end_date"],
+    ("apple_ads", "get_campaign_performance"): ["account_id", "start_date", "end_date"],
     ("google_ads", "get_campaigns"): ["customer_id"],
     ("google_ads", "get_campaign_performance"): ["customer_id", "start_date", "end_date"],
     ("search_console", "get_search_analytics"): ["site_url", "start_date", "end_date"],
@@ -357,7 +359,7 @@ def register_dashboard_tools(mcp_server):
           title (str): human-readable card title
           chart_type (str): one of — scorecard, bar, line, pie, table, audit, list
           platform (str): one of — ga4, bigquery, redshift, snowflake, meta_ads, tiktok_ads,
-                          snap_ads, google_ads, amplitude, adobe_analytics, search_console,
+                          snap_ads, apple_ads, google_ads, amplitude, adobe_analytics, search_console,
                           gtm, adobe_launch
           tool (str): MCP tool category (e.g. analytics_read, marketing_read, warehouse_query,
                       tagmanager_read, seo_read)
@@ -397,7 +399,7 @@ def register_dashboard_tools(mcp_server):
             start_date: default ISO date (e.g. "2025-01-01") used when no UI filter active
             end_date: default ISO date (e.g. "2025-04-23")
             filter_hooks: {"date_range.start": "start_date", "date_range.end": "end_date"}
-          meta_ads/tiktok_ads/snap_ads + marketing_read:
+          meta_ads/tiktok_ads/snap_ads/apple_ads + marketing_read:
             ad_account_id or advertiser_id, start_date, end_date, fields (list)
             filter_hooks: {"date_range.start": "start_date", "date_range.end": "end_date"}
           google_ads + marketing_read:

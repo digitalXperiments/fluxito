@@ -40,6 +40,7 @@
 .intg-head-reddit    { background: linear-gradient(135deg, #FF4500, #cc3700); color: #fff; }
 .intg-head-x         { background: linear-gradient(135deg, #111111, #555555); color: #fff; }
 .intg-head-bing      { background: linear-gradient(135deg, #008373, #00614f); color: #fff; }
+.intg-head-apple     { background: linear-gradient(135deg, #111111, #6b7280); color: #fff; }
 
 .intg-platform-name {
   font-weight: 600;

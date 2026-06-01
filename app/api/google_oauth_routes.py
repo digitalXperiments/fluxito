@@ -88,6 +88,7 @@ GRANULAR_CONNECTOR_CATALOG: list[tuple[str, str, tuple[str, ...]]] = [
     ("snap", "Snapchat Ads", ("has_snap",)),
     ("x", "X Ads", ("has_x",)),
     ("reddit", "Reddit Ads", ("has_reddit",)),
+    ("apple", "Apple Ads", ("has_apple",)),
     ("linkedin", "LinkedIn Ads", ("has_linkedin",)),
     ("pinterest", "Pinterest Ads", ("has_pinterest",)),
     ("bing", "Bing Webmaster Tools", ("has_bing",)),
@@ -450,6 +451,7 @@ async def home(request: Request):
     # them from oauth_conns the same way the other ad platforms are.
     reddit_conns = [c for c in oauth_conns if c.provider == "reddit"]
     bing_conns = [c for c in oauth_conns if c.provider == "bing"]
+    apple_conns = [c for c in oauth_conns if c.provider == "apple"]
     conn_flags = SimpleNamespace(
         has_ga4=google_has_ga4,
         has_gtm=google_has_gtm,
@@ -466,6 +468,7 @@ async def home(request: Request):
         has_snap=bool(snap_conns),
         has_x=bool(x_conns),
         has_reddit=bool(reddit_conns),
+        has_apple=bool(apple_conns),
         has_linkedin=bool(linkedin_conns),
         has_pinterest=bool(pinterest_conns),
         has_bing=bool(bing_conns),
@@ -921,6 +924,7 @@ async def connect_page(request: Request):
     x_count = 0
     reddit_count = 0
     bing_count = 0
+    apple_count = 0
     connections_view = []
     bq_rows = []
     oauth_rows = []
@@ -1013,6 +1017,7 @@ async def connect_page(request: Request):
         x_count = len([c for c in oauth_rows if c.provider == "x"])
         reddit_count = len([c for c in oauth_rows if c.provider == "reddit"])
         bing_count = len([c for c in oauth_rows if c.provider == "bing"])
+        apple_count = len([c for c in oauth_rows if c.provider == "apple"])
 
         name_map = {
             "google": "Google Suite",
@@ -1022,6 +1027,7 @@ async def connect_page(request: Request):
             "x": "X Ads",
             "bing": "Bing Webmaster Tools",
             "reddit": "Reddit Ads",
+            "apple": "Apple Ads",
             "linkedin": "LinkedIn Ads",
             "pinterest": "Pinterest Ads",
             "bigquery": "BigQuery",
@@ -1034,6 +1040,7 @@ async def connect_page(request: Request):
             "x": "X",
             "bing": "🔎",
             "reddit": "👽",
+            "apple": "Apple",
             "linkedin": "💼",
             "pinterest": "📌",
             "bigquery": "🗄️",
@@ -1046,6 +1053,7 @@ async def connect_page(request: Request):
             "x": "/api/connections/x/{id}",
             "bing": "/api/connections/bing/{id}",
             "reddit": "/api/connections/reddit/{id}",
+            "apple": "/api/connections/apple/{id}",
             "linkedin": "/api/connections/linkedin/{id}",
             "pinterest": "/api/connections/pinterest/{id}",
             "bigquery": "/api/connections/bigquery/{id}",
@@ -1058,6 +1066,7 @@ async def connect_page(request: Request):
             "x": "/connect/x",
             "bing": "/connect/bing",
             "reddit": "/connect/reddit",
+            "apple": "/connect/apple",
             "linkedin": "/connect/linkedin",
             "pinterest": "/connect/pinterest",
             "bigquery": "/connect/bigquery",
@@ -1212,7 +1221,9 @@ async def connect_page(request: Request):
                 }
             )
 
-    # Available platforms list (shown regardless; badge indicates if already connected)
+    # Available platforms list (shown regardless; badge indicates if already connected).
+    # `products` (optional) lists the named sub-products a single connection unlocks,
+    # rendered as icon+name chips so users can see everything a platform covers.
     platforms_avail = [
         {
             "slug": "google",
@@ -1249,6 +1260,11 @@ async def connect_page(request: Request):
             "url": "/connect/adobe",
             "count": adobe_count,
             "primary": False,
+            "products": [
+                {"slug": "adobe", "name": "Analytics"},
+                {"slug": "adobe", "name": "Launch"},
+                {"slug": "adobe", "name": "Campaign", "soon": True},
+            ],
         },
         {
             "slug": "marketo",
@@ -1320,6 +1336,15 @@ async def connect_page(request: Request):
             "desc": "Campaign & ad group performance",
             "url": "/connect/reddit",
             "count": reddit_count,
+            "primary": False,
+        },
+        {
+            "slug": "apple",
+            "name": "Apple Ads",
+            "icon": "Apple",
+            "desc": "App Store campaign performance",
+            "url": "/connect/apple",
+            "count": apple_count,
             "primary": False,
         },
         {
@@ -1404,6 +1429,7 @@ async def connect_page(request: Request):
         has_snap=bool(snap_count),
         has_x=bool(x_count),
         has_reddit=bool(reddit_count),
+        has_apple=bool(apple_count),
         has_linkedin=bool(linkedin_count),
         has_pinterest=bool(pinterest_count),
         has_bing=bool(bing_count),

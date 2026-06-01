@@ -206,6 +206,11 @@ def test_reddit_ads_is_supported_oauth_app_platform():
     assert "reddit" in SUPPORTED_PLATFORMS
 
 
+def test_apple_ads_is_supported_oauth_app_platform():
+    """Apple Ads can be configured as an install-wide OAuth app."""
+    assert "apple" in SUPPORTED_PLATFORMS
+
+
 # ---------------------------------------------------------------------------
 # 7. Encrypt/decrypt round-trip — secret survives the DB
 # ---------------------------------------------------------------------------

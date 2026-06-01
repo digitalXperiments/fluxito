@@ -704,6 +704,7 @@ def register_all_tools(mcp_server):
             u.has_x = project_ctx.has_x
             u.has_reddit = project_ctx.has_reddit
             u.has_bing = project_ctx.has_bing
+            u.has_apple = project_ctx.has_apple
             u.has_amplitude = project_ctx.has_amplitude
             u.has_adobe_analytics = project_ctx.has_adobe_analytics
             u.has_adobe_launch = project_ctx.has_adobe_launch
@@ -727,6 +728,7 @@ def register_all_tools(mcp_server):
                     ("Snap Ads", project_ctx.has_snap),
                     ("X Ads", project_ctx.has_x),
                     ("Reddit Ads", project_ctx.has_reddit),
+                    ("Apple Ads", project_ctx.has_apple),
                     ("Bing Webmaster Tools", project_ctx.has_bing),
                     ("Amplitude", project_ctx.has_amplitude),
                     ("Adobe Analytics", project_ctx.has_adobe_analytics),
