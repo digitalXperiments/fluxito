@@ -303,3 +303,57 @@ async def test_add_leads_to_list_posts_ids(monkeypatch):
     assert captured["url"] == f"{_INSTANCE}/rest/v1/lists/9/leads.json"
     assert captured["body"]["input"] == [{"id": 1}, {"id": 2}]
     assert result["result"][0]["status"] == "added"
+
+
+@pytest.mark.asyncio
+async def test_remove_leads_from_list_uses_method_delete(monkeypatch):
+    captured = {}
+
+    def handler(url, headers, params, body):
+        captured["url"] = url
+        captured["params"] = params or {}
+        captured["body"] = body
+        return _resp(200, {"success": True, "result": [{"id": 1, "status": "removed"}]})
+
+    conn = _connector_with_post(monkeypatch, handler)
+    result = await conn.remove_leads_from_list(
+        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET, list_id="9", lead_ids=["1", "2"]
+    )
+
+    assert captured["url"] == f"{_INSTANCE}/rest/v1/lists/9/leads.json"
+    assert captured["params"]["_method"] == "DELETE"  # DELETE tunneled over POST
+    assert captured["body"]["input"] == [{"id": 1}, {"id": 2}]
+    assert result["result"][0]["status"] == "removed"
+
+
+@pytest.mark.asyncio
+async def test_schedule_campaign_includes_run_at_when_provided(monkeypatch):
+    captured = {}
+
+    def handler(url, headers, params, body):
+        captured["url"] = url
+        captured["body"] = body
+        return _resp(200, {"success": True, "result": [{"id": 55}]})
+
+    conn = _connector_with_post(monkeypatch, handler)
+    result = await conn.schedule_campaign(
+        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET, campaign_id="55", run_at="2026-07-01T09:00:00Z"
+    )
+
+    assert captured["url"] == f"{_INSTANCE}/rest/v1/campaigns/55/schedule.json"
+    assert captured["body"]["input"]["runAt"] == "2026-07-01T09:00:00Z"
+    assert result["result"][0]["id"] == 55
+
+
+@pytest.mark.asyncio
+async def test_schedule_campaign_omits_run_at_when_none(monkeypatch):
+    captured = {}
+
+    def handler(url, headers, params, body):
+        captured["body"] = body
+        return _resp(200, {"success": True, "result": []})
+
+    conn = _connector_with_post(monkeypatch, handler)
+    await conn.schedule_campaign(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET, campaign_id="55")
+
+    assert "runAt" not in captured["body"]["input"]  # omitted when not provided
