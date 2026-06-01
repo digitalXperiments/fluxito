@@ -73,6 +73,34 @@ class AdobeConnection(Base):
         return f"<AdobeConnection(org_id={self.org_id}, is_active={self.is_active})>"
 
 
+class MarketoConnection(Base):
+    """Adobe Marketo Engage connection (own OAuth client-creds, not IMS) scoped to a project."""
+
+    __tablename__ = "marketo_connections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Canonical REST endpoint base, e.g. https://123-ABC-456.mktorest.com (not secret).
+    instance_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    client_id_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    client_secret_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    connection_status: Mapped[str] = mapped_column(String(50), default=CONNECTION_STATUS_ACTIVE, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("idx_marketo_project_user_active", project_id, user_id, is_active),)
+
+    def __repr__(self) -> str:
+        return f"<MarketoConnection(display_name={self.display_name}, is_active={self.is_active})>"
+
+
 class RedshiftConnection(Base):
     """Amazon Redshift connection scoped to a project."""
 

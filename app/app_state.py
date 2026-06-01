@@ -41,6 +41,7 @@ bing_connector: Any = None
 amplitude_connector: Any = None
 adobe_analytics_connector: Any = None
 adobe_launch_connector: Any = None
+adobe_marketo_connector: Any = None
 redshift_connector: Any = None
 snowflake_connector: Any = None
 token_manager: Optional["GoogleTokenManager"] = None

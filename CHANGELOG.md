@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Adobe Marketo Engage** integration — connect Marketo via its own LaunchPoint
+  credentials and REST endpoint (separate from Adobe Analytics/Launch, which use
+  Adobe IMS). Once connected, read leads, lists, lead activities (opens, clicks,
+  form fills), campaigns, programs, and email/landing-page/form assets; audit API
+  usage vs. daily quota and core-field data quality; and create/update leads, add or
+  remove leads from lists, and trigger or schedule smart campaigns — all through the
+  `marketing_read` / `marketing_audit` / `marketing_write` tools (`marketo_*` actions)
+  and `run_audit`. Includes a `/connect/marketo` setup page and a step-by-step
+  LaunchPoint setup tutorial.
+
 ## [1.0.7] — 2026-06-01
 
 ### Added

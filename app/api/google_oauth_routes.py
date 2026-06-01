@@ -40,6 +40,7 @@ from app.models.connection import OAuthConnection
 from app.models.credential_connection import (
     AdobeConnection,
     AmplitudeConnection,
+    MarketoConnection,
     RedshiftConnection,
     SnowflakeConnection,
 )
@@ -908,6 +909,7 @@ async def connect_page(request: Request):
     bq_count = 0
     amplitude_count = 0
     adobe_count = 0
+    marketo_count = 0
     redshift_count = 0
     snowflake_count = 0
     google_count = 0
@@ -922,6 +924,7 @@ async def connect_page(request: Request):
     connections_view = []
     bq_rows = []
     oauth_rows = []
+    marketo_rows = []
     if user_ctx is not None:
         try:
             db_session = app_state.db_session_factory()
@@ -967,6 +970,16 @@ async def connect_page(request: Request):
                 adobe_result = await db.execute(adobe_stmt)
                 adobe_rows = list(adobe_result.scalars().all())
                 adobe_count = len(adobe_rows)
+
+                marketo_stmt = select(MarketoConnection).where(
+                    MarketoConnection.user_id == uuid.UUID(user_ctx.user_id),
+                    MarketoConnection.is_active == True,
+                )
+                if active_pid_uuid:
+                    marketo_stmt = marketo_stmt.where(MarketoConnection.project_id == active_pid_uuid)
+                marketo_result = await db.execute(marketo_stmt)
+                marketo_rows = list(marketo_result.scalars().all())
+                marketo_count = len(marketo_rows)
 
                 redshift_stmt = select(RedshiftConnection).where(
                     RedshiftConnection.user_id == uuid.UUID(user_ctx.user_id),
@@ -1151,6 +1164,22 @@ async def connect_page(request: Request):
                 }
             )
 
+        # ── Marketo connections ──
+        for mkto in marketo_rows:
+            connections_view.append(
+                {
+                    "id": str(mkto.id),
+                    "provider": "marketo",
+                    "platform_name": "Adobe Marketo Engage",
+                    "label": mkto.display_name or "Marketo",
+                    "detail": mkto.instance_url or "Marketing automation",
+                    "icon": "🟣",
+                    "is_active": mkto.connection_status == "active",
+                    "delete_url": f"/api/connections/marketo/{mkto.id}",
+                    "edit_url": f"/connect/marketo?edit={mkto.id}",
+                }
+            )
+
         # ── Redshift connections ──
         for rs in redshift_rows:
             connections_view.append(
@@ -1219,6 +1248,15 @@ async def connect_page(request: Request):
             "desc": "Analytics + Launch",
             "url": "/connect/adobe",
             "count": adobe_count,
+            "primary": False,
+        },
+        {
+            "slug": "marketo",
+            "name": "Adobe Marketo Engage",
+            "icon": "🟣",
+            "desc": "Leads, campaigns & automation",
+            "url": "/connect/marketo",
+            "count": marketo_count,
             "primary": False,
         },
         {
@@ -3365,6 +3403,166 @@ async def disconnect_adobe_connection(conn_id: str, request: Request):
             .where(
                 AdobeConnection.id == uuid.UUID(conn_id),
                 AdobeConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(is_active=False, connection_status="disconnected")
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "disconnected"}
+
+
+# ---------------------------------------------------------------------------
+# Marketo Routes (Credential-based connection)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/connect/marketo", response_class=HTMLResponse)
+async def connect_marketo_page(request: Request):
+    """Adobe Marketo Engage connect page (supports ?edit=<id>)."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/marketo", status_code=302)
+    user_view = await _load_user_view(user_ctx)
+
+    editing = None
+    edit_id = request.query_params.get("edit")
+    if edit_id and user_ctx:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            row = (
+                await db.execute(
+                    select(MarketoConnection).where(
+                        MarketoConnection.id == uuid.UUID(edit_id),
+                        MarketoConnection.user_id == uuid.UUID(user_ctx.user_id),
+                        MarketoConnection.is_active == True,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row:
+                editing = {
+                    "id": str(row.id),
+                    "display_name": row.display_name,
+                    "instance_url": row.instance_url,
+                    "client_id": _decrypt(row.client_id_encrypted),
+                }
+
+    return render(
+        request,
+        "connect/marketo.html",
+        {
+            "user": user_view,
+            "platform_name": "Adobe Marketo Engage",
+            "platform_icon": "🟣",
+            "platform_desc": "Connect Adobe Marketo Engage for leads, campaigns, and marketing automation.",
+            "editing": editing,
+        },
+    )
+
+
+class MarketoUploadRequest(BaseModel):
+    display_name: str
+    instance_url: str
+    client_id: str
+    client_secret: str
+
+
+@router.post("/api/connections/marketo")
+async def add_marketo_connection(payload: MarketoUploadRequest, request: Request):
+    """Securely stores Adobe Marketo Engage credentials."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    encrypted_client_id = _encrypt(payload.client_id)
+    encrypted_client_secret = _encrypt(payload.client_secret)
+    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        new_conn = MarketoConnection(
+            user_id=uuid.UUID(user_ctx.user_id),
+            project_id=active_project_id,
+            display_name=payload.display_name,
+            instance_url=payload.instance_url.rstrip("/"),
+            client_id_encrypted=encrypted_client_id,
+            client_secret_encrypted=encrypted_client_secret,
+            connection_status="active",
+            is_active=True,
+        )
+        db.add(new_conn)
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "success", "connection_id": str(new_conn.id)}
+
+
+@router.put("/api/connections/marketo/{conn_id}")
+async def update_marketo_connection(conn_id: str, payload: MarketoUploadRequest, request: Request):
+    """Updates an existing Marketo connection (blank client_secret keeps the existing one)."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    values: dict = {
+        "display_name": payload.display_name,
+        "instance_url": payload.instance_url.rstrip("/"),
+        "client_id_encrypted": _encrypt(payload.client_id),
+    }
+    if payload.client_secret:
+        values["client_secret_encrypted"] = _encrypt(payload.client_secret)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(MarketoConnection)
+            .where(
+                MarketoConnection.id == uuid.UUID(conn_id),
+                MarketoConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(**values)
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "updated"}
+
+
+@router.delete("/api/connections/marketo/{conn_id}")
+async def disconnect_marketo_connection(conn_id: str, request: Request):
+    """Deactivates a Marketo connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(MarketoConnection)
+            .where(
+                MarketoConnection.id == uuid.UUID(conn_id),
+                MarketoConnection.user_id == uuid.UUID(user_ctx.user_id),
             )
             .values(is_active=False, connection_status="disconnected")
         )

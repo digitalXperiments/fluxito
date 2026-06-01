@@ -78,6 +78,7 @@ _PLATFORM_FLAG_MAP = {
     "amplitude": "has_amplitude",
     "adobe_analytics": "has_adobe_analytics",
     "adobe_launch": "has_adobe_launch",
+    "adobe_marketo": "has_adobe_marketo",
     "redshift": "has_redshift",
     "snowflake": "has_snowflake",
 }

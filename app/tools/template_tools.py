@@ -43,6 +43,7 @@ def _check_platform_compatibility(user, required_platforms: list) -> dict:
         "amplitude": getattr(user, "has_amplitude", False),
         "adobe_analytics": getattr(user, "has_adobe_analytics", False),
         "adobe_launch": getattr(user, "has_adobe_launch", False),
+        "adobe_marketo": getattr(user, "has_adobe_marketo", False),
         "redshift": getattr(user, "has_redshift", False),
         "snowflake": getattr(user, "has_snowflake", False),
     }
