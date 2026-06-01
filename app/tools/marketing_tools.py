@@ -85,7 +85,9 @@ def _unauthorized_response(platform: str):
 def register_marketing_tools(mcp_server):
     @mcp_server.tool("marketing_read")
     async def marketing_read(
-        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"],
+        platform: Literal[
+            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"
+        ],
         action: str,
         account_id: str | None = None,
         date_range_start: str | None = None,
@@ -575,7 +577,9 @@ def register_marketing_tools(mcp_server):
 
     @mcp_server.tool("marketing_audit")
     async def marketing_audit(
-        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"],
+        platform: Literal[
+            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"
+        ],
         action: str,
         account_id: str | None = None,
         date_range_start: str | None = None,
@@ -728,7 +732,9 @@ def register_marketing_tools(mcp_server):
 
     @mcp_server.tool("marketing_write")
     async def marketing_write(
-        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"],
+        platform: Literal[
+            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"
+        ],
         action: str,
         account_id: str | None = None,
         campaign_id: str | None = None,
@@ -1032,21 +1038,33 @@ def register_marketing_tools(mcp_server):
                 )
             if action == "add_leads_to_list":
                 if not resource_id or not p.get("lead_ids"):
-                    return {"error": True, "message": "resource_id (list id) and payload.lead_ids are required"}
+                    return {
+                        "error": True,
+                        "message": "resource_id (list id) and payload.lead_ids are required",
+                    }
                 return await mk.add_leads_to_list(*creds, list_id=resource_id, lead_ids=p["lead_ids"])
             if action == "remove_leads_from_list":
                 if not resource_id or not p.get("lead_ids"):
-                    return {"error": True, "message": "resource_id (list id) and payload.lead_ids are required"}
+                    return {
+                        "error": True,
+                        "message": "resource_id (list id) and payload.lead_ids are required",
+                    }
                 return await mk.remove_leads_from_list(*creds, list_id=resource_id, lead_ids=p["lead_ids"])
             if action == "request_campaign":
                 if not resource_id or not p.get("lead_ids"):
-                    return {"error": True, "message": "resource_id (campaign id) and payload.lead_ids are required"}
+                    return {
+                        "error": True,
+                        "message": "resource_id (campaign id) and payload.lead_ids are required",
+                    }
                 return await mk.request_campaign(
                     *creds, campaign_id=resource_id, lead_ids=p["lead_ids"], tokens=p.get("tokens")
                 )
             if action == "schedule_campaign":
                 if not resource_id:
-                    return {"error": True, "message": "resource_id (campaign id) is required for schedule_campaign"}
+                    return {
+                        "error": True,
+                        "message": "resource_id (campaign id) is required for schedule_campaign",
+                    }
                 return await mk.schedule_campaign(
                     *creds, campaign_id=resource_id, run_at=p.get("run_at"), tokens=p.get("tokens")
                 )

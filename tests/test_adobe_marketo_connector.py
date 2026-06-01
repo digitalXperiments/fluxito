@@ -107,8 +107,13 @@ async def test_get_leads_sends_filter_and_bearer(monkeypatch):
 
     conn = _connector_with_token(monkeypatch, handler)
     result = await conn.get_leads(
-        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET,
-        filter_type="email", filter_values=["a@b.com"], fields=["id", "email"], limit=10,
+        _INSTANCE,
+        _CLIENT_ID,
+        _CLIENT_SECRET,
+        filter_type="email",
+        filter_values=["a@b.com"],
+        fields=["id", "email"],
+        limit=10,
     )
 
     assert captured["url"] == f"{_INSTANCE}/rest/v1/leads.json"
@@ -218,13 +223,16 @@ async def test_audit_instance_reports_quota(monkeypatch):
 @pytest.mark.asyncio
 async def test_check_data_quality_counts_missing_fields(monkeypatch):
     def handler(url, headers, params):
-        return _resp(200, {
-            "success": True,
-            "result": [
-                {"id": 1, "email": "a@b.com", "company": "Acme"},
-                {"id": 2, "email": None, "company": None},
-            ],
-        })
+        return _resp(
+            200,
+            {
+                "success": True,
+                "result": [
+                    {"id": 1, "email": "a@b.com", "company": "Acme"},
+                    {"id": 2, "email": None, "company": None},
+                ],
+            },
+        )
 
     conn = _connector_with_token(monkeypatch, handler)
     result = await conn.check_data_quality(
@@ -258,8 +266,12 @@ async def test_create_or_update_leads_posts_payload(monkeypatch):
 
     conn = _connector_with_post(monkeypatch, handler)
     result = await conn.create_or_update_leads(
-        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET,
-        leads=[{"email": "a@b.com", "firstName": "A"}], lookup_field="email", action="createOrUpdate",
+        _INSTANCE,
+        _CLIENT_ID,
+        _CLIENT_SECRET,
+        leads=[{"email": "a@b.com", "firstName": "A"}],
+        lookup_field="email",
+        action="createOrUpdate",
     )
 
     assert captured["url"] == f"{_INSTANCE}/rest/v1/leads.json"
@@ -280,7 +292,11 @@ async def test_request_campaign_posts_leads(monkeypatch):
 
     conn = _connector_with_post(monkeypatch, handler)
     result = await conn.request_campaign(
-        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET, campaign_id="55", lead_ids=["1", "2"],
+        _INSTANCE,
+        _CLIENT_ID,
+        _CLIENT_SECRET,
+        campaign_id="55",
+        lead_ids=["1", "2"],
     )
 
     assert captured["url"] == f"{_INSTANCE}/rest/v1/campaigns/55/trigger.json"
@@ -298,7 +314,9 @@ async def test_add_leads_to_list_posts_ids(monkeypatch):
         return _resp(200, {"success": True, "result": [{"id": 1, "status": "added"}]})
 
     conn = _connector_with_post(monkeypatch, handler)
-    result = await conn.add_leads_to_list(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET, list_id="9", lead_ids=["1", "2"])
+    result = await conn.add_leads_to_list(
+        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET, list_id="9", lead_ids=["1", "2"]
+    )
 
     assert captured["url"] == f"{_INSTANCE}/rest/v1/lists/9/leads.json"
     assert captured["body"]["input"] == [{"id": 1}, {"id": 2}]

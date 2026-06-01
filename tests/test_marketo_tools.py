@@ -90,8 +90,10 @@ async def test_marketing_write_marketo_upsert(wired):
 async def test_marketing_write_marketo_no_account_id(wired):
     mcp, conn = wired
     result = await mcp.tools["marketing_write"](
-        platform="marketo", action="add_leads_to_list",
-        resource_id="9", payload={"lead_ids": ["1", "2"]},
+        platform="marketo",
+        action="add_leads_to_list",
+        resource_id="9",
+        payload={"lead_ids": ["1", "2"]},
     )
     assert conn.calls[0][0] == "add_leads_to_list"
     assert "error" not in result

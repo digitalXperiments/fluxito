@@ -153,11 +153,18 @@ class AdobeMarketoConnector:
         fl = self._csv(fields)
         if fl:
             params["fields"] = fl
-        return await self._request(instance_url, client_id, client_secret, "GET", "/rest/v1/leads.json", params=params)
+        return await self._request(
+            instance_url, client_id, client_secret, "GET", "/rest/v1/leads.json", params=params
+        )
 
     @friendly_errors("Adobe Marketo Engage")
     async def get_lead_by_id(
-        self, instance_url: str, client_id: str, client_secret: str, lead_id: str, fields: list[str] | None = None
+        self,
+        instance_url: str,
+        client_id: str,
+        client_secret: str,
+        lead_id: str,
+        fields: list[str] | None = None,
     ) -> dict:
         """GET /rest/v1/lead/{id}.json — a single lead by Marketo id."""
         params = {}
@@ -165,22 +172,35 @@ class AdobeMarketoConnector:
         if fl:
             params["fields"] = fl
         return await self._request(
-            instance_url, client_id, client_secret, "GET", f"/rest/v1/lead/{lead_id}.json", params=params or None
+            instance_url,
+            client_id,
+            client_secret,
+            "GET",
+            f"/rest/v1/lead/{lead_id}.json",
+            params=params or None,
         )
 
     @friendly_errors("Adobe Marketo Engage")
-    async def list_lead_lists(self, instance_url: str, client_id: str, client_secret: str, limit: int = 100) -> dict:
+    async def list_lead_lists(
+        self, instance_url: str, client_id: str, client_secret: str, limit: int = 100
+    ) -> dict:
         """GET /rest/v1/lists.json — static/smart lists."""
         return await self._request(
             instance_url, client_id, client_secret, "GET", "/rest/v1/lists.json", params={"batchSize": limit}
         )
 
     @friendly_errors("Adobe Marketo Engage")
-    async def get_list_leads(self, instance_url: str, client_id: str, client_secret: str, list_id: str, limit: int = 100) -> dict:
+    async def get_list_leads(
+        self, instance_url: str, client_id: str, client_secret: str, list_id: str, limit: int = 100
+    ) -> dict:
         """GET /rest/v1/list/{listId}/leads.json — members of a list."""
         return await self._request(
-            instance_url, client_id, client_secret, "GET",
-            f"/rest/v1/list/{list_id}/leads.json", params={"batchSize": limit},
+            instance_url,
+            client_id,
+            client_secret,
+            "GET",
+            f"/rest/v1/list/{list_id}/leads.json",
+            params={"batchSize": limit},
         )
 
     @friendly_errors("Adobe Marketo Engage")
@@ -201,8 +221,12 @@ class AdobeMarketoConnector:
         """
         token_params = {"sinceDatetime": since_datetime or "1970-01-01T00:00:00Z"}
         pt = await self._request(
-            instance_url, client_id, client_secret, "GET",
-            "/rest/v1/activities/pagingtoken.json", params=token_params,
+            instance_url,
+            client_id,
+            client_secret,
+            "GET",
+            "/rest/v1/activities/pagingtoken.json",
+            params=token_params,
         )
         if pt.get("error"):
             return pt
@@ -218,46 +242,82 @@ class AdobeMarketoConnector:
         )
 
     @friendly_errors("Adobe Marketo Engage")
-    async def list_campaigns(self, instance_url: str, client_id: str, client_secret: str, limit: int = 100) -> dict:
+    async def list_campaigns(
+        self, instance_url: str, client_id: str, client_secret: str, limit: int = 100
+    ) -> dict:
         """GET /rest/v1/campaigns.json — smart campaigns."""
         return await self._request(
-            instance_url, client_id, client_secret, "GET", "/rest/v1/campaigns.json", params={"batchSize": limit}
+            instance_url,
+            client_id,
+            client_secret,
+            "GET",
+            "/rest/v1/campaigns.json",
+            params={"batchSize": limit},
         )
 
     @friendly_errors("Adobe Marketo Engage")
-    async def list_programs(self, instance_url: str, client_id: str, client_secret: str, limit: int = 100) -> dict:
+    async def list_programs(
+        self, instance_url: str, client_id: str, client_secret: str, limit: int = 100
+    ) -> dict:
         """GET /rest/asset/v1/programs.json — programs."""
         return await self._request(
-            instance_url, client_id, client_secret, "GET", "/rest/asset/v1/programs.json", params={"maxReturn": limit}
+            instance_url,
+            client_id,
+            client_secret,
+            "GET",
+            "/rest/asset/v1/programs.json",
+            params={"maxReturn": limit},
         )
 
     @friendly_errors("Adobe Marketo Engage")
-    async def get_program(self, instance_url: str, client_id: str, client_secret: str, program_id: str) -> dict:
+    async def get_program(
+        self, instance_url: str, client_id: str, client_secret: str, program_id: str
+    ) -> dict:
         """GET /rest/asset/v1/program/{id}.json — a single program."""
         return await self._request(
             instance_url, client_id, client_secret, "GET", f"/rest/asset/v1/program/{program_id}.json"
         )
 
     @friendly_errors("Adobe Marketo Engage")
-    async def list_emails(self, instance_url: str, client_id: str, client_secret: str, limit: int = 100) -> dict:
+    async def list_emails(
+        self, instance_url: str, client_id: str, client_secret: str, limit: int = 100
+    ) -> dict:
         """GET /rest/asset/v1/emails.json — email assets."""
         return await self._request(
-            instance_url, client_id, client_secret, "GET", "/rest/asset/v1/emails.json", params={"maxReturn": limit}
+            instance_url,
+            client_id,
+            client_secret,
+            "GET",
+            "/rest/asset/v1/emails.json",
+            params={"maxReturn": limit},
         )
 
     @friendly_errors("Adobe Marketo Engage")
-    async def list_landing_pages(self, instance_url: str, client_id: str, client_secret: str, limit: int = 100) -> dict:
+    async def list_landing_pages(
+        self, instance_url: str, client_id: str, client_secret: str, limit: int = 100
+    ) -> dict:
         """GET /rest/asset/v1/landingPages.json — landing page assets."""
         return await self._request(
-            instance_url, client_id, client_secret, "GET",
-            "/rest/asset/v1/landingPages.json", params={"maxReturn": limit},
+            instance_url,
+            client_id,
+            client_secret,
+            "GET",
+            "/rest/asset/v1/landingPages.json",
+            params={"maxReturn": limit},
         )
 
     @friendly_errors("Adobe Marketo Engage")
-    async def list_forms(self, instance_url: str, client_id: str, client_secret: str, limit: int = 100) -> dict:
+    async def list_forms(
+        self, instance_url: str, client_id: str, client_secret: str, limit: int = 100
+    ) -> dict:
         """GET /rest/asset/v1/forms.json — form assets."""
         return await self._request(
-            instance_url, client_id, client_secret, "GET", "/rest/asset/v1/forms.json", params={"maxReturn": limit}
+            instance_url,
+            client_id,
+            client_secret,
+            "GET",
+            "/rest/asset/v1/forms.json",
+            params={"maxReturn": limit},
         )
 
     # ------------------------------------------------------------------
@@ -270,8 +330,12 @@ class AdobeMarketoConnector:
             instance_url, client_id, client_secret, "GET", "/rest/v1/stats/usage.json"
         )
         programs = await self._request(
-            instance_url, client_id, client_secret, "GET",
-            "/rest/asset/v1/programs.json", params={"maxReturn": 200},
+            instance_url,
+            client_id,
+            client_secret,
+            "GET",
+            "/rest/asset/v1/programs.json",
+            params={"maxReturn": 200},
         )
         api_calls = 0
         if not usage.get("error"):
@@ -294,8 +358,13 @@ class AdobeMarketoConnector:
     ) -> dict:
         """Null-field rates on core lead fields over a sampled set of leads."""
         leads_resp = await self.get_leads(
-            instance_url, client_id, client_secret,
-            filter_type="email", filter_values=sample_emails, fields=["id", "email", "company"], limit=300,
+            instance_url,
+            client_id,
+            client_secret,
+            filter_type="email",
+            filter_values=sample_emails,
+            fields=["id", "email", "company"],
+            limit=300,
         )
         if leads_resp.get("error"):
             return leads_resp
@@ -345,7 +414,12 @@ class AdobeMarketoConnector:
         """POST /rest/v1/lists/{listId}/leads.json — add leads to a static list."""
         body = {"input": self._lead_id_objects(lead_ids)}
         return await self._request(
-            instance_url, client_id, client_secret, "POST", f"/rest/v1/lists/{list_id}/leads.json", json_body=body
+            instance_url,
+            client_id,
+            client_secret,
+            "POST",
+            f"/rest/v1/lists/{list_id}/leads.json",
+            json_body=body,
         )
 
     @friendly_errors("Adobe Marketo Engage")
@@ -355,8 +429,13 @@ class AdobeMarketoConnector:
         """Remove leads from a static list. Marketo uses DELETE semantics via _method=DELETE on POST."""
         body = {"input": self._lead_id_objects(lead_ids)}
         return await self._request(
-            instance_url, client_id, client_secret, "POST", f"/rest/v1/lists/{list_id}/leads.json",
-            params={"_method": "DELETE"}, json_body=body,
+            instance_url,
+            client_id,
+            client_secret,
+            "POST",
+            f"/rest/v1/lists/{list_id}/leads.json",
+            params={"_method": "DELETE"},
+            json_body=body,
         )
 
     @friendly_errors("Adobe Marketo Engage")
@@ -374,8 +453,12 @@ class AdobeMarketoConnector:
         if tokens:
             inp["tokens"] = tokens
         return await self._request(
-            instance_url, client_id, client_secret, "POST",
-            f"/rest/v1/campaigns/{campaign_id}/trigger.json", json_body={"input": inp},
+            instance_url,
+            client_id,
+            client_secret,
+            "POST",
+            f"/rest/v1/campaigns/{campaign_id}/trigger.json",
+            json_body={"input": inp},
         )
 
     @friendly_errors("Adobe Marketo Engage")
@@ -395,6 +478,10 @@ class AdobeMarketoConnector:
         if tokens:
             inp["tokens"] = tokens
         return await self._request(
-            instance_url, client_id, client_secret, "POST",
-            f"/rest/v1/campaigns/{campaign_id}/schedule.json", json_body={"input": inp},
+            instance_url,
+            client_id,
+            client_secret,
+            "POST",
+            f"/rest/v1/campaigns/{campaign_id}/schedule.json",
+            json_body={"input": inp},
         )
