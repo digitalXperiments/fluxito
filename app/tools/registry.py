@@ -230,7 +230,7 @@ def _install_tool_hook(mcp_server):
     tool_manager = mcp_server._tool_manager
     _original_call = tool_manager.call_tool
 
-    async def _instrumented_call(name, arguments, *args, **kwargs):
+    async def _instrumented_call_raw(name, arguments, *args, **kwargs):
         # --- Reliability layer ─────────────────────────────────────────────
         # Circuit breaker keyed by tool name — prevents a hot broken tool
         # from saturating the worker. Allows one probe after cooldown.
@@ -480,6 +480,37 @@ def _install_tool_hook(mcp_server):
                 logger.debug(f"audit hook failed: {_e}")
 
         return result
+
+    async def _instrumented_call(name, arguments, *args, **kwargs):
+        # FastMCP's ``call_tool`` invokes the tool manager with
+        # ``convert_result=True`` and expects already-converted content
+        # (a list of content blocks, or a ``(content, structured)`` tuple).
+        #
+        # We deliberately run the wrapped tool with ``convert_result=False``
+        # so the instrumentation layer — most importantly the audit trail —
+        # observes the RAW dict/list/str the tool returned (needed to derive
+        # response summaries and the success/error/denied status). Only once
+        # auditing is done do we convert exactly as FastMCP would, so the
+        # value handed back to the SDK is byte-for-byte what it expects.
+        _want_convert = kwargs.pop("convert_result", False)
+        raw = await _instrumented_call_raw(name, arguments, *args, **kwargs)
+        if not _want_convert:
+            return raw
+        tool = tool_manager.get_tool(name)
+        if tool is None:
+            return raw
+        try:
+            return tool.fn_metadata.convert_result(raw)
+        except Exception:
+            # Never let result conversion break a call — return the raw value
+            # and let the lowlevel server fall back to generic serialization.
+            return raw
+
+    # Actually install the hook. Without this assignment the entire
+    # instrumentation layer (audit trail, circuit breaker, per-tool timeout,
+    # per-call active-project resolution, source-client capture) is dead code
+    # and the Activity Log never receives a single tool-call record.
+    tool_manager.call_tool = _instrumented_call
 
 
 def register_all_tools(mcp_server):

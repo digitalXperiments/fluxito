@@ -124,6 +124,21 @@ def test_no_unexpected_tools(registered_names):
     assert not extra, f"Unexpected tools (update EXPECTED_TOOLS if intentional): {sorted(extra)}"
 
 
+def test_instrumentation_hook_is_installed(tool_manager):
+    """register_all_tools must actually swap in the instrumented call_tool.
+
+    Regression guard: _install_tool_hook used to build the wrapper but never
+    assign it, so the audit trail (and the entire Activity Log) silently got
+    no data even though every tool worked. This asserts the real registration
+    path installs the hook end-to-end.
+    """
+    assert tool_manager.call_tool.__name__ == "_instrumented_call", (
+        "tool_manager.call_tool is not the instrumented wrapper — "
+        "the audit/instrumentation hook is not installed"
+    )
+    assert "_install_tool_hook" in tool_manager.call_tool.__qualname__
+
+
 def test_all_tools_have_docstrings(tool_manager):
     missing = [
         name
