@@ -233,3 +233,73 @@ async def test_check_data_quality_counts_missing_fields(monkeypatch):
     assert result["leads_checked"] == 2
     assert result["missing_email"] == 1
     assert result["missing_company"] == 1
+
+
+def _connector_with_post(monkeypatch, post_handler):
+    class FakeClient(_FakeClientBase):
+        async def get(self, url, *, headers=None, params=None):
+            return _resp(200, {"access_token": _TOKEN, "expires_in": 3600})
+
+        async def post(self, url, *, headers=None, params=None, json=None):
+            return post_handler(url, headers, params, json)
+
+    monkeypatch.setattr("app.connectors.adobe_marketo.httpx.AsyncClient", FakeClient)
+    return AdobeMarketoConnector()
+
+
+@pytest.mark.asyncio
+async def test_create_or_update_leads_posts_payload(monkeypatch):
+    captured = {}
+
+    def handler(url, headers, params, body):
+        captured["url"] = url
+        captured["body"] = body
+        return _resp(200, {"success": True, "result": [{"id": 1, "status": "created"}]})
+
+    conn = _connector_with_post(monkeypatch, handler)
+    result = await conn.create_or_update_leads(
+        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET,
+        leads=[{"email": "a@b.com", "firstName": "A"}], lookup_field="email", action="createOrUpdate",
+    )
+
+    assert captured["url"] == f"{_INSTANCE}/rest/v1/leads.json"
+    assert captured["body"]["action"] == "createOrUpdate"
+    assert captured["body"]["lookupField"] == "email"
+    assert captured["body"]["input"] == [{"email": "a@b.com", "firstName": "A"}]
+    assert result["result"][0]["status"] == "created"
+
+
+@pytest.mark.asyncio
+async def test_request_campaign_posts_leads(monkeypatch):
+    captured = {}
+
+    def handler(url, headers, params, body):
+        captured["url"] = url
+        captured["body"] = body
+        return _resp(200, {"success": True, "result": [{"id": 55}]})
+
+    conn = _connector_with_post(monkeypatch, handler)
+    result = await conn.request_campaign(
+        _INSTANCE, _CLIENT_ID, _CLIENT_SECRET, campaign_id="55", lead_ids=["1", "2"],
+    )
+
+    assert captured["url"] == f"{_INSTANCE}/rest/v1/campaigns/55/trigger.json"
+    assert captured["body"]["input"]["leads"] == [{"id": 1}, {"id": 2}]
+    assert result["result"][0]["id"] == 55
+
+
+@pytest.mark.asyncio
+async def test_add_leads_to_list_posts_ids(monkeypatch):
+    captured = {}
+
+    def handler(url, headers, params, body):
+        captured["url"] = url
+        captured["body"] = body
+        return _resp(200, {"success": True, "result": [{"id": 1, "status": "added"}]})
+
+    conn = _connector_with_post(monkeypatch, handler)
+    result = await conn.add_leads_to_list(_INSTANCE, _CLIENT_ID, _CLIENT_SECRET, list_id="9", lead_ids=["1", "2"])
+
+    assert captured["url"] == f"{_INSTANCE}/rest/v1/lists/9/leads.json"
+    assert captured["body"]["input"] == [{"id": 1}, {"id": 2}]
+    assert result["result"][0]["status"] == "added"

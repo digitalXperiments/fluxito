@@ -308,3 +308,93 @@ class AdobeMarketoConnector:
             "missing_email": missing_email,
             "missing_company": missing_company,
         }
+
+    # ------------------------------------------------------------------
+    # Layer 3: Write
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _lead_id_objects(lead_ids: list[str]) -> list[dict]:
+        out = []
+        for lid in lead_ids:
+            try:
+                out.append({"id": int(lid)})
+            except (TypeError, ValueError):
+                out.append({"id": lid})
+        return out
+
+    @friendly_errors("Adobe Marketo Engage")
+    async def create_or_update_leads(
+        self,
+        instance_url: str,
+        client_id: str,
+        client_secret: str,
+        leads: list[dict],
+        lookup_field: str = "email",
+        action: str = "createOrUpdate",
+    ) -> dict:
+        """POST /rest/v1/leads.json — create/update leads (dedupe by lookup_field)."""
+        body = {"action": action, "lookupField": lookup_field, "input": leads}
+        return await self._request(
+            instance_url, client_id, client_secret, "POST", "/rest/v1/leads.json", json_body=body
+        )
+
+    @friendly_errors("Adobe Marketo Engage")
+    async def add_leads_to_list(
+        self, instance_url: str, client_id: str, client_secret: str, list_id: str, lead_ids: list[str]
+    ) -> dict:
+        """POST /rest/v1/lists/{listId}/leads.json — add leads to a static list."""
+        body = {"input": self._lead_id_objects(lead_ids)}
+        return await self._request(
+            instance_url, client_id, client_secret, "POST", f"/rest/v1/lists/{list_id}/leads.json", json_body=body
+        )
+
+    @friendly_errors("Adobe Marketo Engage")
+    async def remove_leads_from_list(
+        self, instance_url: str, client_id: str, client_secret: str, list_id: str, lead_ids: list[str]
+    ) -> dict:
+        """Remove leads from a static list. Marketo uses DELETE semantics via _method=DELETE on POST."""
+        body = {"input": self._lead_id_objects(lead_ids)}
+        return await self._request(
+            instance_url, client_id, client_secret, "POST", f"/rest/v1/lists/{list_id}/leads.json",
+            params={"_method": "DELETE"}, json_body=body,
+        )
+
+    @friendly_errors("Adobe Marketo Engage")
+    async def request_campaign(
+        self,
+        instance_url: str,
+        client_id: str,
+        client_secret: str,
+        campaign_id: str,
+        lead_ids: list[str],
+        tokens: list[dict] | None = None,
+    ) -> dict:
+        """POST /rest/v1/campaigns/{id}/trigger.json — run a trigger smart campaign for leads."""
+        inp: dict[str, Any] = {"leads": self._lead_id_objects(lead_ids)}
+        if tokens:
+            inp["tokens"] = tokens
+        return await self._request(
+            instance_url, client_id, client_secret, "POST",
+            f"/rest/v1/campaigns/{campaign_id}/trigger.json", json_body={"input": inp},
+        )
+
+    @friendly_errors("Adobe Marketo Engage")
+    async def schedule_campaign(
+        self,
+        instance_url: str,
+        client_id: str,
+        client_secret: str,
+        campaign_id: str,
+        run_at: str | None = None,
+        tokens: list[dict] | None = None,
+    ) -> dict:
+        """POST /rest/v1/campaigns/{id}/schedule.json — schedule a batch campaign run."""
+        inp: dict[str, Any] = {}
+        if run_at:
+            inp["runAt"] = run_at
+        if tokens:
+            inp["tokens"] = tokens
+        return await self._request(
+            instance_url, client_id, client_secret, "POST",
+            f"/rest/v1/campaigns/{campaign_id}/schedule.json", json_body={"input": inp},
+        )
