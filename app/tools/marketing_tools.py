@@ -38,6 +38,35 @@ def _get_provider_oauth1_tokens(provider_str: str) -> tuple[str, str] | None:
     return get_provider_oauth1_tokens(provider_str)
 
 
+async def _get_marketo_conn(user_id: str):
+    """Fetch the active Marketo connection and decrypt credentials.
+
+    Returns (conn_id, instance_url, client_id, client_secret) or (None, None, None, None).
+    """
+    from app.models.credential_connection import MarketoConnection
+    from app.tools.shared_helpers import decrypt_field, get_encrypted_credential_conn
+
+    conn = await get_encrypted_credential_conn(MarketoConnection, user_id)
+    if not conn:
+        return None, None, None, None
+    client_id = decrypt_field(conn.client_id_encrypted)
+    client_secret = decrypt_field(conn.client_secret_encrypted)
+    return str(conn.id), conn.instance_url, client_id, client_secret
+
+
+def _no_marketo() -> dict:
+    from app.config import settings
+
+    base = settings.APP_BASE_URL
+    return {
+        "error": True,
+        "error_type": "connection_missing",
+        "message": "No Adobe Marketo Engage connection found.",
+        "connect_url": f"{base}/connect/marketo",
+        "action_required": f"Visit {base}/connect/marketo to connect Marketo.",
+    }
+
+
 def _unauthorized_response(platform: str):
     from app.auth.mcp_session_manager import no_ads_response
     from app.config import settings
@@ -56,7 +85,7 @@ def _unauthorized_response(platform: str):
 def register_marketing_tools(mcp_server):
     @mcp_server.tool("marketing_read")
     async def marketing_read(
-        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit"],
+        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"],
         action: str,
         account_id: str | None = None,
         date_range_start: str | None = None,
@@ -64,16 +93,19 @@ def register_marketing_tools(mcp_server):
         metrics: list[str] | None = None,
         campaign_id: str | None = None,
         limit: int = 50,
+        resource_id: str | None = None,
+        filters: dict | None = None,
     ) -> dict:
         """Reads ad platform data. Use marketing_audit for health checks, marketing_write for changes.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit. Dates: YYYY-MM-DD.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | marketo. Dates: YYYY-MM-DD.
 
         All platforms: list_accounts, get_campaign_performance(account_id+dates)
         Google only: get_ad_group_performance(+dates,campaign_id?), get_conversion_actions(account_id), get_keyword_performance(+dates,campaign_id?)
         Meta: get_adset_performance(+dates,campaign_id?)
         TikTok: get_adgroup_performance(+dates,campaign_id?)
         Snap: get_adsquad_performance(+dates,campaign_id?)
+        Marketo actions: get_leads, get_lead_by_id, list_lead_lists, get_list_leads, get_lead_activities, list_campaigns, list_programs, get_program, list_emails, list_landing_pages, list_forms
         """
         user = _get_user()
 
@@ -93,6 +125,19 @@ def register_marketing_tools(mcp_server):
             "pinterest": {"list_accounts", "get_campaign_performance", "get_adgroup_performance"},
             "x": {"list_accounts", "get_campaign_performance", "get_line_item_performance"},
             "reddit": {"list_accounts", "get_campaign_performance", "get_adgroup_performance"},
+            "marketo": {
+                "get_leads",
+                "get_lead_by_id",
+                "list_lead_lists",
+                "get_list_leads",
+                "get_lead_activities",
+                "list_campaigns",
+                "list_programs",
+                "get_program",
+                "list_emails",
+                "list_landing_pages",
+                "list_forms",
+            },
         }
         valid_actions = _VALID_MARKETING_READ_ACTIONS.get(platform, set())
         if action not in valid_actions:
@@ -475,11 +520,63 @@ def register_marketing_tools(mcp_server):
                 "message": f"Unknown action '{action}' for Reddit Ads. Supported: list_accounts, get_campaign_performance, get_adgroup_performance",
             }
 
+        elif platform == "marketo":
+            user = _get_user()
+            if not user or not getattr(user, "has_adobe_marketo", False):
+                return _no_marketo()
+            conn_id, instance_url, client_id, client_secret = await _get_marketo_conn(user.user_id)
+            if not conn_id:
+                return _no_marketo()
+            mk = state.adobe_marketo_connector
+            f = filters or {}
+            creds = (instance_url, client_id, client_secret)
+
+            if action == "get_leads":
+                return await mk.get_leads(
+                    *creds,
+                    filter_type=f.get("filter_type", "email"),
+                    filter_values=f.get("filter_values"),
+                    fields=f.get("fields"),
+                    limit=limit,
+                )
+            if action == "get_lead_by_id":
+                if not resource_id:
+                    return {"error": True, "message": "resource_id (lead id) is required for get_lead_by_id"}
+                return await mk.get_lead_by_id(*creds, lead_id=resource_id, fields=f.get("fields"))
+            if action == "list_lead_lists":
+                return await mk.list_lead_lists(*creds, limit=limit)
+            if action == "get_list_leads":
+                if not resource_id:
+                    return {"error": True, "message": "resource_id (list id) is required for get_list_leads"}
+                return await mk.get_list_leads(*creds, list_id=resource_id, limit=limit)
+            if action == "get_lead_activities":
+                return await mk.get_lead_activities(
+                    *creds,
+                    activity_type_ids=f.get("activity_type_ids"),
+                    list_id=f.get("list_id") or resource_id,
+                    since_datetime=f.get("since_datetime"),
+                    limit=limit,
+                )
+            if action == "list_campaigns":
+                return await mk.list_campaigns(*creds, limit=limit)
+            if action == "list_programs":
+                return await mk.list_programs(*creds, limit=limit)
+            if action == "get_program":
+                if not resource_id:
+                    return {"error": True, "message": "resource_id (program id) is required for get_program"}
+                return await mk.get_program(*creds, program_id=resource_id)
+            if action == "list_emails":
+                return await mk.list_emails(*creds, limit=limit)
+            if action == "list_landing_pages":
+                return await mk.list_landing_pages(*creds, limit=limit)
+            if action == "list_forms":
+                return await mk.list_forms(*creds, limit=limit)
+
         return {"error": True, "message": f"Unknown platform: {platform}"}
 
     @mcp_server.tool("marketing_audit")
     async def marketing_audit(
-        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit"],
+        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"],
         action: str,
         account_id: str,
         date_range_start: str | None = None,
@@ -608,11 +705,26 @@ def register_marketing_tools(mcp_server):
                 ),
             }
 
+        elif platform == "marketo":
+            user = _get_user()
+            if not user or not getattr(user, "has_adobe_marketo", False):
+                return _no_marketo()
+            conn_id, instance_url, client_id, client_secret = await _get_marketo_conn(user.user_id)
+            if not conn_id:
+                return _no_marketo()
+            mk = state.adobe_marketo_connector
+            creds = (instance_url, client_id, client_secret)
+            if action == "audit_instance":
+                return await mk.audit_instance(*creds)
+            if action == "check_data_quality":
+                return await mk.check_data_quality(*creds)
+            return {"error": True, "message": f"Unknown marketo audit action: {action}"}
+
         return {"error": True, "message": f"Unknown platform: {platform}"}
 
     @mcp_server.tool("marketing_write")
     async def marketing_write(
-        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit"],
+        platform: Literal["google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "marketo"],
         action: str,
         account_id: str,
         campaign_id: str | None = None,
@@ -623,13 +735,16 @@ def register_marketing_tools(mcp_server):
         start_date: str | None = None,
         end_date: str | None = None,
         bidding_strategy_type: str | None = None,
+        resource_id: str | None = None,
+        payload: dict | None = None,
     ) -> dict:
         """Write operations for ad platforms. Google requires 'full' tier.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | marketo.
         create_campaign: campaign_name, advertising_channel_type(SEARCH|DISPLAY|SHOPPING|VIDEO|PERFORMANCE_MAX), daily_budget_usd, start_date
         update_campaign_status: campaign_id, status(ENABLED|PAUSED)
         update_campaign_budget: campaign_id, daily_budget_usd
+        Marketo actions: create_or_update_leads, add_leads_to_list, remove_leads_from_list, request_campaign, schedule_campaign
         """
         user = _get_user()
 
@@ -885,5 +1000,47 @@ def register_marketing_tools(mcp_server):
                 "error": True,
                 "message": f"Unknown action '{action}' for Reddit Ads write. Supported: update_campaign_status, update_campaign_budget",
             }
+
+        elif platform == "marketo":
+            user = _get_user()
+            if not user or not getattr(user, "has_adobe_marketo", False):
+                return _no_marketo()
+            conn_id, instance_url, client_id, client_secret = await _get_marketo_conn(user.user_id)
+            if not conn_id:
+                return _no_marketo()
+            mk = state.adobe_marketo_connector
+            p = payload or {}
+            creds = (instance_url, client_id, client_secret)
+
+            if action == "create_or_update_leads":
+                if not p.get("leads"):
+                    return {"error": True, "message": "payload.leads (list) is required"}
+                return await mk.create_or_update_leads(
+                    *creds,
+                    leads=p["leads"],
+                    lookup_field=p.get("lookup_field", "email"),
+                    action=p.get("action", "createOrUpdate"),
+                )
+            if action == "add_leads_to_list":
+                if not resource_id or not p.get("lead_ids"):
+                    return {"error": True, "message": "resource_id (list id) and payload.lead_ids are required"}
+                return await mk.add_leads_to_list(*creds, list_id=resource_id, lead_ids=p["lead_ids"])
+            if action == "remove_leads_from_list":
+                if not resource_id or not p.get("lead_ids"):
+                    return {"error": True, "message": "resource_id (list id) and payload.lead_ids are required"}
+                return await mk.remove_leads_from_list(*creds, list_id=resource_id, lead_ids=p["lead_ids"])
+            if action == "request_campaign":
+                if not resource_id or not p.get("lead_ids"):
+                    return {"error": True, "message": "resource_id (campaign id) and payload.lead_ids are required"}
+                return await mk.request_campaign(
+                    *creds, campaign_id=resource_id, lead_ids=p["lead_ids"], tokens=p.get("tokens")
+                )
+            if action == "schedule_campaign":
+                if not resource_id:
+                    return {"error": True, "message": "resource_id (campaign id) is required for schedule_campaign"}
+                return await mk.schedule_campaign(
+                    *creds, campaign_id=resource_id, run_at=p.get("run_at"), tokens=p.get("tokens")
+                )
+            return {"error": True, "message": f"Unknown marketo write action: {action}"}
 
         return {"error": True, "message": f"Unknown platform: {platform}"}
