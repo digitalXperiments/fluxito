@@ -46,14 +46,21 @@
     </div>
   </div>
 
+  {# Global live filter — applies to Connected cards + Google Suite CTA + More platforms cards #}
+  <div class="conn-search-wrap">
+    <div class="conn-search">
+      <input type="text" id="connSearch" placeholder="Filter connections and platforms…" oninput="window.filterConnections()">
+    </div>
+  </div>
+
   {# ─────────────────────────────────────────────────────────────────
      SECTION 1 — Currently connected
      ───────────────────────────────────────────────────────────────── #}
   {% if connections %}
   <div class="cat-title analytics" style="margin-top:10px">Connected</div>
-  <div class="conn-grid">
+  <div class="conn-grid" id="connectedGrid">
     {% for c in connections %}
-    <div class="conn-card is-connected">
+    <div class="conn-card is-connected" data-search="{{ [c.platform_name, c.label, c.detail or '', (c.services or []) | map(attribute='name') | join(' ')] | join(' ') | lower }}">
       <div class="conn-head">
         <span class="pbadge {{ pbadge_class(c.provider) }}"><span>{{ c.provider[:2]|upper }}</span></span>
         {% if c.is_active %}
@@ -102,7 +109,7 @@
      ───────────────────────────────────────────────────────────────── #}
   {% if not has_google %}
   <div class="cat-title analytics" style="margin-top:48px">Google Suite</div>
-  <a href="/connect/google" class="google-suite-cta">
+  <a href="/connect/google" class="google-suite-cta" data-search="google suite ga4 gtm google ads search console analytics tag manager">
     <div class="gs-icon">{{ platform_icon("google", 26) }}</div>
     <div class="gs-body">
       <h4>Google Suite</h4>
@@ -127,10 +134,11 @@
      we bucket client-side via tag on p. If not available, just show one list. #}
   {% if platforms_avail %}
   <div class="cat-title tags" style="margin-top:48px">More platforms</div>
-  <div class="conn-grid">
+  <div class="conn-grid" id="platformsGrid">
     {% for p in platforms_avail %}
       {% if not p.primary %}
-      <a href="{{ p.url }}" class="conn-card {% if p.count %}is-connected{% endif %}" style="text-decoration:none;color:inherit">
+      <a href="{{ p.url }}" class="conn-card {% if p.count %}is-connected{% endif %}" style="text-decoration:none;color:inherit"
+         data-search="{{ [p.name, p.desc, ((p.products or []) | map(attribute='name') | join(' '))] | join(' ') | lower }}">
         <div class="conn-head">
           <span class="pbadge {{ pbadge_class(p.slug) }}"><span>{{ p.slug[:2]|upper }}</span></span>
           {% if p.count %}
@@ -242,10 +250,38 @@
 .kebab-menu-item.is-danger { color: var(--red); }
 .kebab-menu-item.is-danger:hover { background: color-mix(in srgb, var(--red) 8%, transparent); }
 
-@media (max-width: 640px) {
-  .google-suite-cta { flex-direction: column; align-items: flex-start; }
-  .gs-cta { width: 100%; }
-  .gs-cta .btn { width: 100%; justify-content: center; }
+/* ── Dynamic page-wide search (filters Connected + Google Suite CTA + More platforms) ── */
+.conn-search-wrap {
+  width: 100%;
+  margin: 8px 0 28px;
+}
+.conn-search {
+  position: relative;
+}
+.conn-search input {
+  width: 100%;
+  padding: 11px 14px 11px 40px;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: inherit;
+  outline: none;
+  transition: border-color .15s;
+  min-height: 42px;
+}
+.conn-search input:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.conn-search::before {
+  content: '';
+  position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px;
+  background: var(--muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") center/contain no-repeat;
 }
 
 /* SEO Tools CTA */
@@ -269,9 +305,58 @@
 .st-cta { flex-shrink: 0; }
 
 @media (max-width: 640px) {
+  .google-suite-cta { flex-direction: column; align-items: flex-start; }
+  .gs-cta { width: 100%; }
+  .gs-cta .btn { width: 100%; justify-content: center; }
   .seo-tools-cta { flex-direction: column; align-items: flex-start; }
   .st-cta { width: 100%; }
   .st-cta .btn { width: 100%; justify-content: center; }
 }
 </style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.filterConnections = function () {
+    var input = document.getElementById('connSearch');
+    if (!input) return;
+    var q = (input.value || '').toLowerCase().trim();
+
+    // Filter all conn-card lists (Connected + More platforms)
+    document.querySelectorAll('.conn-card').forEach(function (card) {
+      var hay = (card.dataset.search || card.textContent || '').toLowerCase();
+      var show = !q || hay.indexOf(q) !== -1;
+      card.style.display = show ? '' : 'none';
+    });
+
+    // Filter the special Google Suite CTA (and its preceding section title)
+    var googleCta = document.querySelector('.google-suite-cta');
+    if (googleCta) {
+      var hay = (googleCta.dataset.search || googleCta.textContent || '').toLowerCase();
+      var show = !q || hay.indexOf(q) !== -1;
+      googleCta.style.display = show ? '' : 'none';
+      var prev = googleCta.previousElementSibling;
+      if (prev && prev.classList.contains('cat-title')) {
+        prev.style.display = show ? '' : 'none';
+      }
+    }
+
+    // For the two .conn-grid sections, hide/show their preceding .cat-title
+    // when the query is active and that section has no visible cards.
+    document.querySelectorAll('.conn-grid').forEach(function (grid) {
+      var hasVisible = false;
+      grid.querySelectorAll('.conn-card').forEach(function (c) {
+        if (c.style.display !== 'none') hasVisible = true;
+      });
+      var title = grid.previousElementSibling;
+      if (title && title.classList.contains('cat-title')) {
+        if (!q) {
+          title.style.display = '';
+        } else {
+          title.style.display = hasVisible ? '' : 'none';
+        }
+      }
+    });
+  };
+</script>
 {% endblock %}
