@@ -10,6 +10,7 @@
 {%- if s in ['ga4', 'google-analytics', 'google_analytics'] -%}ga4
 {%- elif s == 'amplitude' -%}amp
 {%- elif s in ['adobe-analytics', 'adobe_analytics', 'adobe'] -%}aa
+{%- elif s in ['marketo', 'adobe-marketo', 'adobe_marketo'] -%}marketo
 {%- elif s == 'gtm' -%}gtm
 {%- elif s in ['adobe-launch', 'adobe_launch'] -%}al
 {%- elif s in ['google', 'google_suite', 'google-suite'] -%}google
@@ -22,6 +23,7 @@
 {%- elif s == 'reddit' -%}reddit
 {%- elif s == 'x' -%}x
 {%- elif s == 'bing' -%}bing
+{%- elif s in ['apple', 'apple-ads', 'apple_ads'] -%}apple
 {%- elif s == 'bigquery' -%}bq
 {%- elif s == 'redshift' -%}rs
 {%- elif s == 'snowflake' -%}sf

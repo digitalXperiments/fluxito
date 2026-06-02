@@ -49,6 +49,7 @@ test_results
 parked/
 .commandcode
 .gstack
+~/.codex/*
 
 # ── Virtual environments ──────────────────────────────────────────────────
 .venv/
