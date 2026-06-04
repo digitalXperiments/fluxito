@@ -23,7 +23,6 @@
         <p class="ps-desc">{{ project.description }}</p>
         {% endif %}
       </div>
-      <span class="t-flag ps-plan ps-plan-{{ project.plan }}">{{ project.plan | capitalize }}</span>
     </div>
   </div>
 
@@ -47,13 +46,18 @@
 
     {# Invite bar (owner/admin only) #}
     {% if membership.role in ('owner', 'admin') %}
-    <div class="ps-card" style="padding:18px 20px;margin-bottom:18px">
+    <section class="ps-card ps-section-card ps-invite-card">
+      <div class="ps-section-copy">
+        <span class="label">Access</span>
+        <h2>Invite teammates</h2>
+        <p>Add people to this project and choose the level of access they should start with.</p>
+      </div>
       <form id="inviteForm" class="ps-invite" novalidate>
-        <label class="f-field" style="flex:1;min-width:220px">
+        <label class="f-field ps-invite-email">
           <span>Invite by email</span>
           <input type="email" name="email" class="f-input" placeholder="colleague@example.com" autocomplete="off">
         </label>
-        <label class="f-field" style="min-width:140px">
+        <label class="f-field ps-invite-role">
           <span>Role</span>
           <select name="role" class="f-input">
             <option value="member">Member</option>
@@ -63,64 +67,71 @@
         <button type="submit" class="btn primary" id="inviteBtn">Invite</button>
       </form>
       <div id="inviteMsg" class="ps-msg" style="display:none"></div>
-    </div>
+    </section>
     {% endif %}
 
     {# Member list #}
-    <div class="ps-card" style="padding:0">
-      <table class="ps-table">
-        <thead>
-          <tr>
-            <th>Member</th>
-            <th>Role</th>
-            <th>Joined</th>
-            {% if membership.role in ('owner', 'admin') %}<th style="width:240px;text-align:right">Actions</th>{% endif %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for m in members %}
-          <tr data-member-id="{{ m.id }}">
-            <td>
+    <section class="ps-card ps-directory-card">
+      <div class="ps-directory-head">
+        <div>
+          <span class="label">Directory</span>
+          <h2>Project members</h2>
+        </div>
+        <span class="ps-count-pill">{{ members | length }} members</span>
+      </div>
+      <div class="ps-member-list">
+        {% for m in members %}
+        <article class="ps-member-row" data-member-id="{{ m.id }}">
+          <div class="ps-member-person">
+            <div class="ps-avatar">{{ (m.display_name or m.email)[:2] | upper }}</div>
+            <div>
               <div class="ps-mbr-name">{{ m.display_name or m.email.split('@')[0] }}</div>
               <div class="ps-mbr-email">{{ m.email }}</div>
-            </td>
-            <td>
-              <span class="t-flag ps-role ps-role-{{ m.role }}">{{ m.role | capitalize }}</span>
-              {% if membership.role in ('owner', 'admin') and m.role == 'member' %}
-              <div class="mbr-roles" data-member-id="{{ m.id }}" data-role-ids="{{ m.role_ids | join(',') }}">
-                <span class="mbr-role-chips"></span>
-                <button type="button" class="mbr-roles-edit" onclick="openRolesPopover(this, '{{ m.id }}')">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Roles
-                </button>
-              </div>
-              {% endif %}
-            </td>
-            <td class="ps-mono-sm">
-              {{ m.joined_at[:10] if m.joined_at else 'Pending' }}
-            </td>
-            {% if membership.role in ('owner', 'admin') and m.role != 'owner' %}
-            <td>
-              <div class="ps-row-actions">
-                {% if membership.role == 'owner' %}
+            </div>
+          </div>
+          <div class="ps-member-meta">
+            <span class="ps-field-label">Role</span>
+            <span class="t-flag ps-role ps-role-{{ m.role }}">{{ m.role | capitalize }}</span>
+            {% if membership.role in ('owner', 'admin') and m.role == 'member' %}
+            <div class="mbr-roles" data-member-id="{{ m.id }}" data-role-ids="{{ m.role_ids | join(',') }}">
+              <span class="mbr-role-chips"></span>
+              <button type="button" class="mbr-roles-edit" onclick="openRolesPopover(this, '{{ m.id }}')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Roles
+              </button>
+            </div>
+            {% endif %}
+          </div>
+          <div class="ps-member-meta">
+            <span class="ps-field-label">Joined</span>
+            <span class="ps-mono-sm">{{ m.joined_at[:10] if m.joined_at else 'Pending' }}</span>
+          </div>
+          {% if membership.role in ('owner', 'admin') %}
+          <div class="ps-member-actions">
+            {% if m.role != 'owner' %}
+              {% if membership.role == 'owner' %}
+              <label class="ps-action-field">
+                <span>Change role</span>
                 <select class="f-input ps-role-select"
                         onchange="changeRole('{{ project.slug }}', '{{ m.id }}', this.value)" data-current="{{ m.role }}">
                   <option value="admin" {% if m.role == 'admin' %}selected{% endif %}>Admin</option>
                   <option value="member" {% if m.role == 'member' %}selected{% endif %}>Member</option>
                 </select>
-                {% endif %}
+              </label>
+              {% endif %}
+              <div class="ps-action-buttons">
                 <button class="btn sm danger-outline" onclick="removeMember('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Remove</button>
                 <button class="btn sm" onclick="resetMemberPassword('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Reset password</button>
               </div>
-            </td>
-            {% elif membership.role in ('owner', 'admin') %}
-            <td></td>
+            {% else %}
+              <span class="ps-owner-note">Owner controls billing, deletion, and ownership transfer.</span>
             {% endif %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+          </div>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </div>
+    </section>
 
     <div class="ps-meta-note">
       {{ members | length }} members
@@ -555,14 +566,102 @@
     {% endif %}
   </div>
 
-  {# ── ROLES TAB (owner/admin only) ── #}
+  {# ── USER ROLES TAB (owner/admin only) ── #}
   {% if membership.role in ('owner', 'admin') %}
   <div class="ps-panel" data-panel="roles" style="display:none">
+    <div class="ps-roles-hero">
+      <div>
+        <span class="label">Access model</span>
+        <h2>User roles</h2>
+        <p>Owner, Admin, and Member are the built-in project roles. Create custom roles below for fine-grained tool and provider access, then assign them to members from the Members tab.</p>
+      </div>
+      <a href="#settingsTabs" class="btn" onclick="switchTab('members')">Manage members</a>
+    </div>
 
-    <p class="ps-lede">
-      Define custom roles with specific tool and provider permissions.
-      Assign roles to members in the Members tab.
-    </p>
+    <div class="ps-role-grid">
+      <article class="ps-role-card ps-role-card-owner">
+        <div class="ps-role-card-head">
+          <span class="ps-role-icon">OW</span>
+          <span class="t-flag ps-role ps-role-owner">Owner</span>
+        </div>
+        <h3>Full control</h3>
+        <p>Owns the project boundary and can transfer ownership or delete the project.</p>
+        <ul class="ps-permission-list">
+          <li><span></span>Manage every member and role</li>
+          <li><span></span>Connect platforms and notification senders</li>
+          <li><span></span>Transfer ownership and delete the project</li>
+        </ul>
+      </article>
+
+      <article class="ps-role-card ps-role-card-admin">
+        <div class="ps-role-card-head">
+          <span class="ps-role-icon">AD</span>
+          <span class="t-flag ps-role ps-role-admin">Admin</span>
+        </div>
+        <h3>Operational control</h3>
+        <p>Runs the workspace day to day without ownership-level destructive actions.</p>
+        <ul class="ps-permission-list">
+          <li><span></span>Invite and remove non-owner members</li>
+          <li><span></span>Connect data platforms and manage senders</li>
+          <li><span></span>Cannot transfer ownership or delete the project</li>
+        </ul>
+      </article>
+
+      <article class="ps-role-card ps-role-card-member">
+        <div class="ps-role-card-head">
+          <span class="ps-role-icon">MB</span>
+          <span class="t-flag ps-role ps-role-member">Member</span>
+        </div>
+        <h3>Project access</h3>
+        <p>Can use the project workspace without changing access, credentials, or billing boundaries.</p>
+        <ul class="ps-permission-list">
+          <li><span></span>View and use project resources</li>
+          <li><span></span>Run allowed workflows in the active project</li>
+          <li><span></span>No member, connection, or notification admin</li>
+        </ul>
+      </article>
+    </div>
+
+    <section class="ps-card ps-matrix-card">
+      <div class="ps-directory-head">
+        <div>
+          <span class="label">Permissions</span>
+          <h2>Role capabilities</h2>
+        </div>
+      </div>
+      <div class="ps-access-matrix">
+        <div class="ps-matrix-row ps-matrix-header">
+          <span>Capability</span>
+          <span>Owner</span>
+          <span>Admin</span>
+          <span>Member</span>
+        </div>
+        {% for capability, owner_ok, admin_ok, member_ok in [
+          ('Invite members', true, true, false),
+          ('Remove members', true, true, false),
+          ('Change member roles', true, false, false),
+          ('Connect platforms', true, true, false),
+          ('Manage notification senders', true, true, false),
+          ('Transfer ownership', true, false, false),
+          ('Delete project', true, false, false),
+        ] %}
+        <div class="ps-matrix-row">
+          <span>{{ capability }}</span>
+          <span class="{% if owner_ok %}is-yes{% endif %}">{{ 'Yes' if owner_ok else 'No' }}</span>
+          <span class="{% if admin_ok %}is-yes{% endif %}">{{ 'Yes' if admin_ok else 'No' }}</span>
+          <span class="{% if member_ok %}is-yes{% endif %}">{{ 'Yes' if member_ok else 'No' }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    {# ── Custom roles (functional) ── #}
+    <div class="ps-directory-head" style="margin-top:28px">
+      <div>
+        <span class="label">Custom roles</span>
+        <h2>Fine-grained access</h2>
+      </div>
+    </div>
 
     {# Roles list #}
     <div class="ps-card" style="padding:0;margin-bottom:20px" id="rolesListCard">
@@ -965,8 +1064,466 @@
 }
 .btn.sm { padding: 5px 11px; font-size: 12px; }
 
+/* ── Project settings redesign ───────────────────── */
+.page-head {
+  margin-bottom: 22px;
+  padding-bottom: 26px;
+}
+.ps-head {
+  align-items: center;
+  gap: 20px;
+}
+.ps-mark {
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bg) 18%, transparent);
+}
+.ps-head-main h1 {
+  margin: 0;
+  font-size: clamp(34px, 5vw, 56px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+.ps-desc {
+  max-width: 720px;
+}
+.ps-tabs {
+  gap: 8px;
+  margin-bottom: 26px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-2);
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.ps-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+.ps-tab:hover {
+  background: var(--bg);
+  border-color: var(--line-2);
+}
+.ps-tab.is-active {
+  background: var(--bg);
+  border-color: var(--line);
+  box-shadow: var(--shadow-xs);
+}
+.ps-tab-n {
+  margin-left: 0;
+  padding: 1px 6px;
+  background: var(--bg-3);
+}
+.ps-panel {
+  max-width: 1180px;
+}
+.ps-card {
+  background: color-mix(in srgb, var(--bg) 96%, var(--bg-2));
+  border-color: color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.04);
+}
+.ps-section-card {
+  padding: 22px;
+  margin-bottom: 18px;
+}
+.ps-section-copy {
+  margin-bottom: 18px;
+}
+.ps-section-copy h2,
+.ps-directory-head h2,
+.ps-roles-hero h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--ink);
+  letter-spacing: 0;
+}
+.ps-section-copy p,
+.ps-roles-hero p {
+  margin: 7px 0 0;
+  max-width: 620px;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+.ps-invite {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(150px, 210px) auto;
+  gap: 12px;
+  align-items: end;
+}
+.ps-invite .btn {
+  min-height: 44px;
+  justify-content: center;
+}
+.ps-invite-email,
+.ps-invite-role {
+  min-width: 0;
+}
+.ps-directory-card {
+  padding: 0;
+}
+.ps-directory-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.ps-count-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-2);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.ps-member-list {
+  display: flex;
+  flex-direction: column;
+}
+.ps-member-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.4fr) minmax(120px, .55fr) minmax(120px, .55fr) minmax(260px, .95fr);
+  gap: 18px;
+  align-items: center;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line-2);
+}
+.ps-member-row:last-child {
+  border-bottom: 0;
+}
+.ps-member-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.ps-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+.ps-member-meta {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.ps-member-meta .ps-role {
+  justify-self: start;
+  width: max-content;
+}
+.ps-field-label,
+.ps-action-field > span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.ps-member-actions {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+.ps-action-field {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 230px);
+}
+.ps-action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ps-role-select {
+  width: 100%;
+  min-height: 38px;
+  margin-right: 0;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+.ps-owner-note {
+  max-width: 240px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: right;
+}
+.ps-mbr-name,
+.ps-sender-name,
+.ps-conn-name {
+  letter-spacing: 0;
+}
+.ps-mbr-email {
+  overflow-wrap: anywhere;
+}
+.ps-table th,
+.ps-table td {
+  padding: 16px 18px;
+}
+.ps-table tbody tr {
+  transition: background .12s ease;
+}
+.ps-table tbody tr:hover {
+  background: color-mix(in srgb, var(--bg-2) 70%, transparent);
+}
+.ps-conn-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.ps-conn {
+  min-height: 124px;
+  padding: 20px;
+}
+.ps-conn-head {
+  align-items: flex-start;
+}
+.ps-lede {
+  max-width: 800px;
+}
+.ps-h2 {
+  letter-spacing: 0;
+}
+.ps-h3 {
+  letter-spacing: 0;
+}
+.ps-grid-2,
+.ps-grid-3 {
+  gap: 16px;
+}
+.ps-subtabs {
+  border-radius: 10px;
+}
+.ps-subtab {
+  border-radius: 7px;
+}
+.ps-slack-form {
+  grid-template-columns: minmax(180px, .75fr) minmax(260px, 1.4fr) auto;
+}
+.ps-detail-list > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 140px) minmax(0, 1fr);
+  align-items: center;
+}
+.ps-detail-list strong,
+.ps-detail-list code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ps-roles-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 72%, transparent), var(--bg));
+}
+.ps-role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.ps-role-card {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+}
+.ps-role-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.ps-role-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+.ps-role-card h3 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 17px;
+  letter-spacing: 0;
+}
+.ps-role-card p {
+  margin: 0 0 18px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.ps-permission-list {
+  display: grid;
+  gap: 10px;
+}
+.ps-permission-list li {
+  display: flex;
+  gap: 9px;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.ps-permission-list li span {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--green);
+  flex: 0 0 6px;
+}
+.ps-matrix-card {
+  padding: 0;
+}
+.ps-access-matrix {
+  overflow-x: auto;
+}
+.ps-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(100px, .45fr));
+  min-width: 620px;
+  border-top: 1px solid var(--line-2);
+}
+.ps-matrix-header {
+  border-top: 0;
+  background: var(--bg-2);
+}
+.ps-matrix-row span {
+  padding: 13px 16px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.ps-matrix-header span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.ps-matrix-row span:not(:first-child) {
+  text-align: center;
+  border-left: 1px solid var(--line-2);
+}
+.ps-matrix-row .is-yes {
+  color: var(--green);
+  font-weight: 600;
+}
+
 /* ── Responsive ─────────────────────────────────── */
+@media (max-width: 980px) {
+  .ps-member-row {
+    grid-template-columns: minmax(240px, 1fr) minmax(110px, .45fr) minmax(110px, .45fr);
+  }
+  .ps-member-actions {
+    grid-column: 1 / -1;
+    justify-items: start;
+    padding-top: 12px;
+    border-top: 1px solid var(--line-2);
+  }
+  .ps-action-buttons {
+    justify-content: flex-start;
+  }
+  .ps-owner-note {
+    max-width: none;
+    text-align: left;
+  }
+  .ps-role-grid {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 720px) {
+  .app-main {
+    max-width: 100%;
+    overflow-x: hidden;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .ps-head {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 14px;
+  }
+  .ps-head-main {
+    min-width: 0;
+  }
+  .ps-head-main h1,
+  .ps-desc {
+    overflow-wrap: anywhere;
+  }
+  .ps-tabs {
+    margin-left: -2px;
+    margin-right: -2px;
+    max-width: 100%;
+  }
+  .ps-invite {
+    grid-template-columns: 1fr;
+  }
+  .ps-invite .btn {
+    width: 100%;
+  }
+  .ps-directory-head,
+  .ps-roles-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .ps-member-row {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .ps-member-meta {
+    grid-template-columns: 86px minmax(0, 1fr);
+    align-items: center;
+  }
+  .ps-action-field {
+    width: 100%;
+  }
+  .ps-action-buttons,
+  .ps-action-buttons .btn {
+    width: 100%;
+  }
+  .ps-action-buttons .btn {
+    justify-content: center;
+  }
   .ps-grid-2, .ps-grid-3 { grid-template-columns: 1fr; }
   .ps-stat-grid { grid-template-columns: 1fr; }
   .ps-slack-form { grid-template-columns: 1fr; }
