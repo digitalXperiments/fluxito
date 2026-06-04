@@ -468,21 +468,38 @@ async def _load_connections_and_resources(
     has_bing = "bing" in providers
     has_apple = "apple" in providers
 
-    # Check credential-based connections
+    # Check credential-based connections.
+    #
+    # These live in their OWN tables, so each MUST be scoped by THAT table's
+    # own owner column — NOT by the OAuthConnection column passed in. Filtering
+    # a `select(BQConnection)` by `OAuthConnection.project_id` produces a
+    # cartesian product that returns every tenant's rows whenever the caller has
+    # any oauth_connection, leaking warehouse/credential connection *presence*
+    # across projects and users. BQ's Fluxito-project column is
+    # ``fluxito_project_id``; the rest use ``project_id``.
+    _scope_by_project = getattr(owner_filter_column, "key", None) == "project_id"
+
+    def _cred_scope(model):
+        if _scope_by_project:
+            col = model.fluxito_project_id if model is BQConnection else model.project_id
+        else:
+            col = model.user_id
+        return col == owner_id
+
     result = await db.execute(
-        select(BQConnection).where(owner_filter_column == owner_id, BQConnection.is_active == True).limit(1)
+        select(BQConnection).where(_cred_scope(BQConnection), BQConnection.is_active == True).limit(1)
     )
     has_bq = result.scalar_one_or_none() is not None
 
     result = await db.execute(
         select(AmplitudeConnection)
-        .where(owner_filter_column == owner_id, AmplitudeConnection.is_active == True)
+        .where(_cred_scope(AmplitudeConnection), AmplitudeConnection.is_active == True)
         .limit(1)
     )
     has_amplitude = result.scalar_one_or_none() is not None
 
     result = await db.execute(
-        select(AdobeConnection).where(owner_filter_column == owner_id, AdobeConnection.is_active == True)
+        select(AdobeConnection).where(_cred_scope(AdobeConnection), AdobeConnection.is_active == True)
     )
     adobe_conns = result.scalars().all()
     has_adobe_analytics = any(c.has_analytics for c in adobe_conns)
@@ -490,21 +507,21 @@ async def _load_connections_and_resources(
 
     result = await db.execute(
         select(MarketoConnection)
-        .where(owner_filter_column == owner_id, MarketoConnection.is_active == True)
+        .where(_cred_scope(MarketoConnection), MarketoConnection.is_active == True)
         .limit(1)
     )
     has_adobe_marketo = result.scalar_one_or_none() is not None
 
     result = await db.execute(
         select(RedshiftConnection)
-        .where(owner_filter_column == owner_id, RedshiftConnection.is_active == True)
+        .where(_cred_scope(RedshiftConnection), RedshiftConnection.is_active == True)
         .limit(1)
     )
     has_redshift = result.scalar_one_or_none() is not None
 
     result = await db.execute(
         select(SnowflakeConnection)
-        .where(owner_filter_column == owner_id, SnowflakeConnection.is_active == True)
+        .where(_cred_scope(SnowflakeConnection), SnowflakeConnection.is_active == True)
         .limit(1)
     )
     has_snowflake = result.scalar_one_or_none() is not None

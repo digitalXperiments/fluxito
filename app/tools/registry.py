@@ -564,10 +564,18 @@ def _install_tool_hook(mcp_server):
 
     # ── RBAC tool-list filter ─────────────────────────────────────────────────
     # FastMCP.list_tools is async, so we can await resolve_effective_permissions
-    # here. We wrap the bound method on the FastMCP *server* instance (not the
-    # ToolManager) because that is the MCP-protocol handler registered via
-    # _setup_handlers. Falls back to the unfiltered list on any error — the
-    # Task 6 call-time backstop remains the real security boundary.
+    # here. Falls back to the unfiltered list on any error — the call-time
+    # backstop remains the real security boundary.
+    #
+    # IMPORTANT: FastMCP._setup_handlers registers a DIRECT REFERENCE to the
+    # original ``self.list_tools`` bound method into the low-level protocol
+    # server (``self._mcp_server.list_tools()(self.list_tools)``). Reassigning
+    # the ``mcp_server.list_tools`` attribute below therefore does NOT change
+    # what the wire protocol calls — the over-HTTP tools/list would stay
+    # unfiltered. So we ALSO re-register the filtered handler on the low-level
+    # server. (The call_tool backstop works without this trick only because
+    # FastMCP.call_tool delegates to ``self._tool_manager.call_tool``, which we
+    # wrap directly above.)
     _original_list_tools = mcp_server.list_tools
 
     async def _filtered_list_tools(*args, **kwargs):
@@ -592,6 +600,17 @@ def _install_tool_hook(mcp_server):
             return unfiltered
 
     mcp_server.list_tools = _filtered_list_tools
+
+    # Re-register on the low-level protocol server so the over-the-wire
+    # tools/list is actually filtered (see the note above). Without this the
+    # filter is dead code for real MCP clients.
+    try:
+        mcp_server._mcp_server.list_tools()(_filtered_list_tools)
+    except Exception as _exc:  # pragma: no cover - defensive
+        logger.warning(
+            "Could not re-register filtered list_tools on the low-level MCP "
+            "server; tools/list will be unfiltered over the wire: %s", _exc
+        )
 
 
 def register_all_tools(mcp_server):
