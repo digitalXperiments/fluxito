@@ -30,15 +30,15 @@
      TABS
      ══════════════════════════════════════════════════════════════ #}
   <div class="ps-tabs" id="settingsTabs">
-    <button class="ps-tab is-active" data-tab="members" onclick="switchTab('members')">Members <span class="ps-tab-n">{{ members | length }}</span></button>
-    <button class="ps-tab" data-tab="connections" onclick="switchTab('connections')">Connections <span class="ps-tab-n">{{ connections | length }}</span></button>
-    {% if membership.role in ('owner', 'admin') %}
-    <button class="ps-tab" data-tab="notifications" onclick="switchTab('notifications')">Notifications <span class="ps-tab-n">{{ (email_senders | length) + (slack_webhooks | length) }}</span></button>
-    {% endif %}
-    <button class="ps-tab" data-tab="general" onclick="switchTab('general')">General</button>
+    <button class="ps-tab is-active" data-tab="members" onclick="switchTab('members')">Users</button>
     {% if membership.role in ('owner', 'admin') %}
     <button class="ps-tab" data-tab="roles" onclick="switchTab('roles')">User Roles</button>
     {% endif %}
+    <button class="ps-tab" data-tab="connections" onclick="switchTab('connections')">Connections</button>
+    {% if membership.role in ('owner', 'admin') %}
+    <button class="ps-tab" data-tab="notifications" onclick="switchTab('notifications')">Notifications</button>
+    {% endif %}
+    <button class="ps-tab" data-tab="general" onclick="switchTab('general')">General</button>
   </div>
 
   {# ── MEMBERS TAB ── #}
@@ -569,13 +569,39 @@
   {# ── USER ROLES TAB (owner/admin only) ── #}
   {% if membership.role in ('owner', 'admin') %}
   <div class="ps-panel" data-panel="roles" style="display:none">
+    <div class="ps-roles-manage-head">
+      <div>
+        <span class="label">Custom roles</span>
+        <h2>Fine-grained access</h2>
+        <p>Create access profiles for the tools and connected data sources your users need.</p>
+      </div>
+      <div class="ps-roles-manage-actions">
+        <a href="#settingsTabs" class="btn" onclick="switchTab('members')">Manage users</a>
+        <button type="button" class="btn primary" id="createRoleBtn" onclick="openRoleDrawer('create', this)">Create role</button>
+      </div>
+    </div>
+
+    <div class="ps-card ps-custom-roles-card" id="rolesListCard">
+      <div id="rolesList">
+        <div class="ps-roles-empty">Loading roles…</div>
+      </div>
+    </div>
+
+    <details class="ps-built-in-roles">
+      <summary class="ps-built-in-summary">
+        <span>
+          <strong>Built-in roles and permissions</strong>
+          <small>Reference Owner, Admin, and Member capabilities.</small>
+        </span>
+        <span class="ps-built-in-summary-action">Show reference</span>
+      </summary>
+      <div class="ps-built-in-content">
     <div class="ps-roles-hero">
       <div>
         <span class="label">Access model</span>
         <h2>User roles</h2>
-        <p>Owner, Admin, and Member are the built-in project roles. Create custom roles below for fine-grained tool and provider access, then assign them to members from the Members tab.</p>
+        <p>Owner, Admin, and Member are the built-in project roles. Use custom roles above for fine-grained tool and provider access, then assign them to members from the Users tab.</p>
       </div>
-      <a href="#settingsTabs" class="btn" onclick="switchTab('members')">Manage members</a>
     </div>
 
     <div class="ps-role-grid">
@@ -654,100 +680,141 @@
         {% endfor %}
       </div>
     </section>
-
-    {# ── Custom roles (functional) ── #}
-    <div class="ps-directory-head" style="margin-top:28px">
-      <div>
-        <span class="label">Custom roles</span>
-        <h2>Fine-grained access</h2>
       </div>
-    </div>
-
-    {# Roles list #}
-    <div class="ps-card" style="padding:0;margin-bottom:20px" id="rolesListCard">
-      <div id="rolesList">
-        <div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading roles…</div>
-      </div>
-    </div>
+    </details>
 
     {# Role editor form #}
-    <div class="ps-card" style="padding:24px 26px">
-      <h3 class="ps-h3" id="roleFormTitle">Create role</h3>
+    <div class="ps-role-drawer-backdrop" id="roleDrawerBackdrop" hidden></div>
+    <aside class="ps-role-drawer"
+           id="roleDrawer"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="roleFormTitle"
+           aria-hidden="true"
+           inert>
+    <div class="ps-card ps-role-editor">
+      <div class="ps-role-editor-head">
+        <div>
+          <span class="label">Access profile</span>
+          <h3 class="ps-h3" id="roleFormTitle">Create role</h3>
+          <p>Define which tools and connected data sources people with this role can use.</p>
+        </div>
+        <div class="ps-role-editor-head-actions">
+          <span class="ps-role-editor-state" id="roleFormState">New role</span>
+          <button type="button" class="ps-role-drawer-close" id="roleDrawerClose" aria-label="Close role editor">×</button>
+        </div>
+      </div>
       <form id="roleForm" novalidate>
         <input type="hidden" id="roleId" value="">
 
-        <div class="ps-grid-2" style="margin-bottom:14px">
-          <label class="f-field">
-            <span>Name *</span>
-            <input type="text" name="name" class="f-input" placeholder="e.g. Analyst" required>
-          </label>
-          <label class="f-field">
-            <span>Description</span>
-            <input type="text" name="description" class="f-input" placeholder="optional">
-          </label>
-        </div>
+        <section class="ps-role-editor-section">
+          <div class="ps-role-editor-section-head">
+            <span class="ps-role-editor-step">1</span>
+            <div>
+              <h4>Role details</h4>
+              <p>Choose a clear name that describes this access profile.</p>
+            </div>
+          </div>
+          <div class="ps-grid-2">
+            <label class="f-field">
+              <span>Name *</span>
+              <input type="text" name="name" class="f-input" placeholder="e.g. Analyst" required>
+            </label>
+            <label class="f-field">
+              <span>Description</span>
+              <input type="text" name="description" class="f-input" placeholder="e.g. Reporting and analysis access">
+            </label>
+          </div>
+        </section>
 
         {# Tool permissions grid #}
-        <h4 class="ps-h4" style="margin-bottom:10px">Tool permissions</h4>
-        <div class="ps-card" style="padding:0;margin-bottom:16px;overflow:auto">
-          <table class="ps-table" id="toolGrid">
-            <thead>
-              <tr>
-                <th>Domain</th>
-                <th style="width:96px;text-align:center">
-                  Read
-                  <label class="tg-all" title="Select all read"><input type="checkbox" id="toolAllRead"> all</label>
-                </th>
-                <th style="width:96px;text-align:center">
-                  Write
-                  <label class="tg-all" title="Select all write"><input type="checkbox" id="toolAllWrite"> all</label>
-                </th>
-              </tr>
-            </thead>
-            <tbody id="toolGridBody">
-              {# populated by JS #}
-            </tbody>
-          </table>
-        </div>
+        <section class="ps-role-editor-section">
+          <div class="ps-role-editor-section-head">
+            <span class="ps-role-editor-step">2</span>
+            <div>
+              <h4>Tool permissions</h4>
+              <p>Choose whether this role can read from or make changes with each capability.</p>
+            </div>
+          </div>
+          <div class="ps-role-editor-control">
+            <table class="ps-table" id="toolGrid">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th style="width:96px;text-align:center">
+                    Read
+                    <label class="tg-all" title="Select all read"><input type="checkbox" id="toolAllRead"> all</label>
+                  </th>
+                  <th style="width:96px;text-align:center">
+                    Write
+                    <label class="tg-all" title="Select all write"><input type="checkbox" id="toolAllWrite"> all</label>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="toolGridBody">
+                {# populated by JS #}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         {# Provider permissions — chip multiselect #}
-        <h4 class="ps-h4" style="margin-bottom:10px">Provider access</h4>
-        <div class="prov-select" id="provSelect" style="margin-bottom:16px">
-          <div class="prov-control" id="provControl" tabindex="0">
-            <div class="prov-chips" id="provChips"></div>
-            <input type="text" class="prov-search" id="provSearch" placeholder="Search or add providers…" autocomplete="off">
-          </div>
-          <div class="prov-dropdown" id="provDropdown" hidden>
-            <label class="prov-opt prov-opt-all">
-              <input type="checkbox" id="provAll"><span>Select all</span>
-            </label>
-            <div class="prov-opt-list" id="provOptList">
-              {# checkboxes [data-provider] populated by JS — source of truth #}
+        <section class="ps-role-editor-section">
+          <div class="ps-role-editor-section-head">
+            <span class="ps-role-editor-step">3</span>
+            <div>
+              <h4>Provider access</h4>
+              <p>Select the connected data sources this role can use.</p>
             </div>
-            <div class="prov-empty" id="provEmpty" hidden>No matching providers</div>
           </div>
-        </div>
+          <div class="prov-select" id="provSelect">
+            <div class="prov-control" id="provControl" tabindex="0">
+              <div class="prov-chips" id="provChips"></div>
+              <input type="text" class="prov-search" id="provSearch" placeholder="Search or add providers…" autocomplete="off">
+            </div>
+            <div class="prov-dropdown" id="provDropdown" hidden>
+              <label class="prov-opt prov-opt-all">
+                <input type="checkbox" id="provAll"><span>Select all</span>
+              </label>
+              <div class="prov-opt-list" id="provOptList">
+                {# checkboxes [data-provider] populated by JS — source of truth #}
+              </div>
+              <div class="prov-empty" id="provEmpty" hidden>No matching providers</div>
+            </div>
+          </div>
+        </section>
 
         {# Advanced toggles #}
-        <h4 class="ps-h4" style="margin-bottom:10px">Advanced</h4>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
-          <label class="ps-check">
-            <input type="checkbox" name="adv_scripting">
-            <span>Run Script — allow executing custom scripts</span>
-          </label>
-          <label class="ps-check">
-            <input type="checkbox" name="adv_generic">
-            <span>Generic tools — allow use of generic read/write tools</span>
-          </label>
-        </div>
+        <section class="ps-role-editor-section" data-variant="advanced">
+          <div class="ps-role-editor-section-head">
+            <span class="ps-role-editor-step">4</span>
+            <div>
+              <h4>Advanced access</h4>
+              <p>These grants allow broader execution paths. Enable them only when required.</p>
+            </div>
+          </div>
+          <div class="ps-role-advanced-options">
+            <label class="ps-check">
+              <input type="checkbox" name="adv_scripting">
+              <span><strong>Run Script</strong><small>Allow executing custom scripts.</small></span>
+            </label>
+            <label class="ps-check">
+              <input type="checkbox" name="adv_generic">
+              <span><strong>Generic tools</strong><small>Allow use of generic read and write tools.</small></span>
+            </label>
+          </div>
+        </section>
 
-        <div class="ps-form-foot">
-          <button type="submit" class="btn primary" id="roleSaveBtn">Create role</button>
-          <button type="button" class="btn" id="roleCancelBtn" style="display:none">Cancel</button>
+        <div class="ps-role-editor-foot">
           <div id="roleMsg" class="ps-msg" style="display:none"></div>
+          <div class="ps-role-editor-actions">
+            <button type="button" class="btn" id="roleCancelBtn" style="display:none">Cancel</button>
+            <button type="submit" class="btn primary" id="roleSaveBtn">Create role</button>
+          </div>
         </div>
       </form>
     </div>
+    </aside>
 
   </div>
   {% endif %}
@@ -826,14 +893,6 @@
 }
 .ps-tab:hover { color: var(--ink); }
 .ps-tab.is-active { color: var(--ink); border-bottom-color: var(--ink); }
-.ps-tab-n {
-  display: inline-flex; align-items: center;
-  font-family: var(--mono); font-size: 11px;
-  color: var(--muted);
-  background: var(--bg-2);
-  padding: 1px 7px; border-radius: 10px;
-}
-
 .ps-panel { animation: fadeIn 0.2s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
@@ -1117,11 +1176,6 @@
   background: var(--bg);
   border-color: var(--line);
   box-shadow: var(--shadow-xs);
-}
-.ps-tab-n {
-  margin-left: 0;
-  padding: 1px 6px;
-  background: var(--bg-3);
 }
 .ps-panel {
   max-width: 1180px;
@@ -1540,6 +1594,324 @@
 .role-row:last-child { border-bottom: none; }
 .role-row-name { font-weight: 500; color: var(--ink); font-size: 14px; flex: 1; }
 .role-row-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* ── Compact roles workflow ── */
+.ps-roles-manage-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 72%, transparent), var(--bg));
+}
+.ps-roles-manage-head h2 {
+  margin: 4px 0 6px;
+  color: var(--ink);
+  font-size: 22px;
+}
+.ps-roles-manage-head p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.ps-roles-manage-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+.ps-custom-roles-card {
+  margin-bottom: 16px;
+}
+.ps-roles-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 28px 20px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.ps-roles-empty strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+.ps-roles-empty .btn {
+  margin-top: 4px;
+}
+.ps-built-in-roles {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.ps-built-in-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 17px 20px;
+  cursor: pointer;
+  list-style: none;
+}
+.ps-built-in-summary::-webkit-details-marker {
+  display: none;
+}
+.ps-built-in-summary > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+.ps-built-in-summary strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+.ps-built-in-summary small,
+.ps-built-in-summary-action {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.ps-built-in-summary-action {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-2);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ps-built-in-roles[open] .ps-built-in-summary {
+  border-bottom: 1px solid var(--line);
+}
+.ps-built-in-roles[open] .ps-built-in-summary-action {
+  font-size: 0;
+}
+.ps-built-in-roles[open] .ps-built-in-summary-action::after {
+  content: "Hide reference";
+  font-size: 9px;
+}
+.ps-built-in-content {
+  padding: 18px;
+  background: var(--bg-2);
+}
+.ps-built-in-content .ps-matrix-card {
+  margin-bottom: 0;
+}
+.role-drawer-open {
+  overflow: hidden;
+}
+.ps-role-drawer-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  background: rgba(16, 18, 23, 0.42);
+  backdrop-filter: blur(2px);
+}
+.ps-role-drawer {
+  position: fixed;
+  z-index: 91;
+  top: 0;
+  right: 0;
+  width: min(820px, calc(100vw - 48px));
+  height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--bg);
+  box-shadow: -24px 0 70px rgba(0, 0, 0, 0.2);
+  transform: translateX(102%);
+  visibility: hidden;
+  transition: transform 0.24s ease, visibility 0.24s;
+}
+.ps-role-drawer.is-open {
+  transform: translateX(0);
+  visibility: visible;
+}
+.ps-role-drawer .ps-role-editor {
+  min-height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
+}
+.ps-role-drawer .ps-role-editor-head {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+}
+.ps-role-editor-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ps-role-drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ps-role-drawer-close:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.ps-role-drawer .ps-role-editor-foot {
+  position: sticky;
+  z-index: 4;
+  bottom: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: 0 -8px 22px color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+/* ── Guided role editor ── */
+.ps-role-editor {
+  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.ps-role-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 26px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 75%, transparent), var(--bg));
+}
+.ps-role-editor-head,
+.ps-role-editor-section,
+.ps-role-editor-foot {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.ps-role-editor-head > div,
+.ps-role-editor-section-head > div {
+  min-width: 0;
+}
+.ps-role-editor-head .ps-h3 {
+  margin: 5px 0 5px;
+  font-size: 20px;
+}
+.ps-role-editor-head p,
+.ps-role-editor-section-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ps-role-editor-state {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ps-role-editor-section {
+  padding: 24px 26px;
+  border-bottom: 1px solid var(--line-2);
+}
+.ps-role-editor-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.ps-role-editor-section-head h4 {
+  margin: 0 0 3px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ps-role-editor-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+.ps-role-editor-control {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.ps-role-editor-section[data-variant="advanced"] {
+  background: color-mix(in srgb, var(--amber) 4%, var(--bg));
+}
+.ps-role-editor-section[data-variant="advanced"] .ps-role-editor-step {
+  background: var(--amber);
+}
+.ps-role-advanced-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.ps-role-advanced-options .ps-check {
+  align-items: flex-start;
+  min-height: 72px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--amber) 24%, var(--line));
+  border-radius: 10px;
+  background: var(--bg);
+}
+.ps-role-advanced-options .ps-check span {
+  display: grid;
+  gap: 3px;
+}
+.ps-role-advanced-options .ps-check strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+.ps-role-advanced-options .ps-check small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.ps-role-editor-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 72px;
+  padding: 14px 26px;
+  background: var(--bg-2);
+  border-radius: 0 0 14px 14px;
+}
+.ps-role-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .provider-check {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 12px; color: var(--ink-soft);
@@ -1587,6 +1959,64 @@
 .prov-opt input, .prov-opt-all input { accent-color:var(--ink); }
 .prov-opt-all { font-weight:600; border-bottom:1px solid var(--line-2); border-radius:6px 6px 0 0; margin-bottom:2px; }
 .prov-empty { padding:10px; text-align:center; font-size:12px; color:var(--muted); }
+
+@media (max-width: 720px) {
+  .ps-roles-manage-head,
+  .ps-built-in-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .ps-roles-manage-actions,
+  .ps-roles-manage-actions .btn {
+    width: 100%;
+  }
+  .ps-roles-manage-actions .btn {
+    justify-content: center;
+  }
+  .ps-built-in-content {
+    padding: 12px;
+  }
+  .ps-role-drawer {
+    width: 100vw;
+  }
+  .ps-role-drawer .ps-role-editor-head p,
+  .ps-role-drawer .ps-role-editor-section-head p {
+    max-width: calc(100vw - 54px);
+    width: calc(100vw - 54px);
+    white-space: normal;
+  }
+  .ps-role-drawer .ps-role-editor-section-head p {
+    max-width: calc(100vw - 110px);
+    width: calc(100vw - 110px);
+  }
+  .ps-role-drawer .ps-role-editor-head > div:first-child {
+    width: calc(100vw - 36px);
+  }
+  .ps-role-drawer .ps-role-editor-section-head > div {
+    width: calc(100vw - 96px);
+  }
+  .ps-role-editor-head,
+  .ps-role-editor-section,
+  .ps-role-editor-foot {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .ps-role-editor-head,
+  .ps-role-editor-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .ps-role-advanced-options {
+    grid-template-columns: 1fr;
+  }
+  .ps-role-editor-actions,
+  .ps-role-editor-actions .btn {
+    width: 100%;
+  }
+  .ps-role-editor-actions .btn {
+    justify-content: center;
+  }
+}
 
 /* ── Member row actions + role chips ── */
 .ps-row-actions { display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
@@ -2290,6 +2720,45 @@ function _roleMsg(text, kind) {
   el.style.display = 'inline-block';
 }
 
+var _roleDrawerTrigger = null;
+
+function openRoleDrawer(mode, trigger, role) {
+  var drawer = document.getElementById('roleDrawer');
+  var backdrop = document.getElementById('roleDrawerBackdrop');
+  if (!drawer || !backdrop) return;
+  _roleDrawerTrigger = trigger || document.activeElement;
+  if (mode === 'edit' && role) {
+    loadRoleIntoForm(role);
+  } else {
+    resetRoleForm();
+  }
+  backdrop.hidden = false;
+  drawer.classList.add('is-open');
+  drawer.setAttribute('aria-hidden', 'false');
+  drawer.inert = false;
+  document.body.classList.add('role-drawer-open');
+  window.setTimeout(function() {
+    var nameInput = drawer.querySelector('input[name="name"]');
+    if (nameInput) nameInput.focus();
+  }, 80);
+}
+
+function closeRoleDrawer() {
+  var drawer = document.getElementById('roleDrawer');
+  var backdrop = document.getElementById('roleDrawerBackdrop');
+  if (!drawer || !backdrop) return;
+  drawer.classList.remove('is-open');
+  drawer.setAttribute('aria-hidden', 'true');
+  drawer.inert = true;
+  backdrop.hidden = true;
+  document.body.classList.remove('role-drawer-open');
+  resetRoleForm();
+  if (_roleDrawerTrigger && typeof _roleDrawerTrigger.focus === 'function') {
+    _roleDrawerTrigger.focus();
+  }
+  _roleDrawerTrigger = null;
+}
+
 function loadRoleIntoForm(role) {
   var form = document.getElementById('roleForm');
   if (!form) return;
@@ -2335,6 +2804,8 @@ function loadRoleIntoForm(role) {
   // UI labels
   var title = document.getElementById('roleFormTitle');
   if (title) title.textContent = 'Edit role';
+  var state = document.getElementById('roleFormState');
+  if (state) state.textContent = 'Editing role';
   var saveBtn = document.getElementById('roleSaveBtn');
   if (saveBtn) saveBtn.textContent = 'Save changes';
   var cancelBtn = document.getElementById('roleCancelBtn');
@@ -2352,6 +2823,8 @@ function resetRoleForm() {
   syncToolHeaderChecks();
   var title = document.getElementById('roleFormTitle');
   if (title) title.textContent = 'Create role';
+  var state = document.getElementById('roleFormState');
+  if (state) state.textContent = 'New role';
   var saveBtn = document.getElementById('roleSaveBtn');
   if (saveBtn) saveBtn.textContent = 'Create role';
   var cancelBtn = document.getElementById('roleCancelBtn');
@@ -2380,7 +2853,11 @@ async function loadRoles() {
     var roles = Array.isArray(data) ? data : (data.roles || []);
     _rolesCache = roles;
     if (roles.length === 0) {
-      listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No custom roles yet. Create one below.</div>';
+      listEl.innerHTML = '<div class="ps-roles-empty">' +
+        '<strong>No custom roles yet</strong>' +
+        '<span>Create an access profile for a specific team or workflow.</span>' +
+        '<button type="button" class="btn primary" onclick="openRoleDrawer(\'create\', this)">Create role</button>' +
+      '</div>';
     } else {
       var html = '';
       roles.forEach(function(r) {
@@ -2389,7 +2866,7 @@ async function loadRoles() {
             '<div class="role-row-name">' + _esc(r.name) + '</div>' +
             (r.description ? '<div class="role-row-desc">' + _esc(r.description) + '</div>' : '') +
           '</div>' +
-          '<button class="btn sm" onclick="loadRoleIntoForm(' + _esc(JSON.stringify(r)) + ')">Edit</button>' +
+          '<button class="btn sm" onclick="openRoleDrawer(\'edit\', this, ' + _esc(JSON.stringify(r)) + ')">Edit</button>' +
           '<button class="btn sm danger-outline" onclick="deleteRole(\'' + _esc(r.id) + '\',\'' + _esc(r.name) + '\')">Delete</button>' +
         '</div>';
       });
@@ -2534,8 +3011,18 @@ async function saveMemberRoles(memberId) {
   // Cancel button
   var cancelBtn = document.getElementById('roleCancelBtn');
   if (cancelBtn) {
-    cancelBtn.addEventListener('click', function() { resetRoleForm(); });
+    cancelBtn.addEventListener('click', closeRoleDrawer);
   }
+  var closeBtn = document.getElementById('roleDrawerClose');
+  if (closeBtn) closeBtn.addEventListener('click', closeRoleDrawer);
+  var backdrop = document.getElementById('roleDrawerBackdrop');
+  if (backdrop) backdrop.addEventListener('click', closeRoleDrawer);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      var drawer = document.getElementById('roleDrawer');
+      if (drawer && drawer.classList.contains('is-open')) closeRoleDrawer();
+    }
+  });
 
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -2562,8 +3049,8 @@ async function saveMemberRoles(memberId) {
       var data = await res.json();
       if (!res.ok) throw new Error(data.message || data.detail || 'Failed to save role');
       _roleMsg(roleId ? 'Role updated.' : 'Role created.', 'success');
-      resetRoleForm();
       await loadRoles();
+      closeRoleDrawer();
     } catch(err) {
       _roleMsg(err.message, 'error');
     } finally {
@@ -2586,7 +3073,7 @@ async function saveMemberRoles(memberId) {
   });
 })();
 
-// Also load roles on page load for member multi-selects (Members tab is default)
+// Also load roles on page load for member multi-selects (Users tab is default)
 (function() {
   // Only fetch if there are member role widgets on the page
   if (!document.querySelector('.mbr-roles')) return;
