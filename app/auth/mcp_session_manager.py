@@ -867,6 +867,7 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
         eff = None
         try:
             from app.auth.permissions import resolve_effective_permissions
+
             eff = await resolve_effective_permissions(str(user_id), str(project_id))
         except Exception as _rbac_err:
             logger.warning("RBAC permission resolution failed, skipping provider filter: %s", _rbac_err)

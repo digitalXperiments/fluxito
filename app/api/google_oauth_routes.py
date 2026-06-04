@@ -141,6 +141,7 @@ async def _load_user_view(user_ctx, project_id: str | None = None) -> dict:
     if project_id:
         try:
             from app.auth.permissions import resolve_effective_permissions
+
             eff = await resolve_effective_permissions(user_ctx.user_id, project_id)
             permissions = {
                 "full": eff.full,

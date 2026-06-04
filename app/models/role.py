@@ -5,6 +5,7 @@ A Role is a named bundle of tool + connection permissions scoped to a single
 project. Members may hold multiple roles; effective access is the union.
 See docs/superpowers/specs/2026-06-03-roles-and-access-control-design.md.
 """
+
 import uuid
 from datetime import datetime
 

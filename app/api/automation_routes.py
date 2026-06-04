@@ -325,6 +325,7 @@ async def automations_page(
     project_id = uuid.UUID(project_id_str)
 
     from app.auth.web_guards import require_domain_permission
+
     await require_domain_permission(user_ctx.user_id, project_id_str, "automation")
 
     user_view = await _load_user_view(user_ctx, project_id=project_id_str)

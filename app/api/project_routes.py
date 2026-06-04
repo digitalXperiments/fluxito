@@ -1875,13 +1875,13 @@ async def update_dashboard_settings(request: Request, slug: str):
 # RBAC — Role CRUD (Task 12), Member role assignment (Task 13), Toggle (Task 14)
 # ---------------------------------------------------------------------------
 
-from app.auth.permissions import (  # noqa: E402 — late import OK inside module
+from app.auth.permissions import (
     PermissionValidationError,
     invalidate_permissions_cache,
     normalize_permissions,
 )
-from app.models.project import CAN_MANAGE_ROLES  # noqa: E402
-from app.models.role import MemberRole, Role  # noqa: E402
+from app.models.project import CAN_MANAGE_ROLES
+from app.models.role import MemberRole, Role
 
 
 class _RoleIn(BaseModel):
@@ -1928,9 +1928,7 @@ async def list_roles(request: Request, slug: str):
         raise HTTPException(403, "Only owners and admins can manage roles")
 
     async with app_state.db_session_factory() as db:
-        result = await db.execute(
-            select(Role).where(Role.project_id == project.id, Role.is_active == True)
-        )
+        result = await db.execute(select(Role).where(Role.project_id == project.id, Role.is_active == True))
         roles = result.scalars().all()
 
     return JSONResponse([_role_out(r) for r in roles])
@@ -2132,9 +2130,7 @@ async def assign_member_roles(request: Request, slug: str, member_id: str, body:
                     raise HTTPException(400, f"Role {rid} is not a valid active role in this project")
 
         # Replace assignments
-        await db.execute(
-            sa_delete(MemberRole).where(MemberRole.project_member_id == target_member.id)
-        )
+        await db.execute(sa_delete(MemberRole).where(MemberRole.project_member_id == target_member.id))
         for rid in role_uuids:
             db.add(MemberRole(project_member_id=target_member.id, role_id=rid, assigned_by=uid))
 

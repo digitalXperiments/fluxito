@@ -8,6 +8,7 @@ Mirrors the harness in test_invite_and_projects.py:
 """
 
 import pytest
+
 import app.app_state as app_state
 
 
@@ -143,6 +144,7 @@ async def test_member_cannot_create_role(_http_client, db_session_factory):
 async def test_owner_can_list_roles(_http_client, db_session_factory):
     """Owner can GET /roles and see the roles that exist."""
     from unittest.mock import AsyncMock, patch
+
     from app.models.role import Role
 
     seed = await _seed_project_with_users(db_session_factory, slug="rc-04")
@@ -150,6 +152,7 @@ async def test_owner_can_list_roles(_http_client, db_session_factory):
     # Pre-seed a role directly in DB
     async with db_session_factory() as db:
         import uuid
+
         role = Role(
             project_id=uuid.UUID(seed["project_id"]),
             name="Seeded Role",
@@ -178,6 +181,7 @@ async def test_owner_can_list_roles(_http_client, db_session_factory):
 async def test_assign_roles_to_member_persists_and_returns_ids(_http_client, db_session_factory):
     """PUT member roles: assignment persists and response lists role ids."""
     from unittest.mock import AsyncMock, patch
+
     from app.models.role import Role
 
     seed = await _seed_project_with_users(db_session_factory, slug="ma-01")
@@ -185,6 +189,7 @@ async def test_assign_roles_to_member_persists_and_returns_ids(_http_client, db_
     # Pre-seed two roles
     async with db_session_factory() as db:
         import uuid
+
         r1 = Role(
             project_id=uuid.UUID(seed["project_id"]),
             name="Role A",
@@ -214,18 +219,22 @@ async def test_assign_roles_to_member_persists_and_returns_ids(_http_client, db_
     assert set(data["role_ids"]) == {r1_id, r2_id}
 
     # Verify persistence
-    from sqlalchemy import select
-    from app.models.role import MemberRole
     import uuid as _uuid
+
+    from sqlalchemy import select
+
+    from app.models.role import MemberRole
 
     async with db_session_factory() as db:
         rows = (
-            await db.execute(
-                select(MemberRole).where(
-                    MemberRole.project_member_id == _uuid.UUID(seed["pm_member_id"])
+            (
+                await db.execute(
+                    select(MemberRole).where(MemberRole.project_member_id == _uuid.UUID(seed["pm_member_id"]))
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assigned = {str(r.role_id) for r in rows}
     assert assigned == {r1_id, r2_id}
 
@@ -233,8 +242,8 @@ async def test_assign_roles_to_member_persists_and_returns_ids(_http_client, db_
 @pytest.mark.asyncio
 async def test_assign_invalid_role_id_returns_400(_http_client, db_session_factory):
     """Assigning a role_id that doesn't belong to the project returns 400."""
-    from unittest.mock import AsyncMock, patch
     import uuid
+    from unittest.mock import AsyncMock, patch
 
     seed = await _seed_project_with_users(db_session_factory, slug="ma-02")
     admin_ctx = {"user_id": seed["admin_id"], "email": seed["admin_email"]}
@@ -255,10 +264,12 @@ async def test_assign_invalid_role_id_returns_400(_http_client, db_session_facto
 @pytest.mark.asyncio
 async def test_toggle_rbac_returns_new_value(_http_client, db_session_factory):
     """PUT /settings/rbac toggles rbac_enabled and returns it."""
-    from unittest.mock import AsyncMock, patch
-    from sqlalchemy import select
-    from app.models.project import Project
     import uuid as _uuid
+    from unittest.mock import AsyncMock, patch
+
+    from sqlalchemy import select
+
+    from app.models.project import Project
 
     seed = await _seed_project_with_users(db_session_factory, slug="rt-01")
     owner_ctx = {"user_id": seed["owner_id"], "email": seed["owner_email"]}

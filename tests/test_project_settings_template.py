@@ -1,12 +1,11 @@
 from pathlib import Path
 
-
 SETTINGS_TEMPLATE = Path("app/templates/projects/settings.html")
 
 
 def test_settings_tabs_are_text_only_and_ordered():
     source = SETTINGS_TEMPLATE.read_text()
-    tabs = source[source.index('<div class="ps-tabs"'):source.index("{# ── MEMBERS TAB")]
+    tabs = source[source.index('<div class="ps-tabs"') : source.index("{# ── MEMBERS TAB")]
 
     assert "ps-tab-n" not in tabs
     assert tabs.index(">Users</button>") < tabs.index(">User Roles</button>")
@@ -43,7 +42,7 @@ def test_user_facing_role_copy_uses_users_label():
 
 def test_user_roles_prioritizes_custom_roles_and_collapses_reference():
     source = SETTINGS_TEMPLATE.read_text()
-    roles_panel = source[source.index('data-panel="roles"'):source.index("{# ── Member roles popover")]
+    roles_panel = source[source.index('data-panel="roles"') : source.index("{# ── Member roles popover")]
 
     assert roles_panel.index('id="rolesListCard"') < roles_panel.index('class="ps-built-in-roles"')
     assert '<details class="ps-built-in-roles">' in roles_panel

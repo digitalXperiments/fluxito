@@ -3,6 +3,7 @@
 Run with the live-replay env (see run.sh). Prints a JSON blob to stdout and
 writes it to tests/_live_rbac/scenario.json.
 """
+
 import asyncio
 import hashlib
 import json
@@ -21,18 +22,19 @@ def _h(t: str) -> str:
 
 
 async def main():
-    import redis.asyncio as aioredis
-    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-
     import os
+
+    import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
     import app.models  # noqa: F401  (register all tables)
     from app.db.database import Base
-    from app.models.user import User
-    from app.models.project import Project, ProjectMember
-    from app.models.role import Role, MemberRole
-    from app.models.connection import OAuthConnection
     from app.models.bq_connection import BQConnection
+    from app.models.connection import OAuthConnection
     from app.models.mcp_session import MCPSession
+    from app.models.project import Project, ProjectMember
+    from app.models.role import MemberRole, Role
+    from app.models.user import User
 
     engine = create_async_engine(os.environ["DATABASE_URL"], echo=False)
     async with engine.begin() as conn:
@@ -69,21 +71,45 @@ async def main():
         db.add(MemberRole(project_member_id=pm_a_member.id, role_id=role.id))
 
         # meta conn in A, BQ conn in B (for the cross-tenant presence test)
-        db.add(OAuthConnection(
-            project_id=proj_a.id, user_id=a_owner.id, provider="meta",
-            google_email="ads@meta.test", access_token_encrypted="x",
-            refresh_token_encrypted="x",
-        ))
-        db.add(BQConnection(
-            fluxito_project_id=proj_b.id, user_id=b_owner.id,
-            display_name="B warehouse", project_id="gcp-bravo", service_account_encrypted="x",
-        ))
+        db.add(
+            OAuthConnection(
+                project_id=proj_a.id,
+                user_id=a_owner.id,
+                provider="meta",
+                google_email="ads@meta.test",
+                access_token_encrypted="x",
+                refresh_token_encrypted="x",
+            )
+        )
+        db.add(
+            BQConnection(
+                fluxito_project_id=proj_b.id,
+                user_id=b_owner.id,
+                display_name="B warehouse",
+                project_id="gcp-bravo",
+                service_account_encrypted="x",
+            )
+        )
 
         exp = datetime.utcnow() + timedelta(hours=2)
-        db.add(MCPSession(user_id=a_member.id, access_token_hash=_h(MEMBER_TOKEN),
-                          access_token_expires_at=exp, client_id="live-test", is_revoked=False))
-        db.add(MCPSession(user_id=a_owner.id, access_token_hash=_h(OWNER_TOKEN),
-                          access_token_expires_at=exp, client_id="live-test", is_revoked=False))
+        db.add(
+            MCPSession(
+                user_id=a_member.id,
+                access_token_hash=_h(MEMBER_TOKEN),
+                access_token_expires_at=exp,
+                client_id="live-test",
+                is_revoked=False,
+            )
+        )
+        db.add(
+            MCPSession(
+                user_id=a_owner.id,
+                access_token_hash=_h(OWNER_TOKEN),
+                access_token_expires_at=exp,
+                client_id="live-test",
+                is_revoked=False,
+            )
+        )
         await db.commit()
 
         scenario = {

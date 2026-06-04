@@ -38,8 +38,10 @@ logger = logging.getLogger(__name__)
 # RBAC helpers — module-level so tests can monkeypatch _resolve_perms_for_call
 # ---------------------------------------------------------------------------
 
+
 async def _resolve_perms_for_call(user_id: str, project_id: str):
     from app.auth.permissions import resolve_effective_permissions
+
     return await resolve_effective_permissions(user_id, project_id)
 
 
@@ -49,6 +51,7 @@ async def _tool_permitted_for_call(
     """True if resolved permissions allow this call. Missing ctx -> allow (RBAC only
     restricts when we know who/where; auth + project errors are handled elsewhere)."""
     from app.auth.permissions import ALWAYS_ON_TOOLS
+
     if name in ALWAYS_ON_TOOLS:
         return True
     if not user_id or not project_id:
@@ -327,6 +330,7 @@ def _install_tool_hook(mcp_server):
         # ── RBAC backstop: deny tools the caller's role does not grant ──────
         try:
             import app.app_state as _state
+
             _uctx = _state.current_user_ctx.get()
             _pctx = _state.current_project_ctx.get()
             _uid = getattr(_uctx, "user_id", None) if _uctx else None
@@ -582,14 +586,13 @@ def _install_tool_hook(mcp_server):
         unfiltered = await _original_list_tools(*args, **kwargs)
         try:
             import app.app_state as _state
+
             _uctx = _state.current_user_ctx.get(None)
             _pctx = _state.current_project_ctx.get(None)
             _uid = getattr(_uctx, "user_id", None) if _uctx else None
             _pid = None
             if _pctx is not None:
-                _pid = str(
-                    getattr(_pctx, "project_id", None) or getattr(_pctx, "id", None) or ""
-                ) or None
+                _pid = str(getattr(_pctx, "project_id", None) or getattr(_pctx, "id", None) or "") or None
             if not _uid or not _pid:
                 return unfiltered
             eff = await _resolve_perms_for_call(_uid, _pid)
@@ -609,7 +612,8 @@ def _install_tool_hook(mcp_server):
     except Exception as _exc:  # pragma: no cover - defensive
         logger.warning(
             "Could not re-register filtered list_tools on the low-level MCP "
-            "server; tools/list will be unfiltered over the wire: %s", _exc
+            "server; tools/list will be unfiltered over the wire: %s",
+            _exc,
         )
 
 

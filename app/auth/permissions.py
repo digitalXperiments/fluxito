@@ -4,24 +4,32 @@
 Two axes per role: tool capabilities (domain x read/write) and connection
 access (per provider). See the design spec for the full vocabulary.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 # Tool domains -> dispatcher tools (read vs write)
 DOMAIN_TOOLS: dict[str, dict[str, set[str]]] = {
-    "analytics":    {"read": {"analytics_read"},            "write": {"analytics_write"}},
-    "tagmanager":   {"read": {"tagmanager_read"},           "write": {"tagmanager_write"}},
-    "marketing":    {"read": {"marketing_read"},            "write": {"marketing_write"}},
-    "seo":          {"read": {"seo_read"},                  "write": {"seo_write"}},
-    "warehouse":    {"read": {"warehouse_read", "warehouse_query"}, "write": set()},
-    "dashboards":   {"read": {"dashboard_read"},
-                     "write": {"dashboard_deploy_batch", "dashboard_manage_scopes",
-                               "dashboard_rotate_token", "template_deploy", "template_save"}},
-    "knowledge":    {"read": {"get_knowledge"},             "write": {"deploy_knowledge"}},
-    "automation":   {"read": {"automation_read"},           "write": {"automation_write"}},
-    "analysis":     {"read": {"run_analysis", "run_audit"}, "write": set()},
-    "tracking_plan": {"read": {"tracking_plan"},            "write": {"tracking_plan"}},
+    "analytics": {"read": {"analytics_read"}, "write": {"analytics_write"}},
+    "tagmanager": {"read": {"tagmanager_read"}, "write": {"tagmanager_write"}},
+    "marketing": {"read": {"marketing_read"}, "write": {"marketing_write"}},
+    "seo": {"read": {"seo_read"}, "write": {"seo_write"}},
+    "warehouse": {"read": {"warehouse_read", "warehouse_query"}, "write": set()},
+    "dashboards": {
+        "read": {"dashboard_read"},
+        "write": {
+            "dashboard_deploy_batch",
+            "dashboard_manage_scopes",
+            "dashboard_rotate_token",
+            "template_deploy",
+            "template_save",
+        },
+    },
+    "knowledge": {"read": {"get_knowledge"}, "write": {"deploy_knowledge"}},
+    "automation": {"read": {"automation_read"}, "write": {"automation_write"}},
+    "analysis": {"read": {"run_analysis", "run_audit"}, "write": set()},
+    "tracking_plan": {"read": {"tracking_plan"}, "write": {"tracking_plan"}},
 }
 
 _TRACKING_PLAN_WRITE_ACTIONS = {"save", "refine"}
@@ -36,9 +44,26 @@ _ADVANCED_TOOLS: dict[str, str] = {
 ALWAYS_ON_TOOLS: set[str] = {"get_session_context", "list_my_projects", "set_active_project"}
 
 PROVIDERS: list[str] = [
-    "ga4", "gtm", "google_ads", "gsc", "bing", "meta", "tiktok", "snap",
-    "linkedin", "pinterest", "x", "reddit", "apple", "amplitude",
-    "adobe_analytics", "adobe_launch", "adobe_marketo", "bigquery", "redshift", "snowflake",
+    "ga4",
+    "gtm",
+    "google_ads",
+    "gsc",
+    "bing",
+    "meta",
+    "tiktok",
+    "snap",
+    "linkedin",
+    "pinterest",
+    "x",
+    "reddit",
+    "apple",
+    "amplitude",
+    "adobe_analytics",
+    "adobe_launch",
+    "adobe_marketo",
+    "bigquery",
+    "redshift",
+    "snowflake",
 ]
 
 _TOOL_TO_REQ: dict[str, tuple[str, str]] = {}
@@ -145,6 +170,7 @@ def _redis_client():
     """Return the app's async Redis client, or None if unavailable."""
     try:
         import app.app_state as state
+
         return getattr(state, "redis_client", None)
     except Exception:
         return None
@@ -180,12 +206,14 @@ async def _cache_set(user_id: str, project_id: str, eff: EffectivePermissions) -
         r = _redis_client()
         if r is None:
             return
-        payload = json.dumps({
-            "full": eff.full,
-            "tools": {k: sorted(v) for k, v in eff.tools.items()},
-            "providers": sorted(eff.providers),
-            "advanced": sorted(eff.advanced),
-        })
+        payload = json.dumps(
+            {
+                "full": eff.full,
+                "tools": {k: sorted(v) for k, v in eff.tools.items()},
+                "providers": sorted(eff.providers),
+                "advanced": sorted(eff.advanced),
+            }
+        )
         await r.setex(_cache_key(user_id, project_id), _PERMS_CACHE_TTL, payload)
     except Exception:
         pass
@@ -217,40 +245,48 @@ async def resolve_effective_permissions(user_id: str, project_id: str) -> Effect
     from sqlalchemy import select
 
     import app.app_state as state
-    from app.models.project import Project, ProjectMember, ROLE_OWNER, ROLE_ADMIN
-    from app.models.role import Role, MemberRole
+    from app.models.project import ROLE_ADMIN, ROLE_OWNER, Project, ProjectMember
+    from app.models.role import MemberRole, Role
 
     cached = await _cache_get(user_id, project_id)
     if cached is not None:
         return cached
 
     async with state.db_session_factory() as db:
-        proj = (await db.execute(
-            select(Project).where(Project.id == _uuid.UUID(project_id))
-        )).scalar_one_or_none()
+        proj = (
+            await db.execute(select(Project).where(Project.id == _uuid.UUID(project_id)))
+        ).scalar_one_or_none()
         if proj is None:
             eff = EffectivePermissions(full=False)
             await _cache_set(user_id, project_id, eff)
             return eff
 
-        pm = (await db.execute(
-            select(ProjectMember).where(
-                ProjectMember.project_id == proj.id,
-                ProjectMember.user_id == _uuid.UUID(user_id),
-                ProjectMember.is_active.is_(True),
+        pm = (
+            await db.execute(
+                select(ProjectMember).where(
+                    ProjectMember.project_id == proj.id,
+                    ProjectMember.user_id == _uuid.UUID(user_id),
+                    ProjectMember.is_active.is_(True),
+                )
             )
-        )).scalar_one_or_none()
+        ).scalar_one_or_none()
 
         if pm is None:
             eff = EffectivePermissions(full=False)
         elif pm.role in (ROLE_OWNER, ROLE_ADMIN) or not proj.rbac_enabled:
             eff = EffectivePermissions(full=True)
         else:
-            docs = (await db.execute(
-                select(Role.permissions)
-                .join(MemberRole, MemberRole.role_id == Role.id)
-                .where(MemberRole.project_member_id == pm.id, Role.is_active.is_(True))
-            )).scalars().all()
+            docs = (
+                (
+                    await db.execute(
+                        select(Role.permissions)
+                        .join(MemberRole, MemberRole.role_id == Role.id)
+                        .where(MemberRole.project_member_id == pm.id, Role.is_active.is_(True))
+                    )
+                )
+                .scalars()
+                .all()
+            )
             eff = _union_role_docs(list(docs))
 
     await _cache_set(user_id, project_id, eff)

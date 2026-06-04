@@ -14,24 +14,24 @@ real compensating control behind them.
 
 Requires Postgres (skips otherwise) and uses fakeredis.
 """
+
 import uuid
 
 import pytest
 
 import app.app_state as app_state
+from app.auth.mcp_session_manager import (
+    _match_membership_project_id,
+    build_project_context,
+    build_user_context,
+    ensure_call_project_ctx,
+)
 from app.auth.permissions import (
     ALWAYS_ON_TOOLS,
-    resolve_effective_permissions,
     invalidate_permissions_cache,
+    resolve_effective_permissions,
 )
-from app.auth.mcp_session_manager import (
-    build_user_context,
-    build_project_context,
-    ensure_call_project_ctx,
-    _match_membership_project_id,
-)
-from app.tools.registry import _tool_permitted_for_call, _filter_tool_names
-
+from app.tools.registry import _filter_tool_names, _tool_permitted_for_call
 
 # Tools that read/return project data, grouped by the domain each requires.
 _READ_TOOLS = [
@@ -66,10 +66,10 @@ async def _seed(db_session_factory):
 
     Returns a dict of ids.
     """
-    from app.models.user import User
-    from app.models.project import Project, ProjectMember
-    from app.models.role import Role, MemberRole
     from app.models.connection import OAuthConnection
+    from app.models.project import Project, ProjectMember
+    from app.models.role import MemberRole, Role
+    from app.models.user import User
 
     async with db_session_factory() as db:
         a_owner = User(email="a-owner@ex.com", display_name="A Owner")
@@ -101,14 +101,16 @@ async def _seed(db_session_factory):
         db.add(MemberRole(project_member_id=pm_a_member.id, role_id=role.id))
 
         # A meta connection in project A (token owner = a_owner).
-        db.add(OAuthConnection(
-            project_id=proj_a.id,
-            user_id=a_owner.id,
-            provider="meta",
-            google_email="ads@meta.test",
-            access_token_encrypted="x",
-            refresh_token_encrypted="x",
-        ))
+        db.add(
+            OAuthConnection(
+                project_id=proj_a.id,
+                user_id=a_owner.id,
+                provider="meta",
+                google_email="ads@meta.test",
+                access_token_encrypted="x",
+                refresh_token_encrypted="x",
+            )
+        )
         await db.commit()
 
         return {
@@ -123,6 +125,7 @@ async def _seed(db_session_factory):
 # ---------------------------------------------------------------------------
 # 1. Cross-role within a project
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_restricted_member_resolves_to_granted_scope_only(wired, db_session_factory):
@@ -144,9 +147,17 @@ async def test_backstop_denies_every_ungranted_tool_for_member(wired, db_session
     # Granted
     assert await _tool_permitted_for_call("analytics_read", {}, uid, pid) is True
     # Denied: other read domains, all writes, advanced tools
-    for tool in ["marketing_read", "tagmanager_read", "seo_read",
-                 "warehouse_read", "automation_read", "analytics_write",
-                 "marketing_write", "run_script", "generic_tool_read"]:
+    for tool in [
+        "marketing_read",
+        "tagmanager_read",
+        "seo_read",
+        "warehouse_read",
+        "automation_read",
+        "analytics_write",
+        "marketing_write",
+        "run_script",
+        "generic_tool_read",
+    ]:
         assert await _tool_permitted_for_call(tool, {}, uid, pid) is False, tool
 
     # Always-on tools remain callable regardless of role.
@@ -167,11 +178,13 @@ async def test_owner_gets_full_access(wired, db_session_factory):
 async def test_rbac_disabled_grants_member_full_access(wired, db_session_factory):
     ids = await _seed(db_session_factory)
     from sqlalchemy import update
+
     from app.models.project import Project
 
     async with db_session_factory() as db:
-        await db.execute(update(Project).where(Project.id == uuid.UUID(ids["proj_a"]))
-                         .values(rbac_enabled=False))
+        await db.execute(
+            update(Project).where(Project.id == uuid.UUID(ids["proj_a"])).values(rbac_enabled=False)
+        )
         await db.commit()
     await invalidate_permissions_cache(ids["a_member"], ids["proj_a"])
 
@@ -182,6 +195,7 @@ async def test_rbac_disabled_grants_member_full_access(wired, db_session_factory
 # ---------------------------------------------------------------------------
 # 2. Cross-project / cross-tenant
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_nonmember_resolves_to_deny_all(wired, db_session_factory):
@@ -198,6 +212,7 @@ async def test_nonmember_resolves_to_deny_all(wired, db_session_factory):
 @pytest.mark.asyncio
 async def test_build_project_context_403_for_nonmember(wired, db_session_factory):
     from fastapi import HTTPException
+
     ids = await _seed(db_session_factory)
     with pytest.raises(HTTPException) as exc:
         await build_project_context(ids["proj_b"], ids["a_owner"])
@@ -240,6 +255,7 @@ async def test_foreign_project_id_arg_cannot_hijack_active_scope(wired, db_sessi
 # 3. Provider filtering (connection-level leakage)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_provider_filter_strips_ungranted_connection_for_member(wired, db_session_factory):
     ids = await _seed(db_session_factory)
@@ -257,6 +273,7 @@ async def test_provider_filter_strips_ungranted_connection_for_member(wired, db_
 # ---------------------------------------------------------------------------
 # 4. Fail-open & missing-ctx compensating controls
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_missing_project_ctx_resolves_to_no_context(wired, db_session_factory):
@@ -285,8 +302,8 @@ async def test_hidden_tool_is_also_blocked_at_execution(wired, db_session_factor
     eff = await resolve_effective_permissions(uid, pid)
 
     visible = set(_filter_tool_names(_READ_TOOLS, eff))
-    assert "analytics_read" in visible          # granted → visible
-    assert "marketing_read" not in visible       # ungranted → hidden
+    assert "analytics_read" in visible  # granted → visible
+    assert "marketing_read" not in visible  # ungranted → hidden
 
     # The hidden tool, if called directly anyway, is still blocked.
     assert await _tool_permitted_for_call("marketing_read", {}, uid, pid) is False
@@ -298,6 +315,7 @@ async def test_hidden_tool_is_also_blocked_at_execution(wired, db_session_factor
 #    OAuthConnection column). Fixed by scoping each credential query by its own
 #    table's column (fluxito_project_id/project_id/user_id).
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_LEAK_warehouse_presence_crosses_tenants(wired, db_session_factory):
@@ -311,13 +329,15 @@ async def test_LEAK_warehouse_presence_crosses_tenants(wired, db_session_factory
 
     # Give project B a BigQuery connection owned by B's owner.
     async with db_session_factory() as db:
-        db.add(BQConnection(
-            fluxito_project_id=uuid.UUID(ids["proj_b"]),
-            user_id=uuid.UUID(ids["b_owner"]),
-            display_name="B's warehouse",
-            project_id="gcp-bravo-proj",
-            service_account_encrypted="x",
-        ))
+        db.add(
+            BQConnection(
+                fluxito_project_id=uuid.UUID(ids["proj_b"]),
+                user_id=uuid.UUID(ids["b_owner"]),
+                display_name="B's warehouse",
+                project_id="gcp-bravo-proj",
+                service_account_encrypted="x",
+            )
+        )
         await db.commit()
 
     # Build context for project A (which has a meta conn but no BQ of its own).

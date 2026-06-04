@@ -18,7 +18,7 @@ from app.models.mcp_session import MCPSession
 from app.models.notification import Notification
 from app.models.oauth_app_credential import OAuthAppCredential
 from app.models.project import Project, ProjectMember
-from app.models.role import MemberRole, Role  # noqa: F401
+from app.models.role import MemberRole, Role
 from app.models.scheduled_report import (
     ProjectEmailSender,
     ProjectSlackWebhook,

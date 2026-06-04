@@ -1,7 +1,8 @@
 # tests/test_rbac_models.py
 """Persistence tests for RBAC role models."""
-import uuid
+
 import pytest
+
 import app.app_state as app_state
 import app.models.sdr  # noqa: F401  (ensures model metadata loaded)
 
@@ -17,9 +18,10 @@ def _patch_db(db_session_factory):
 @pytest.mark.asyncio
 async def test_role_persists_with_permissions(_patch_db, db_session_factory):
     from sqlalchemy import select
-    from app.models.user import User
-    from app.models.project import Project, ProjectMember
+
+    from app.models.project import Project
     from app.models.role import Role
+    from app.models.user import User
 
     async with db_session_factory() as db:
         u = User(email="admin@example.com")
@@ -50,9 +52,10 @@ async def test_role_persists_with_permissions(_patch_db, db_session_factory):
 @pytest.mark.asyncio
 async def test_member_role_assignment_persists(_patch_db, db_session_factory):
     from sqlalchemy import select
-    from app.models.user import User
+
     from app.models.project import Project, ProjectMember
-    from app.models.role import Role, MemberRole
+    from app.models.role import MemberRole, Role
+    from app.models.user import User
 
     async with db_session_factory() as db:
         u = User(email="m@example.com")
@@ -64,7 +67,9 @@ async def test_member_role_assignment_persists(_patch_db, db_session_factory):
         pm = ProjectMember(project_id=p.id, user_id=u.id, role="member")
         db.add(pm)
         await db.flush()
-        role = Role(project_id=p.id, name="Viewer", permissions={"tools": {"dashboards": ["read"]}}, created_by=u.id)
+        role = Role(
+            project_id=p.id, name="Viewer", permissions={"tools": {"dashboards": ["read"]}}, created_by=u.id
+        )
         db.add(role)
         await db.flush()
         mr = MemberRole(project_member_id=pm.id, role_id=role.id, assigned_by=u.id)
@@ -84,8 +89,9 @@ async def test_member_role_assignment_persists(_patch_db, db_session_factory):
 @pytest.mark.asyncio
 async def test_project_rbac_enabled_defaults_false(_patch_db, db_session_factory):
     from sqlalchemy import select
-    from app.models.user import User
+
     from app.models.project import Project
+    from app.models.user import User
 
     async with db_session_factory() as db:
         u = User(email="o@example.com")
@@ -102,6 +108,7 @@ async def test_project_rbac_enabled_defaults_false(_patch_db, db_session_factory
 
 
 def test_can_manage_roles_set():
-    from app.models.project import CAN_MANAGE_ROLES, ROLE_OWNER, ROLE_ADMIN, ROLE_MEMBER
-    assert CAN_MANAGE_ROLES == {ROLE_OWNER, ROLE_ADMIN}
+    from app.models.project import CAN_MANAGE_ROLES, ROLE_ADMIN, ROLE_MEMBER, ROLE_OWNER
+
+    assert {ROLE_OWNER, ROLE_ADMIN} == CAN_MANAGE_ROLES
     assert ROLE_MEMBER not in CAN_MANAGE_ROLES
