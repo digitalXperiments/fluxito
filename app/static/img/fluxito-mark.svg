@@ -1,16 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Fluxito">
   <defs>
-    <linearGradient id="fxg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#3b6cff"/>
-      <stop offset="100%" stop-color="#1d44d6"/>
+    <linearGradient id="fluxito-tile" x1="10" y1="6" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5F8DFF"/>
+      <stop offset="0.52" stop-color="#2557F6"/>
+      <stop offset="1" stop-color="#1233B8"/>
+    </linearGradient>
+    <linearGradient id="fluxito-signal" x1="24" y1="42" x2="44" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9DE7D7"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
     </linearGradient>
   </defs>
-  <!-- Rounded tile -->
-  <rect width="64" height="64" rx="15" fill="url(#fxg)"/>
-  <!-- Bracket motif "[ ]" (brand icon language) + signature dot, all vector -->
-  <g fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M25 19 H19 V45 H25"/>
-    <path d="M39 19 H45 V45 H39"/>
-  </g>
-  <circle cx="32" cy="32" r="4.2" fill="#9ec1ff"/>
+  <rect width="64" height="64" rx="14" fill="url(#fluxito-tile)"/>
+  <path d="M24.5 18H18v28h6.5" fill="none" stroke="#FFFFFF" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M39.5 18H46v28h-6.5" fill="none" stroke="#FFFFFF" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M23.5 40.5 40.5 23.5" fill="none" stroke="url(#fluxito-signal)" stroke-width="4.8" stroke-linecap="round"/>
+  <circle cx="32" cy="32" r="4.4" fill="#FFFFFF"/>
+  <circle cx="40.5" cy="23.5" r="3.2" fill="#9DE7D7"/>
 </svg>

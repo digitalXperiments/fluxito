@@ -1,9 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="232" height="56" viewBox="0 0 232 56" role="img" aria-label="Fluxito">
-  <!-- Wordmark: "flux" (mono, medium) + "ito" (italic) + signature dot.
-       Mirrors the in-app CSS wordmark; the dot is a true vector circle so it
-       renders identically even where the font stack falls back. -->
-  <text x="8" y="38" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace"
-        font-size="40" font-weight="500" letter-spacing="-0.02em" fill="#101114">flux<tspan
-        font-family="Georgia,'Times New Roman',serif" font-style="italic" font-weight="500">ito</tspan></text>
-  <circle cx="208" cy="36" r="5" fill="#2557f6"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="272" height="64" viewBox="0 0 272 64" role="img" aria-label="Fluxito">
+  <defs>
+    <linearGradient id="fluxito-lockup-tile" x1="7" y1="7" x2="49" y2="55" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5F8DFF"/>
+      <stop offset="0.52" stop-color="#2557F6"/>
+      <stop offset="1" stop-color="#1233B8"/>
+    </linearGradient>
+    <linearGradient id="fluxito-lockup-signal" x1="21" y1="39" x2="39" y2="21" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9DE7D7"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <rect x="4" y="8" width="48" height="48" rx="11" fill="url(#fluxito-lockup-tile)"/>
+    <path d="M22.6 21H18v22h4.6" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M33.4 21H38v22h-4.6" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M21.6 38.2 34.4 25.8" fill="none" stroke="url(#fluxito-lockup-signal)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="28" cy="32" r="3.5" fill="#FFFFFF"/>
+    <circle cx="34.4" cy="25.8" r="2.5" fill="#9DE7D7"/>
+  </g>
+  <text x="66" y="42" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="38" font-weight="500" letter-spacing="0" fill="#101114">flux<tspan font-family="Georgia,'Times New Roman',serif" font-style="italic" font-weight="500">ito</tspan></text>
+  <circle cx="245" cy="40" r="4.8" fill="#2557F6"/>
 </svg>
