@@ -852,6 +852,25 @@ html[data-theme="dark"] .mobile-topbar {
 }
 .proj-switcher-manage:hover { color: var(--ink, var(--text)); }
 
+/* Project row = switch link + settings gear */
+.proj-switcher-row { display: flex; align-items: center; gap: 2px; }
+.proj-switcher-row .proj-switcher-item { flex: 1; min-width: 0; }
+.proj-switcher-gear {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: 7px;
+  color: var(--muted, var(--text-muted));
+  text-decoration: none;
+  opacity: .5;
+  transition: opacity .12s, background .12s, color .12s;
+}
+.proj-switcher-row:hover .proj-switcher-gear,
+.proj-switcher-row.is-active .proj-switcher-gear { opacity: 1; }
+.proj-switcher-gear:hover {
+  background: var(--bg-2, var(--surface-2));
+  color: var(--ink, var(--text));
+}
+
 /* Mobile section labels (hidden on desktop, shown in hamburger) */
 .mob-section-label { display: none; }
 .mob-section-divider { display: none; }

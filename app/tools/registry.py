@@ -34,6 +34,37 @@ import app.app_state as app_state
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# RBAC helpers — module-level so tests can monkeypatch _resolve_perms_for_call
+# ---------------------------------------------------------------------------
+
+async def _resolve_perms_for_call(user_id: str, project_id: str):
+    from app.auth.permissions import resolve_effective_permissions
+    return await resolve_effective_permissions(user_id, project_id)
+
+
+async def _tool_permitted_for_call(
+    name: str, arguments: dict, user_id: str | None, project_id: str | None
+) -> bool:
+    """True if resolved permissions allow this call. Missing ctx -> allow (RBAC only
+    restricts when we know who/where; auth + project errors are handled elsewhere)."""
+    from app.auth.permissions import ALWAYS_ON_TOOLS
+    if name in ALWAYS_ON_TOOLS:
+        return True
+    if not user_id or not project_id:
+        return True
+    eff = await _resolve_perms_for_call(user_id, project_id)
+    action = (arguments or {}).get("action") if isinstance(arguments, dict) else None
+    return eff.allows_tool(name, action=action)
+
+
+def _filter_tool_names(names, eff) -> list:
+    """Return only the tool names the effective permissions allow. None/full -> all."""
+    if eff is None or getattr(eff, "full", False):
+        return list(names)
+    return [n for n in names if eff.allows_tool(n)]
+
+
 # Populated by unified.rewire_unified_surface — holds a reference to the
 # FastMCP ToolManager so the unified dispatcher tools can reach the
 # preserved legacy tool objects.
@@ -293,6 +324,25 @@ def _install_tool_hook(mcp_server):
         except Exception:
             _proj_token = None
 
+        # ── RBAC backstop: deny tools the caller's role does not grant ──────
+        try:
+            import app.app_state as _state
+            _uctx = _state.current_user_ctx.get()
+            _pctx = _state.current_project_ctx.get()
+            _uid = getattr(_uctx, "user_id", None) if _uctx else None
+            _pid = None
+            if _pctx is not None:
+                _pid = str(getattr(_pctx, "project_id", None) or getattr(_pctx, "id", None) or "") or None
+            if not await _tool_permitted_for_call(name, arguments, _uid, _pid):
+                return {
+                    "error": True,
+                    "error_type": "permission_denied",
+                    "message": f"Your role does not grant access to '{name}'.",
+                    "tool": name,
+                }
+        except Exception as _exc:
+            logger.warning("RBAC backstop check failed for %s: %s", name, _exc)
+
         try:
             try:
                 result = await _asyncio.wait_for(
@@ -414,7 +464,7 @@ def _install_tool_hook(mcp_server):
             error_type = _audit_parsed.get("error_type", "")
             call_status = (
                 "denied"
-                if error_type in ("scope_denied", "quota_exceeded", "connection_missing")
+                if error_type in ("scope_denied", "quota_exceeded", "connection_missing", "permission_denied")
                 else "error"
             )
 
@@ -511,6 +561,37 @@ def _install_tool_hook(mcp_server):
     # per-call active-project resolution, source-client capture) is dead code
     # and the Activity Log never receives a single tool-call record.
     tool_manager.call_tool = _instrumented_call
+
+    # ── RBAC tool-list filter ─────────────────────────────────────────────────
+    # FastMCP.list_tools is async, so we can await resolve_effective_permissions
+    # here. We wrap the bound method on the FastMCP *server* instance (not the
+    # ToolManager) because that is the MCP-protocol handler registered via
+    # _setup_handlers. Falls back to the unfiltered list on any error — the
+    # Task 6 call-time backstop remains the real security boundary.
+    _original_list_tools = mcp_server.list_tools
+
+    async def _filtered_list_tools(*args, **kwargs):
+        unfiltered = await _original_list_tools(*args, **kwargs)
+        try:
+            import app.app_state as _state
+            _uctx = _state.current_user_ctx.get(None)
+            _pctx = _state.current_project_ctx.get(None)
+            _uid = getattr(_uctx, "user_id", None) if _uctx else None
+            _pid = None
+            if _pctx is not None:
+                _pid = str(
+                    getattr(_pctx, "project_id", None) or getattr(_pctx, "id", None) or ""
+                ) or None
+            if not _uid or not _pid:
+                return unfiltered
+            eff = await _resolve_perms_for_call(_uid, _pid)
+            allowed = set(_filter_tool_names([t.name for t in unfiltered], eff))
+            return [t for t in unfiltered if t.name in allowed]
+        except Exception as _exc:
+            logger.warning("RBAC list-tools filter failed, returning unfiltered: %s", _exc)
+            return unfiltered
+
+    mcp_server.list_tools = _filtered_list_tools
 
 
 def register_all_tools(mcp_server):

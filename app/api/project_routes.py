@@ -415,9 +415,25 @@ async def project_settings_page(request: Request, slug: str):
                 "display_name": u.display_name,
                 "role": pm.role,
                 "joined_at": pm.joined_at.isoformat() if pm.joined_at else None,
+                "role_ids": [],
             }
             for pm, u in result.all()
         ]
+
+        # Custom RBAC role assignments per member (member_id -> [role_id])
+        from app.models.role import MemberRole
+
+        if members:
+            mr_rows = await db.execute(
+                select(MemberRole.project_member_id, MemberRole.role_id).where(
+                    MemberRole.project_member_id.in_([uuid.UUID(m["id"]) for m in members])
+                )
+            )
+            _assign: dict[str, list[str]] = {}
+            for pm_id, role_id in mr_rows.all():
+                _assign.setdefault(str(pm_id), []).append(str(role_id))
+            for m in members:
+                m["role_ids"] = _assign.get(m["id"], [])
 
     # Load project connections (scoped to project)
     from app.models.connection import OAuthConnection
@@ -463,12 +479,14 @@ async def project_settings_page(request: Request, slug: str):
                 "description": project.description,
                 "owner_id": str(project.owner_id),
                 "dashboard_style_config": project.dashboard_style_config,
+                "rbac_enabled": project.rbac_enabled,
             },
             "members": members,
             "connections": connections,
             "email_senders": email_senders,
             "slack_webhooks": slack_webhooks,
             "membership": {"role": membership.role},
+            "user_project_role": membership.role,
             "user": user,
         },
     )
@@ -1851,3 +1869,319 @@ async def update_dashboard_settings(request: Request, slug: str):
         await db.commit()
 
     return JSONResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# RBAC — Role CRUD (Task 12), Member role assignment (Task 13), Toggle (Task 14)
+# ---------------------------------------------------------------------------
+
+from app.auth.permissions import (  # noqa: E402 — late import OK inside module
+    PermissionValidationError,
+    invalidate_permissions_cache,
+    normalize_permissions,
+)
+from app.models.project import CAN_MANAGE_ROLES  # noqa: E402
+from app.models.role import MemberRole, Role  # noqa: E402
+
+
+class _RoleIn(BaseModel):
+    name: str
+    description: str | None = None
+    permissions: dict = {}
+
+
+class _MemberRolesIn(BaseModel):
+    role_ids: list[str] = []
+
+
+class _RbacToggleIn(BaseModel):
+    enabled: bool
+
+
+def _role_out(role: Role) -> dict:
+    return {
+        "id": str(role.id),
+        "name": role.name,
+        "description": role.description,
+        "permissions": role.permissions,
+        "is_active": role.is_active,
+    }
+
+
+# --- Task 12: GET roles ---
+
+
+@router.get("/api/project/{slug}/roles")
+async def list_roles(request: Request, slug: str):
+    """List active custom roles for a project (admin/owner only)."""
+    user = await _resolve_user(request)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+
+    project = await _get_project_by_slug(slug)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    uid = uuid.UUID(user["user_id"])
+    membership = await _get_membership(project.id, uid)
+    if not membership or membership.role not in CAN_MANAGE_ROLES:
+        raise HTTPException(403, "Only owners and admins can manage roles")
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(
+            select(Role).where(Role.project_id == project.id, Role.is_active == True)
+        )
+        roles = result.scalars().all()
+
+    return JSONResponse([_role_out(r) for r in roles])
+
+
+# --- Task 12: POST create role ---
+
+
+@router.post("/api/project/{slug}/roles")
+async def create_role(request: Request, slug: str, body: _RoleIn):
+    """Create a custom role for the project (admin/owner only)."""
+    from sqlalchemy.exc import IntegrityError
+
+    user = await _resolve_user(request)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+
+    project = await _get_project_by_slug(slug)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    uid = uuid.UUID(user["user_id"])
+    membership = await _get_membership(project.id, uid)
+    if not membership or membership.role not in CAN_MANAGE_ROLES:
+        raise HTTPException(403, "Only owners and admins can manage roles")
+
+    try:
+        normalized = normalize_permissions(body.permissions)
+    except PermissionValidationError as exc:
+        raise HTTPException(400, str(exc))
+
+    async with app_state.db_session_factory() as db:
+        role = Role(
+            project_id=project.id,
+            name=body.name,
+            description=body.description,
+            permissions=normalized,
+            created_by=uid,
+        )
+        db.add(role)
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(409, f"A role named '{body.name}' already exists in this project")
+
+    return JSONResponse(_role_out(role))
+
+
+# --- Task 12: PATCH update role ---
+
+
+@router.patch("/api/project/{slug}/roles/{role_id}")
+async def update_role(request: Request, slug: str, role_id: str, body: _RoleIn):
+    """Update a role's name/description/permissions (admin/owner only)."""
+    user = await _resolve_user(request)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+
+    project = await _get_project_by_slug(slug)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    uid = uuid.UUID(user["user_id"])
+    membership = await _get_membership(project.id, uid)
+    if not membership or membership.role not in CAN_MANAGE_ROLES:
+        raise HTTPException(403, "Only owners and admins can manage roles")
+
+    try:
+        normalized = normalize_permissions(body.permissions)
+    except PermissionValidationError as exc:
+        raise HTTPException(400, str(exc))
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(
+            select(Role).where(Role.id == uuid.UUID(role_id), Role.project_id == project.id)
+        )
+        role = result.scalar_one_or_none()
+        if not role:
+            raise HTTPException(404, "Role not found")
+
+        role.name = body.name
+        role.description = body.description
+        role.permissions = normalized
+
+        # Collect users holding this role so we can invalidate their caches
+        mr_result = await db.execute(
+            select(ProjectMember.user_id)
+            .join(MemberRole, MemberRole.project_member_id == ProjectMember.id)
+            .where(MemberRole.role_id == role.id)
+        )
+        affected_user_ids = [str(row[0]) for row in mr_result.fetchall()]
+
+        await db.commit()
+
+    for affected_uid in affected_user_ids:
+        await invalidate_permissions_cache(affected_uid, str(project.id))
+
+    return JSONResponse(_role_out(role))
+
+
+# --- Task 12: DELETE (soft) role ---
+
+
+@router.delete("/api/project/{slug}/roles/{role_id}")
+async def delete_role(request: Request, slug: str, role_id: str):
+    """Soft-delete a role and remove its MemberRole rows (admin/owner only)."""
+    user = await _resolve_user(request)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+
+    project = await _get_project_by_slug(slug)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    uid = uuid.UUID(user["user_id"])
+    membership = await _get_membership(project.id, uid)
+    if not membership or membership.role not in CAN_MANAGE_ROLES:
+        raise HTTPException(403, "Only owners and admins can manage roles")
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(
+            select(Role).where(Role.id == uuid.UUID(role_id), Role.project_id == project.id)
+        )
+        role = result.scalar_one_or_none()
+        if not role:
+            raise HTTPException(404, "Role not found")
+
+        # Collect affected users before deleting assignments
+        mr_result = await db.execute(
+            select(ProjectMember.user_id)
+            .join(MemberRole, MemberRole.project_member_id == ProjectMember.id)
+            .where(MemberRole.role_id == role.id)
+        )
+        affected_user_ids = [str(row[0]) for row in mr_result.fetchall()]
+
+        # Delete MemberRole rows
+        from sqlalchemy import delete as sa_delete
+
+        await db.execute(sa_delete(MemberRole).where(MemberRole.role_id == role.id))
+
+        # Soft-delete the role
+        role.is_active = False
+        await db.commit()
+
+    for affected_uid in affected_user_ids:
+        await invalidate_permissions_cache(affected_uid, str(project.id))
+
+    return JSONResponse({"ok": True, "id": role_id})
+
+
+# --- Task 13: PUT member role assignment ---
+
+
+@router.put("/api/project/{slug}/members/{member_id}/roles")
+async def assign_member_roles(request: Request, slug: str, member_id: str, body: _MemberRolesIn):
+    """Replace a member's role assignments (admin/owner only)."""
+    from sqlalchemy import delete as sa_delete
+
+    user = await _resolve_user(request)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+
+    project = await _get_project_by_slug(slug)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    uid = uuid.UUID(user["user_id"])
+    membership = await _get_membership(project.id, uid)
+    if not membership or membership.role not in CAN_MANAGE_ROLES:
+        raise HTTPException(403, "Only owners and admins can assign roles")
+
+    role_uuids = [uuid.UUID(rid) for rid in body.role_ids]
+
+    async with app_state.db_session_factory() as db:
+        # Load target ProjectMember
+        result = await db.execute(
+            select(ProjectMember).where(
+                ProjectMember.id == uuid.UUID(member_id),
+                ProjectMember.project_id == project.id,
+            )
+        )
+        target_member = result.scalar_one_or_none()
+        if not target_member:
+            raise HTTPException(404, "Member not found")
+
+        # Validate all role_ids belong to this project and are active
+        if role_uuids:
+            valid_result = await db.execute(
+                select(Role.id).where(
+                    Role.id.in_(role_uuids),
+                    Role.project_id == project.id,
+                    Role.is_active == True,
+                )
+            )
+            valid_ids = {row[0] for row in valid_result.fetchall()}
+            for rid in role_uuids:
+                if rid not in valid_ids:
+                    raise HTTPException(400, f"Role {rid} is not a valid active role in this project")
+
+        # Replace assignments
+        await db.execute(
+            sa_delete(MemberRole).where(MemberRole.project_member_id == target_member.id)
+        )
+        for rid in role_uuids:
+            db.add(MemberRole(project_member_id=target_member.id, role_id=rid, assigned_by=uid))
+
+        target_user_id = str(target_member.user_id)
+        await db.commit()
+
+    await invalidate_permissions_cache(target_user_id, str(project.id))
+
+    return JSONResponse({"ok": True, "role_ids": [str(r) for r in role_uuids]})
+
+
+# --- Task 14: PUT RBAC toggle ---
+
+
+@router.put("/api/project/{slug}/settings/rbac")
+async def toggle_rbac(request: Request, slug: str, body: _RbacToggleIn):
+    """Enable or disable RBAC for the project (admin/owner only)."""
+    user = await _resolve_user(request)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+
+    project = await _get_project_by_slug(slug)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    uid = uuid.UUID(user["user_id"])
+    membership = await _get_membership(project.id, uid)
+    if not membership or membership.role not in CAN_MANAGE_ROLES:
+        raise HTTPException(403, "Only owners and admins can change RBAC settings")
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(select(Project).where(Project.id == project.id))
+        proj = result.scalar_one()
+        proj.rbac_enabled = body.enabled
+
+        # Collect all active member user_ids for cache invalidation
+        members_result = await db.execute(
+            select(ProjectMember.user_id).where(
+                ProjectMember.project_id == project.id,
+                ProjectMember.is_active == True,
+            )
+        )
+        all_user_ids = [str(row[0]) for row in members_result.fetchall()]
+
+        await db.commit()
+
+    for affected_uid in all_user_ids:
+        await invalidate_permissions_cache(affected_uid, str(project.id))
+
+    return JSONResponse({"ok": True, "rbac_enabled": body.enabled})

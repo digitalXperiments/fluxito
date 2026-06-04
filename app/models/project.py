@@ -43,6 +43,9 @@ CAN_CONNECT_ROLES = {ROLE_OWNER, ROLE_ADMIN}
 # Roles that can invite/remove members
 CAN_MANAGE_MEMBERS_ROLES = {ROLE_OWNER, ROLE_ADMIN}
 
+# Roles that can create/assign custom roles and toggle RBAC
+CAN_MANAGE_ROLES = {ROLE_OWNER, ROLE_ADMIN}
+
 
 # ---------------------------------------------------------------------------
 # Project — the data boundary and collaboration space
@@ -76,6 +79,10 @@ class Project(Base):
 
     # --- dashboard style config (consumed by the Haiku style-guide prompt) ---
     dashboard_style_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # When False (default) all members retain full access (pre-RBAC behavior).
+    # When True, members are restricted to their assigned roles.
+    rbac_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     # Relationships
     members: Mapped[list["ProjectMember"]] = relationship(

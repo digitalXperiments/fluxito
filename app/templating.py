@@ -163,6 +163,8 @@ def render(
         ctx["active_project_id"] = getattr(request.state, "active_project_id", None)
     if "active_project_plan" not in ctx:
         ctx["active_project_plan"] = getattr(request.state, "active_project_plan", "free")
+    if "user_project_role" not in ctx:
+        ctx["user_project_role"] = getattr(request.state, "active_project_role", None)
     if "nav_projects" not in ctx:
         ctx["nav_projects"] = getattr(request.state, "nav_projects", [])
     return templates.TemplateResponse(request, template_name, ctx, status_code=status_code)

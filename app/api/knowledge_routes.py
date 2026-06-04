@@ -226,12 +226,16 @@ async def kpi_library_page(request: Request):
     user_ctx = await _resolve_user_ctx(request)
     if not user_ctx:
         return RedirectResponse("/signin?next=/kpi-library", status_code=302)
-    user_view = await _load_user_view(user_ctx)
 
     project_id_str = await ensure_active_project(request, user_ctx.user_id)
     if not project_id_str:
         return RedirectResponse("/projects", status_code=302)
     project_id = uuid.UUID(project_id_str)
+
+    from app.auth.web_guards import require_domain_permission
+    await require_domain_permission(user_ctx.user_id, project_id_str, "knowledge")
+
+    user_view = await _load_user_view(user_ctx, project_id=project_id_str)
 
     async with app_state.db_session_factory() as db:
         stmt = (

@@ -22,6 +22,27 @@
     </div>
   </div>
 
+  {# ── Active project bar — makes the project-scoped workspace explicit ── #}
+  {% if active_project_name %}
+  {% set ns = namespace(slug=None) %}
+  {% for p in nav_projects %}{% if p.id == active_project_id %}{% set ns.slug = p.slug %}{% endif %}{% endfor %}
+  <div class="home-project-bar">
+    <span class="hpb-mark">{{ active_project_name[:2] | upper }}</span>
+    <div class="hpb-main">
+      <div class="hpb-row">
+        <span class="hpb-name">{{ active_project_name }}</span>
+        {% if user_project_role %}<span class="t-flag hpb-role">{{ user_project_role | upper }}</span>{% endif %}
+        {% if active_project_plan %}<span class="hpb-plan">{{ active_project_plan | capitalize }} plan</span>{% endif %}
+      </div>
+      <div class="hpb-sub">You're in this project — connections, dashboards, and automations below are all scoped to it.</div>
+    </div>
+    <div class="hpb-actions">
+      {% if ns.slug %}<a href="/project/{{ ns.slug }}/settings" class="btn sm">Project settings</a>{% endif %}
+      <a href="/projects" class="btn sm">All projects</a>
+    </div>
+  </div>
+  {% endif %}
+
   {# ── Empty-state: no projects yet ── #}
   {% if not nav_projects %}
   <div class="empty-state">
@@ -179,6 +200,37 @@
 
 .home-main .page-head h1 {
   max-width: 900px;
+}
+
+/* ── Active project bar ── */
+.home-project-bar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; margin: 0 0 var(--home-gap);
+  background: var(--bg-2, var(--surface-2));
+  border: 1px solid var(--line, var(--border));
+  border-radius: var(--r-l, 14px);
+}
+.hpb-mark {
+  flex-shrink: 0; width: 38px; height: 38px; border-radius: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #A9CDFE, #4D7CE3); color: #fff;
+  font-family: var(--mono); font-size: 13px; font-weight: 600;
+}
+.hpb-main { flex: 1; min-width: 0; }
+.hpb-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hpb-name { font-size: 16px; font-weight: 600; color: var(--ink, var(--text)); letter-spacing: -0.01em; }
+.hpb-role {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink, var(--text));
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  padding: 2px 7px; border-radius: 5px;
+}
+.hpb-plan { font-size: 12px; color: var(--muted, var(--text-muted)); }
+.hpb-sub { margin-top: 3px; font-size: 12.5px; color: var(--muted, var(--text-muted)); }
+.hpb-actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 720px) {
+  .home-project-bar { flex-wrap: wrap; }
+  .hpb-actions { width: 100%; justify-content: flex-start; }
 }
 
 .home-main .kpi-row {
