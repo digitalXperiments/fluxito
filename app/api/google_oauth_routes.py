@@ -117,8 +117,13 @@ def count_granular_connectors(flags) -> tuple[int, int]:
     return connected, TOTAL_CONNECTOR_COUNT
 
 
-async def _load_user_view(user_ctx) -> dict:
-    """Load a lightweight user view for templates (email, display_name, is_superadmin)."""
+async def _load_user_view(user_ctx, project_id: str | None = None) -> dict:
+    """Load a lightweight user view for templates (email, display_name, is_superadmin, permissions).
+
+    When ``project_id`` is provided, effective RBAC permissions are resolved and
+    included in the ``permissions`` key. When absent, the default ``full=True``
+    stub is returned so non-project pages are never gated.
+    """
     display_name = None
     is_superadmin = False
     try:
@@ -131,11 +136,27 @@ async def _load_user_view(user_ctx) -> dict:
                 is_superadmin = bool(u.is_superadmin)
     except Exception:
         pass
+
+    permissions = {"full": True, "tools": {}, "providers": [], "advanced": []}
+    if project_id:
+        try:
+            from app.auth.permissions import resolve_effective_permissions
+            eff = await resolve_effective_permissions(user_ctx.user_id, project_id)
+            permissions = {
+                "full": eff.full,
+                "tools": {k: sorted(v) for k, v in eff.tools.items()},
+                "providers": sorted(eff.providers),
+                "advanced": sorted(eff.advanced),
+            }
+        except Exception:
+            pass
+
     return {
         "id": user_ctx.user_id,
         "email": user_ctx.email,
         "display_name": display_name,
         "is_superadmin": is_superadmin,
+        "permissions": permissions,
     }
 
 

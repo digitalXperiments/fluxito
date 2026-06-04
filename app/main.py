@@ -764,7 +764,7 @@ async def _attach_nav_project_context(scope) -> None:
 
         async with app_state.db_session_factory() as db:
             result = await db.execute(
-                _sel(Project.id, Project.name, Project.slug)
+                _sel(Project.id, Project.name, Project.slug, ProjectMember.role)
                 .join(ProjectMember, ProjectMember.project_id == Project.id)
                 .where(
                     ProjectMember.user_id == user_id,
@@ -773,7 +773,7 @@ async def _attach_nav_project_context(scope) -> None:
                 )
                 .order_by(Project.created_at.asc())
             )
-            projects = [{"id": str(r.id), "name": r.name, "slug": r.slug} for r in result]
+            projects = [{"id": str(r.id), "name": r.name, "slug": r.slug, "role": r.role} for r in result]
             scope["state"]["nav_projects"] = projects
 
             if active_pid_cookie:
@@ -781,10 +781,12 @@ async def _attach_nav_project_context(scope) -> None:
                     if p["id"] == active_pid_cookie:
                         scope["state"]["active_project_name"] = p["name"]
                         scope["state"]["active_project_id"] = p["id"]
+                        scope["state"]["active_project_role"] = p["role"]
                         break
             if not scope["state"].get("active_project_name") and projects:
                 scope["state"]["active_project_name"] = projects[0]["name"]
                 scope["state"]["active_project_id"] = projects[0]["id"]
+                scope["state"]["active_project_role"] = projects[0]["role"]
     except Exception:
         pass
 

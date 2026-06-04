@@ -122,15 +122,20 @@
       <div class="sidebar-project-menu">
         <div class="proj-switcher-header">Switch project</div>
         {% for p in nav_projects %}
-        <a href="/api/project/switch/{{ p.slug }}"
-           class="proj-switcher-item {% if p.id == active_project_id %}is-active{% endif %}"
-           data-pid="{{ p.id }}">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20V4a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>
-          <span>{{ p.name }}</span>
-          {% if p.id == active_project_id %}
-          <svg class="proj-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          {% endif %}
-        </a>
+        <div class="proj-switcher-row {% if p.id == active_project_id %}is-active{% endif %}">
+          <a href="/api/project/switch/{{ p.slug }}"
+             class="proj-switcher-item {% if p.id == active_project_id %}is-active{% endif %}"
+             data-pid="{{ p.id }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20V4a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>
+            <span>{{ p.name }}</span>
+            {% if p.id == active_project_id %}
+            <svg class="proj-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            {% endif %}
+          </a>
+          <a href="/project/{{ p.slug }}/settings" class="proj-switcher-gear" title="Project settings" aria-label="Settings for {{ p.name }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </a>
+        </div>
         {% endfor %}
         <div class="proj-switcher-divider"></div>
         <a href="/projects" class="proj-switcher-item proj-switcher-manage">
@@ -143,22 +148,30 @@
 
     {# ── Nav items ── #}
     <nav class="sidebar-nav">
+      {% set perms = (user.permissions if user and user.permissions else {"full": True, "tools": {}}) %}
+      {% set is_admin = user and (user_project_role in ['owner','admin']) %}
       <a href="/home" class="sidebar-item {% if active=='home' %}is-active{% endif %}">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
         Home
       </a>
+      {% if perms.full or is_admin %}
       <a href="/connect" class="sidebar-item {% if active=='connect' %}is-active{% endif %}">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h2a5 5 0 0 1 0 10h-2m-6 0H7A5 5 0 0 1 7 7h2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         Connections
       </a>
+      {% endif %}
 
       {# ── Knowledge group ── #}
+      {% if perms.full or perms.tools.get('tracking_plan') or perms.tools.get('knowledge') %}
       <div class="sidebar-group" data-accent="amber">
         <span class="sidebar-group-label">Knowledge</span>
+        {% if perms.full or perms.tools.get('tracking_plan') %}
         <a href="/solution-design" class="sidebar-item {% if active=='sdr' %}is-active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
           Solution Design
         </a>
+        {% endif %}
+        {% if perms.full or perms.tools.get('knowledge') %}
         <a href="/kpi-library" class="sidebar-item {% if active=='kpi_library' %}is-active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           KPI Library
@@ -167,9 +180,12 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
           Business Context
         </a>
+        {% endif %}
       </div>
+      {% endif %}
 
       {# ── Reporting group ── #}
+      {% if perms.full or perms.tools.get('dashboards') %}
       <div class="sidebar-group" data-accent="teal">
         <span class="sidebar-group-label">Reporting</span>
         <a href="/live-dashboards" class="sidebar-item {% if active=='live' %}is-active{% endif %}">
@@ -181,19 +197,26 @@
           Templates
         </a>
       </div>
+      {% endif %}
 
-      {# ── Automations (standalone) ── #}
+      {# ── Operations group ── #}
+      {% if perms.full or perms.tools.get('automation') or is_admin %}
       <div class="sidebar-group" data-accent="blue">
         <span class="sidebar-group-label">Operations</span>
+        {% if perms.full or perms.tools.get('automation') %}
         <a href="/automations" class="sidebar-item {% if active=='automations' %}is-active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
           Automations
         </a>
+        {% endif %}
+        {% if perms.full or is_admin %}
         <a href="/activity-log" class="sidebar-item {% if active=='audit' %}is-active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           Activity Log
         </a>
+        {% endif %}
       </div>
+      {% endif %}
 
       <div class="sidebar-group" data-accent="purple">
         <span class="sidebar-group-label">Resources</span>
@@ -203,8 +226,10 @@
         </a>
       </div>
 
+      {% if perms.full or is_admin or (user and user.is_superadmin) %}
       <div class="sidebar-group" data-accent="slate">
         <span class="sidebar-group-label">Administration</span>
+        {% if perms.full or is_admin %}
         <a href="/settings/integrations" class="sidebar-item {% if active=='integrations' %}is-active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
           Integrations
@@ -213,6 +238,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           System Settings
         </a>
+        {% endif %}
         {% if user and user.is_superadmin %}
         <a href="/admin" class="sidebar-item {% if active=='admin' %}is-active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 4 3 7 8 8 5-1 8-4 8-8V6Z"/></svg>
@@ -220,6 +246,7 @@
         </a>
         {% endif %}
       </div>
+      {% endif %}
     </nav>
 
     <div class="sidebar-spacer"></div>

@@ -95,6 +95,18 @@ def derive_google_platform_flags(google_connections) -> tuple[bool, bool, bool, 
     return has_ga4, has_gtm, has_ads, has_gsc
 
 
+def _apply_provider_filter(connections, eff):
+    """Drop connections whose provider the effective permissions don't allow.
+    Accepts dicts or objects exposing a ``provider`` key/attr. full/None -> unchanged."""
+    if eff is None or getattr(eff, "full", False):
+        return connections
+
+    def _prov(c):
+        return c.get("provider") if isinstance(c, dict) else getattr(c, "provider", None)
+
+    return [c for c in connections if _prov(c) is not None and eff.allows_provider(_prov(c))]
+
+
 @dataclass
 class ConnectionInfo:
     id: str
@@ -832,6 +844,49 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             ads_accs,
             gsc_sites,
         ) = await _load_connections_and_resources(db, OAuthConnection.project_id, project.id)
+
+        # ── RBAC provider filtering ──
+        # Resolve effective permissions for the caller (fails gracefully).
+        eff = None
+        try:
+            from app.auth.permissions import resolve_effective_permissions
+            eff = await resolve_effective_permissions(str(user_id), str(project_id))
+        except Exception as _rbac_err:
+            logger.warning("RBAC permission resolution failed, skipping provider filter: %s", _rbac_err)
+
+        if eff is not None and not eff.full:
+            # Filter OAuthConnection-based rows (google/meta/tiktok/snap/linkedin/
+            # pinterest/x/reddit/bing/apple). provider=None means google.
+            filtered_orm = _apply_provider_filter(all_connections_orm, eff)
+
+            # Re-derive flags that come from OAuthConnection.provider
+            filtered_providers = {c.provider or "google" for c in filtered_orm}
+            has_meta = "meta" in filtered_providers
+            has_tiktok = "tiktok" in filtered_providers
+            has_snap = "snap" in filtered_providers
+            has_linkedin = "linkedin" in filtered_providers
+            has_pinterest = "pinterest" in filtered_providers
+            has_x = "x" in filtered_providers
+            has_reddit = "reddit" in filtered_providers
+            has_bing = "bing" in filtered_providers
+            has_apple = "apple" in filtered_providers
+
+            # Gate credential-based flags by provider grant
+            has_bq = has_bq and eff.allows_provider("bigquery")
+            has_amplitude = has_amplitude and eff.allows_provider("amplitude")
+            has_adobe_analytics = has_adobe_analytics and eff.allows_provider("adobe_analytics")
+            has_adobe_launch = has_adobe_launch and eff.allows_provider("adobe_launch")
+            has_adobe_marketo = has_adobe_marketo and eff.allows_provider("adobe_marketo")
+            has_redshift = has_redshift and eff.allows_provider("redshift")
+            has_snowflake = has_snowflake and eff.allows_provider("snowflake")
+
+            # Gate Google-scope-derived flags by provider grant
+            has_ga4 = has_ga4 and eff.allows_provider("ga4")
+            has_gtm = has_gtm and eff.allows_provider("gtm")
+            has_ads = has_ads and eff.allows_provider("google_ads")
+            has_gsc = has_gsc and eff.allows_provider("gsc")
+
+            all_connections_orm = filtered_orm
 
         connections = [
             ConnectionInfo(

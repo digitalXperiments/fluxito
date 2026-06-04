@@ -37,6 +37,9 @@
     <button class="ps-tab" data-tab="notifications" onclick="switchTab('notifications')">Notifications <span class="ps-tab-n">{{ (email_senders | length) + (slack_webhooks | length) }}</span></button>
     {% endif %}
     <button class="ps-tab" data-tab="general" onclick="switchTab('general')">General</button>
+    {% if membership.role in ('owner', 'admin') %}
+    <button class="ps-tab" data-tab="roles" onclick="switchTab('roles')">User Roles</button>
+    {% endif %}
   </div>
 
   {# ── MEMBERS TAB ── #}
@@ -71,7 +74,7 @@
             <th>Member</th>
             <th>Role</th>
             <th>Joined</th>
-            {% if membership.role in ('owner', 'admin') %}<th style="width:220px"></th>{% endif %}
+            {% if membership.role in ('owner', 'admin') %}<th style="width:240px;text-align:right">Actions</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -83,21 +86,32 @@
             </td>
             <td>
               <span class="t-flag ps-role ps-role-{{ m.role }}">{{ m.role | capitalize }}</span>
+              {% if membership.role in ('owner', 'admin') and m.role == 'member' %}
+              <div class="mbr-roles" data-member-id="{{ m.id }}" data-role-ids="{{ m.role_ids | join(',') }}">
+                <span class="mbr-role-chips"></span>
+                <button type="button" class="mbr-roles-edit" onclick="openRolesPopover(this, '{{ m.id }}')">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Roles
+                </button>
+              </div>
+              {% endif %}
             </td>
             <td class="ps-mono-sm">
               {{ m.joined_at[:10] if m.joined_at else 'Pending' }}
             </td>
             {% if membership.role in ('owner', 'admin') and m.role != 'owner' %}
-            <td style="text-align:right;white-space:nowrap">
-              {% if membership.role == 'owner' %}
-              <select class="f-input ps-role-select"
-                      onchange="changeRole('{{ project.slug }}', '{{ m.id }}', this.value)" data-current="{{ m.role }}">
-                <option value="admin" {% if m.role == 'admin' %}selected{% endif %}>Admin</option>
-                <option value="member" {% if m.role == 'member' %}selected{% endif %}>Member</option>
-              </select>
-              {% endif %}
-              <button class="btn sm danger-outline" onclick="removeMember('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Remove</button>
-              <button class="btn sm" onclick="resetMemberPassword('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Reset password</button>
+            <td>
+              <div class="ps-row-actions">
+                {% if membership.role == 'owner' %}
+                <select class="f-input ps-role-select"
+                        onchange="changeRole('{{ project.slug }}', '{{ m.id }}', this.value)" data-current="{{ m.role }}">
+                  <option value="admin" {% if m.role == 'admin' %}selected{% endif %}>Admin</option>
+                  <option value="member" {% if m.role == 'member' %}selected{% endif %}>Member</option>
+                </select>
+                {% endif %}
+                <button class="btn sm danger-outline" onclick="removeMember('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Remove</button>
+                <button class="btn sm" onclick="resetMemberPassword('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Reset password</button>
+              </div>
             </td>
             {% elif membership.role in ('owner', 'admin') %}
             <td></td>
@@ -397,6 +411,40 @@
       </div>
     </div>
 
+    {% if membership.role in ('owner', 'admin') %}
+    <div class="ps-card rbac-toggle" style="padding:20px 24px;margin-top:16px">
+      <h3 class="ps-h3" style="margin-bottom:8px">Role-based access</h3>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13.5px;color:var(--ink)">
+        <input type="checkbox" id="rbacToggle" {% if project.rbac_enabled %}checked{% endif %} style="margin-top:3px;accent-color:var(--ink)">
+        <span>Enable role-based access</span>
+      </label>
+      <p class="ps-card-lede" style="margin-top:8px;margin-bottom:0">When off, all members have full access. When on, members are limited to their assigned roles — members with no roles will lose access until you assign one.</p>
+    </div>
+    <script>
+    document.getElementById('rbacToggle')?.addEventListener('change', async function(e) {
+      if (e.target.checked && !confirm('Enable RBAC? Members without roles will lose access until assigned a role.')) {
+        e.target.checked = false;
+        return;
+      }
+      try {
+        var res = await fetch('/api/project/{{ project.slug }}/settings/rbac', {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({enabled: e.target.checked}),
+        });
+        if (!res.ok) {
+          var d = await res.json().catch(function(){return {};});
+          alert('Failed to update RBAC setting: ' + (d.message || d.detail || res.status));
+          e.target.checked = !e.target.checked;
+        }
+      } catch(err) {
+        alert('Failed to update RBAC setting: ' + err.message);
+        e.target.checked = !e.target.checked;
+      }
+    });
+    </script>
+    {% endif %}
+
     <!-- Dashboard Style Configuration -->
     <div class="ps-card" id="dashboardStyleCard" style="padding:24px 26px;margin-top:16px">
       <h3 class="ps-h3">Dashboard Style</h3>
@@ -507,6 +555,114 @@
     {% endif %}
   </div>
 
+  {# ── ROLES TAB (owner/admin only) ── #}
+  {% if membership.role in ('owner', 'admin') %}
+  <div class="ps-panel" data-panel="roles" style="display:none">
+
+    <p class="ps-lede">
+      Define custom roles with specific tool and provider permissions.
+      Assign roles to members in the Members tab.
+    </p>
+
+    {# Roles list #}
+    <div class="ps-card" style="padding:0;margin-bottom:20px" id="rolesListCard">
+      <div id="rolesList">
+        <div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading roles…</div>
+      </div>
+    </div>
+
+    {# Role editor form #}
+    <div class="ps-card" style="padding:24px 26px">
+      <h3 class="ps-h3" id="roleFormTitle">Create role</h3>
+      <form id="roleForm" novalidate>
+        <input type="hidden" id="roleId" value="">
+
+        <div class="ps-grid-2" style="margin-bottom:14px">
+          <label class="f-field">
+            <span>Name *</span>
+            <input type="text" name="name" class="f-input" placeholder="e.g. Analyst" required>
+          </label>
+          <label class="f-field">
+            <span>Description</span>
+            <input type="text" name="description" class="f-input" placeholder="optional">
+          </label>
+        </div>
+
+        {# Tool permissions grid #}
+        <h4 class="ps-h4" style="margin-bottom:10px">Tool permissions</h4>
+        <div class="ps-card" style="padding:0;margin-bottom:16px;overflow:auto">
+          <table class="ps-table" id="toolGrid">
+            <thead>
+              <tr>
+                <th>Domain</th>
+                <th style="width:96px;text-align:center">
+                  Read
+                  <label class="tg-all" title="Select all read"><input type="checkbox" id="toolAllRead"> all</label>
+                </th>
+                <th style="width:96px;text-align:center">
+                  Write
+                  <label class="tg-all" title="Select all write"><input type="checkbox" id="toolAllWrite"> all</label>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="toolGridBody">
+              {# populated by JS #}
+            </tbody>
+          </table>
+        </div>
+
+        {# Provider permissions — chip multiselect #}
+        <h4 class="ps-h4" style="margin-bottom:10px">Provider access</h4>
+        <div class="prov-select" id="provSelect" style="margin-bottom:16px">
+          <div class="prov-control" id="provControl" tabindex="0">
+            <div class="prov-chips" id="provChips"></div>
+            <input type="text" class="prov-search" id="provSearch" placeholder="Search or add providers…" autocomplete="off">
+          </div>
+          <div class="prov-dropdown" id="provDropdown" hidden>
+            <label class="prov-opt prov-opt-all">
+              <input type="checkbox" id="provAll"><span>Select all</span>
+            </label>
+            <div class="prov-opt-list" id="provOptList">
+              {# checkboxes [data-provider] populated by JS — source of truth #}
+            </div>
+            <div class="prov-empty" id="provEmpty" hidden>No matching providers</div>
+          </div>
+        </div>
+
+        {# Advanced toggles #}
+        <h4 class="ps-h4" style="margin-bottom:10px">Advanced</h4>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
+          <label class="ps-check">
+            <input type="checkbox" name="adv_scripting">
+            <span>Run Script — allow executing custom scripts</span>
+          </label>
+          <label class="ps-check">
+            <input type="checkbox" name="adv_generic">
+            <span>Generic tools — allow use of generic read/write tools</span>
+          </label>
+        </div>
+
+        <div class="ps-form-foot">
+          <button type="submit" class="btn primary" id="roleSaveBtn">Create role</button>
+          <button type="button" class="btn" id="roleCancelBtn" style="display:none">Cancel</button>
+          <div id="roleMsg" class="ps-msg" style="display:none"></div>
+        </div>
+      </form>
+    </div>
+
+  </div>
+  {% endif %}
+
+  {# ── Member roles popover (shared) ── #}
+  <div id="rolesPopover" class="roles-popover" hidden>
+    <div class="roles-popover-head">
+      <span>Assign user roles</span>
+      <button type="button" class="roles-popover-close" onclick="closeRolesPopover()" aria-label="Close">×</button>
+    </div>
+    <label class="roles-popover-all"><input type="checkbox" id="rpAll"><span>Select all</span></label>
+    <div class="roles-popover-list" id="rpList"></div>
+    <div class="roles-popover-empty" id="rpEmpty" hidden>No custom roles yet. Create one in the User Roles tab.</div>
+  </div>
 
 </main>
 
@@ -554,13 +710,15 @@
 /* ── Tabs ────────────────────────────────────────── */
 .ps-tabs {
   display: flex; gap: 2px; flex-wrap: wrap;
+  align-items: stretch;
   border-bottom: 1px solid var(--line);
   margin-bottom: 28px;
 }
 .ps-tab {
+  display: inline-flex; align-items: center; gap: 6px;
   background: transparent; border: none;
-  padding: 12px 16px;
-  font: inherit; font-size: 13.5px; font-weight: 500;
+  height: 44px; padding: 0 16px;
+  font: inherit; font-size: 13.5px; font-weight: 500; line-height: 1;
   color: var(--muted); cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
@@ -570,12 +728,11 @@
 .ps-tab:hover { color: var(--ink); }
 .ps-tab.is-active { color: var(--ink); border-bottom-color: var(--ink); }
 .ps-tab-n {
-  display: inline-block;
+  display: inline-flex; align-items: center;
   font-family: var(--mono); font-size: 11px;
   color: var(--muted);
   background: var(--bg-2);
   padding: 1px 7px; border-radius: 10px;
-  margin-left: 4px;
 }
 
 .ps-panel { animation: fadeIn 0.2s ease; }
@@ -816,6 +973,95 @@
   .ps-slack-form button { margin-top: 0 !important; }
   .ps-check { padding-bottom: 0; margin-top: 4px; }
 }
+
+/* ── Roles ─────────────────────────────────── */
+.role-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-2);
+}
+.role-row:last-child { border-bottom: none; }
+.role-row-name { font-weight: 500; color: var(--ink); font-size: 14px; flex: 1; }
+.role-row-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.provider-check {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--ink-soft);
+  background: var(--bg-2); border: 1px solid var(--line-2);
+  border-radius: var(--r-s, 6px); padding: 4px 10px;
+  cursor: pointer; user-select: none;
+}
+.provider-check input { accent-color: var(--ink); cursor: pointer; }
+
+/* ── Tool-grid select-all ── */
+.tg-all { display:block; margin-top:4px; font-size:10px; font-weight:500; letter-spacing:0; text-transform:none; font-family:var(--mono); color:var(--muted); cursor:pointer; }
+.tg-all input { accent-color:var(--ink); vertical-align:middle; margin-right:2px; }
+
+/* ── Provider chip multiselect ── */
+.prov-select { position:relative; }
+.prov-control {
+  display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+  min-height:42px; padding:7px 10px;
+  border:1px solid var(--line); border-radius:var(--r-m);
+  background:var(--bg); cursor:text;
+}
+.prov-select.is-open .prov-control { border-color:var(--ink); }
+.prov-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.prov-chip {
+  display:inline-flex; align-items:center; gap:5px;
+  background:var(--bg-2); border:1px solid var(--line-2); border-radius:6px;
+  padding:2px 4px 2px 9px; font-size:12px; color:var(--ink);
+}
+.prov-chip button {
+  border:none; background:none; cursor:pointer; color:var(--muted);
+  font-size:14px; line-height:1; padding:0 3px; border-radius:4px;
+}
+.prov-chip button:hover { color:var(--red); background:color-mix(in srgb, var(--red) 10%, transparent); }
+.prov-search { flex:1; min-width:120px; border:none; outline:none; background:none; font:inherit; font-size:13px; color:var(--ink); padding:2px 0; }
+.prov-dropdown {
+  position:absolute; z-index:30; left:0; right:0; top:calc(100% + 4px);
+  background:var(--bg); border:1px solid var(--line); border-radius:var(--r-m);
+  box-shadow:0 8px 28px rgba(0,0,0,.12); padding:6px; max-height:260px; overflow:auto;
+}
+.prov-opt, .prov-opt-all {
+  display:flex; align-items:center; gap:8px;
+  padding:7px 9px; border-radius:6px; font-size:13px; color:var(--ink); cursor:pointer;
+}
+.prov-opt:hover, .prov-opt-all:hover { background:var(--bg-2); }
+.prov-opt input, .prov-opt-all input { accent-color:var(--ink); }
+.prov-opt-all { font-weight:600; border-bottom:1px solid var(--line-2); border-radius:6px 6px 0 0; margin-bottom:2px; }
+.prov-empty { padding:10px; text-align:center; font-size:12px; color:var(--muted); }
+
+/* ── Member row actions + role chips ── */
+.ps-row-actions { display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+.mbr-roles { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.mbr-role-chips { display:inline-flex; flex-wrap:wrap; gap:4px; }
+.mbr-role-chip {
+  display:inline-block; background:color-mix(in srgb, var(--blue) 10%, transparent);
+  color:var(--blue); border-radius:5px; padding:2px 8px; font-size:11.5px; font-weight:500;
+}
+.mbr-role-none { font-size:11.5px; color:var(--muted); font-style:italic; }
+.mbr-roles-edit {
+  display:inline-flex; align-items:center; gap:4px;
+  border:1px dashed var(--line); background:none; border-radius:6px;
+  padding:2px 8px; font-size:11.5px; color:var(--muted); cursor:pointer; font:inherit;
+}
+.mbr-roles-edit:hover { color:var(--ink); border-color:var(--ink); }
+
+/* ── Member roles popover ── */
+.roles-popover {
+  position:absolute; z-index:60; width:240px;
+  background:var(--bg); border:1px solid var(--line); border-radius:var(--r-m);
+  box-shadow:0 10px 34px rgba(0,0,0,.16); padding:8px;
+}
+.roles-popover-head { display:flex; align-items:center; justify-content:space-between; padding:4px 6px 8px; font-size:12px; font-weight:600; color:var(--ink); }
+.roles-popover-close { border:none; background:none; cursor:pointer; font-size:16px; line-height:1; color:var(--muted); padding:0 4px; }
+.roles-popover-close:hover { color:var(--ink); }
+.roles-popover-all { display:flex; align-items:center; gap:8px; padding:7px 8px; font-size:12.5px; font-weight:600; border-top:1px solid var(--line-2); border-bottom:1px solid var(--line-2); cursor:pointer; }
+.roles-popover-list { max-height:200px; overflow:auto; padding-top:2px; }
+.roles-popover-opt { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:6px; font-size:13px; color:var(--ink); cursor:pointer; }
+.roles-popover-opt:hover { background:var(--bg-2); }
+.roles-popover-all input, .roles-popover-opt input { accent-color:var(--ink); }
+.roles-popover-empty { padding:12px 8px; font-size:12px; color:var(--muted); text-align:center; }
 </style>
 
 <script>
@@ -1272,6 +1518,531 @@ async function saveDashStyleConfig() {
   statusEl.textContent = resp.ok ? 'Saved.' : 'Error saving.';
   setTimeout(function() { statusEl.textContent = ''; }, 3000);
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// ROLES — tab 15
+// ═══════════════════════════════════════════════════════════════════
+var ROLES_API = '/api/project/{{ project.slug }}/roles';
+
+var DOMAINS = ['analytics','tagmanager','marketing','seo','warehouse','dashboards','knowledge','automation','analysis','tracking_plan'];
+var PROVIDERS = ['ga4','gtm','google_ads','gsc','bing','meta','tiktok','snap','linkedin','pinterest','x','reddit','apple','amplitude','adobe_analytics','adobe_launch','adobe_marketo','bigquery','redshift','snowflake'];
+
+// Cache of fetched roles — shared with member multi-select population
+var _rolesCache = [];
+
+function serializeRole(form) {
+  var tools = {};
+  DOMAINS.forEach(function(d) {
+    var r = form.querySelector('[data-tool="' + d + '"][data-lvl="read"]');
+    var w = form.querySelector('[data-tool="' + d + '"][data-lvl="write"]');
+    var rChecked = r ? r.checked : false;
+    var wChecked = w ? w.checked : false;
+    var lv = [];
+    if (rChecked || wChecked) lv.push('read');
+    if (wChecked) lv.push('write');
+    if (lv.length) tools[d] = lv;
+  });
+  var providers = PROVIDERS.filter(function(p) {
+    var el = form.querySelector('[data-provider="' + p + '"]');
+    return el ? el.checked : false;
+  });
+  return {
+    name: form.name.value.trim(),
+    description: (form.description.value.trim() || null),
+    permissions: {
+      tools: tools,
+      providers: providers,
+      advanced: {
+        scripting: form.adv_scripting.checked,
+        generic_tools: form.adv_generic.checked,
+      },
+    },
+  };
+}
+
+function buildToolGrid() {
+  var tbody = document.getElementById('toolGridBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  DOMAINS.forEach(function(d) {
+    var tr = document.createElement('tr');
+    var label = d.replace(/_/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+    tr.innerHTML =
+      '<td style="font-size:13.5px">' + label + '</td>' +
+      '<td style="text-align:center"><input type="checkbox" data-tool="' + d + '" data-lvl="read" style="accent-color:var(--ink)"></td>' +
+      '<td style="text-align:center"><input type="checkbox" data-tool="' + d + '" data-lvl="write" style="accent-color:var(--ink)"></td>';
+    tbody.appendChild(tr);
+    // write auto-checks read
+    var writeEl = tr.querySelector('[data-lvl="write"]');
+    var readEl  = tr.querySelector('[data-lvl="read"]');
+    writeEl.addEventListener('change', function() {
+      if (writeEl.checked) readEl.checked = true;
+      syncToolHeaderChecks();
+    });
+    readEl.addEventListener('change', function() {
+      if (!readEl.checked) writeEl.checked = false;
+      syncToolHeaderChecks();
+    });
+  });
+}
+
+// Keep the column "all" header checkboxes in sync with the rows
+function syncToolHeaderChecks() {
+  var reads = Array.prototype.slice.call(document.querySelectorAll('#toolGridBody [data-lvl="read"]'));
+  var writes = Array.prototype.slice.call(document.querySelectorAll('#toolGridBody [data-lvl="write"]'));
+  var ar = document.getElementById('toolAllRead');
+  var aw = document.getElementById('toolAllWrite');
+  if (ar && reads.length) {
+    ar.checked = reads.every(function(c){ return c.checked; });
+    ar.indeterminate = !ar.checked && reads.some(function(c){ return c.checked; });
+  }
+  if (aw && writes.length) {
+    aw.checked = writes.every(function(c){ return c.checked; });
+    aw.indeterminate = !aw.checked && writes.some(function(c){ return c.checked; });
+  }
+}
+
+// Wire the column "all" header checkboxes (write implies read)
+function initToolSelectAll() {
+  var ar = document.getElementById('toolAllRead');
+  var aw = document.getElementById('toolAllWrite');
+  if (ar) ar.addEventListener('change', function() {
+    document.querySelectorAll('#toolGridBody [data-lvl="read"]').forEach(function(c){ c.checked = ar.checked; });
+    if (!ar.checked) document.querySelectorAll('#toolGridBody [data-lvl="write"]').forEach(function(c){ c.checked = false; });
+    syncToolHeaderChecks();
+  });
+  if (aw) aw.addEventListener('change', function() {
+    document.querySelectorAll('#toolGridBody [data-lvl="write"]').forEach(function(c){ c.checked = aw.checked; });
+    if (aw.checked) document.querySelectorAll('#toolGridBody [data-lvl="read"]').forEach(function(c){ c.checked = true; });
+    syncToolHeaderChecks();
+  });
+}
+
+function _provLabel(p) { return p.replace(/_/g, ' '); }
+
+function buildProviderGrid() {
+  var list = document.getElementById('provOptList');
+  if (!list) return;
+  list.innerHTML = '';
+  PROVIDERS.forEach(function(p) {
+    var label = document.createElement('label');
+    label.className = 'prov-opt';
+    label.setAttribute('data-prov-opt', p);
+    label.innerHTML = '<input type="checkbox" data-provider="' + p + '"><span>' + _provLabel(p) + '</span>';
+    label.querySelector('input').addEventListener('change', function() { renderProviderChips(); });
+    list.appendChild(label);
+  });
+  initProviderSelect();
+  renderProviderChips();
+}
+
+function _provInputs() {
+  return Array.prototype.slice.call(document.querySelectorAll('#provOptList [data-provider]'));
+}
+
+// Render the selected-provider chips from the checkbox source-of-truth
+function renderProviderChips() {
+  var wrap = document.getElementById('provChips');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  _provInputs().filter(function(c){ return c.checked; }).forEach(function(c) {
+    var p = c.getAttribute('data-provider');
+    var chip = document.createElement('span');
+    chip.className = 'prov-chip';
+    chip.innerHTML = '<span>' + _provLabel(p) + '</span><button type="button" aria-label="Remove ' + _provLabel(p) + '" data-rm="' + p + '">×</button>';
+    chip.querySelector('button').addEventListener('click', function(e) {
+      e.stopPropagation();
+      var box = document.querySelector('#provOptList [data-provider="' + p + '"]');
+      if (box) box.checked = false;
+      renderProviderChips();
+    });
+    wrap.appendChild(chip);
+  });
+  _syncProvAll();
+}
+
+function _syncProvAll() {
+  var all = document.getElementById('provAll');
+  if (!all) return;
+  var boxes = _provInputs();
+  var checked = boxes.filter(function(c){ return c.checked; }).length;
+  all.checked = boxes.length > 0 && checked === boxes.length;
+  all.indeterminate = checked > 0 && checked < boxes.length;
+}
+
+function _provFilter(q) {
+  q = (q || '').trim().toLowerCase();
+  var any = false;
+  document.querySelectorAll('#provOptList .prov-opt').forEach(function(opt) {
+    var p = (opt.getAttribute('data-prov-opt') || '');
+    var match = !q || p.replace(/_/g, ' ').indexOf(q) !== -1;
+    opt.hidden = !match;
+    if (match) any = true;
+  });
+  var empty = document.getElementById('provEmpty');
+  if (empty) empty.hidden = any;
+}
+
+function _provOpen(open) {
+  var dd = document.getElementById('provDropdown');
+  var sel = document.getElementById('provSelect');
+  if (!dd || !sel) return;
+  dd.hidden = !open;
+  sel.classList.toggle('is-open', open);
+}
+
+var _provInited = false;
+function initProviderSelect() {
+  if (_provInited) return;
+  _provInited = true;
+  var control = document.getElementById('provControl');
+  var search = document.getElementById('provSearch');
+  var all = document.getElementById('provAll');
+  var sel = document.getElementById('provSelect');
+  if (control) control.addEventListener('click', function() { _provOpen(true); if (search) search.focus(); });
+  if (search) {
+    search.addEventListener('focus', function() { _provOpen(true); });
+    search.addEventListener('input', function() { _provFilter(search.value); _provOpen(true); });
+  }
+  if (all) all.addEventListener('change', function() {
+    _provInputs().forEach(function(c){ c.checked = all.checked; });
+    renderProviderChips();
+  });
+  document.addEventListener('click', function(e) {
+    if (sel && !sel.contains(e.target)) _provOpen(false);
+  });
+}
+
+function _roleMsg(text, kind) {
+  var el = document.getElementById('roleMsg');
+  if (!el) return;
+  el.textContent = text;
+  if (kind === 'error') {
+    el.style.color = 'var(--red)';
+    el.style.background = 'color-mix(in srgb, var(--red) 8%, transparent)';
+    el.style.borderColor = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+  } else if (kind === 'success') {
+    el.style.color = 'var(--green)';
+    el.style.background = 'color-mix(in srgb, var(--green) 8%, transparent)';
+    el.style.borderColor = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+  } else {
+    el.style.color = 'var(--ink-soft)';
+    el.style.background = 'var(--bg-2)';
+    el.style.borderColor = 'var(--line-2)';
+  }
+  el.style.display = 'inline-block';
+}
+
+function loadRoleIntoForm(role) {
+  var form = document.getElementById('roleForm');
+  if (!form) return;
+  document.getElementById('roleId').value = role.id;
+  form.name.value = role.name || '';
+  form.description.value = role.description || '';
+  // reset all checkboxes
+  DOMAINS.forEach(function(d) {
+    var r = form.querySelector('[data-tool="' + d + '"][data-lvl="read"]');
+    var w = form.querySelector('[data-tool="' + d + '"][data-lvl="write"]');
+    if (r) r.checked = false;
+    if (w) w.checked = false;
+  });
+  PROVIDERS.forEach(function(p) {
+    var el = form.querySelector('[data-provider="' + p + '"]');
+    if (el) el.checked = false;
+  });
+  form.adv_scripting.checked = false;
+  form.adv_generic.checked = false;
+  // apply saved values
+  var perms = role.permissions || {};
+  var tools = perms.tools || {};
+  Object.keys(tools).forEach(function(d) {
+    var levels = tools[d] || [];
+    if (levels.indexOf('read') !== -1) {
+      var r = form.querySelector('[data-tool="' + d + '"][data-lvl="read"]');
+      if (r) r.checked = true;
+    }
+    if (levels.indexOf('write') !== -1) {
+      var w = form.querySelector('[data-tool="' + d + '"][data-lvl="write"]');
+      if (w) w.checked = true;
+    }
+  });
+  (perms.providers || []).forEach(function(p) {
+    var el = form.querySelector('[data-provider="' + p + '"]');
+    if (el) el.checked = true;
+  });
+  var adv = perms.advanced || {};
+  form.adv_scripting.checked = !!(adv.scripting);
+  form.adv_generic.checked   = !!(adv.generic_tools);
+  renderProviderChips();
+  syncToolHeaderChecks();
+  // UI labels
+  var title = document.getElementById('roleFormTitle');
+  if (title) title.textContent = 'Edit role';
+  var saveBtn = document.getElementById('roleSaveBtn');
+  if (saveBtn) saveBtn.textContent = 'Save changes';
+  var cancelBtn = document.getElementById('roleCancelBtn');
+  if (cancelBtn) cancelBtn.style.display = '';
+  var msg = document.getElementById('roleMsg');
+  if (msg) msg.style.display = 'none';
+}
+
+function resetRoleForm() {
+  var form = document.getElementById('roleForm');
+  if (!form) return;
+  form.reset();
+  document.getElementById('roleId').value = '';
+  renderProviderChips();
+  syncToolHeaderChecks();
+  var title = document.getElementById('roleFormTitle');
+  if (title) title.textContent = 'Create role';
+  var saveBtn = document.getElementById('roleSaveBtn');
+  if (saveBtn) saveBtn.textContent = 'Create role';
+  var cancelBtn = document.getElementById('roleCancelBtn');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  var msg = document.getElementById('roleMsg');
+  if (msg) msg.style.display = 'none';
+}
+
+async function deleteRole(roleId, roleName) {
+  if (!confirm('Delete role "' + roleName + '"? Members assigned only this role will lose their permissions.')) return;
+  try {
+    var res = await fetch(ROLES_API + '/' + roleId, {method: 'DELETE'});
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
+    await loadRoles();
+  } catch(err) { alert(err.message); }
+}
+
+async function loadRoles() {
+  var listEl = document.getElementById('rolesList');
+  if (!listEl) return;
+  try {
+    var res = await fetch(ROLES_API);
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.detail || 'Failed to load roles');
+    var roles = Array.isArray(data) ? data : (data.roles || []);
+    _rolesCache = roles;
+    if (roles.length === 0) {
+      listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No custom roles yet. Create one below.</div>';
+    } else {
+      var html = '';
+      roles.forEach(function(r) {
+        html += '<div class="role-row">' +
+          '<div style="flex:1">' +
+            '<div class="role-row-name">' + _esc(r.name) + '</div>' +
+            (r.description ? '<div class="role-row-desc">' + _esc(r.description) + '</div>' : '') +
+          '</div>' +
+          '<button class="btn sm" onclick="loadRoleIntoForm(' + _esc(JSON.stringify(r)) + ')">Edit</button>' +
+          '<button class="btn sm danger-outline" onclick="deleteRole(\'' + _esc(r.id) + '\',\'' + _esc(r.name) + '\')">Delete</button>' +
+        '</div>';
+      });
+      listEl.innerHTML = html;
+    }
+    // also refresh member role chips
+    renderAllMemberRoleChips();
+  } catch(err) {
+    listEl.innerHTML = '<div style="padding:20px;color:var(--red);font-size:13px">Error loading roles: ' + _esc(err.message) + '</div>';
+  }
+}
+
+function _esc(s) {
+  if (typeof s !== 'string') return s;
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Member custom-role chips + popover ──
+function renderMemberRoleChips(container) {
+  var chipsEl = container.querySelector('.mbr-role-chips');
+  if (!chipsEl) return;
+  var ids = (container.getAttribute('data-role-ids') || '').split(',').filter(Boolean);
+  chipsEl.innerHTML = '';
+  if (!ids.length) {
+    chipsEl.innerHTML = '<span class="mbr-role-none">No roles</span>';
+    return;
+  }
+  ids.forEach(function(id) {
+    var role = (_rolesCache || []).find(function(r){ return r.id === id; });
+    if (!role) return;
+    var chip = document.createElement('span');
+    chip.className = 'mbr-role-chip';
+    chip.textContent = role.name;
+    chipsEl.appendChild(chip);
+  });
+}
+
+function renderAllMemberRoleChips() {
+  document.querySelectorAll('.mbr-roles').forEach(renderMemberRoleChips);
+}
+
+var _rpMemberId = null;
+
+function openRolesPopover(btn, memberId) {
+  var pop = document.getElementById('rolesPopover');
+  if (!pop) return;
+  // toggle off if same member's popover already open
+  if (!pop.hidden && _rpMemberId === memberId) { closeRolesPopover(); return; }
+  _rpMemberId = memberId;
+  var container = document.querySelector('.mbr-roles[data-member-id="' + memberId + '"]');
+  var current = (container && container.getAttribute('data-role-ids'))
+    ? container.getAttribute('data-role-ids').split(',').filter(Boolean) : [];
+  var list = document.getElementById('rpList');
+  var empty = document.getElementById('rpEmpty');
+  list.innerHTML = '';
+  if (!_rolesCache || !_rolesCache.length) {
+    empty.hidden = false;
+  } else {
+    empty.hidden = true;
+    _rolesCache.forEach(function(r) {
+      var row = document.createElement('label');
+      row.className = 'roles-popover-opt';
+      var checked = current.indexOf(r.id) !== -1 ? ' checked' : '';
+      row.innerHTML = '<input type="checkbox" value="' + _esc(r.id) + '"' + checked + '><span>' + _esc(r.name) + '</span>';
+      row.querySelector('input').addEventListener('change', function(){ saveMemberRoles(memberId); });
+      list.appendChild(row);
+    });
+  }
+  _syncRpAll();
+  pop.hidden = false;
+  // position under the button
+  var rect = btn.getBoundingClientRect();
+  var top = window.scrollY + rect.bottom + 6;
+  var left = window.scrollX + rect.left;
+  left = Math.max(12, Math.min(left, window.scrollX + window.innerWidth - pop.offsetWidth - 12));
+  pop.style.top = top + 'px';
+  pop.style.left = left + 'px';
+}
+
+function closeRolesPopover() {
+  var pop = document.getElementById('rolesPopover');
+  if (pop) pop.hidden = true;
+  _rpMemberId = null;
+}
+
+function _syncRpAll() {
+  var all = document.getElementById('rpAll');
+  if (!all) return;
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('#rpList input[type=checkbox]'));
+  var checked = boxes.filter(function(c){ return c.checked; }).length;
+  all.checked = boxes.length > 0 && checked === boxes.length;
+  all.indeterminate = checked > 0 && checked < boxes.length;
+}
+
+async function saveMemberRoles(memberId) {
+  var ids = Array.prototype.slice.call(document.querySelectorAll('#rpList input[type=checkbox]:checked'))
+    .map(function(c){ return c.value; });
+  _syncRpAll();
+  try {
+    var res = await fetch('/api/project/{{ project.slug }}/members/' + memberId + '/roles', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({role_ids: ids}),
+    });
+    var d = await res.json();
+    if (!res.ok) throw new Error(d.message || d.detail || 'Failed to update roles');
+    var container = document.querySelector('.mbr-roles[data-member-id="' + memberId + '"]');
+    if (container) {
+      container.setAttribute('data-role-ids', ids.join(','));
+      renderMemberRoleChips(container);
+    }
+  } catch(err) { alert(err.message); }
+}
+
+// "Select all" inside the popover + outside-click close
+(function() {
+  var all = document.getElementById('rpAll');
+  if (all) all.addEventListener('change', function() {
+    document.querySelectorAll('#rpList input[type=checkbox]').forEach(function(c){ c.checked = all.checked; });
+    if (_rpMemberId) saveMemberRoles(_rpMemberId);
+  });
+  document.addEventListener('click', function(e) {
+    var pop = document.getElementById('rolesPopover');
+    if (!pop || pop.hidden) return;
+    if (pop.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('.mbr-roles-edit')) return;
+    closeRolesPopover();
+  });
+})();
+
+// Role form submit
+(function() {
+  var form = document.getElementById('roleForm');
+  if (!form) return;
+
+  // Build grids on first load
+  buildToolGrid();
+  initToolSelectAll();
+  buildProviderGrid();
+  syncToolHeaderChecks();
+
+  // Cancel button
+  var cancelBtn = document.getElementById('roleCancelBtn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', function() { resetRoleForm(); });
+  }
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('roleSaveBtn');
+    var roleId = document.getElementById('roleId').value;
+    var body = serializeRole(form);
+    if (!body.name) { _roleMsg('Name is required.', 'error'); return; }
+    btn.disabled = true;
+    var oldText = btn.textContent;
+    btn.textContent = 'Saving…';
+    _roleMsg('Saving…', 'info');
+    try {
+      var method, url;
+      if (roleId) {
+        method = 'PATCH'; url = ROLES_API + '/' + roleId;
+      } else {
+        method = 'POST'; url = ROLES_API;
+      }
+      var res = await fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.detail || 'Failed to save role');
+      _roleMsg(roleId ? 'Role updated.' : 'Role created.', 'success');
+      resetRoleForm();
+      await loadRoles();
+    } catch(err) {
+      _roleMsg(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = oldText;
+    }
+  });
+})();
+
+// Load roles when the Roles tab is first activated
+(function() {
+  var rolesTabBtn = document.querySelector('.ps-tab[data-tab="roles"]');
+  if (!rolesTabBtn) return;
+  var _rolesLoaded = false;
+  rolesTabBtn.addEventListener('click', function() {
+    if (!_rolesLoaded) {
+      _rolesLoaded = true;
+      loadRoles();
+    }
+  });
+})();
+
+// Also load roles on page load for member multi-selects (Members tab is default)
+(function() {
+  // Only fetch if there are member role widgets on the page
+  if (!document.querySelector('.mbr-roles')) return;
+  fetch(ROLES_API).then(function(res) {
+    return res.json();
+  }).then(function(data) {
+    var roles = Array.isArray(data) ? data : (data.roles || []);
+    _rolesCache = roles;
+    renderAllMemberRoleChips();
+  }).catch(function() {
+    // non-fatal — member role chips stay empty
+  });
+})();
 
 // ── Delete project ──
 async function deleteProject() {
