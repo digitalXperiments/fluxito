@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-06-04
+
+### Added
+- **Role-based access control (RBAC) for projects.** A single role definition now
+  governs both what an AI can do over MCP and what a teammate sees in the web UI.
+  Owners and admins keep full access; a **member** starts with *zero* access until
+  granted one or more roles. Permissions have two axes:
+  - **Tools** by domain (analytics, tag manager, marketing, SEO, warehouse,
+    dashboards, knowledge, automation, analysis, tracking plan) at **read** / **write**
+    granularity.
+  - **Connections** per provider (GA4, GTM, Google Ads, Search Console, BigQuery,
+    Meta, TikTok, LinkedIn, Pinterest, Snap, X, Reddit, Bing, Apple, Amplitude,
+    Adobe Analytics/Launch/Marketo, Redshift, Snowflake).
+
+  A member can hold several roles (permissions are the union). Enforcement is
+  defense-in-depth: ungranted tools are hidden from the MCP `tools/list`, every tool
+  call is checked again at execution time, connections are filtered per project, and
+  the web sidebar/routes are guarded by the same resolver. Roles are managed under
+  **Settings → User Roles**, and the whole feature rolls out behind a per-project
+  toggle (default **off**) — existing projects are unchanged until an admin enables it.
+
+### Changed
+- **Redesigned Project Settings.** Streamlined tabbed layout with a guided, sectioned
+  role editor; "Members" is now **Users**, with a compact roles workflow for inviting
+  people and assigning roles.
+- **Refreshed branding** — new Fluxito logo mark, wordmark, and favicons / app icons.
+
+### Fixed
+- **Cross-tenant connection-presence isolation.** Building a project's context could
+  report another project's warehouse/credential connection *presence* (BigQuery,
+  Adobe, Marketo, Redshift, Snowflake, Amplitude) because those lookups were scoped by
+  the wrong table. Each credential lookup is now scoped to its own project (or user).
+  No data or credentials were ever exposed — only the on/off presence flags — but the
+  flags are now correct and tenant-isolated.
+- **RBAC tool hiding now applies to real MCP clients.** The role-based `tools/list`
+  filter was only wired to an in-process code path, so connected AI clients still saw
+  the full tool list (calls were always blocked at execution by the backstop, so no
+  access leaked). The filter is now registered on the MCP protocol handler, so
+  ungranted tools are correctly hidden from the list as well.
+
 ## [1.0.9] — 2026-06-02
 
 ### Added

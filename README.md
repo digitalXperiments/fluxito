@@ -282,6 +282,29 @@ All credentials are stored in the database and encrypted at rest. After the firs
 
 ---
 
+## Team access & roles (RBAC)
+
+Projects are multi-user. **Role-based access control** lets you decide exactly what each teammate — and the AI acting on their behalf — can touch. One role definition governs both surfaces at once: the MCP tool list **and** the web UI.
+
+**Built-in tiers**
+
+| Tier | What it can do |
+|---|---|
+| **Owner** | Everything, plus structural actions (transfer ownership, delete project). |
+| **Admin** | Full access to tools and connections, plus manages members and roles. |
+| **Member** | **No access until granted one or more roles.** |
+
+**Custom roles** (Settings → User Roles) grant permissions on two axes:
+
+- **Tools by domain** — analytics, tag manager, marketing, SEO, warehouse, dashboards, knowledge, automation, analysis, tracking plan — each at **read** or **write** level.
+- **Connections by provider** — e.g. grant GA4 + Search Console but not Ads, or BigQuery but not Snowflake.
+
+A member can hold several roles; their effective permissions are the **union**. Enforcement is defense-in-depth — ungranted tools are hidden from the connected AI's `tools/list`, every tool call is re-checked at execution time, connections are filtered per project, and the web sidebar/routes use the same check — so a teammate can never read or write data their role doesn't grant, whether through the UI or through their AI client.
+
+RBAC is **off by default** per project (existing single-user projects behave exactly as before). An owner/admin turns it on under **Settings**, creates roles, and assigns them to members.
+
+---
+
 ## Configuration
 
 Fluxito has two distinct configuration surfaces:
