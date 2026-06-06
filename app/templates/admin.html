@@ -101,7 +101,48 @@
         — <a id="upd-notes" href="#" target="_blank" rel="noopener">release notes</a></p>
       <p id="upd-uptodate" style="display:none">&#x2713; You're on the latest version.</p>
       <button id="upd-apply" class="btn primary" style="display:none">Update now</button>
-      <p id="upd-progress" class="update-progress" style="display:none"></p>
+
+      <div id="upd-confirm" class="update-card" style="display:none">
+        <span class="update-eyebrow">Confirm update</span>
+        <h3>Ready to update to <span id="upd-confirm-version"></span>?</h3>
+        <p>Fluxito will briefly restart. If the new version fails its health check, the instance will automatically roll back.</p>
+        <div class="update-actions">
+          <button id="upd-confirm-start" class="btn primary">Update now</button>
+          <button id="upd-confirm-cancel" class="btn">Cancel</button>
+        </div>
+      </div>
+
+      <div id="upd-workflow" class="update-card" style="display:none">
+        <span id="upd-state-label" class="update-eyebrow">Update in progress</span>
+        <h3 id="upd-state-title">Updating Fluxito</h3>
+        <p id="upd-state-copy" aria-live="polite">You can leave this page. Progress will resume when you return.</p>
+        <div id="upd-progressbar" class="update-progressbar" role="progressbar" aria-label="Update progress"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span id="upd-progress-fill"></span>
+        </div>
+        <ol class="update-stages" aria-label="Update stages">
+          <li data-update-stage="pulling"><span class="update-stage-mark">1</span><span>Download update</span></li>
+          <li data-update-stage="recreating"><span class="update-stage-mark">2</span><span>Restart Fluxito</span></li>
+          <li data-update-stage="verifying"><span class="update-stage-mark">3</span><span>Verify health</span></li>
+          <li data-update-stage="success"><span class="update-stage-mark">4</span><span>Complete</span></li>
+          <li id="upd-rollback-stage" style="display:none"><span class="update-stage-mark">5</span><span>Rollback</span></li>
+        </ol>
+
+        <div id="upd-troubleshooting" class="update-troubleshooting" style="display:none">
+          <h4>Troubleshooting</h4>
+          <ol id="upd-troubleshooting-steps"></ol>
+          <div class="update-actions">
+            <button id="upd-copy-diagnostics" class="btn sm">Copy diagnostic commands</button>
+            <a id="upd-failure-notes" class="btn sm" href="#" target="_blank" rel="noopener" style="display:none">Open release notes</a>
+            <button id="upd-retry" class="btn sm">Try update again</button>
+          </div>
+        </div>
+
+        <details id="upd-technical" class="update-technical" style="display:none">
+          <summary>Technical details</summary>
+          <pre id="upd-technical-text"></pre>
+        </details>
+      </div>
     </div>
   </section>
 </main>
@@ -126,9 +167,34 @@
 .ps-table tbody tr:last-child { border-bottom: none; }
 .ps-table td { padding: 14px 18px; vertical-align: middle; }
 .btn.sm.danger-outline { border-color: var(--red, crimson); color: var(--red, crimson); }
-.update-box { max-width: 520px; }
+.update-box { max-width: 680px; }
 .update-box p { margin: 0 0 12px; line-height: 1.6; }
-.update-progress { font-size: 13px; color: var(--ink-soft); font-family: var(--mono); padding: 8px 14px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: var(--r-m); }
+.update-card { margin-top:18px; padding:20px; background:var(--bg-2); border:1px solid var(--line-2); border-radius:var(--r-l); }
+.update-card h3 { margin:5px 0 7px; font-size:18px; }
+.update-eyebrow { display:block; color:var(--muted); font:600 10.5px/1.4 var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+.update-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:15px; }
+.update-progressbar { height:7px; margin:18px 0 20px; overflow:hidden; background:var(--line-2); border-radius:999px; }
+.update-progressbar span { display:block; width:0; height:100%; background:var(--ink); border-radius:inherit; transition:width .35s ease; }
+.update-progressbar.is-failed span { background:var(--red, crimson); }
+.update-stages { display:grid; gap:12px; margin:0; padding:0; list-style:none; }
+.update-stages li { display:flex; gap:10px; align-items:center; color:var(--muted); font-size:13px; }
+.update-stages li.is-active { color:var(--ink); font-weight:600; }
+.update-stages li.is-complete { color:var(--ink-soft); }
+.update-stages li.is-failed { color:var(--red, crimson); font-weight:600; }
+.update-stage-mark { display:grid; width:22px; height:22px; place-items:center; flex:0 0 22px; border:1px solid var(--line); border-radius:50%; font:600 10px var(--mono); }
+.update-stages li.is-active .update-stage-mark { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+.update-stages li.is-complete .update-stage-mark { border-color:var(--ink-soft); }
+.update-stages li.is-failed .update-stage-mark { border-color:var(--red, crimson); }
+.update-troubleshooting { margin-top:20px; padding:16px; border:1px solid var(--line-2); border-radius:var(--r-m); background:var(--bg); }
+.update-troubleshooting h4 { margin:0 0 8px; font-size:14px; }
+.update-troubleshooting ol { margin:0; padding-left:20px; color:var(--ink-soft); font-size:12.5px; line-height:1.7; }
+.update-technical { margin-top:15px; border-top:1px solid var(--line-2); padding-top:12px; color:var(--muted); font-size:12px; }
+.update-technical summary { cursor:pointer; }
+.update-technical pre { margin:10px 0 0; padding:12px; overflow:auto; white-space:pre-wrap; background:var(--bg); border-radius:var(--r-m); color:var(--ink-soft); font:11.5px/1.5 var(--mono); }
+@media (max-width: 640px) {
+  .update-card { padding:16px; }
+  .update-actions .btn { width:100%; justify-content:center; }
+}
 </style>
 
 <script>
@@ -262,22 +328,173 @@ loadUsers(); loadRequests(); loadRateLimits(); loadBranding(); loadAuthMethods()
 (function () {
   var apply = document.getElementById('upd-apply');
   if (!apply) return;
+  var workflow = document.getElementById('upd-workflow');
+  var targetVersion = '';
+  var pollTimer = null;
+
+  var UPDATE_STAGES = {
+    pulling: { index: 0, progress: 20, title: 'Downloading update', copy: 'Pulling the new Fluxito image.' },
+    recreating: { index: 1, progress: 50, title: 'Restarting Fluxito', copy: 'The app may be briefly unavailable.' },
+    verifying: { index: 2, progress: 78, title: 'Verifying health', copy: 'Waiting for the new version to become healthy.' },
+    success: { index: 3, progress: 100, title: 'Update complete', copy: 'Fluxito is running the new version.' },
+    rolling_back: { index: 2, progress: 100, title: 'Rolling back', copy: 'The update failed. Restoring the previous version.' }
+  };
+  var FAILURE_GUIDANCE = {
+    pull: {
+      title: 'The update image could not be downloaded.',
+      steps: ['Check internet access and connectivity to GHCR.', 'Check available disk space.', 'Review updater logs for the registry error.'],
+      commands: 'docker compose logs --tail=200 updater\ndocker system df'
+    },
+    recreate: {
+      title: 'Fluxito could not restart with the new image.',
+      steps: ['Check that the updater can access Docker.', 'Validate the Compose configuration.', 'Review updater logs for the restart error.'],
+      commands: 'docker compose ps\ndocker compose config --quiet\ndocker compose logs --tail=200 updater'
+    },
+    healthcheck: {
+      title: 'The new version did not pass its health check.',
+      steps: ['Check app logs for startup or migration errors.', 'Confirm the database and Redis services are healthy.', 'Review the release notes for configuration changes.'],
+      commands: 'docker compose ps\ndocker compose logs --tail=200 app\ndocker compose logs --tail=100 db redis'
+    },
+    updater_auth_failed: {
+      title: 'The app and updater do not share a valid updater token.',
+      steps: ['Set the same non-empty UPDATER_TOKEN in both services.', 'Recreate the app and updater containers.', 'Return here and try the update again.'],
+      commands: "docker compose exec app sh -c 'test -n \"$UPDATER_TOKEN\" && echo \"app token configured\" || echo \"app token missing\"'\ndocker compose exec updater sh -c 'test -n \"$UPDATER_TOKEN\" && echo \"updater token configured\" || echo \"updater token missing\"'"
+    },
+    updater_unavailable: {
+      title: 'The app cannot reach the updater service.',
+      steps: ['Confirm the updater service is running.', 'Review updater logs.', 'Confirm app and updater share a Docker network.'],
+      commands: 'docker compose ps updater\ndocker compose logs --tail=200 updater'
+    },
+    updater_error: {
+      title: 'The updater rejected the request.',
+      steps: ['Review updater logs for the cause.', 'Confirm the Compose configuration is valid.', 'Try again after correcting the reported problem.'],
+      commands: 'docker compose config --quiet\ndocker compose logs --tail=200 updater'
+    }
+  };
 
   function show(id) { document.getElementById(id).style.display = ''; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+  function setText(id, text) { document.getElementById(id).textContent = text || ''; }
+  function clearPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+  function openConfirmation() {
+    hide('upd-apply'); hide('upd-workflow'); show('upd-confirm');
+    setText('upd-confirm-version', 'v' + targetVersion);
+    document.getElementById('upd-confirm-start').textContent = 'Update to v' + targetVersion;
+  }
+  function closeConfirmation() { hide('upd-confirm'); show('upd-apply'); }
+  function resetWorkflow() {
+    hide('upd-confirm'); show('upd-workflow'); hide('upd-troubleshooting'); hide('upd-technical');
+    hide('upd-rollback-stage');
+    document.getElementById('upd-progressbar').classList.remove('is-failed');
+  }
+  function renderStages(status, failedStage, rolledBack) {
+    var state = UPDATE_STAGES[status] || UPDATE_STAGES.pulling;
+    var failedIndex = failedStage === 'pull' ? 0 : failedStage === 'recreate' ? 1 : failedStage === 'healthcheck' ? 2 : -1;
+    document.querySelectorAll('[data-update-stage]').forEach(function (el, index) {
+      el.className = '';
+      var mark = el.querySelector('.update-stage-mark');
+      mark.textContent = String(index + 1);
+      if (status === 'failed' && index === failedIndex) { el.className = 'is-failed'; mark.textContent = 'x'; }
+      else if (status === 'success' || index < state.index || (status === 'failed' && index < failedIndex)) { el.className = 'is-complete'; mark.textContent = '✓'; }
+      else if (index === state.index && status !== 'failed') { el.className = 'is-active'; }
+    });
+    if (status === 'rolling_back' || rolledBack) {
+      show('upd-rollback-stage');
+      var rollback = document.getElementById('upd-rollback-stage');
+      rollback.className = rolledBack ? 'is-complete' : 'is-active';
+      rollback.querySelector('.update-stage-mark').textContent = rolledBack ? '✓' : '5';
+    }
+  }
+  function setProgress(value, failed) {
+    var bar = document.getElementById('upd-progressbar');
+    bar.setAttribute('aria-valuenow', String(value));
+    bar.classList.toggle('is-failed', !!failed);
+    document.getElementById('upd-progress-fill').style.width = value + '%';
+  }
+  function showTechnical(lines) {
+    setText('upd-technical-text', lines.filter(Boolean).join('\n'));
+    show('upd-technical');
+  }
+  function renderFailure(job, category) {
+    var key = category || job.stage || 'updater_error';
+    var guide = FAILURE_GUIDANCE[key] || FAILURE_GUIDANCE.updater_error;
+    resetWorkflow(); clearPoll();
+    setText('upd-state-label', category ? 'Updates unavailable' : 'Update failed');
+    setText('upd-state-title', job.rolled_back ? 'Fluxito rolled back to v' + (job.current || job.previous) : guide.title);
+    setText('upd-state-copy', job.rolled_back ? 'The previous version is running. Follow these steps before trying again.' : guide.title);
+    renderStages('failed', job.stage, job.rolled_back);
+    setProgress(100, true);
+    var steps = document.getElementById('upd-troubleshooting-steps');
+    steps.innerHTML = '';
+    guide.steps.forEach(function (step) { var li = document.createElement('li'); li.textContent = step; steps.appendChild(li); });
+    document.getElementById('upd-copy-diagnostics').dataset.commands = guide.commands;
+    show('upd-troubleshooting');
+    var notes = document.getElementById('upd-failure-notes');
+    notes.style.display = notes.getAttribute('href') !== '#' ? '' : 'none';
+    document.getElementById('upd-retry').style.display = targetVersion ? '' : 'none';
+    showTechnical(['Stage: ' + (job.stage || category || 'unknown'), job.error || '']);
+  }
+  function renderJob(job, reloadOnSuccess) {
+    var state = UPDATE_STAGES[job.status];
+    if (job.status === 'failed') { renderFailure(job); return; }
+    if (!state) return;
+    resetWorkflow();
+    setText('upd-state-label', job.status === 'success' ? 'Update complete' : 'Update in progress');
+    setText('upd-state-title', state.title);
+    setText('upd-state-copy', state.copy);
+    renderStages(job.status);
+    setProgress(state.progress, false);
+    if (job.status === 'success') {
+      clearPoll();
+      if (reloadOnSuccess) setTimeout(function () { location.reload(); }, 1800);
+    }
+  }
+  function renderApiFailure(data) {
+    renderFailure({ status: 'failed', error: data.error || '', stage: '' }, data.code || 'updater_error');
+  }
+  function fetchJob(reloadOnSuccess) {
+    return fetch('/api/updates/job', { credentials: 'same-origin' })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (result) {
+        if (result.ok) {
+          var active = ['pulling', 'recreating', 'verifying', 'rolling_back'].indexOf(result.data.status) >= 0;
+          if (active || result.data.status === 'failed' || (result.data.status === 'success' && reloadOnSuccess)) {
+            renderJob(result.data, reloadOnSuccess);
+          }
+          if (active && !pollTimer) {
+            pollTimer = setInterval(function () { fetchJob(true); }, 3000);
+          }
+        }
+        else if (result.data.code === 'updater_auth_failed') renderApiFailure(result.data);
+        else if (workflow.style.display !== 'none') {
+          setText('upd-state-title', 'Reconnecting to Fluxito');
+          setText('upd-state-copy', 'The app is restarting. Progress will resume automatically.');
+        }
+        return result;
+      });
+  }
+  function pollJob() {
+    clearPoll(); show('upd-workflow'); fetchJob(true);
+    pollTimer = setInterval(function () { fetchJob(true); }, 3000);
+  }
 
   function refreshStatus() {
     return fetch('/api/updates/status', { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         document.getElementById('upd-current').textContent = 'v' + d.current;
+        targetVersion = d.latest || '';
+        hide('upd-latest-row'); hide('upd-apply'); hide('upd-uptodate');
         if (d.update_available) {
           document.getElementById('upd-latest').textContent = 'v' + d.latest;
           document.getElementById('upd-notes').href = d.release_notes_url || '#';
+          document.getElementById('upd-failure-notes').href = d.release_notes_url || '#';
           show('upd-latest-row');
           show('upd-apply');
         } else {
           show('upd-uptodate');
         }
+        return fetchJob(false);
       })
       .catch(function () {
         var c = document.getElementById('upd-current');
@@ -287,44 +504,30 @@ loadUsers(); loadRequests(); loadRateLimits(); loadBranding(); loadAuthMethods()
 
   window.__fluxRefreshUpdates = refreshStatus;
 
-  function pollJob() {
-    var prog = document.getElementById('upd-progress');
-    show('upd-progress');
-    var tries = 0;
-    var iv = setInterval(function () {
-      tries++;
-      fetch('/api/updates/job', { credentials: 'same-origin' })
-        .then(function (r) { return r.ok ? r.json() : { status: 'unknown' }; })
-        .then(function (j) {
-          prog.textContent = 'Status: ' + j.status + (j.target ? ' → v' + j.target : '');
-          if (j.status === 'success') {
-            clearInterval(iv);
-            prog.textContent = '✓ Updated to v' + (j.current || j.target) + '. Reloading…';
-            setTimeout(function () { location.reload(); }, 2000);
-          } else if (j.status === 'failed') {
-            clearInterval(iv);
-            prog.textContent = '✗ Update failed (' + (j.stage || '') + ')'
-              + (j.rolled_back ? ' — rolled back to v' + j.current : '');
-          }
-        })
-        .catch(function () { prog.textContent = 'Restarting… (' + tries + ')'; });
-    }, 3000);
-  }
-
-  apply.addEventListener('click', function () {
-    if (!confirm('Update now? Fluxito will briefly restart.')) return;
-    apply.disabled = true;
+  apply.addEventListener('click', openConfirmation);
+  document.getElementById('upd-confirm-cancel').addEventListener('click', closeConfirmation);
+  document.getElementById('upd-retry').addEventListener('click', openConfirmation);
+  document.getElementById('upd-copy-diagnostics').addEventListener('click', function () {
+    if (window.Fluxito && Fluxito.copy) Fluxito.copy(this.dataset.commands || '', 'Diagnostic commands');
+  });
+  document.getElementById('upd-confirm-start').addEventListener('click', function () {
+    var start = this;
+    start.disabled = true;
+    hide('upd-confirm');
+    renderJob({ status: 'pulling' }, false);
     fetch('/api/updates/apply', { method: 'POST', credentials: 'same-origin' })
       .then(function (r) {
-        if (r.ok) { pollJob(); }
-        else {
-          r.json().then(function (e) {
-            alert('Could not start update: ' + (e.error || r.status));
-            apply.disabled = false;
-          }).catch(function () { apply.disabled = false; });
-        }
+        return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; });
       })
-      .catch(function () { pollJob(); });
+      .then(function (result) {
+        start.disabled = false;
+        if (result.ok || result.data.code === 'update_in_progress') pollJob();
+        else renderApiFailure(result.data);
+      })
+      .catch(function () {
+        start.disabled = false;
+        pollJob();
+      });
   });
 
   refreshStatus();

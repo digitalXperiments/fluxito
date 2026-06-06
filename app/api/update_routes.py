@@ -25,6 +25,25 @@ UPDATER_URL = os.environ.get("UPDATER_URL", "http://updater:9000")
 UPDATER_TOKEN = os.environ.get("UPDATER_TOKEN", "")
 
 
+def _updater_http_error(exc: httpx.HTTPStatusError) -> JSONResponse:
+    """Translate updater-side HTTP failures into stable browser-facing categories."""
+    status_code = exc.response.status_code
+    if status_code == 401:
+        return JSONResponse(
+            {"error": "updater authentication failed", "code": "updater_auth_failed"},
+            status_code=503,
+        )
+    if status_code == 409:
+        return JSONResponse(
+            {"error": "update already in progress", "code": "update_in_progress"},
+            status_code=409,
+        )
+    return JSONResponse(
+        {"error": "updater request failed", "code": "updater_error"},
+        status_code=502,
+    )
+
+
 async def _trigger_updater(version: str, previous: str) -> dict:
     """POST the target version to the updater sidecar. Returns its JSON response."""
     headers = {"Authorization": f"Bearer {UPDATER_TOKEN}"}
@@ -55,9 +74,15 @@ async def update_apply(request: Request):
         return JSONResponse({"error": "no update available"}, status_code=409)
     try:
         result = await _trigger_updater(status["latest"], status["current"])
-    except httpx.HTTPError as exc:
+    except httpx.HTTPStatusError as exc:
+        logger.error("updater rejected trigger: %s", exc)
+        return _updater_http_error(exc)
+    except httpx.RequestError as exc:
         logger.error("updater trigger failed: %s", exc)
-        return JSONResponse({"error": "updater unreachable"}, status_code=502)
+        return JSONResponse(
+            {"error": "updater unavailable", "code": "updater_unavailable"},
+            status_code=503,
+        )
     return JSONResponse({"status": "started", "target": status["latest"], "updater": result})
 
 
@@ -71,7 +96,13 @@ async def update_job(request: Request):
             resp = await client.get(f"{UPDATER_URL}/status", headers=headers)
             resp.raise_for_status()
             return JSONResponse(resp.json())
-    except httpx.HTTPError as exc:
+    except httpx.HTTPStatusError as exc:
+        logger.warning("updater rejected status check: %s", exc)
+        return _updater_http_error(exc)
+    except httpx.RequestError as exc:
         # During the app's own restart the updater may briefly be unreachable.
         logger.warning("updater status check failed: %s", exc)
-        return JSONResponse({"status": "unknown"}, status_code=503)
+        return JSONResponse(
+            {"status": "unknown", "error": "updater unavailable", "code": "updater_unavailable"},
+            status_code=503,
+        )

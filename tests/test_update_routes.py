@@ -115,6 +115,109 @@ async def test_apply_rejects_when_no_update(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_apply_reports_updater_authentication_failure(monkeypatch):
+    async def _allow(request):
+        return {"id": "1", "email": "a@b.c", "is_superadmin": True}
+
+    async def _check():
+        return {
+            "current": "1.0.2",
+            "latest": "1.0.5",
+            "update_available": True,
+            "release_notes_url": "https://x",
+            "published_at": None,
+            "checks_enabled": True,
+        }
+
+    async def _post(version, previous):
+        request = update_routes.httpx.Request("POST", "http://updater:9000/update")
+        response = update_routes.httpx.Response(401, request=request, json={"error": "unauthorized"})
+        raise update_routes.httpx.HTTPStatusError("unauthorized", request=request, response=response)
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _allow)
+    monkeypatch.setattr(update_service, "check_for_update", _check)
+    monkeypatch.setattr(update_routes, "_trigger_updater", _post)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/updates/apply")
+
+    assert resp.status_code == 503
+    assert resp.json() == {
+        "error": "updater authentication failed",
+        "code": "updater_auth_failed",
+    }
+
+
+@pytest.mark.asyncio
+async def test_apply_reports_existing_update_job(monkeypatch):
+    async def _allow(request):
+        return {"id": "1", "email": "a@b.c", "is_superadmin": True}
+
+    async def _check():
+        return {
+            "current": "1.0.2",
+            "latest": "1.0.5",
+            "update_available": True,
+            "release_notes_url": "https://x",
+            "published_at": None,
+            "checks_enabled": True,
+        }
+
+    async def _post(version, previous):
+        request = update_routes.httpx.Request("POST", "http://updater:9000/update")
+        response = update_routes.httpx.Response(
+            409, request=request, json={"error": "update already in progress"}
+        )
+        raise update_routes.httpx.HTTPStatusError("conflict", request=request, response=response)
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _allow)
+    monkeypatch.setattr(update_service, "check_for_update", _check)
+    monkeypatch.setattr(update_routes, "_trigger_updater", _post)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/updates/apply")
+
+    assert resp.status_code == 409
+    assert resp.json() == {
+        "error": "update already in progress",
+        "code": "update_in_progress",
+    }
+
+
+@pytest.mark.asyncio
+async def test_apply_reports_unreachable_updater(monkeypatch):
+    async def _allow(request):
+        return {"id": "1", "email": "a@b.c", "is_superadmin": True}
+
+    async def _check():
+        return {
+            "current": "1.0.2",
+            "latest": "1.0.5",
+            "update_available": True,
+            "release_notes_url": "https://x",
+            "published_at": None,
+            "checks_enabled": True,
+        }
+
+    async def _post(version, previous):
+        request = update_routes.httpx.Request("POST", "http://updater:9000/update")
+        raise update_routes.httpx.ConnectError("connection refused", request=request)
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _allow)
+    monkeypatch.setattr(update_service, "check_for_update", _check)
+    monkeypatch.setattr(update_routes, "_trigger_updater", _post)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/updates/apply")
+
+    assert resp.status_code == 503
+    assert resp.json() == {
+        "error": "updater unavailable",
+        "code": "updater_unavailable",
+    }
+
+
+@pytest.mark.asyncio
 async def test_job_requires_superadmin(monkeypatch):
     async def _deny(request):
         from fastapi import HTTPException
