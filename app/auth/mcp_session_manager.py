@@ -533,11 +533,7 @@ async def revoke_pat(user_id: str, pat_id: str) -> bool:
             return False
 
         access_hash = row.access_token_hash
-        await db.execute(
-            update(MCPSession)
-            .where(MCPSession.id == pid)
-            .values(is_revoked=True)
-        )
+        await db.execute(update(MCPSession).where(MCPSession.id == pid).values(is_revoked=True))
         await db.commit()
 
     # Purge cache so subsequent validation fails immediately (matches oauth revoke behavior)

@@ -10,8 +10,6 @@ These exercise the non-database parts that can be imported in isolation:
 import hashlib
 import secrets
 
-import pytest
-
 from app.auth.mcp_oauth_server import _is_oob_redirect_uri
 from app.models.mcp_session import MCPSession
 

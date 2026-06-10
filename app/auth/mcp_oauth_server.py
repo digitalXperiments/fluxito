@@ -177,9 +177,7 @@ def _is_oob_redirect_uri(uri: str | None) -> bool:
     if u.endswith("/oauth/oob") or u.endswith("/oob"):
         return True
     # Some clients use a localhost oob variant or custom scheme
-    if "oob" in u:
-        return True
-    return False
+    return "oob" in u
 
 
 # ---------------------------------------------------------------------------
@@ -569,6 +567,7 @@ async def authorize_decision(
             params["client_id"],
         )
         from app.templating import render
+
         return render(
             request,
             "auth/mcp_oob_success.html",
@@ -772,6 +771,7 @@ async def google_identity_callback(
             params.get("resource"),
         )
         from app.templating import render
+
         return render(
             request,
             "auth/mcp_oob_success.html",
