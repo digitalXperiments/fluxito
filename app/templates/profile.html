@@ -38,53 +38,128 @@
     </div>
   </div>
 
-  {# ── Two-column: Personal Info + Preferences ── #}
+  {# ── Personal Info + Preferences (side-by-side on wide screens) ── #}
   <div class="pf-grid">
-
-    <div class="pf-col">
-      <div class="pf-card">
-        <div class="pf-card-head">
-          <h2>Personal Info</h2>
-        </div>
-        <form id="profileForm" onsubmit="return false;" class="kpi-form" style="gap:12px">
-          <label class="f-field">
-            <span>Display name</span>
-            <input class="f-input" type="text" id="displayName" name="display_name"
-                   value="{{ user.display_name or '' }}"
-                   placeholder="How should we call you?" maxlength="255"/>
-          </label>
-          <label class="f-field">
-            <span>Email address</span>
-            <input class="f-input" type="email" id="emailField" name="email"
-                   value="{{ user.email }}"
-                   placeholder="your@email.com"/>
-          </label>
-          <button type="button" class="btn primary block" id="saveProfileBtn" onclick="Fluxito._saveProfile()">Save changes</button>
-        </form>
+    <div class="pf-card">
+      <div class="pf-card-head">
+        <h2>Personal Info</h2>
       </div>
+      <form id="profileForm" onsubmit="return false;">
+        <label class="f-field">
+          <span>Display name</span>
+          <input class="f-input" type="text" id="displayName" name="display_name"
+                 value="{{ user.display_name or '' }}"
+                 placeholder="How should we call you?" maxlength="255"/>
+        </label>
+        <label class="f-field">
+          <span>Email address</span>
+          <input class="f-input" type="email" id="emailField" name="email"
+                 value="{{ user.email }}"
+                 placeholder="your@email.com"/>
+        </label>
+        <button type="button" class="btn primary" id="saveProfileBtn" onclick="Fluxito._saveProfile()">Save changes</button>
+      </form>
+    </div>
 
-      <div class="pf-card">
-        <div class="pf-card-head">
-          <h2>Preferences</h2>
+    <div class="pf-card pf-side-card">
+      <div class="pf-card-head">
+        <h2>Preferences</h2>
+      </div>
+      <div class="pf-pref-row">
+        <div>
+          <div class="pf-pref-name">Appearance</div>
+          <div class="pf-pref-sub">Follows your system theme</div>
         </div>
-        <div class="pf-pref-row">
-          <div>
-            <div class="pf-pref-name">Appearance</div>
-            <div class="pf-pref-sub">Automatically follows your system theme</div>
-          </div>
-          <span class="t-flag">Auto</span>
+        <span class="t-flag">Auto</span>
+      </div>
+      {% if org %}
+      <div class="pf-pref-row" style="margin-top:8px">
+        <div>
+          <div class="pf-pref-name">Organization</div>
+          <div class="pf-pref-sub">{{ org.name }} · {{ org_member_count }} members</div>
         </div>
-        {% if org %}
-        <div class="pf-pref-row" style="margin-top:8px">
-          <div>
-            <div class="pf-pref-name">Organization</div>
-            <div class="pf-pref-sub">{{ org.name }} · {{ org_member_count }} members</div>
-          </div>
-          <a href="/org" class="btn sm">Manage</a>
-        </div>
-        {% endif %}
+        <a href="/org" class="btn sm">Manage</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── MCP Access Tokens (PATs) for remote / headless / SSH use ── #}
+  {# Primary solution for "no browser on the remote box": generate here (laptop), copy token or config, paste on remote. #}
+  <div class="pf-card" id="mcpTokensCard">
+    <div class="pf-card-head">
+      <div>
+        <h2>MCP Access Tokens</h2>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;">For remote servers, SSH, containers, CLIs (no browser or localhost redirect needed on the target)</div>
       </div>
     </div>
+
+    {# Create form #}
+    <form id="mcpTokenForm" onsubmit="return false;" class="pf-token-create">
+      <label class="f-field pf-grow">
+        <span>Name</span>
+        <input class="f-input" type="text" id="mcpTokenName" placeholder="remote-server-1" maxlength="255" required />
+      </label>
+      <label class="f-field pf-expires">
+        <span>Expires</span>
+        <select class="f-input" id="mcpTokenExpiry">
+          <option value="90">90 days (recommended)</option>
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+          <option value="365">365 days</option>
+          <option value="0">Never</option>
+        </select>
+      </label>
+      <button type="button" class="btn primary pf-btn-create" id="mcpCreateBtn" onclick="Fluxito._createMcpPat()">Create token</button>
+    </form>
+
+    {# Post-create reveal (populated by JS, shown once) #}
+    <div id="mcpPatReveal" class="pf-pat-reveal" style="display:none;margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r-m);padding:14px;background:var(--bg-2)">
+      <div style="font-size:12px;font-weight:600;color:var(--green);margin-bottom:6px">Token created — copy it now (shown only once)</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <code id="mcpPatPlain" style="flex:1;font-family:var(--mono);font-size:12.5px;word-break:break-all;background:var(--bg);padding:6px 8px;border-radius:4px;border:1px solid var(--line)"></code>
+        <button type="button" class="btn sm" onclick="Fluxito.copy(document.getElementById('mcpPatPlain').textContent, 'MCP PAT')">Copy token</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Example config snippet (add the Authorization header to your MCP client's server definition for this Fluxito instance):</div>
+      <pre id="mcpPatSnippet" style="font-size:11px;background:var(--bg);padding:8px;border-radius:4px;border:1px solid var(--line);overflow:auto;white-space:pre-wrap"></pre>
+      <button type="button" class="btn sm" onclick="Fluxito.copy(document.getElementById('mcpPatSnippet').textContent, 'Config snippet'); document.getElementById('mcpPatReveal').style.display='none'">Copy snippet &amp; dismiss</button>
+    </div>
+
+    {# Existing tokens list (server-rendered initial state; JS can refresh or we reload on mutate for simplicity) #}
+    <div id="mcpPatList">
+      {% if mcp_pats %}
+        <div style="font-size:11px;font-weight:600;color:var(--muted);margin:6px 0 4px;text-transform:uppercase;letter-spacing:.06em">Your tokens</div>
+        <div class="pf-pat-list">
+          {% for p in mcp_pats %}
+            <div class="pf-pat-row {% if p.is_revoked %}is-revoked{% endif %}" data-id="{{ p.id }}">
+              <div class="pf-pat-main">
+                <span class="pf-pat-name">{{ p.name or '(unnamed)' }}</span>
+                <span class="pf-pat-hint mono">{{ p.token_hint or '' }}</span>
+              </div>
+              <div class="pf-pat-meta">
+                {% if p.is_revoked %}
+                  <span class="t-flag" style="background:color-mix(in srgb, var(--red) 15%, transparent);color:var(--red)">revoked</span>
+                {% else %}
+                  {% if p.access_token_expires_at %}
+                    <span class="pf-pat-exp">expires {{ p.access_token_expires_at | fmt_date if p.access_token_expires_at else '—' }}</span>
+                  {% else %}
+                    <span class="pf-pat-exp">no expiry</span>
+                  {% endif %}
+                {% endif %}
+                {% if p.last_used_at %}<span class="pf-pat-last">last used {{ p.last_used_at | fmt_date }}</span>{% endif %}
+              </div>
+              {% if not p.is_revoked %}
+                <button type="button" class="btn sm" style="color:var(--red);border-color:var(--red)" onclick="Fluxito._revokeMcpPat('{{ p.id }}', '{{ p.name or p.token_hint or 'this token' }}')">Revoke</button>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="pf-empty">No tokens yet. Create one above for a remote machine, SSH, container or CLI.</div>
+      {% endif %}
+    </div>
+
+    <div class="pf-pat-foot">PATs are user-wide (same permissions as you). Revocation is immediate. Use the token as a <span class="mono">Bearer</span> header in your remote client's MCP config.</div>
   </div>
 
   {# ── Audit shortcut ── #}
@@ -100,10 +175,10 @@
   </a>
 
   {% if recent_notifs %}
-  <div class="pf-card" style="margin-top:0">
+  <div class="pf-card">
     <div class="pf-card-head">
       <h2>Recent activity</h2>
-      <div style="display:flex;gap:10px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center">
         {% if unread_notifs > 0 %}<span class="t-flag" style="background:color-mix(in srgb, var(--ink) 6%, transparent);color:var(--ink)">{{ unread_notifs }} new</span>{% endif %}
         <a href="/profile/activity" class="pf-view-all">View all →</a>
       </div>
@@ -179,34 +254,35 @@
 
 <style>
 .pf-identity {
-  display: flex; align-items: center; gap: 20px;
-  padding: 8px 0 30px;
+  display: flex; align-items: center; gap: 16px;
+  padding: 4px 0 18px;
 }
 .pf-avatar {
-  width: 64px; height: 64px;
+  width: 56px; height: 56px;
   border-radius: 50%;
   background: var(--ink); color: var(--bg);
   display: flex; align-items: center; justify-content: center;
-  font-weight: 600; font-size: 22px;
+  font-weight: 600; font-size: 20px;
   letter-spacing: 0.02em;
   flex-shrink: 0;
 }
 .pf-name-row {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .pf-name-row h1 {
-  font-size: clamp(22px, 3vw, 28px);
-  font-weight: 500; letter-spacing: -0.02em;
+  font-size: clamp(20px, 2.6vw, 26px);
+  font-weight: 600; letter-spacing: -0.02em;
   margin: 0;
 }
-.pf-sub { font-size: 13.5px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+.pf-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
 
+/* Stats row — 3 columns, compact, no empty 4th column */
 .pf-stats {
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  gap: 14px; margin-bottom: 28px;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-bottom: 18px;
 }
 .pf-stat {
-  padding: 18px 20px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-l);
   background: var(--bg);
@@ -214,72 +290,101 @@
 .pf-stat-click { cursor: pointer; transition: border-color 0.15s; }
 .pf-stat-click:hover { border-color: var(--ink); }
 .pf-stat-label {
-  font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--muted);
   font-family: var(--mono);
 }
 .pf-stat-val {
-  font-size: 28px; font-weight: 600; margin-top: 8px;
-  letter-spacing: -0.02em; color: var(--ink);
+  font-size: 22px; font-weight: 600; margin-top: 2px;
+  letter-spacing: -0.01em; color: var(--ink);
   line-height: 1.1; font-variant-numeric: tabular-nums;
 }
-.pf-stat-foot { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
-.pf-stat-link { color: var(--ink); }
+.pf-stat-foot { font-size: 10.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
 
+/* Grid for Personal + Preferences: side-by-side on wide, stack on narrow. Fills space, no giant empty column. */
 .pf-grid {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 22px; margin-bottom: 24px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-bottom: 20px;
 }
-.pf-col { display: flex; flex-direction: column; gap: 22px; }
+@media (min-width: 860px) {
+  .pf-grid { grid-template-columns: 1fr 300px; align-items: start; }
+}
 
 .pf-card {
-  padding: 24px 26px;
+  padding: 16px 18px;
   border: 1px solid var(--line);
   border-radius: var(--r-l);
   background: var(--bg);
 }
+.app-main > .pf-card {
+  margin-bottom: 20px;
+}
 .pf-card-head {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 .pf-card-head h2 {
-  font-size: 15px; font-weight: 600; margin: 0;
+  font-size: 14px; font-weight: 600; margin: 0;
   letter-spacing: -0.01em; color: var(--ink);
 }
+.pf-side-card .pf-card-head { margin-bottom: 8px; }
+
 .pf-view-all {
-  font-size: 12.5px; color: var(--ink);
+  font-size: 12px; color: var(--ink);
   text-decoration: none;
   font-family: var(--mono); letter-spacing: 0.02em;
 }
 .pf-view-all:hover { text-decoration: underline; }
 
-
+/* Preferences rows — compact */
 .pf-pref-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; background: var(--bg-2);
+  padding: 8px 10px; background: var(--bg-2);
   border-radius: var(--r-m);
+  font-size: 12.5px;
 }
-.pf-pref-name { font-size: 13px; font-weight: 500; color: var(--ink); }
-.pf-pref-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+.pf-pref-name { font-size: 12.5px; font-weight: 500; color: var(--ink); }
+.pf-pref-sub { font-size: 11px; color: var(--muted); margin-top: 1px; font-family: var(--mono); }
+
+/* Token create row — neat, aligned, no fighting heights */
+.pf-token-create {
+  display: grid;
+  grid-template-columns: 1fr 190px auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+.pf-token-create .f-field { margin-bottom: 0; }
+.pf-token-create .pf-grow { min-width: 160px; }
+.pf-token-create .pf-expires { min-width: 140px; }
+.pf-token-create .pf-btn-create { height: 40px; white-space: nowrap; }
+@media (max-width: 620px) {
+  .pf-token-create {
+    grid-template-columns: 1fr;
+  }
+  .pf-token-create .pf-btn-create { width: 100%; }
+}
 
 .pf-audit {
-  display: flex; align-items: center; gap: 14px;
-  padding: 18px 24px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
   border: 1px solid var(--line); border-radius: var(--r-l);
   background: var(--bg);
   text-decoration: none; color: inherit;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
   transition: border-color 0.15s;
 }
 .pf-audit:hover { border-color: var(--ink); }
 .pf-audit-icon {
-  width: 36px; height: 36px; border-radius: var(--r-m);
+  width: 32px; height: 32px; border-radius: var(--r-m);
   background: var(--bg-2); color: var(--ink);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
-.pf-audit-title { font-size: 14px; font-weight: 600; color: var(--ink); }
-.pf-audit-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.pf-audit-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.pf-audit-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; }
 
 .pf-notif-list {
   display: flex; flex-direction: column;
@@ -289,7 +394,7 @@
 }
 .pf-notif {
   display: flex; align-items: center; gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background: var(--bg);
   border-bottom: 1px solid var(--line-2);
   text-decoration: none; color: inherit;
@@ -299,19 +404,19 @@
 .pf-notif:hover { background: var(--bg-2); }
 .pf-notif.unread { background: color-mix(in srgb, var(--ink) 2%, var(--bg)); }
 .pf-notif-dot {
-  width: 7px; height: 7px; border-radius: 50%;
+  width: 6px; height: 6px; border-radius: 50%;
   background: var(--bg-3); flex-shrink: 0;
 }
 .pf-notif.unread .pf-notif-dot { background: var(--ink); }
-.pf-notif-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+.pf-notif-title { font-size: 12.5px; font-weight: 500; color: var(--ink); }
 .pf-notif.unread .pf-notif-title { font-weight: 600; }
 .pf-notif-msg {
-  font-size: 12px; color: var(--ink-soft);
+  font-size: 11.5px; color: var(--ink-soft);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   margin-top: 1px;
 }
 .pf-notif-date {
-  font-size: 11px; color: var(--muted);
+  font-size: 10.5px; color: var(--muted);
   flex-shrink: 0; white-space: nowrap;
   font-family: var(--mono); letter-spacing: 0.02em;
 }
@@ -319,7 +424,7 @@
 .pf-danger-card { margin-top: 0; }
 .pf-danger-row {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; padding: 14px 16px;
+  gap: 14px; padding: 12px 14px;
   border-radius: var(--r-m);
   background: var(--bg-2);
   border: 1px solid var(--line);
@@ -332,18 +437,53 @@
   background: color-mix(in srgb, var(--red) 5%, transparent);
   border: 1px dashed color-mix(in srgb, var(--red) 40%, var(--line));
 }
-.pf-danger-title { font-size: 13px; font-weight: 600; color: var(--ink); }
-.pf-danger-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; line-height: 1.5; }
-.pf-danger-foot { font-size: 11px; color: var(--muted); margin-top: 8px; padding: 0 4px; font-family: var(--mono); }
+.pf-danger-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.pf-danger-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; line-height: 1.4; }
+.pf-danger-foot { font-size: 10.5px; color: var(--muted); margin-top: 6px; padding: 0 2px; font-family: var(--mono); }
 
-.pf-loading { text-align: center; padding: 32px; color: var(--muted); font-family: var(--mono); }
+.pf-loading { text-align: center; padding: 28px; color: var(--muted); font-family: var(--mono); }
 
 @media (max-width: 900px) {
-  .pf-stats { grid-template-columns: repeat(2, 1fr); }
-  .pf-grid { grid-template-columns: 1fr; }
+  .pf-stats { grid-template-columns: repeat(3, 1fr); }
 }
-@media (max-width: 500px) {
+@media (max-width: 560px) {
   .pf-stats { grid-template-columns: 1fr; }
+}
+
+/* MCP PAT card specifics */
+.pf-pat-reveal code,
+.pf-pat-reveal pre { font-family: var(--mono); }
+.pf-pat-list { border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; }
+.pf-pat-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); background: var(--bg); font-size: 13px; }
+.pf-pat-row:last-child { border-bottom: none; }
+.pf-pat-row.is-revoked { opacity: .6; background: var(--bg-2); }
+.pf-pat-main { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.pf-pat-name { font-weight: 500; }
+.pf-pat-hint { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.pf-pat-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); font-family: var(--mono); flex-shrink: 0; }
+.pf-pat-exp, .pf-pat-last { white-space: nowrap; }
+
+/* Small polish for the MCP section */
+.pf-empty {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--bg-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-m);
+  padding: 10px 12px;
+}
+.pf-pat-foot {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.pf-pat-foot .mono { font-family: var(--mono); font-size: 10.5px; }
+
+/* Make sure selects in this card pick up the nice chevron + consistent height from globals */
+#mcpTokensCard select.f-input {
+  padding-top: 9px;
+  padding-bottom: 9px;
 }
 </style>
 {% endblock %}
@@ -493,6 +633,61 @@ document.addEventListener('DOMContentLoaded', function(){
         setTimeout(function(){ window.location.href = '/'; }, 1500);
       } else {
         Fluxito.toast(data.error || 'Failed to delete', 'error');
+      }
+    } catch(e) { Fluxito.toast('Network error', 'error'); }
+  };
+
+  // --- MCP PAT (remote access token) helpers ---
+  window.Fluxito._createMcpPat = async function() {
+    var btn = document.getElementById('mcpCreateBtn');
+    var nameEl = document.getElementById('mcpTokenName');
+    var expEl = document.getElementById('mcpTokenExpiry');
+    var reveal = document.getElementById('mcpPatReveal');
+    if (!nameEl || !nameEl.value.trim()) { Fluxito.toast('Please enter a name for the token', 'error'); return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+    try {
+      var res = await fetch('/api/profile/tokens', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameEl.value.trim(), expiry_days: expEl ? parseInt(expEl.value, 10) : 90 })
+      });
+      var data = await res.json();
+      if (res.ok && data.token) {
+        // Populate reveal
+        var plain = document.getElementById('mcpPatPlain');
+        var snippet = document.getElementById('mcpPatSnippet');
+        if (plain) plain.textContent = data.token;
+        var base = (window.location.origin || '') + '/mcp';
+        if (snippet) {
+          snippet.textContent = 'URL: ' + base + '\nAuthorization: Bearer ' + data.token + '\n\n(Include the Authorization header in your remote MCP client\'s Fluxito server config.)';
+        }
+        if (reveal) reveal.style.display = 'block';
+        Fluxito.toast('Token created — copy it now');
+        // Simple: reload so the list updates (keeps logic minimal and consistent with other mutating actions)
+        setTimeout(function(){ window.location.reload(); }, 1200);
+      } else {
+        Fluxito.toast(data.error || 'Failed to create token', 'error');
+      }
+    } catch(e) {
+      Fluxito.toast('Network error', 'error');
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Create token'; }
+  };
+
+  window.Fluxito._revokeMcpPat = async function(id, label) {
+    if (!confirm('Revoke token "' + (label || id) + '"? This cannot be undone and will immediately stop any clients using it.')) return;
+    try {
+      var res = await fetch('/api/profile/tokens/' + encodeURIComponent(id) + '/revoke', {
+        method: 'POST',
+        credentials: 'same-origin'
+      });
+      var data = await res.json();
+      if (res.ok && data.ok) {
+        Fluxito.toast('Token revoked');
+        setTimeout(function(){ window.location.reload(); }, 600);
+      } else {
+        Fluxito.toast(data.error || 'Failed to revoke', 'error');
       }
     } catch(e) { Fluxito.toast('Network error', 'error'); }
   };

@@ -163,6 +163,25 @@ def _url_with_query(base_url: str, params: dict[str, str | None]) -> str:
     )
 
 
+def _is_oob_redirect_uri(uri: str | None) -> bool:
+    """Detect out-of-band / manual code paste redirect URIs.
+    When the client (often a remote/headless process) uses one of these,
+    we render a page that displays the code for copy-paste instead of
+    redirecting to an unreachable loopback or custom URI.
+    """
+    if not uri:
+        return False
+    u = uri.strip().lower()
+    if u in {"oob", "urn:ietf:wg:oauth:2.0:oob"}:
+        return True
+    if u.endswith("/oauth/oob") or u.endswith("/oob"):
+        return True
+    # Some clients use a localhost oob variant or custom scheme
+    if "oob" in u:
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Discovery Endpoints
 # ---------------------------------------------------------------------------
@@ -542,8 +561,22 @@ async def authorize_decision(
 
     await redis.delete(state_key)
 
+    redirect_uri = params.get("redirect_uri", "")
+    if _is_oob_redirect_uri(redirect_uri):
+        logger.info(
+            "MCP auth code issued via browser session consent (OOB) for user %s (client=%s)",
+            user_id,
+            params["client_id"],
+        )
+        from app.templating import render
+        return render(
+            request,
+            "auth/mcp_oob_success.html",
+            {"code": auth_code_value, "state": params.get("state")},
+        )
+
     success_url = _url_with_query(
-        params["redirect_uri"],
+        redirect_uri,
         {
             "code": auth_code_value,
             "state": params["state"],
@@ -727,7 +760,24 @@ async def google_identity_callback(
         db.add(auth_code)
         await db.commit()
 
-    # Redirect to Claude's redirect_uri.
+    # Redirect to client's redirect_uri (or OOB display page for headless/remote flows).
+    import logging as _logging
+
+    redirect_uri = params.get("redirect_uri", "")
+    if _is_oob_redirect_uri(redirect_uri):
+        _logging.getLogger(__name__).info(
+            "MCP auth code issued (OOB) → showing code page (client=%s, scope=%s, resource=%s)",
+            params["client_id"],
+            params.get("scope"),
+            params.get("resource"),
+        )
+        from app.templating import render
+        return render(
+            request,
+            "auth/mcp_oob_success.html",
+            {"code": auth_code_value, "state": params.get("state")},
+        )
+
     # Echo back `scope` too — some MCP clients validate it matches request.
     redirect_params = {
         "code": auth_code_value,
@@ -736,12 +786,11 @@ async def google_identity_callback(
     if params.get("scope"):
         redirect_params["scope"] = params["scope"]
 
-    redirect_url = _url_with_query(params["redirect_uri"], redirect_params)
-    import logging as _logging
+    redirect_url = _url_with_query(redirect_uri, redirect_params)
 
     _logging.getLogger(__name__).info(
         "MCP auth code issued → redirecting to %s (client=%s, scope=%s, resource=%s)",
-        params["redirect_uri"],
+        redirect_uri,
         params["client_id"],
         params.get("scope"),
         params.get("resource"),

@@ -9,7 +9,9 @@ from app.db.database import Base
 
 
 class MCPSession(Base):
-    """MCP access tokens issued to Claude after OAuth — validated on every tool call."""
+    """MCP access/refresh tokens (OAuth) or Personal Access Tokens (PATs) for headless/remote clients.
+    Validated on every /mcp tool call and /oauth/userinfo etc. via access_token_hash.
+    """
 
     __tablename__ = "mcp_sessions"
 
@@ -30,7 +32,13 @@ class MCPSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     is_revoked: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
+    # PAT support (kind='pat' for tokens generated in web UI for remote/headless use;
+    # 'oauth' for normal client-driven OAuth sessions). Backfilled + defaulted in migration 051.
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, server_default="oauth")
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    token_hint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     __table_args__ = (Index("idx_user_active", user_id, is_revoked),)
 
     def __repr__(self) -> str:
-        return f"<MCPSession(user_id={self.user_id}, is_revoked={self.is_revoked})>"
+        return f"<MCPSession(user_id={self.user_id}, kind={self.kind}, is_revoked={self.is_revoked})>"

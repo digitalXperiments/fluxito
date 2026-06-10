@@ -18,9 +18,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import secrets
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -408,6 +409,146 @@ async def flush_last_used_batch():
             await db.commit()
     except Exception as e:
         logger.warning(f"Failed to flush last_used batch: {e}")
+
+
+# ---------------------------------------------------------------------------
+# PAT (Personal Access Token) helpers for headless / remote MCP clients
+# These create long-lived bearer tokens that are stored as MCPSession rows
+# (kind='pat') so they flow through the exact same _validate_token /
+# require_valid_mcp_token / build_user_context paths as OAuth sessions.
+# Plaintext token is returned only once from create_pat().
+# ---------------------------------------------------------------------------
+
+
+async def create_pat(
+    user_id: str,
+    name: str,
+    expires_in_days: int | None,
+) -> dict:
+    """Create a PAT for the given user.
+
+    - name: human label (required, trimmed, <=255)
+    - expires_in_days: 30/60/90/365 or None for "never" (far-future sentinel)
+    Returns: {id, token (plaintext, once only), token_hint, name, expires_at, created_at}
+    The plaintext is never persisted or logged.
+    """
+    if not name or not str(name).strip():
+        raise ValueError("name is required")
+    name = str(name).strip()[:255]
+
+    plaintext = "fxt_pat_" + secrets.token_urlsafe(32)
+    token_hash = sha256(plaintext)
+
+    now = datetime.utcnow()
+    if expires_in_days is None or int(expires_in_days) <= 0:
+        # Far-future sentinel per PAT design (matches "no expiry" option)
+        expires_at = datetime(9999, 12, 31)
+    else:
+        expires_at = now + timedelta(days=int(expires_in_days))
+
+    # Short display hint, e.g. fxt_pat_AbCd...wXyZ
+    hint = plaintext[:12] + "…" + plaintext[-4:] if len(plaintext) > 16 else plaintext[:8]
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        row = MCPSession(
+            user_id=UUID(str(user_id)),
+            access_token_hash=token_hash,
+            refresh_token_hash=None,
+            client_id="pat",
+            scopes=["read", "write"],
+            access_token_expires_at=expires_at,
+            refresh_token_expires_at=None,
+            kind="pat",
+            name=name,
+            token_hint=hint,
+            is_revoked=False,
+        )
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+
+    return {
+        "id": str(row.id),
+        "token": plaintext,  # returned exactly once
+        "token_hint": hint,
+        "name": name,
+        "expires_at": None if expires_at.year >= 9999 else expires_at.isoformat(),
+        "created_at": row.created_at.isoformat() if getattr(row, "created_at", None) else None,
+    }
+
+
+async def list_pats(user_id: str) -> list[dict]:
+    """List PATs for the user (all, including revoked/expired for the UI to show status).
+    Never returns plaintext or hashes.
+    """
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        result = await db.execute(
+            select(MCPSession)
+            .where(
+                MCPSession.user_id == UUID(str(user_id)),
+                MCPSession.kind == "pat",
+            )
+            .order_by(MCPSession.created_at.desc())
+        )
+        rows = result.scalars().all()
+
+    out: list[dict] = []
+    for r in rows:
+        out.append(
+            {
+                "id": str(r.id),
+                "name": r.name,
+                "token_hint": r.token_hint,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "last_used_at": r.last_used_at.isoformat() if r.last_used_at else None,
+                "access_token_expires_at": r.access_token_expires_at.isoformat()
+                if r.access_token_expires_at
+                else None,
+                "is_revoked": bool(r.is_revoked),
+            }
+        )
+    return out
+
+
+async def revoke_pat(user_id: str, pat_id: str) -> bool:
+    """Revoke a PAT owned by the user. Immediate effect (DB flag + Redis purge).
+    Returns True if a row was found+revoked.
+    """
+    uid = UUID(str(user_id))
+    pid = UUID(str(pat_id))
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        result = await db.execute(
+            select(MCPSession).where(
+                MCPSession.id == pid,
+                MCPSession.user_id == uid,
+                MCPSession.kind == "pat",
+            )
+        )
+        row = result.scalar_one_or_none()
+        if not row:
+            return False
+
+        access_hash = row.access_token_hash
+        await db.execute(
+            update(MCPSession)
+            .where(MCPSession.id == pid)
+            .values(is_revoked=True)
+        )
+        await db.commit()
+
+    # Purge cache so subsequent validation fails immediately (matches oauth revoke behavior)
+    try:
+        redis = app_state.redis_client
+        if access_hash:
+            await redis.delete(f"mcp_session:{access_hash}")
+    except Exception:
+        pass
+
+    return True
 
 
 async def _load_connections_and_resources(

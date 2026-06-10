@@ -10,6 +10,10 @@ Notifications:
 Profile:
   GET  /profile                   — Profile page (HTML)
   POST /api/profile               — Update profile (JSON)
+  GET  /api/profile/usage         — Usage stats (JSON)
+  POST /api/profile/tokens        — Create PAT (JSON) — for remote/headless MCP
+  GET  /api/profile/tokens        — List PATs (JSON)
+  POST /api/profile/tokens/{id}/revoke — Revoke PAT (JSON)
 """
 
 import logging
@@ -21,6 +25,7 @@ from sqlalchemy import desc, func, select, update
 
 import app.app_state as app_state
 from app.auth.uid_cookie import get_uid_from_request
+from app.auth.mcp_session_manager import create_pat, list_pats, revoke_pat
 from app.models.connection import OAuthConnection
 from app.models.notification import Notification
 from app.models.token import GA4Property, GoogleAdsAccount, GTMContainer
@@ -427,6 +432,15 @@ async def profile_page(request: Request):
     except Exception:
         pass
 
+    # ── MCP PATs (Personal Access Tokens for remote/headless MCP clients) ──
+    # Loaded here so the profile template can render the "Access Tokens" card.
+    # list_pats returns only safe fields (no plaintext/hashes).
+    mcp_pats: list[dict] = []
+    try:
+        mcp_pats = await list_pats(uid)
+    except Exception:
+        pass
+
     return render(
         request,
         "profile.html",
@@ -440,6 +454,7 @@ async def profile_page(request: Request):
             "dashboard_count": dashboard_count,
             "recent_notifs": recent_notifs,
             "unread_notifs": unread_notifs,
+            "mcp_pats": mcp_pats,
         },
     )
 
@@ -591,6 +606,101 @@ async def usage_stats(request: Request):
     except Exception as e:
         logger.error(f"Error fetching usage stats: {e}")
         return JSONResponse({"error": "Failed to load usage stats"}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# MCP Personal Access Tokens (for remote/headless clients)
+# These are user-wide bearer tokens (stored as MCPSession rows with kind='pat').
+# The client (on remote) just sends Authorization: Bearer fxt_pat_... on its /mcp calls.
+# No OAuth dance or browser required on the remote machine.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/profile/tokens")
+async def create_mcp_token(request: Request):
+    """Create a new PAT. Body: {name: str, expiry_days: int|null }.
+    Returns the token plaintext exactly once + metadata.
+    """
+    uid = get_uid_from_request(request)
+    if not uid:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    name = (body.get("name") or "").strip()
+    expiry_days = body.get("expiry_days")
+
+    if not name:
+        return JSONResponse({"error": "name is required"}, status_code=400)
+
+    try:
+        data = await create_pat(uid, name, expiry_days)
+        # Best-effort activity note (non-fatal)
+        try:
+            from app.notifications import create_notification
+
+            await create_notification(
+                user_id=uid,
+                title="MCP Access Token created",
+                message=f"Token '{name}' created for remote / headless use.",
+                category="system",
+                action_url="/profile",
+            )
+        except Exception:
+            pass
+        return JSONResponse(data)
+    except Exception as e:
+        logger.error(f"Error creating MCP PAT: {e}")
+        return JSONResponse({"error": "Failed to create token"}, status_code=500)
+
+
+@router.get("/api/profile/tokens")
+async def list_mcp_tokens(request: Request):
+    """List the caller's PATs (safe fields only; no plaintext)."""
+    uid = get_uid_from_request(request)
+    if not uid:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        tokens = await list_pats(uid)
+        return JSONResponse({"tokens": tokens})
+    except Exception as e:
+        logger.error(f"Error listing MCP PATs: {e}")
+        return JSONResponse({"error": "Failed to list tokens"}, status_code=500)
+
+
+@router.post("/api/profile/tokens/{token_id}/revoke")
+async def revoke_mcp_token(request: Request, token_id: str):
+    """Revoke one of the caller's PATs. Immediate (DB + Redis)."""
+    uid = get_uid_from_request(request)
+    if not uid:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        ok = await revoke_pat(uid, token_id)
+        if not ok:
+            return JSONResponse({"error": "Token not found or not owned by you"}, status_code=404)
+        # Best-effort activity note
+        try:
+            from app.notifications import create_notification
+
+            await create_notification(
+                user_id=uid,
+                title="MCP Access Token revoked",
+                message="A token was revoked from your profile.",
+                category="system",
+                severity="warning",
+                action_url="/profile",
+            )
+        except Exception:
+            pass
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        logger.error(f"Error revoking MCP PAT: {e}")
+        return JSONResponse({"error": "Failed to revoke"}, status_code=500)
 
 
 # ---------------------------------------------------------------------------

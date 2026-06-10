@@ -103,6 +103,27 @@ docker compose restart app
 
 Use `https://abc123.ngrok-free.app/mcp` in your AI client.
 
+## Connecting from remote or headless servers (SSH, containers, CI — no browser)
+
+When the MCP client runs on a machine without a UI (or where you cannot open a browser and receive localhost redirects), the normal OAuth flow cannot complete.
+
+### Recommended: Personal Access Tokens (PATs)
+
+1. On any machine with a browser, sign in to Fluxito and go to **/profile**.
+2. In the **MCP Access Tokens** card, give the token a name (e.g. `prod-box`) and choose an expiry.
+3. Click **Create token**. The plaintext token is shown **once** together with a ready-to-paste config snippet.
+4. Copy the `Authorization: Bearer fxt_pat_...` header (or the whole snippet).
+5. On the remote machine, add the header to your MCP client's configuration for the Fluxito server (most HTTP-based MCP clients support custom headers or `env`/`headers` in the server definition).
+6. The remote client can now call tools with no further browser interaction.
+
+PATs are user-wide (they carry your identity and project memberships exactly like a normal OAuth session). They can be revoked instantly from the same Profile page.
+
+### Alternative: Out-of-band (manual) OAuth code paste
+
+Some clients (or small helper scripts you run on the remote) can print an authorization URL, let you complete the normal sign-in/consent flow in a local browser, and then accept a short-lived `code` that you paste back. When the client uses a special `redirect_uri` such as `urn:ietf:wg:oauth:2.0:oob` (or `oob`), Fluxito will display the code on a dedicated page instead of trying to redirect to an unreachable address. After pasting the code the client finishes the normal PKCE token exchange.
+
+PATs are still preferred for most headless cases because they require no client-side OAuth state management across machines.
+
 ## Common issues
 
 | Symptom | Fix |

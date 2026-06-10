@@ -249,9 +249,7 @@
       {% endif %}
     </nav>
 
-    <div class="sidebar-spacer"></div>
-
-    {# ── Bottom: theme + profile ── #}
+    {# ── Bottom: theme + profile (always visible; nav above scrolls when needed) ── #}
     <div class="sidebar-bottom">
       <button class="sidebar-item" type="button" id="notifToggle" style="border:none;background:none;cursor:pointer;width:100%;text-align:left;position:relative;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -504,20 +502,56 @@
   <div class="toast-host"></div>
   <script src="/static/js/app.js?v={{ asset_hash('js/app.js') }}" defer></script>
   <script>
-    // Top-nav dropdowns (project switcher, etc.)
+    // Top-nav dropdowns (project switcher, user menu). Use fixed positioning so
+    // menus can escape the sidebar on short laptop screens without causing
+    // scroll jumps or clipping when the nav is scrolled.
     (function(){
+      function positionFloatingMenu(group, menu) {
+        var btn = group.querySelector('button[aria-haspopup]') || group.querySelector('button');
+        if (!btn || !menu) return;
+        var br = btn.getBoundingClientRect();
+        var gap = 4;
+        menu.style.position = 'fixed';
+        menu.style.left = br.left + 'px';
+        menu.style.width = br.width + 'px';
+        if (group.classList.contains('sidebar-user')) {
+          // Opens upwards from near bottom of sidebar
+          menu.style.top = 'auto';
+          menu.style.bottom = (window.innerHeight - br.top + gap) + 'px';
+        } else {
+          // Opens downwards (project switcher etc.)
+          menu.style.bottom = 'auto';
+          menu.style.top = (br.bottom + gap) + 'px';
+        }
+      }
+      function clearFloatingPosition(menu) {
+        if (!menu) return;
+        menu.style.position = '';
+        menu.style.left = '';
+        menu.style.right = '';
+        menu.style.top = '';
+        menu.style.bottom = '';
+        menu.style.width = '';
+      }
       function init(){
         var groups = document.querySelectorAll('[data-nav-group]');
         groups.forEach(function(g){
-          var btn = g.querySelector('button[aria-haspopup]') || g.querySelector('.nav-group-btn');
+          var btn = g.querySelector('button[aria-haspopup]') || g.querySelector('.nav-group-btn') || g.querySelector('button');
           if (!btn) return;
           btn.addEventListener('click', function(ev){
             ev.stopPropagation();
             var wasOpen = g.classList.contains('is-open');
-            groups.forEach(function(x){ x.classList.remove('is-open'); });
+            var menu = g.querySelector('.sidebar-user-menu, .sidebar-project-menu');
+            groups.forEach(function(x){
+              x.classList.remove('is-open');
+              var b = x.querySelector('button[aria-haspopup]');
+              if (b) b.setAttribute('aria-expanded','false');
+              clearFloatingPosition(x.querySelector('.sidebar-user-menu, .sidebar-project-menu'));
+            });
             if (!wasOpen) {
               g.classList.add('is-open');
               btn.setAttribute('aria-expanded','true');
+              if (menu) positionFloatingMenu(g, menu);
             } else {
               btn.setAttribute('aria-expanded','false');
             }
@@ -529,11 +563,23 @@
             x.classList.remove('is-open');
             var b = x.querySelector('button[aria-haspopup]');
             if (b) b.setAttribute('aria-expanded','false');
+            clearFloatingPosition(x.querySelector('.sidebar-user-menu, .sidebar-project-menu'));
           });
         });
         document.addEventListener('keydown', function(ev){
           if (ev.key === 'Escape') {
-            groups.forEach(function(x){ x.classList.remove('is-open'); });
+            groups.forEach(function(x){
+              x.classList.remove('is-open');
+              clearFloatingPosition(x.querySelector('.sidebar-user-menu, .sidebar-project-menu'));
+            });
+          }
+        });
+        // Reposition open menu on resize (rare but keeps it attached)
+        window.addEventListener('resize', function(){
+          var openGroup = document.querySelector('[data-nav-group].is-open');
+          if (openGroup) {
+            var m = openGroup.querySelector('.sidebar-user-menu, .sidebar-project-menu');
+            if (m) positionFloatingMenu(openGroup, m);
           }
         });
       }

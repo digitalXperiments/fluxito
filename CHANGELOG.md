@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-06-11
+
+### Added
+- Support for using Fluxito's MCP server from remote or headless environments (SSH, containers, CI, servers without a browser, etc.).
+- **Personal Access Tokens (PATs)** — generate static, long-lived bearer tokens directly from the Profile page on a machine with a browser, then paste them into remote client configs.
+- Out-of-band OAuth flow that lets you open an auth URL in a local browser and paste a code back to a remote client to complete authentication.
+- New **MCP Access Tokens** section on the Profile page for creating, listing, and revoking tokens for remote use.
+
+### Changed
+- MCP clients now support three authentication options: standard browser OAuth, manual code paste (OOB), and static Personal Access Tokens. This makes it practical to connect agents like Claude Code on remote boxes, Hermes, and other headless or config-driven tools.
+- Connection documentation updated with clear guidance for remote and headless setups.
+
 ## [1.1.0] — 2026-06-04
 
 ### Added
