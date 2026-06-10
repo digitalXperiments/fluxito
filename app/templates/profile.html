@@ -114,15 +114,19 @@
     </form>
 
     {# Post-create reveal (populated by JS, shown once) #}
-    <div id="mcpPatReveal" class="pf-pat-reveal" style="display:none;margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r-m);padding:14px;background:var(--bg-2)">
-      <div style="font-size:12px;font-weight:600;color:var(--green);margin-bottom:6px">Token created — copy it now (shown only once)</div>
+    <div id="mcpPatReveal" class="pf-pat-reveal" style="display:none;margin-bottom:16px;border:2px solid var(--green);border-radius:var(--r-m);padding:14px;background:var(--bg-2)">
+      <div style="font-size:12px;font-weight:600;color:var(--green);margin-bottom:6px">✓ Token created — copy the full value now (shown only once, never again)</div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <code id="mcpPatPlain" style="flex:1;font-family:var(--mono);font-size:12.5px;word-break:break-all;background:var(--bg);padding:6px 8px;border-radius:4px;border:1px solid var(--line)"></code>
-        <button type="button" class="btn sm" onclick="Fluxito.copy(document.getElementById('mcpPatPlain').textContent, 'MCP PAT')">Copy token</button>
+        <code id="mcpPatPlain" style="flex:1;font-family:var(--mono);font-size:13px;word-break:break-all;background:var(--bg);padding:8px 10px;border-radius:6px;border:1px solid var(--line);user-select:all" onclick="try{this.select()}catch(e){}"></code>
+        <button type="button" class="btn primary sm" onclick="Fluxito.copy(document.getElementById('mcpPatPlain').textContent, 'MCP PAT')">Copy token</button>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Example config snippet (add the Authorization header to your MCP client's server definition for this Fluxito instance):</div>
-      <pre id="mcpPatSnippet" style="font-size:11px;background:var(--bg);padding:8px;border-radius:4px;border:1px solid var(--line);overflow:auto;white-space:pre-wrap"></pre>
-      <button type="button" class="btn sm" onclick="Fluxito.copy(document.getElementById('mcpPatSnippet').textContent, 'Config snippet'); document.getElementById('mcpPatReveal').style.display='none'">Copy snippet &amp; dismiss</button>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Config snippet for your remote MCP client (add the Authorization header):</div>
+      <pre id="mcpPatSnippet" style="font-size:11px;background:var(--bg);padding:8px;border-radius:4px;border:1px solid var(--line);overflow:auto;white-space:pre-wrap;margin-bottom:8px"></pre>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        <button type="button" class="btn sm" onclick="Fluxito.copy(document.getElementById('mcpPatSnippet').textContent, 'Config snippet')">Copy snippet</button>
+        <button type="button" class="btn sm" onclick="document.getElementById('mcpPatReveal').style.display='none'">Done — I've copied the token</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">The full token will never be shown again. Keep it safe.</div>
     </div>
 
     {# Existing tokens list (server-rendered initial state; JS can refresh or we reload on mutate for simplicity) #}
@@ -131,26 +135,20 @@
         <div style="font-size:11px;font-weight:600;color:var(--muted);margin:6px 0 4px;text-transform:uppercase;letter-spacing:.06em">Your tokens</div>
         <div class="pf-pat-list">
           {% for p in mcp_pats %}
-            <div class="pf-pat-row {% if p.is_revoked %}is-revoked{% endif %}" data-id="{{ p.id }}">
+            <div class="pf-pat-row" data-id="{{ p.id }}">
               <div class="pf-pat-main">
                 <span class="pf-pat-name">{{ p.name or '(unnamed)' }}</span>
                 <span class="pf-pat-hint mono">{{ p.token_hint or '' }}</span>
               </div>
               <div class="pf-pat-meta">
-                {% if p.is_revoked %}
-                  <span class="t-flag" style="background:color-mix(in srgb, var(--red) 15%, transparent);color:var(--red)">revoked</span>
+                {% if p.access_token_expires_at %}
+                  <span class="pf-pat-exp">expires {{ p.access_token_expires_at | fmt_date if p.access_token_expires_at else '—' }}</span>
                 {% else %}
-                  {% if p.access_token_expires_at %}
-                    <span class="pf-pat-exp">expires {{ p.access_token_expires_at | fmt_date if p.access_token_expires_at else '—' }}</span>
-                  {% else %}
-                    <span class="pf-pat-exp">no expiry</span>
-                  {% endif %}
+                  <span class="pf-pat-exp">no expiry</span>
                 {% endif %}
                 {% if p.last_used_at %}<span class="pf-pat-last">last used {{ p.last_used_at | fmt_date }}</span>{% endif %}
               </div>
-              {% if not p.is_revoked %}
-                <button type="button" class="btn sm" style="color:var(--red);border-color:var(--red)" onclick="Fluxito._revokeMcpPat('{{ p.id }}', '{{ p.name or p.token_hint or 'this token' }}')">Revoke</button>
-              {% endif %}
+              <button type="button" class="btn sm" style="color:var(--red);border-color:var(--red)" onclick="Fluxito._revokeMcpPat('{{ p.id }}', '{{ p.name or p.token_hint or 'this token' }}')">Revoke</button>
             </div>
           {% endfor %}
         </div>
@@ -453,6 +451,7 @@
 /* MCP PAT card specifics */
 .pf-pat-reveal code,
 .pf-pat-reveal pre { font-family: var(--mono); }
+.pf-pat-reveal { box-shadow: 0 4px 12px -2px rgba(0,0,0,0.1); }
 .pf-pat-list { border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; }
 .pf-pat-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); background: var(--bg); font-size: 13px; }
 .pf-pat-row:last-child { border-bottom: none; }
@@ -663,9 +662,15 @@ document.addEventListener('DOMContentLoaded', function(){
           snippet.textContent = 'URL: ' + base + '\nAuthorization: Bearer ' + data.token + '\n\n(Include the Authorization header in your remote MCP client\'s Fluxito server config.)';
         }
         if (reveal) reveal.style.display = 'block';
-        Fluxito.toast('Token created — copy it now');
-        // Simple: reload so the list updates (keeps logic minimal and consistent with other mutating actions)
-        setTimeout(function(){ window.location.reload(); }, 1200);
+        Fluxito.toast('Token created — copy it now (shown only once)');
+
+        // Update the list in place so the new token appears with its hint (no full reload)
+        if (window.Fluxito && Fluxito._addPatToList) {
+          Fluxito._addPatToList(data);
+        }
+
+        // Clear the form for next token
+        if (nameEl) nameEl.value = '';
       } else {
         Fluxito.toast(data.error || 'Failed to create token', 'error');
       }
@@ -673,6 +678,47 @@ document.addEventListener('DOMContentLoaded', function(){
       Fluxito.toast('Network error', 'error');
     }
     if (btn) { btn.disabled = false; btn.textContent = 'Create token'; }
+  };
+
+  window.Fluxito._addPatToList = function(p) {
+    var container = document.getElementById('mcpPatList');
+    if (!container) return;
+
+    // If we were showing the empty state, replace it with list structure
+    var empty = container.querySelector('.pf-empty');
+    if (empty) {
+      container.innerHTML = ''
+        + '<div style="font-size:11px;font-weight:600;color:var(--muted);margin:6px 0 4px;text-transform:uppercase;letter-spacing:.06em">Your tokens</div>'
+        + '<div class="pf-pat-list"></div>';
+    }
+
+    var list = container.querySelector('.pf-pat-list');
+    if (!list) {
+      // Fallback
+      container.insertAdjacentHTML('beforeend',
+        '<div style="font-size:12px;color:var(--muted);margin-top:8px">Token created. <a href="#" onclick="location.reload();return false">Refresh to see it in the list</a>.</div>');
+      return;
+    }
+
+    var name = p.name || '(unnamed)';
+    var hint = p.token_hint || '';
+    var expText = (!p.expires_at) ? 'no expiry' : 'expires ' + (p.expires_at || '').slice(0, 10);
+
+    var row = document.createElement('div');
+    row.className = 'pf-pat-row';
+    row.dataset.id = p.id || '';
+    row.innerHTML = ''
+      + '<div class="pf-pat-main">'
+      +   '<span class="pf-pat-name">' + name + '</span>'
+      +   '<span class="pf-pat-hint mono">' + hint + '</span>'
+      + '</div>'
+      + '<div class="pf-pat-meta">'
+      +   '<span class="pf-pat-exp">' + expText + '</span>'
+      + '</div>'
+      + '<button type="button" class="btn sm" style="color:var(--red);border-color:var(--red)" '
+      +   'onclick="Fluxito._revokeMcpPat(\'' + (p.id || '') + '\', \'' + name.replace(/'/g, "\\'") + '\')">Revoke</button>';
+
+    list.appendChild(row);
   };
 
   window.Fluxito._revokeMcpPat = async function(id, label) {
@@ -685,7 +731,19 @@ document.addEventListener('DOMContentLoaded', function(){
       var data = await res.json();
       if (res.ok && data.ok) {
         Fluxito.toast('Token revoked');
-        setTimeout(function(){ window.location.reload(); }, 600);
+        // Remove the row from the list (no need to reload; revoked entries are hidden anyway)
+        var row = document.querySelector('.pf-pat-row[data-id="' + id + '"]');
+        if (row && row.parentNode) {
+          row.parentNode.removeChild(row);
+        }
+        // If the list is now empty, show the empty state (simple heuristic)
+        var list = document.querySelector('#mcpPatList .pf-pat-list');
+        if (list && list.children.length === 0) {
+          var container = document.getElementById('mcpPatList');
+          if (container) {
+            container.innerHTML = '<div class="pf-empty">No tokens yet. Create one above for a remote machine, SSH, container or CLI.</div>';
+          }
+        }
       } else {
         Fluxito.toast(data.error || 'Failed to revoke', 'error');
       }

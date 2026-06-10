@@ -437,7 +437,7 @@ async def profile_page(request: Request):
     # list_pats returns only safe fields (no plaintext/hashes).
     mcp_pats: list[dict] = []
     try:
-        mcp_pats = await list_pats(uid)
+        mcp_pats = await list_pats(uid)  # defaults to active_only=True (hides revoked)
     except Exception:
         pass
 
@@ -665,7 +665,7 @@ async def list_mcp_tokens(request: Request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     try:
-        tokens = await list_pats(uid)
+        tokens = await list_pats(uid)  # active_only=True by default — revoked tokens are hidden
         return JSONResponse({"tokens": tokens})
     except Exception as e:
         logger.error(f"Error listing MCP PATs: {e}")

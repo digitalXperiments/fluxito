@@ -478,20 +478,22 @@ async def create_pat(
     }
 
 
-async def list_pats(user_id: str) -> list[dict]:
-    """List PATs for the user (all, including revoked/expired for the UI to show status).
+async def list_pats(user_id: str, active_only: bool = True) -> list[dict]:
+    """List PATs for the user.
+    By default only active (non-revoked) ones are returned, since revoked tokens
+    are useless for the user and hidden from the UI.
+    Use active_only=False if you need to see history/revoked for some reason.
     Never returns plaintext or hashes.
     """
     db_session = app_state.db_session_factory()
     async with db_session as db:
-        result = await db.execute(
-            select(MCPSession)
-            .where(
-                MCPSession.user_id == UUID(str(user_id)),
-                MCPSession.kind == "pat",
-            )
-            .order_by(MCPSession.created_at.desc())
-        )
+        where = [
+            MCPSession.user_id == UUID(str(user_id)),
+            MCPSession.kind == "pat",
+        ]
+        if active_only:
+            where.append(MCPSession.is_revoked == False)
+        result = await db.execute(select(MCPSession).where(*where).order_by(MCPSession.created_at.desc()))
         rows = result.scalars().all()
 
     out: list[dict] = []
