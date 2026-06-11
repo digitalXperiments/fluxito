@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **"Check for updates" button in the admin Updates tab.** Super-admins can now
+  force an on-demand version check instead of waiting on the passive 6-hour cache.
+  The button re-polls GitHub immediately, refreshes the displayed version status,
+  and — when a newer release exists — reveals and scrolls to the "Update now"
+  action. A short per-instance cooldown protects GitHub's rate limit.
+
 ## [1.1.4] — 2026-06-11
 
 ### Added
