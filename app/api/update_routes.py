@@ -1,6 +1,7 @@
 """Update status + trigger endpoints.
 
 - GET  /api/updates/status — any authenticated user (drives the version badge).
+- POST /api/updates/check  — super-admin only (force-poll GitHub, bypass cache).
 - POST /api/updates/apply  — super-admin only (triggers the updater sidecar).
 - GET  /api/updates/job    — super-admin only (updater job status passthrough).
 """
@@ -14,6 +15,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+import app.app_state as app_state
 from app.api.admin_routes import require_superadmin
 from app.api.google_oauth_routes import _resolve_user_ctx
 from app.services import update_service
@@ -23,6 +25,8 @@ router = APIRouter()
 
 UPDATER_URL = os.environ.get("UPDATER_URL", "http://updater:9000")
 UPDATER_TOKEN = os.environ.get("UPDATER_TOKEN", "")
+CHECK_COOLDOWN_KEY = "update:check_cooldown"
+CHECK_COOLDOWN_SECONDS = 30
 
 
 def _updater_http_error(exc: httpx.HTTPStatusError) -> JSONResponse:
@@ -63,6 +67,28 @@ async def update_status(request: Request):
     if not await _resolve_user_ctx(request):
         return JSONResponse({"error": "not authenticated"}, status_code=401)
     return JSONResponse(await update_service.check_for_update())
+
+
+@router.post("/api/updates/check")
+async def update_check(request: Request):
+    """Super-admin: force a fresh GitHub poll, bypassing the 6h cache.
+
+    Guarded by a short per-instance cooldown so the forced poll can't exhaust
+    GitHub's unauthenticated rate limit. Degrades open if Redis is unavailable.
+    """
+    await require_superadmin(request)  # raises 401/403
+    redis = app_state.redis_client
+    if redis is not None:
+        try:
+            if await redis.get(CHECK_COOLDOWN_KEY):
+                return JSONResponse(
+                    {"error": "checked too recently", "code": "check_cooldown"},
+                    status_code=429,
+                )
+            await redis.setex(CHECK_COOLDOWN_KEY, CHECK_COOLDOWN_SECONDS, "1")
+        except Exception:  # cooldown is best-effort; never block a check on Redis
+            logger.warning("update check cooldown guard failed", exc_info=True)
+    return JSONResponse(await update_service.check_for_update(force=True))
 
 
 @router.post("/api/updates/apply")
