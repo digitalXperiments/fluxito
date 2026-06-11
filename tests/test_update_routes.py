@@ -309,9 +309,7 @@ async def test_check_rejected_within_cooldown(monkeypatch):
         return {"id": "1", "email": "a@b.c", "is_superadmin": True}
 
     monkeypatch.setattr(update_routes, "require_superadmin", _allow)
-    monkeypatch.setattr(
-        app_state, "redis_client", _FakeRedis({update_routes.CHECK_COOLDOWN_KEY: "1"})
-    )
+    monkeypatch.setattr(app_state, "redis_client", _FakeRedis({update_routes.CHECK_COOLDOWN_KEY: "1"}))
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/updates/check")
