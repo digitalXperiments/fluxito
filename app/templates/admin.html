@@ -102,6 +102,10 @@
       <p id="upd-latest-row" style="display:none">Latest version: <strong id="upd-latest"></strong>
         — <a id="upd-notes" href="#" target="_blank" rel="noopener">release notes</a></p>
       <p id="upd-uptodate" style="display:none">&#x2713; You're on the latest version.</p>
+      <div class="update-check-row">
+        <button id="upd-check" class="btn sm">Check for updates</button>
+        <span id="upd-checked" class="update-checked" aria-live="polite"></span>
+      </div>
       <button id="upd-apply" class="btn primary" style="display:none;width:100%;margin-top:8px">Update now</button>
 
       <div id="upd-confirm" class="update-card" style="display:none">
@@ -211,6 +215,9 @@ section[data-panel] {
 .admin-btn-row .btn { width:100%; justify-content:center; }
 .update-box { width: 100%; margin-top: 28px; }
 .update-box p { margin: 0 0 12px; line-height: 1.6; }
+.update-check-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+.update-checked { color:var(--muted); font-size:12px; }
+#upd-apply.is-highlight { box-shadow:0 0 0 3px color-mix(in srgb, var(--ink) 30%, transparent); transition:box-shadow .3s ease; }
 .update-card { margin-top:28px; padding:20px; background:var(--bg-2); border:1px solid var(--line-2); border-radius:var(--r-l); }
 .update-card h3 { margin:5px 0 7px; font-size:18px; }
 .update-eyebrow { display:block; color:var(--muted); font:600 10.5px/1.4 var(--mono); letter-spacing:.1em; text-transform:uppercase; }
@@ -552,9 +559,43 @@ loadUsers(); loadRequests(); loadRateLimits(); loadBranding(); loadAuthMethods()
       });
   }
 
+  function checkForUpdates() {
+    var btn = document.getElementById('upd-check');
+    var checked = document.getElementById('upd-checked');
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.textContent = 'Checking…';
+    checked.textContent = '';
+    fetch('/api/updates/check', { method: 'POST', credentials: 'same-origin' })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, status: r.status, data: d }; });
+      })
+      .then(function (result) {
+        if (result.status === 429) { checked.textContent = 'Checked moments ago — try again shortly.'; return; }
+        if (!result.ok) { checked.textContent = "Couldn't reach GitHub — try again later."; return; }
+        if (result.data.checks_enabled === false) { checked.textContent = 'Update checks are disabled in settings.'; return; }
+        return refreshStatus().then(function () {
+          if (result.data.update_available) {
+            checked.textContent = 'Update available: v' + result.data.latest;
+            var apply = document.getElementById('upd-apply');
+            apply.classList.add('is-highlight');
+            apply.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(function () { apply.classList.remove('is-highlight'); }, 2000);
+          } else if (!result.data.latest) {
+            checked.textContent = "Couldn't confirm the latest version — try again later.";
+          } else {
+            checked.textContent = "You're on the latest version (v" + result.data.current + ').';
+          }
+        });
+      })
+      .catch(function () { checked.textContent = "Couldn't reach GitHub — try again later."; })
+      .finally(function () { btn.disabled = false; btn.textContent = original; });
+  }
+
   window.__fluxRefreshUpdates = refreshStatus;
 
   apply.addEventListener('click', openConfirmation);
+  document.getElementById('upd-check').addEventListener('click', checkForUpdates);
   document.getElementById('upd-confirm-cancel').addEventListener('click', closeConfirmation);
   document.getElementById('upd-retry').addEventListener('click', openConfirmation);
   document.getElementById('upd-copy-diagnostics').addEventListener('click', function () {

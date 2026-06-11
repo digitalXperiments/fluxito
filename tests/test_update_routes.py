@@ -243,3 +243,103 @@ async def test_job_returns_503_when_updater_unreachable(monkeypatch):
         resp = await client.get("/api/updates/job")
     assert resp.status_code == 503
     assert resp.json()["status"] == "unknown"
+
+
+class _FakeRedis:
+    def __init__(self, initial=None):
+        self.store = dict(initial or {})
+
+    async def get(self, key):
+        return self.store.get(key)
+
+    async def setex(self, key, ttl, value):
+        self.store[key] = value
+
+
+@pytest.mark.asyncio
+async def test_check_requires_superadmin(monkeypatch):
+    async def _deny(request):
+        from fastapi import HTTPException
+
+        raise HTTPException(403, "Super-admin only")
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _deny)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/updates/check")
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_check_forces_fresh_status(monkeypatch):
+    import app.app_state as app_state
+
+    async def _allow(request):
+        return {"id": "1", "email": "a@b.c", "is_superadmin": True}
+
+    forced = {}
+
+    async def _check(force=False):
+        forced["force"] = force
+        return {
+            "current": "1.0.2",
+            "latest": "1.0.9",
+            "update_available": True,
+            "release_notes_url": "https://x",
+            "published_at": None,
+            "checks_enabled": True,
+        }
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _allow)
+    monkeypatch.setattr(update_service, "check_for_update", _check)
+    monkeypatch.setattr(app_state, "redis_client", _FakeRedis())
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/updates/check")
+    assert resp.status_code == 200
+    assert forced["force"] is True
+    assert resp.json()["latest"] == "1.0.9"
+
+
+@pytest.mark.asyncio
+async def test_check_rejected_within_cooldown(monkeypatch):
+    import app.app_state as app_state
+
+    async def _allow(request):
+        return {"id": "1", "email": "a@b.c", "is_superadmin": True}
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _allow)
+    monkeypatch.setattr(app_state, "redis_client", _FakeRedis({update_routes.CHECK_COOLDOWN_KEY: "1"}))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/updates/check")
+    assert resp.status_code == 429
+    assert resp.json()["code"] == "check_cooldown"
+
+
+@pytest.mark.asyncio
+async def test_check_runs_when_redis_unavailable(monkeypatch):
+    """Cooldown guard degrades open: a None Redis must not block the check."""
+    import app.app_state as app_state
+
+    async def _allow(request):
+        return {"id": "1", "email": "a@b.c", "is_superadmin": True}
+
+    async def _check(force=False):
+        return {
+            "current": "1.0.2",
+            "latest": "1.0.9",
+            "update_available": True,
+            "release_notes_url": "https://x",
+            "published_at": None,
+            "checks_enabled": True,
+        }
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _allow)
+    monkeypatch.setattr(update_service, "check_for_update", _check)
+    monkeypatch.setattr(app_state, "redis_client", None)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/updates/check")
+    assert resp.status_code == 200
+    assert resp.json()["latest"] == "1.0.9"

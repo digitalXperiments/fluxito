@@ -82,6 +82,32 @@ async def test_check_uses_cache_when_present(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_force_bypasses_cache_and_rewrites(monkeypatch):
+    monkeypatch.setattr(update_service, "update_checks_enabled", _async_return(True))
+    monkeypatch.setattr(update_service, "get_version", lambda: "1.0.2")
+    stale = json.dumps(
+        {"tag_name": "v1.0.3", "html_url": "https://x/v1.0.3", "published_at": "2026-01-01T00:00:00Z"}
+    )
+    fake = _FakeRedis({update_service.CACHE_KEY: stale})
+    monkeypatch.setattr(app_state, "redis_client", fake)
+
+    calls = {"n": 0}
+
+    async def _fresh(*a, **k):
+        calls["n"] += 1
+        return {"tag_name": "v1.0.9", "html_url": "https://x/v1.0.9", "published_at": "2026-06-01T00:00:00Z"}
+
+    monkeypatch.setattr(update_service, "_fetch_latest_release", _fresh)
+
+    result = await update_service.check_for_update(force=True)
+
+    assert calls["n"] == 1  # network was hit despite warm cache
+    assert result["latest"] == "1.0.9"
+    assert result["update_available"] is True
+    assert any(key == update_service.CACHE_KEY for key, _ttl, _val in fake.setex_calls)  # rewrote cache
+
+
+@pytest.mark.asyncio
 async def test_check_swallows_network_errors(monkeypatch):
     monkeypatch.setattr(update_service, "update_checks_enabled", _async_return(True))
     monkeypatch.setattr(update_service, "get_version", lambda: "1.0.2")
