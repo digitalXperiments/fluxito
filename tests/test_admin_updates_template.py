@@ -40,3 +40,12 @@ def test_updates_centralize_stage_and_failure_mappings():
     assert "var FAILURE_GUIDANCE" in source
     assert "function renderJob" in source
     assert "function renderFailure" in source
+
+
+def test_updates_have_manual_check_button_wired_to_force_endpoint():
+    source = _updates_source()
+
+    assert 'id="upd-check"' in source           # the button
+    assert 'id="upd-checked"' in source          # "last checked" status line
+    assert "/api/updates/check" in source        # POSTs to the force endpoint
+    assert "function checkForUpdates" in source  # handler defined
