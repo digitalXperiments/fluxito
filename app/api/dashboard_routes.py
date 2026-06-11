@@ -100,6 +100,7 @@ async def _load_user_view_from_uid(uid: str | None) -> dict | None:
                     "id": str(u.id),
                     "email": u.email or "",
                     "display_name": u.display_name or "",
+                    "is_superadmin": bool(u.is_superadmin),
                 }
     except Exception as exc:
         logger.warning("Failed to load user view from uid: %s", exc)

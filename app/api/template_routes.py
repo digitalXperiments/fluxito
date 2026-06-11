@@ -30,7 +30,11 @@ router = APIRouter()
 
 
 async def _load_user_view(uid: str) -> dict | None:
-    """Return {id, email} for template context."""
+    """Return {id, email, display_name, is_superadmin} for template context.
+
+    ``is_superadmin`` gates the sidebar Admin link (base.html); omitting it
+    made the link vanish on the templates page for super-admins.
+    """
     try:
         user_uuid = uuid.UUID(uid)
     except ValueError:
@@ -44,6 +48,8 @@ async def _load_user_view(uid: str) -> dict | None:
         return {
             "id": str(user.id),
             "email": user.email,
+            "display_name": user.display_name or "",
+            "is_superadmin": bool(user.is_superadmin),
         }
 
 
