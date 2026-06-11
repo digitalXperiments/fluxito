@@ -47,10 +47,13 @@ async def _fetch_latest_release() -> dict | None:
         return resp.json()
 
 
-async def _get_cached_or_fetch() -> dict | None:
-    """Return the latest-release payload from Redis cache, fetching + caching on miss."""
+async def _get_cached_or_fetch(force: bool = False) -> dict | None:
+    """Return the latest-release payload from Redis cache, fetching + caching on miss.
+
+    When force=True, skip the cache read but still write the fresh result back.
+    """
     redis = app_state.redis_client
-    if redis is not None:
+    if redis is not None and not force:
         cached = await redis.get(CACHE_KEY)
         if cached:
             return json.loads(cached)
@@ -66,8 +69,11 @@ async def _get_cached_or_fetch() -> dict | None:
     return data
 
 
-async def check_for_update() -> dict:
-    """Return update status. Never raises — all failures degrade to 'no update'."""
+async def check_for_update(force: bool = False) -> dict:
+    """Return update status. Never raises — all failures degrade to 'no update'.
+
+    When force=True, bypass the Redis cache and re-poll GitHub.
+    """
     current = get_version()
     base = {
         "current": current,
@@ -85,7 +91,7 @@ async def check_for_update() -> dict:
         # (CHANGELOG unreadable), we can't compare meaningfully — suppress the dot.
         if "+local" in current:
             return base
-        payload = await _get_cached_or_fetch()
+        payload = await _get_cached_or_fetch(force)
         if not payload or not payload.get("tag_name"):
             return base
         latest_raw = payload["tag_name"]
