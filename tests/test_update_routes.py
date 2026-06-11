@@ -317,3 +317,31 @@ async def test_check_rejected_within_cooldown(monkeypatch):
         resp = await client.post("/api/updates/check")
     assert resp.status_code == 429
     assert resp.json()["code"] == "check_cooldown"
+
+
+@pytest.mark.asyncio
+async def test_check_runs_when_redis_unavailable(monkeypatch):
+    """Cooldown guard degrades open: a None Redis must not block the check."""
+    import app.app_state as app_state
+
+    async def _allow(request):
+        return {"id": "1", "email": "a@b.c", "is_superadmin": True}
+
+    async def _check(force=False):
+        return {
+            "current": "1.0.2",
+            "latest": "1.0.9",
+            "update_available": True,
+            "release_notes_url": "https://x",
+            "published_at": None,
+            "checks_enabled": True,
+        }
+
+    monkeypatch.setattr(update_routes, "require_superadmin", _allow)
+    monkeypatch.setattr(update_service, "check_for_update", _check)
+    monkeypatch.setattr(app_state, "redis_client", None)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/updates/check")
+    assert resp.status_code == 200
+    assert resp.json()["latest"] == "1.0.9"

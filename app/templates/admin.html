@@ -581,6 +581,8 @@ loadUsers(); loadRequests(); loadRateLimits(); loadBranding(); loadAuthMethods()
             apply.classList.add('is-highlight');
             apply.scrollIntoView({ behavior: 'smooth', block: 'center' });
             setTimeout(function () { apply.classList.remove('is-highlight'); }, 2000);
+          } else if (!result.data.latest) {
+            checked.textContent = "Couldn't confirm the latest version — try again later.";
           } else {
             checked.textContent = "You're on the latest version (v" + result.data.current + ').';
           }
