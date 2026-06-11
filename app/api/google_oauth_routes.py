@@ -1565,15 +1565,21 @@ async def google_connection_page(request: Request):
             "gsc_sites": gsc_sites,
         }
 
-    return render(
+    active_pid = await ensure_active_project(request, user_ctx.user_id)
+
+    response = render(
         request,
         "connect/google.html",
         {
             "user": user_view,
             "editing": editing,
             "is_new": editing is None,
+            "active_project_id": active_pid,
         },
     )
+    if active_pid and active_pid != get_active_project_id(request):
+        set_active_project_cookie(response, active_pid)
+    return response
 
 
 @router.get("/api/connections/google/initiate")
@@ -1753,6 +1759,28 @@ async def google_data_callback(
             "<h2>Your session expired. Please <a href='/signin'>sign in</a> and connect again.</h2>",
             status_code=401,
         )
+
+    # Fallback: if project_id wasn't captured in the OAuth state (e.g. legacy
+    # flow or cookie was missing when initiate was called), look up the user's
+    # first project so we never violate the NOT NULL constraint on project_id.
+    if not project_id:
+        from app.models.project import Project, ProjectMember
+
+        async with app_state.db_session_factory() as _proj_db:
+            _row = await _proj_db.execute(
+                select(Project)
+                .join(ProjectMember, ProjectMember.project_id == Project.id)
+                .where(
+                    ProjectMember.user_id == user_id,
+                    ProjectMember.is_active == True,
+                    Project.is_active == True,
+                )
+                .order_by(Project.created_at.asc())
+                .limit(1)
+            )
+            _proj = _row.scalar_one_or_none()
+            if _proj:
+                project_id = str(_proj.id)
 
     db_session = app_state.db_session_factory()
     async with db_session as db:

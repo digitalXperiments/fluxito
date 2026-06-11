@@ -12,22 +12,24 @@
     </div>
   </div>
 
-  <div class="tabs" style="margin-bottom:24px;">
-    <button class="tab is-active" data-tab="users" onclick="adminTab('users')">Users</button>
-    <button class="tab" data-tab="requests" onclick="adminTab('requests')">Access Requests</button>
-    <button class="tab" data-tab="signin" onclick="adminTab('signin')">Sign-in</button>
-    <button class="tab" data-tab="ratelimits" onclick="adminTab('ratelimits')">Rate Limits</button>
-    <button class="tab" data-tab="operations" onclick="adminTab('operations')">Operations</button>
-    <button class="tab" data-tab="branding" onclick="adminTab('branding')">Branding</button>
-    <button class="tab" data-tab="updates" onclick="adminTab('updates');if(window.__fluxRefreshUpdates)window.__fluxRefreshUpdates();">Updates</button>
+  <div class="admin-tabs">
+    <div class="tabs">
+      <button class="tab is-active" data-tab="users" onclick="adminTab('users')">Users</button>
+      <button class="tab" data-tab="requests" onclick="adminTab('requests')">Access Requests</button>
+      <button class="tab" data-tab="signin" onclick="adminTab('signin')">Sign-in</button>
+      <button class="tab" data-tab="ratelimits" onclick="adminTab('ratelimits')">Rate Limits</button>
+      <button class="tab" data-tab="operations" onclick="adminTab('operations')">Operations</button>
+      <button class="tab" data-tab="branding" onclick="adminTab('branding')">Branding</button>
+      <button class="tab" data-tab="updates" onclick="adminTab('updates');if(window.__fluxRefreshUpdates)window.__fluxRefreshUpdates();">Updates</button>
+    </div>
   </div>
 
   <section data-panel="users">
-    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px">
-      <label class="f-field">Invite email<input id="invEmail" type="email" class="f-input" style="width:240px" placeholder="person@company.com"></label>
-      <label class="f-field">Name (optional)<input id="invName" class="f-input" style="width:180px" placeholder="Jane Doe"></label>
-      <button class="btn primary" onclick="inviteUser()">Invite user</button>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:0">
+      <label class="f-field" style="flex:1;min-width:200px;margin-bottom:0">Invite email<input id="invEmail" type="email" class="f-input" placeholder="person@company.com"></label>
+      <label class="f-field" style="flex:1;min-width:160px;margin-bottom:0">Name (optional)<input id="invName" class="f-input" placeholder="Jane Doe"></label>
     </div>
+    <div class="admin-btn-row"><button class="btn primary" onclick="inviteUser()">Invite user</button></div>
     <div id="invMsg" class="ps-msg" style="display:none"></div>
     <table class="ps-table"><thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Super-admin</th><th></th></tr></thead>
       <tbody id="usersBody"><tr><td colspan="5">Loading…</td></tr></tbody>
@@ -54,7 +56,7 @@
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
       <input type="checkbox" id="amPassword"> Allow email + password sign-in
     </label>
-    <button class="btn primary" onclick="saveAuthMethods()">Save</button>
+    <div class="admin-btn-row"><button class="btn primary" onclick="saveAuthMethods()">Save</button></div>
     <p style="color:var(--text-muted);margin-top:18px;font-size:12.5px">Tip: the <strong>Access Requests</strong> tab’s “Require access approval” toggle hides “Create account” on the sign-in page (invite-only beta).</p>
   </section>
 
@@ -62,11 +64,11 @@
     <p style="color:var(--text-muted);margin-bottom:16px">Per-user limits on MCP / AI tool calls. Super-admins are exempt. Changes take effect immediately. Limits must be ordered minute ≤ hour ≤ day.</p>
     <div id="rlMsg" class="ps-msg" style="display:none"></div>
     <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
-      <label class="f-field">Requests per minute<input id="rlMin" type="number" min="1" class="f-input" style="width:130px"></label>
-      <label class="f-field">Requests per hour<input id="rlHour" type="number" min="1" class="f-input" style="width:130px"></label>
-      <label class="f-field">Requests per day<input id="rlDay" type="number" min="1" class="f-input" style="width:130px"></label>
-      <button class="btn primary" onclick="saveRateLimits()">Save</button>
+      <label class="f-field" style="flex:1;min-width:140px;margin-bottom:0">Requests per minute<input id="rlMin" type="number" min="1" class="f-input"></label>
+      <label class="f-field" style="flex:1;min-width:140px;margin-bottom:0">Requests per hour<input id="rlHour" type="number" min="1" class="f-input"></label>
+      <label class="f-field" style="flex:1;min-width:140px;margin-bottom:0">Requests per day<input id="rlDay" type="number" min="1" class="f-input"></label>
     </div>
+    <div class="admin-btn-row"><button class="btn primary" onclick="saveRateLimits()">Save</button></div>
   </section>
 
   <section data-panel="operations" style="display:none">
@@ -76,21 +78,21 @@
       <input type="checkbox" id="opMaintenance">
       Maintenance mode — only super-admins can use the app; everyone else sees a maintenance page.
     </label>
-    <label class="f-field" style="max-width:520px">Announcement banner (shown to all signed-in users; blank to hide)
+    <label class="f-field">Announcement banner (shown to all signed-in users; blank to hide)
       <textarea id="opBanner" class="f-input" rows="2" maxlength="280" placeholder="e.g. Fluxito is in beta — expect frequent changes."></textarea>
     </label>
-    <button class="btn primary" style="margin-top:12px" onclick="saveOperations()">Save</button>
+    <div class="admin-btn-row"><button class="btn primary" onclick="saveOperations()">Save</button></div>
   </section>
 
   <section data-panel="branding" style="display:none">
     <p style="color:var(--text-muted);margin-bottom:16px">Whitelabel the instance chrome. Changes apply on the next page load.</p>
     <div id="brMsg" class="ps-msg" style="display:none"></div>
-    <div style="display:flex;flex-direction:column;gap:12px;max-width:420px">
+    <div style="display:flex;flex-direction:column;gap:12px">
       <label class="f-field">App name<input id="brName" class="f-input" maxlength="120"></label>
       <label class="f-field">Logo URL<input id="brLogo" class="f-input" maxlength="500" placeholder="https://…/logo.png"></label>
       <label class="f-field">Accent colour<input id="brAccent" class="f-input" maxlength="64" placeholder="#0B0B0E"></label>
-      <button class="btn primary" style="align-self:flex-start" onclick="saveBranding()">Save</button>
     </div>
+    <div class="admin-btn-row"><button class="btn primary" onclick="saveBranding()">Save</button></div>
   </section>
 
   <section data-panel="updates" style="display:none">
@@ -100,7 +102,7 @@
       <p id="upd-latest-row" style="display:none">Latest version: <strong id="upd-latest"></strong>
         — <a id="upd-notes" href="#" target="_blank" rel="noopener">release notes</a></p>
       <p id="upd-uptodate" style="display:none">&#x2713; You're on the latest version.</p>
-      <button id="upd-apply" class="btn primary" style="display:none">Update now</button>
+      <button id="upd-apply" class="btn primary" style="display:none;width:100%;margin-top:8px">Update now</button>
 
       <div id="upd-confirm" class="update-card" style="display:none">
         <span class="update-eyebrow">Confirm update</span>
@@ -148,10 +150,47 @@
 </main>
 
 <style>
+.admin-tabs {
+  margin-top: 28px;
+  margin-bottom: 0;
+}
+.admin-tabs .tabs {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  /* Override default pill-tab background so it looks like a bottom-border style */
+  background: transparent;
+  padding: 0;
+  gap: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.admin-tabs .tabs::-webkit-scrollbar { display: none; }
+.admin-tabs .tabs .tab {
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  padding: 10px 16px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px; /* sit on top of container border-bottom */
+}
+.admin-tabs .tabs .tab:hover {
+  color: var(--ink);
+  background: var(--bg-2);
+}
+.admin-tabs .tabs .tab.is-active {
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: none;
+  border-bottom-color: var(--ink);
+  font-weight: 600;
+}
+section[data-panel] {
+  padding: 24px 0;
+}
 .ps-msg {
   padding: 8px 14px; border-radius: var(--r-m);
   font-size: 12.5px; line-height: 1.5;
-  display: inline-block; margin-bottom: 16px;
+  display: block; margin-bottom: 16px;
   border: 1px solid var(--line-2);
   background: var(--bg-2); color: var(--ink-soft);
 }
@@ -166,10 +205,13 @@
 .ps-table tbody tr { border-bottom: 1px solid var(--line-2); }
 .ps-table tbody tr:last-child { border-bottom: none; }
 .ps-table td { padding: 14px 18px; vertical-align: middle; }
-.btn.sm.danger-outline { border-color: var(--red, crimson); color: var(--red, crimson); }
-.update-box { max-width: 680px; }
+.btn.sm.danger-outline { border-color: var(--red, crimson); color: var(--red, crimson); cursor:pointer; }
+.btn.sm.danger-outline:hover { background: color-mix(in srgb, var(--red, crimson) 8%, transparent); }
+.admin-btn-row { margin-top:16px; }
+.admin-btn-row .btn { width:100%; justify-content:center; }
+.update-box { width: 100%; margin-top: 28px; }
 .update-box p { margin: 0 0 12px; line-height: 1.6; }
-.update-card { margin-top:18px; padding:20px; background:var(--bg-2); border:1px solid var(--line-2); border-radius:var(--r-l); }
+.update-card { margin-top:28px; padding:20px; background:var(--bg-2); border:1px solid var(--line-2); border-radius:var(--r-l); }
 .update-card h3 { margin:5px 0 7px; font-size:18px; }
 .update-eyebrow { display:block; color:var(--muted); font:600 10.5px/1.4 var(--mono); letter-spacing:.1em; text-transform:uppercase; }
 .update-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:15px; }
@@ -194,6 +236,12 @@
 @media (max-width: 640px) {
   .update-card { padding:16px; }
   .update-actions .btn { width:100%; justify-content:center; }
+  /* Keep tab bar scrollable; reduce font/padding for smaller screens */
+  .admin-tabs .tabs .tab { font-size:12px; padding:8px 12px; }
+  section[data-panel] { padding: 16px 0; }
+  .ps-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .ps-table th, .ps-table td { padding:10px 12px; font-size:12.5px; }
+  .admin-btn-row .btn { width:100%; }
 }
 </style>
 
@@ -210,13 +258,14 @@ async function loadUsers(){
     const tr=document.createElement('tr');
     [u.email, u.display_name||'', u.is_active?'Active':'Inactive', u.is_superadmin?'Yes':'No'].forEach(v=>{const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);});
     const act=document.createElement('td'); act.style.textAlign='right';
+    const wrap=document.createElement('div'); wrap.style.cssText='display:flex;gap:6px;justify-content:flex-end';
     const b1=document.createElement('button'); b1.className='btn sm'; b1.textContent=u.is_active?'Deactivate':'Activate'; b1.onclick=()=>setActive(u.id,!u.is_active);
-    const b2=document.createElement('button'); b2.className='btn sm'; b2.style.marginLeft='6px'; b2.textContent=u.is_superadmin?'Revoke admin':'Make admin'; b2.onclick=()=>setSuper(u.id,!u.is_superadmin);
-    act.appendChild(b1); act.appendChild(b2); tr.appendChild(act); tbody.appendChild(tr);
+    const b2=document.createElement('button'); b2.className='btn sm'; b2.textContent=u.is_superadmin?'Revoke admin':'Make admin'; b2.onclick=()=>setSuper(u.id,!u.is_superadmin);
+    wrap.appendChild(b1); wrap.appendChild(b2); act.appendChild(wrap); tr.appendChild(act); tbody.appendChild(tr);
   });
 }
-async function setActive(id,v){ try{ await api(`/api/admin/users/${id}/active`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_active:v})}); loadUsers(); }catch(e){ alert(e.message);} }
-async function setSuper(id,v){ try{ await api(`/api/admin/users/${id}/superadmin`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_superadmin:v})}); loadUsers(); }catch(e){ alert(e.message);} }
+async function setActive(id,v){ try{ await api(`/api/admin/users/${id}/active`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_active:v})}); loadUsers(); }catch(e){ Fluxito.toast(e.message, 'error');} }
+async function setSuper(id,v){ try{ await api(`/api/admin/users/${id}/superadmin`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_superadmin:v})}); loadUsers(); }catch(e){ Fluxito.toast(e.message, 'error');} }
 async function loadRequests(){
   const {requests} = await api('/api/admin/access-requests?status=pending');
   const tbody=document.getElementById('reqBody'); tbody.innerHTML='';
@@ -225,9 +274,10 @@ async function loadRequests(){
     const tr=document.createElement('tr');
     [r.name, r.email, r.use_case||''].forEach(v=>{const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);});
     const act=document.createElement('td'); act.style.textAlign='right';
+    const wrap=document.createElement('div'); wrap.style.cssText='display:flex;gap:6px;justify-content:flex-end';
     const b1=document.createElement('button'); b1.className='btn sm primary'; b1.textContent='Approve'; b1.onclick=()=>approve(r.id);
-    const b2=document.createElement('button'); b2.className='btn sm danger-outline'; b2.style.marginLeft='6px'; b2.textContent='Reject'; b2.onclick=()=>reject(r.id);
-    act.appendChild(b1); act.appendChild(b2); tr.appendChild(act); tbody.appendChild(tr);
+    const b2=document.createElement('button'); b2.className='btn sm danger-outline'; b2.textContent='Reject'; b2.onclick=()=>reject(r.id);
+    wrap.appendChild(b1); wrap.appendChild(b2); act.appendChild(wrap); tr.appendChild(act); tbody.appendChild(tr);
   });
 }
 async function approve(id){
@@ -237,10 +287,10 @@ async function approve(id){
       ? `Approved ${d.email}. Share these credentials (shown once): ${d.email} / ${d.temp_password}`
       : `Approved ${d.email} (existing account — no new password).`;
     m.style.display='block'; loadRequests();
-  }catch(e){ alert(e.message); }
+  }catch(e){ Fluxito.toast(e.message, 'error'); }
 }
-async function reject(id){ try{ await api(`/api/admin/access-requests/${id}/reject`,{method:'POST'}); loadRequests(); }catch(e){ alert(e.message);} }
-async function toggleGate(v){ try{ await api('/api/admin/settings/require-access-approval',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:v})}); }catch(e){ alert(e.message); document.getElementById('gateToggle').checked=!v;} }
+async function reject(id){ try{ await api(`/api/admin/access-requests/${id}/reject`,{method:'POST'}); loadRequests(); }catch(e){ Fluxito.toast(e.message, 'error');} }
+async function toggleGate(v){ try{ await api('/api/admin/settings/require-access-approval',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:v})}); }catch(e){ Fluxito.toast(e.message, 'error'); document.getElementById('gateToggle').checked=!v;} }
 async function loadRateLimits(){
   try{
     const d = await api('/api/admin/settings/rate-limits');

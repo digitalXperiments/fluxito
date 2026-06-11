@@ -71,6 +71,10 @@ EXPECTED_TOOLS = {
     # Escape hatches
     "generic_tool_read",
     "generic_tool_write",
+    # Tag testing & rulebook tools
+    "live_tag_test",
+    "save_audit_result",
+    "tag_rulebook",
 }
 
 DISPATCHERS = {

@@ -680,6 +680,21 @@ def register_all_tools(mcp_server):
 
     register_sdr_tools(mcp_server)
 
+    # ── Tag Rule Book (20-platform connector-independent rule engine) ─────────
+    from app.tools.tag_rulebook_tools import register_tag_rulebook_tools
+
+    register_tag_rulebook_tools(mcp_server)
+
+    # ── Live Tag Test (Claude computer-use guided browser testing) ────────────
+    from app.tools.live_tag_test_tools import register_live_tag_test_tools
+
+    register_live_tag_test_tools(mcp_server)
+
+    # ── Audit Result Persistence (save findings to Fluxito UI) ───────────────
+    from app.tools.save_audit_result_tools import register_save_audit_result_tools
+
+    register_save_audit_result_tools(mcp_server)
+
     # Install tool hook AFTER all tools are registered (needs _tool_manager)
     _install_tool_hook(mcp_server)
 

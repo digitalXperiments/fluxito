@@ -268,6 +268,14 @@
     <button class="dash-filter-chip active" data-range="30daysAgo,today">Last 30 days</button>
     <button class="dash-filter-chip" data-range="7daysAgo,today">Last 7 days</button>
     <button class="dash-filter-chip" data-range="90daysAgo,today">Last 90 days</button>
+    <button class="dash-filter-chip" data-range="2024-01-01,2024-12-31">Year 2024</button>
+    <button class="dash-filter-chip" data-range="2025-01-01,2025-12-31">Year 2025</button>
+    {% if filter_presets %}
+    <span class="lv-divider"></span>
+    {% for p in filter_presets %}
+    <button class="dash-filter-chip" data-range="{{ p.start }},{{ p.end }}">{{ p.label }}</button>
+    {% endfor %}
+    {% endif %}
     {% if dimension_filters %}
     <span class="lv-divider"></span>
     {% for f in dimension_filters %}
@@ -344,7 +352,7 @@
         chip.classList.add('active');
         const parts = chip.dataset.range.split(',');
         activeRange = {start: parts[0], end: parts[1]};
-        loadCards();
+        scheduleLoad();
       });
     });
 
@@ -354,7 +362,7 @@
       sel.addEventListener('change', function() {
         activeDims[key] = sel.value;
         sel.classList.toggle('is-active', !!sel.value);
-        loadCards();
+        scheduleLoad();
       });
     });
 
@@ -439,11 +447,30 @@
     ).join('');
   }
 
+  // Request coordination: only ever one in-flight /data request, and only the
+  // newest response is allowed to render. Without this, clicking "Last 7 days"
+  // then "Last 30 days" could let the slower first response land last and show
+  // stale data (the "to-and-fro" race).
+  let _loadSeq = 0;
+  let _loadAbort = null;
+  let _debounceTimer = null;
+
+  // Debounced entry point for filter changes — collapses a flurry of rapid
+  // chip clicks / select changes into a single fetch.
+  function scheduleLoad(delay){
+    if (_debounceTimer) clearTimeout(_debounceTimer);
+    _debounceTimer = setTimeout(function(){ _debounceTimer = null; loadCards(); }, delay == null ? 250 : delay);
+  }
+
   async function loadCards(){
     const params = buildParams();
+    const mySeq = ++_loadSeq;
+    // Cancel any request still in flight; its result is now stale.
+    if (_loadAbort) { try { _loadAbort.abort(); } catch(_){} }
+    _loadAbort = new AbortController();
     showSkeleton();
     try {
-      const res = await fetch(`/api/saved-dashboards/${SLUG}/data?${params.toString()}`, {credentials:'same-origin'});
+      const res = await fetch(`/api/saved-dashboards/${SLUG}/data?${params.toString()}`, {credentials:'same-origin', signal: _loadAbort.signal});
       if (!res.ok) {
         let bodyText = '';
         try { bodyText = await res.text(); } catch(_){}
@@ -451,10 +478,36 @@
         throw new Error('HTTP ' + res.status + (bodyText ? ': ' + bodyText.slice(0, 200) : ''));
       }
       const data = await res.json();
+      // A newer request superseded this one while it was in flight — drop it.
+      if (mySeq !== _loadSeq) return;
       lastFetchAt = Date.now();
       tick();
-      renderAll(data.cards || []);
+      // Normalize card_type from chart_type when the backend tool doesn't set it
+      // (GA4 run_report, Search Console, etc. return raw rows without card_type).
+      const cards = (data.cards || []).map(function(c) {
+        if (c.snap && (!c.snap.card_type || c.snap.card_type === 'UNKNOWN')) {
+          // Derive a renderable card_type from chart_type so the renderer
+          // knows whether to draw a scorecard, line, bar, table, etc.
+          const ct = (c.chart_type || '').toLowerCase();
+          const MAP = {
+            scorecard: 'GA4_METRIC',
+            line:      'GA4_TREND',
+            bar:       'GA4_BREAKDOWN',
+            pie:       'GA4_BREAKDOWN',
+            table:     'GA4_TABLE',
+            audit:     'AUDIT',
+            list:      'LIST',
+          };
+          c.snap.card_type = MAP[ct] || ct.toUpperCase() || 'GA4_METRIC';
+          c.card_type      = c.snap.card_type;
+        }
+        return c;
+      });
+      renderAll(cards);
     } catch(e) {
+      // An aborted request was deliberately superseded — not an error.
+      if (e && e.name === 'AbortError') return;
+      if (mySeq !== _loadSeq) return;  // a newer request owns the UI now
       console.error('[loadCards] error', e, e && e.stack);
       if (grid) grid.innerHTML = `<div class="audit-empty" style="grid-column:1/-1;"><h3>Failed to load data</h3><p>${Fluxito.esc(e.message||'')}</p><button class="btn primary" style="margin-top:14px" type="button" onclick="location.reload()">Reload</button></div>`;
     }

@@ -165,8 +165,8 @@ def register_warehouse_tools(mcp_server):
 
     @mcp_server.tool("warehouse_read")
     async def warehouse_read(
-        engine: Literal["bigquery", "redshift", "snowflake"],
-        action: str,
+        engine: Literal["bigquery", "redshift", "snowflake"] | None = None,
+        action: str = "",
         connection_id: str | None = None,
         dataset_id: str | None = None,
         table_id: str | None = None,
@@ -180,6 +180,12 @@ def register_warehouse_tools(mcp_server):
         Redshift: list_schemas(connection_id?)
         Snowflake: list_databases, list_schemas(dataset_id), list_warehouses
         """
+        if not engine:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "engine is required. Pass engine='bigquery', 'redshift', or 'snowflake' in params.",
+            }
         u = _user()
         if not u:
             return _no_bq_response()
@@ -393,8 +399,8 @@ def register_warehouse_tools(mcp_server):
 
     @mcp_server.tool("warehouse_query")
     async def warehouse_query(
-        engine: Literal["bigquery", "redshift", "snowflake"],
-        action: str,
+        engine: Literal["bigquery", "redshift", "snowflake"] | None = None,
+        action: str = "run_query",
         query: str | None = None,
         connection_id: str | None = None,
         dataset_id: str | None = None,
@@ -419,6 +425,12 @@ def register_warehouse_tools(mcp_server):
 
         Call tool_help("warehouse_query") for the full reference.
         """
+        if not engine:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "engine is required. Pass engine='bigquery', 'redshift', or 'snowflake' in params.",
+            }
         u = _user()
         if not u:
             return _no_bq_response()
@@ -615,8 +627,8 @@ def register_warehouse_tools(mcp_server):
 
     @mcp_server.tool("warehouse_audit")
     async def warehouse_audit(
-        engine: Literal["bigquery", "redshift", "snowflake"],
-        action: str,
+        engine: Literal["bigquery", "redshift", "snowflake"] | None = None,
+        action: str = "",
         connection_id: str | None = None,
         dataset_id: str | None = None,
         table_id: str | None = None,
@@ -631,6 +643,12 @@ def register_warehouse_tools(mcp_server):
         RS: audit_schema(dataset_id), check_table_health(dataset_id+table_id)
         SF: audit_schema(dataset_id), check_clustering_health(dataset_id+table_id), get_warehouse_usage(days_stale?)
         """
+        if not engine:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "engine is required. Pass engine='bigquery', 'redshift', or 'snowflake' in params.",
+            }
         u = _user()
         if not u:
             return _no_bq_response()

@@ -318,7 +318,7 @@ async def create_project(request: Request):
 
     await invalidate_user_context_cache(str(uid))
 
-    return JSONResponse(
+    response = JSONResponse(
         {
             "success": True,
             "project": {
@@ -329,6 +329,8 @@ async def create_project(request: Request):
             "redirect_url": f"/project/{project.slug}/settings",
         }
     )
+    set_active_project_cookie(response, str(project.id))
+    return response
 
 
 async def ensure_default_project(

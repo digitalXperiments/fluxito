@@ -112,7 +112,7 @@ def register_tagmanager_tools(mcp_server):
     @mcp_server.tool("tagmanager_read")
     async def tagmanager_read(
         platform: Literal["gtm", "adobe_launch"] = "gtm",
-        action: str = None,
+        action: str | None = None,
         account_id: CoercedStr | None = None,
         container_id: CoercedStr | None = None,
         workspace_id: CoercedStr = "0",
@@ -336,7 +336,7 @@ def register_tagmanager_tools(mcp_server):
     @mcp_server.tool("tagmanager_audit")
     async def tagmanager_audit(
         platform: Literal["gtm", "adobe_launch"] = "gtm",
-        action: str = None,
+        action: str | None = None,
         account_id: CoercedStr | None = None,
         container_id: CoercedStr | None = None,
         tag_id: CoercedStr | None = None,
@@ -1940,7 +1940,7 @@ def register_tagmanager_tools(mcp_server):
     @mcp_server.tool("tagmanager_write")
     async def tagmanager_write(
         platform: Literal["gtm", "adobe_launch"] = "gtm",
-        action: str = None,
+        action: str | None = None,
         account_id: CoercedStr | None = None,
         container_id: CoercedStr | None = None,
         name: str | None = None,

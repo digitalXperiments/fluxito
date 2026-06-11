@@ -55,7 +55,8 @@ def register_bing_webmaster_tools(mcp_server):
             "get_crawl_stats",
             "get_index_coverage",
             "get_link_counts",
-        ],
+        ]
+        | None = None,
         site_url: CoercedStr | None = None,
         start_date: CoercedStr | None = None,
         end_date: CoercedStr | None = None,
@@ -82,6 +83,13 @@ def register_bing_webmaster_tools(mcp_server):
         u = _user()
         if not u or not getattr(u, "has_bing", False):
             return _no_bing()
+
+        if not action:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "action is required. Pass action='list_sites', 'get_query_stats', 'get_crawl_stats', 'get_index_coverage', or 'get_link_counts' in params.",
+            }
 
         access_token = get_provider_token("bing")
         if not access_token:

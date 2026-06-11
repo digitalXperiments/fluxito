@@ -16,6 +16,7 @@ Authenticated (requires signed uid cookie):
   GET  /saved-dashboards/{slug}/pdf               — PDF export
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -30,6 +31,7 @@ from app.auth.uid_cookie import get_uid_from_request
 from app.config import settings
 from app.models.connection import OAuthConnection
 from app.models.dashboard import Dashboard, DashboardCard
+from app.models.project import ProjectMember
 from app.models.user import User
 from app.templating import render
 from app.utils import base_url_from_request, safe_uuid
@@ -37,6 +39,21 @@ from app.utils import base_url_from_request, safe_uuid
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Live-dashboard refresh guardrails. A single hung upstream query (GA4,
+# BigQuery, …) must never hang the whole dashboard, and cards must not be
+# executed one-at-a-time (slow card blocks every card behind it).
+_LIVE_CARD_TIMEOUT_S = 25
+_LIVE_CARD_CONCURRENCY = 6
+
+
+def _as_bool(value) -> bool:
+    """Coerce a stored flag to bool. JSON may round-trip a real bool, but a
+    template/string default can persist ``"false"`` — and ``bool("false")`` is
+    ``True``, which would silently lock dates that should move."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
 
 
 def _resolve_relative_date(value: str) -> str:
@@ -250,6 +267,27 @@ async def public_dashboard_json(slug: str, request: Request):
 # ---------------------------------------------------------------------------
 
 
+async def _user_in_project(db, project_id, user_uuid) -> bool:
+    """Project-isolation gate: True iff the user is an active member of the
+    dashboard's project.
+
+    Owning a dashboard (``user_id`` match) is not sufficient — a user removed
+    from a project must lose access to its dashboards. Legacy dashboards with no
+    project (``project_id IS NULL``) fall back to owner-only access, which the
+    caller's ``user_id`` filter already enforces.
+    """
+    if project_id is None:
+        return True
+    result = await db.execute(
+        select(ProjectMember.id).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_uuid,
+            ProjectMember.is_active == True,
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
 @router.delete("/api/saved-dashboards/{dashboard_id}")
 async def delete_dashboard(dashboard_id: str, request: Request):
     uid = get_uid_from_request(request)
@@ -269,7 +307,7 @@ async def delete_dashboard(dashboard_id: str, request: Request):
             )
         )
         dash = result.scalar_one_or_none()
-        if not dash:
+        if not dash or not await _user_in_project(db, dash.project_id, user_uuid):
             return JSONResponse({"error": "Not found"}, status_code=404)
         await db.execute(sa_delete(Dashboard).where(Dashboard.id == dash.id))
         await db.commit()
@@ -299,7 +337,7 @@ async def toggle_share(dashboard_id: str, request: Request):
             )
         )
         dash = result.scalar_one_or_none()
-        if not dash:
+        if not dash or not await _user_in_project(db, dash.project_id, user_uuid):
             return JSONResponse({"error": "Not found"}, status_code=404)
         base = settings.APP_BASE_URL
         computed_url = f"{base}/d/{dash.share_slug}"
@@ -378,7 +416,10 @@ async def _load_dash_for_owner(dashboard_id: str, uid: str) -> Dashboard | None:
                 Dashboard.user_id == user_uuid,
             )
         )
-        return result.scalar_one_or_none()
+        dash = result.scalar_one_or_none()
+        if dash is None or not await _user_in_project(db, dash.project_id, user_uuid):
+            return None
+        return dash
 
 
 async def _available_resources_for_project(project_id) -> list[dict]:
@@ -534,7 +575,7 @@ async def put_dashboard_scopes(dashboard_id: str, request: Request):
             )
         )
         dash = result.scalar_one_or_none()
-        if not dash:
+        if not dash or not await _user_in_project(db, dash.project_id, user_uuid):
             return JSONResponse({"error": "Not found"}, status_code=404)
         dash.query_scopes = cleaned
         dash.updated_at = datetime.utcnow()
@@ -559,10 +600,15 @@ async def dashboard_scopes_page(slug: str, request: Request):
     async with app_state.db_session_factory() as db:
         result = await db.execute(select(Dashboard).where(Dashboard.share_slug == slug))
         dash = result.scalar_one_or_none()
-    if not dash:
-        return render(request, "dashboards/not_found.html", {}, status_code=404)
-    if str(dash.user_id) != uid:
-        return render(request, "forbidden.html", {}, status_code=403)
+        if not dash:
+            return render(request, "dashboards/not_found.html", {}, status_code=404)
+        user_uuid = safe_uuid(uid)
+        if (
+            user_uuid is None
+            or str(dash.user_id) != uid
+            or not await _user_in_project(db, dash.project_id, user_uuid)
+        ):
+            return render(request, "forbidden.html", {}, status_code=403)
 
     user_view = await _load_user_view_from_uid(uid)
     return render(
@@ -655,8 +701,16 @@ async def live_dashboard_page(page_slug: str, request: Request):
         dash = result.scalar_one_or_none()
         if not dash:
             return render(request, "dashboards/not_found.html", {}, status_code=404)
-        if not dash.is_public and (not uid or str(dash.user_id) != uid):
-            return render(request, "dashboards/not_found.html", {}, status_code=404)
+        # Public dashboards are shareable by design. Private dashboards require
+        # the owner to still be an active member of the dashboard's project.
+        if not dash.is_public:
+            user_uuid = safe_uuid(uid) if uid else None
+            if (
+                user_uuid is None
+                or str(dash.user_id) != uid
+                or not await _user_in_project(db, dash.project_id, user_uuid)
+            ):
+                return render(request, "dashboards/not_found.html", {}, status_code=404)
 
         # Only fetch lightweight card metadata for the filter bar — NO hydration
         cards_result = await db.execute(
@@ -714,6 +768,7 @@ async def live_dashboard_page(page_slug: str, request: Request):
             "current_end": end_date,
             "platforms": platforms_in_dash,
             "dimension_filters": dimension_filters,
+            "filter_presets": dash.filter_presets or [],
             "slug": page_slug,
             "is_owner": is_owner,
             "has_cards": has_cards,
@@ -725,6 +780,55 @@ async def live_dashboard_page(page_slug: str, request: Request):
 # ---------------------------------------------------------------------------
 # Live data refresh API — JSON endpoint the frontend hits when filters change
 # ---------------------------------------------------------------------------
+
+
+def _normalize_snap(snap: dict, chart_type: str | None) -> dict:
+    """Normalize a raw tool result into the flat format the card renderer expects.
+
+    GA4 `run_report` returns::
+
+        {
+          "dimension_headers": ["date"],
+          "metric_headers": ["sessions"],
+          "rows": [{"dimensions": ["20240101"], "metrics": ["1234"]}]
+        }
+
+    The card renderer expects flat rows with named keys::
+
+        {
+          "columns": ["date", "sessions"],
+          "rows": [{"date": "20240101", "sessions": "1234"}]
+        }
+
+    If the snap already has a ``columns`` key or flat rows, it is returned as-is.
+    """
+    if not isinstance(snap, dict):
+        return snap
+
+    dim_headers = snap.get("dimension_headers") or []
+    met_headers = snap.get("metric_headers") or []
+    raw_rows = snap.get("rows") or []
+
+    # Only transform when rows come in the nested GA4 format
+    if (dim_headers or met_headers) and "columns" not in snap and isinstance(raw_rows, list):
+        columns = list(dim_headers) + list(met_headers)
+        flat_rows = []
+        for r in raw_rows:
+            if isinstance(r, dict) and ("dimensions" in r or "metrics" in r):
+                row: dict = {}
+                for i, col in enumerate(dim_headers):
+                    row[col] = (r.get("dimensions") or [])[i] if i < len(r.get("dimensions") or []) else None
+                for i, col in enumerate(met_headers):
+                    row[col] = (r.get("metrics") or [])[i] if i < len(r.get("metrics") or []) else None
+                flat_rows.append(row)
+            else:
+                # Already flat — leave as-is
+                flat_rows.append(r)
+        snap = dict(snap)  # shallow copy to avoid mutating original
+        snap["columns"] = columns
+        snap["rows"] = flat_rows
+
+    return snap
 
 
 @router.get("/api/saved-dashboards/{slug}/data")
@@ -772,8 +876,16 @@ async def live_dashboard_data(slug: str, request: Request):
             dash = result.scalar_one_or_none()
             if not dash:
                 return JSONResponse({"error": "Not found"}, status_code=404)
-            if not dash.is_public and (not uid or str(dash.user_id) != uid):
-                return JSONResponse({"error": "Not found"}, status_code=404)
+            # Public dashboards refresh for anyone (shareable by design). Private
+            # dashboards require the owner to still be an active project member.
+            if not dash.is_public:
+                user_uuid = safe_uuid(uid) if uid else None
+                if (
+                    user_uuid is None
+                    or str(dash.user_id) != uid
+                    or not await _user_in_project(db, dash.project_id, user_uuid)
+                ):
+                    return JSONResponse({"error": "Not found"}, status_code=404)
 
             cards_result = await db.execute(
                 select(DashboardCard)
@@ -793,105 +905,121 @@ async def live_dashboard_data(slug: str, request: Request):
         refresh_ctx = await build_refresh_context(str(dash.id))
         tm = mcp_server._tool_manager if mcp_server else None
 
-        payload_cards = []
         is_owner = uid is not None and str(dash.user_id) == uid
+        _sem = asyncio.Semaphore(_LIVE_CARD_CONCURRENCY)
 
-        async with refresh_ctx:
-            for c in cards:
-                spec = c.query_params or {}
-                tool_name = spec.get("tool") or c.tool_name
-                platform = spec.get("platform") or c.platform or "unknown"
-                action = spec.get("action")
+        async def _exec_card(c) -> dict:
+            """Refresh a single card. Always returns a renderable payload —
+            never raises — falling back to the cached snapshot on any error or
+            timeout so one bad card can't blank the dashboard."""
+            spec = c.query_params or {}
+            tool_name = spec.get("tool") or c.tool_name
+            platform = spec.get("platform") or c.platform or "unknown"
+            action = spec.get("action")
 
-                snap: dict = {}
-                is_live = False
-                live_error = None
+            snap: dict = {}
+            is_live = False
+            live_error = None
 
-                if not tool_name or tm is None:
-                    # No tool registered — fall back to cached result
-                    snap = c.result_cache or {}
-                    if not isinstance(snap, dict):
-                        snap = {"card_type": "UNKNOWN", "raw": snap}
-                    live_error = {"error_type": "no_tool", "message": "Card has no registered tool."}
-                else:
-                    try:
-                        legacy = getattr(tm, "_legacy_tools", {})
-                        tool = legacy.get(tool_name) or tm._tools.get(tool_name)
-                        if tool is None:
-                            raise ValueError(f"Tool '{tool_name}' not registered")
+            if not tool_name or tm is None:
+                snap = c.result_cache or {}
+                if not isinstance(snap, dict):
+                    snap = {"card_type": "UNKNOWN", "raw": snap}
+                live_error = {"error_type": "no_tool", "message": "Card has no registered tool."}
+            else:
+                try:
+                    legacy = getattr(tm, "_legacy_tools", {})
+                    tool = legacy.get(tool_name) or tm._tools.get(tool_name)
+                    if tool is None:
+                        raise ValueError(f"Tool '{tool_name}' not registered")
 
-                        # Merge date overrides (respecting date_locked flag)
-                        card_date_locked = bool(spec.get("date_locked") or spec.get("date_locked"))
-                        merged_spec = apply_overrides(
-                            spec, filter_overrides if not card_date_locked else None
-                        )
-                        # Params are stored flattened in query_params — exclude metadata keys
-                        _META_KEYS = {"key", "platform", "tool", "action", "filter_hooks", "filter_options"}
-                        call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
-                        if action is not None:
-                            call_args["action"] = action
-                        # warehouse_query needs 'engine' (= platform) and uses 'query' not 'sql'
-                        if tool_name == "warehouse_query":
-                            call_args.setdefault("engine", platform)
-                            if "sql" in call_args and "query" not in call_args:
-                                call_args["query"] = call_args.pop("sql")
-                            # Substitute {placeholder} tokens in SQL template.
-                            # Normalize GA4-style relative dates ("today", "30daysAgo") to
-                            # ISO so cards deployed without filter_hooks still get valid SQL.
-                            # Use targeted str.replace instead of format_map so that other
-                            # curly-brace patterns in the SQL (JSON ops, array literals, etc.)
-                            # don't cause a KeyError that silently swallows all substitutions.
-                            if "query" in call_args:
-                                q = call_args["query"]
-                                for _k, _v in call_args.items():
-                                    if _k == "query" or not isinstance(_v, str):
-                                        continue
-                                    resolved = _resolve_relative_date(_v)
-                                    q = q.replace("{" + _k + "}", resolved)
-                                call_args["query"] = q
+                    # Merge date overrides (respecting the date_locked flag)
+                    card_date_locked = _as_bool(spec.get("date_locked"))
+                    merged_spec = apply_overrides(spec, filter_overrides if not card_date_locked else None)
+                    # Params are stored flattened in query_params — exclude spec metadata keys.
+                    # NOTE: "platform" is intentionally NOT excluded — it is a required named
+                    # parameter for analytics_read, marketing_read, etc.
+                    _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
+                    call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
+                    if action is not None:
+                        call_args["action"] = action
+                    # warehouse_query needs 'engine' (= platform) and uses 'query' not 'sql'
+                    if tool_name == "warehouse_query":
+                        call_args.setdefault("engine", platform)
+                        if "sql" in call_args and "query" not in call_args:
+                            call_args["query"] = call_args.pop("sql")
+                        # Substitute {placeholder} tokens in the SQL template. Targeted
+                        # str.replace (not format_map) so other curly-brace patterns in the
+                        # SQL don't raise KeyError and silently swallow all substitutions.
+                        if "query" in call_args:
+                            q = call_args["query"]
+                            for _k, _v in call_args.items():
+                                if _k == "query" or not isinstance(_v, str):
+                                    continue
+                                resolved = _resolve_relative_date(_v)
+                                q = q.replace("{" + _k + "}", resolved)
+                            call_args["query"] = q
 
-                        raw_result = await tool.run(call_args)
-                        if not isinstance(raw_result, dict):
-                            raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
+                    async with _sem:
+                        raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_LIVE_CARD_TIMEOUT_S)
+                    if not isinstance(raw_result, dict):
+                        raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
 
-                        if raw_result.get("card_type") == "ERROR" or raw_result.get("error"):
-                            snap = c.result_cache or raw_result
-                            if not isinstance(snap, dict):
-                                snap = {"card_type": "UNKNOWN", "raw": snap}
-                            is_live = False
-                            live_error = {
-                                "error_type": raw_result.get("error_type", "tool_error"),
-                                "message": raw_result.get("message", str(raw_result.get("error", ""))),
-                            }
-                        else:
-                            snap = raw_result
-                            is_live = True
-                    except Exception as tool_exc:
-                        logger.warning(
-                            "live_dashboard_data: tool dispatch failed for card %s: %s", c.id, tool_exc
-                        )
-                        snap = c.result_cache or {}
+                    if raw_result.get("card_type") == "ERROR" or raw_result.get("error"):
+                        snap = c.result_cache or raw_result
                         if not isinstance(snap, dict):
                             snap = {"card_type": "UNKNOWN", "raw": snap}
                         is_live = False
-                        live_error = {"error_type": "dispatch_error", "message": str(tool_exc)[:300]}
+                        live_error = {
+                            "error_type": raw_result.get("error_type", "tool_error"),
+                            "message": raw_result.get("message", str(raw_result.get("error", ""))),
+                        }
+                    else:
+                        snap = _normalize_snap(raw_result, c.chart_type)
+                        is_live = True
+                except TimeoutError:
+                    logger.warning(
+                        "live_dashboard_data: card %s timed out after %ss", c.id, _LIVE_CARD_TIMEOUT_S
+                    )
+                    snap = c.result_cache or {}
+                    if not isinstance(snap, dict):
+                        snap = {"card_type": "UNKNOWN", "raw": snap}
+                    is_live = False
+                    live_error = {
+                        "error_type": "timeout",
+                        "message": f"Query exceeded {_LIVE_CARD_TIMEOUT_S}s; showing last cached result.",
+                    }
+                except Exception as tool_exc:
+                    logger.warning(
+                        "live_dashboard_data: tool dispatch failed for card %s: %s", c.id, tool_exc
+                    )
+                    snap = c.result_cache or {}
+                    if not isinstance(snap, dict):
+                        snap = {"card_type": "UNKNOWN", "raw": snap}
+                    is_live = False
+                    live_error = {"error_type": "dispatch_error", "message": str(tool_exc)[:300]}
 
-                snap["chart_type"] = c.chart_type
-                snap["chart_config"] = c.chart_config or {}
-                card_payload = {
-                    "id": str(c.id),
-                    "title": c.title,
-                    "platform": platform,
-                    "chart_type": c.chart_type,
-                    "chart_config": c.chart_config or {},
-                    "card_type": snap.get("card_type", "UNKNOWN"),
-                    "is_live": is_live,
-                    "refreshed_at": c.refreshed_at.isoformat() if c.refreshed_at else None,
-                    "snap": snap,
-                }
-                if is_owner:
-                    card_payload["live_error"] = live_error
-                payload_cards.append(card_payload)
+            snap["chart_type"] = c.chart_type
+            snap["chart_config"] = c.chart_config or {}
+            card_payload = {
+                "id": str(c.id),
+                "title": c.title,
+                "platform": platform,
+                "chart_type": c.chart_type,
+                "chart_config": c.chart_config or {},
+                "card_type": snap.get("card_type", "UNKNOWN"),
+                "is_live": is_live,
+                "refreshed_at": c.refreshed_at.isoformat() if c.refreshed_at else None,
+                "snap": snap,
+            }
+            if is_owner:
+                card_payload["live_error"] = live_error
+            return card_payload
+
+        async with refresh_ctx:
+            # Cards run concurrently (bounded by the semaphore) so a slow card
+            # no longer blocks the ones behind it. gather preserves card order.
+            payload_cards = list(await asyncio.gather(*[_exec_card(c) for c in cards]))
 
     except Exception as exc:
         logger.exception("live_dashboard_data failed for slug=%s", slug)

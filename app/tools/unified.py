@@ -34,6 +34,7 @@ and dispatches to one of the pre-registered legacy tools. Action names map
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -371,6 +372,31 @@ AUDIT_ROUTES: dict[str, tuple] = {
     "seo_ctr_outliers": ("search_console_audit", "ctr_outliers"),
     "seo_sitemap_health": ("search_console_audit", "sitemap_health"),
     "seo_gsc_ga4_cross_reference": ("search_console_audit", "gsc_ga4_cross_reference"),
+    # ── Tag Rule Book (connector-independent, 20 platforms) ────────────
+    # Works without a GTM connection — validates static config + live captures.
+    "tag_list_platforms": ("tag_rulebook", "list_platforms"),
+    "tag_get_platform_spec": ("tag_rulebook", "get_platform_spec"),
+    "tag_get_event_spec": ("tag_rulebook", "get_event_spec"),
+    "tag_identify_type": ("tag_rulebook", "identify_tag_type"),
+    "tag_validate_payload": ("tag_rulebook", "validate_payload"),
+    "tag_audit_rulebooks": ("tag_rulebook", "audit_against_rulebooks"),
+    "tag_list_custom_rules": ("tag_rulebook", "list_custom_rules"),
+    "tag_save_custom_rule": ("tag_rulebook", "save_custom_rule"),
+    "tag_delete_custom_rule": ("tag_rulebook", "delete_custom_rule"),
+    # ── Live Tag Test (Claude computer-use guided testing) ──────────────
+    "live_tag_get_plan": ("live_tag_test", "get_test_plan"),
+    "live_tag_get_sdr_context": ("live_tag_test", "get_sdr_context"),
+    "live_tag_analyze_captures": ("live_tag_test", "analyze_captures"),
+    "live_tag_start_session": ("live_tag_test", "start_session"),
+    "live_tag_finish_session": ("live_tag_test", "finish_session"),
+    "live_tag_list_plans": ("live_tag_test", "list_test_plans"),
+    "live_tag_save_plan": ("live_tag_test", "save_test_plan"),
+    # ── Audit Persistence (save results to Fluxito UI) ──────────────────
+    "save_audit_result": ("save_audit_result", "save"),
+    "get_audit_run": ("save_audit_result", "get_run"),
+    "list_audit_runs": ("save_audit_result", "list_runs"),
+    "audit_score_summary": ("save_audit_result", "get_score_summary"),
+    "audit_score_history": ("save_audit_result", "get_score_history"),
 }
 
 # run_analysis: cross-connector computed insights.
@@ -400,8 +426,9 @@ ANALYSIS_ROUTES: dict[str, tuple[str, str | None]] = {
 ANALYTICS_READ_DOC = """
 Read product / web analytics data across GA4, Amplitude, Adobe Analytics.
 
-Pass `platform` (ga4 | amplitude | adobe_analytics) inside `params`
-when multiple platforms are connected.
+REQUIRED: always pass `platform` ('ga4', 'amplitude', or 'adobe_analytics') inside `params`.
+Also pass `metrics` and `dimensions` as plain strings (e.g. ["sessions", "users"]),
+NOT as GA4 API objects like [{"name": "sessions"}].
 
 For audits / anomaly checks / tracking regressions → use `run_audit`.
 For cross-platform blends / attribution → use `run_analysis`.
@@ -409,9 +436,10 @@ For cross-platform blends / attribution → use `run_analysis`.
 Actions (pass via `action`, required params inside `params`):
 
   REPORTING
-    run_report        — Run a report. params: platform, property_id (ga4) or
+    run_report        — Run a report. params: platform (required), property_id (ga4) or
                         project_id (amplitude), start_date, end_date,
-                        dimensions[], metrics[], dimension_filter, limit.
+                        dimensions (list of strings), metrics (list of strings),
+                        dimension_filter, limit.
     compare_date_ranges — Run a date-range comparison report (GA4 only).
     get_realtime      — Real-time event stream.
     query_events      — Event query (Amplitude).
@@ -434,16 +462,19 @@ Return shape: {rows/data/items: [...], ...} or {error, error_type, message}.
 ANALYTICS_WRITE_DOC = """
 Mutate product/web analytics configuration. Requires analytics_write scope.
 
+REQUIRED params for every action: platform ('ga4', 'amplitude', or 'adobe_analytics'),
+property_id, and config (dict of action-specific keys).
+
 Actions:
-  create_audience            — params: platform, property_id, name, filter_clauses
-  create_custom_dimension    — params: platform, property_id, parameter_name, display_name, scope
-  create_custom_metric       — params: platform, property_id, parameter_name, display_name, unit, scope
-  mark_event_as_conversion   — params: platform, property_id, event_name
-  create_calculated_metric   — params: platform, report_suite_id, name, formula
-  create_segment             — params: platform, report_suite_id, name, definition
-  update_segment             — params: platform, segment_id, updates
-  delete_segment             — params: platform, segment_id
-  delete_calculated_metric   — params: platform, metric_id
+  create_audience            — params: platform, property_id, config={name, filter_clauses}
+  create_custom_dimension    — params: platform, property_id, config={parameter_name, display_name, scope}
+  create_custom_metric       — params: platform, property_id, config={parameter_name, display_name, unit, scope}
+  mark_event_as_conversion   — params: platform, property_id, config={event_name}
+  create_calculated_metric   — params: platform, property_id, config={report_suite_id, name, formula}
+  create_segment             — params: platform, property_id, config={report_suite_id, name, definition}
+  update_segment             — params: platform, property_id, config={segment_id, updates}
+  delete_segment             — params: platform, property_id, config={segment_id}
+  delete_calculated_metric   — params: platform, property_id, config={metric_id}
 """
 
 TAGMANAGER_READ_DOC = """
@@ -497,8 +528,7 @@ Actions:
 MARKETING_READ_DOC = """
 Read paid-marketing performance across Google Ads, Meta, TikTok, Snap.
 
-Pass platform (google | meta | tiktok | snap) in params. (Google Ads uses
-"google", not "google_ads".)
+REQUIRED: always pass `platform` in params. Google Ads uses "google" (not "google_ads").
 For audits (budget utilization, quality scores, connection health) → use
 `run_audit`. For blended cross-channel reports / attribution → use `run_analysis`.
 
@@ -524,10 +554,12 @@ Adobe Marketo Engage actions (prefix `marketo_`, marketing automation; no accoun
 MARKETING_WRITE_DOC = """
 Mutate paid marketing campaigns. Requires marketing_write scope.
 
+REQUIRED: always pass `platform` in params.
+
 Actions:
-  update_campaign_budget   — params: platform, account_id, campaign_id, new_budget
-  update_campaign_status   — params: platform, account_id, campaign_id, status (PAUSED|ENABLED)
-  create_campaign          — params: platform, account_id, spec dict
+  update_campaign_budget   — params: platform (required), account_id, campaign_id, new_budget
+  update_campaign_status   — params: platform (required), account_id, campaign_id, status (PAUSED|ENABLED)
+  create_campaign          — params: platform (required), account_id, spec dict
 
 Adobe Marketo Engage actions (prefix `marketo_`; resource_id = list/campaign id, payload carries the body):
   marketo_upsert_leads     — payload={leads[], lookup_field?, action?}
@@ -540,7 +572,7 @@ Adobe Marketo Engage actions (prefix `marketo_`; resource_id = list/campaign id,
 WAREHOUSE_READ_DOC = """
 Read warehouse schema + metadata across BigQuery, Redshift, Snowflake.
 
-Pass engine (bigquery | redshift | snowflake) in params.
+REQUIRED: always pass `engine` ('bigquery', 'redshift', or 'snowflake') in params.
 For data-quality / stale-table / clustering audits → use `run_audit`.
 To actually execute SQL → use `warehouse_query`.
 
@@ -561,8 +593,10 @@ Execute SQL against a connected warehouse (BigQuery, Redshift, Snowflake).
 Separate from warehouse_read because SQL execution is billable / expensive
 and the AI should reason about cost distinctly from catalog reads.
 
+REQUIRED: always pass `engine` and `action` in params.
+
 Params:
-  engine        — bigquery | redshift | snowflake (required)
+  engine        — bigquery | redshift | snowflake (REQUIRED)
   query         — SQL string (required for run_query / dry_run / explain_query)
   dataset_id    — used by preview_table
   table_id      — used by preview_table
@@ -976,7 +1010,85 @@ def _make_dispatcher(routes: dict, surface_name: str):
             }
 
     dispatcher.__name__ = surface_name
+    # Expose the valid actions as a JSON-Schema ``enum`` and give ``params`` a
+    # clean object type (no nullable union). Strict MCP clients (Grok, OpenAI
+    # strict mode) form calls from the served schema, not the prose docstring,
+    # so a bare ``string`` action + ``anyOf: [object, null]`` params left them
+    # guessing or timing out. Runtime stays permissive — the dispatcher body
+    # still tolerates a missing/None ``params`` and unknown actions.
+    _actions = tuple(sorted(routes.keys()))
+    if _actions:
+        dispatcher.__annotations__ = {
+            "action": Literal[_actions],  # type: ignore[valid-type]
+            "params": dict,
+            "return": dict,
+        }
     return dispatcher
+
+
+def _strictify_schema(schema) -> None:
+    """Rewrite a JSON-Schema node in place to be friendly to strict MCP clients.
+
+    The MCP/pydantic default renders every optional parameter as
+    ``{"anyOf": [<type>, {"type": "null"}], "default": null}``. Claude tolerates
+    this, but stricter clients (Grok, OpenAI strict mode) reject or mis-handle
+    nullable unions — which is why Grok failed to form correct calls and timed
+    out. We express optionality the spec-clean way instead: drop the ``null``
+    branch and let ``required`` (which pydantic already omits these from) carry
+    the optionality.
+
+    Only the *served* schema (``Tool.parameters``) is touched. Runtime call
+    validation uses the pydantic ``arg_model``, which is left permissive — so
+    existing clients that still send ``null`` keep working.
+    """
+    if not isinstance(schema, dict):
+        return
+
+    for union_key in ("anyOf", "oneOf"):
+        branches = schema.get(union_key)
+        if isinstance(branches, list):
+            non_null = [b for b in branches if not (isinstance(b, dict) and b.get("type") == "null")]
+            if len(non_null) != len(branches):
+                if len(non_null) == 1:
+                    # Collapse the single survivor up into this node.
+                    survivor = non_null[0]
+                    del schema[union_key]
+                    for k, v in survivor.items():
+                        schema.setdefault(k, v)
+                else:
+                    schema[union_key] = non_null
+    # A ``null`` default never matches a concrete (non-null) type and trips
+    # strict validators. Optionality is carried by ``required`` omission, so a
+    # null default on a typed field is pure noise — drop it.
+    if "default" in schema and schema["default"] is None and schema.get("type") not in (None, "null"):
+        schema.pop("default", None)
+
+    # Recurse into every place a sub-schema can hide.
+    for container_key in ("properties", "$defs", "definitions", "patternProperties"):
+        container = schema.get(container_key)
+        if isinstance(container, dict):
+            for sub in container.values():
+                _strictify_schema(sub)
+    for nested_key in ("items", "additionalProperties", "not"):
+        nested = schema.get(nested_key)
+        if isinstance(nested, dict):
+            _strictify_schema(nested)
+    for union_key in ("anyOf", "oneOf", "allOf"):
+        branches = schema.get(union_key)
+        if isinstance(branches, list):
+            for sub in branches:
+                _strictify_schema(sub)
+
+
+def _strictify_tool_schemas(tm) -> None:
+    """Sanitize every registered tool's input schema for cross-client safety."""
+    cleaned = 0
+    for tool in tm._tools.values():
+        params = getattr(tool, "parameters", None)
+        if isinstance(params, dict):
+            _strictify_schema(params)
+            cleaned += 1
+    logger.info("Strict-client schema sanitize applied to %d tool schemas", cleaned)
 
 
 def rewire_unified_surface(mcp_server) -> None:
@@ -1216,5 +1328,10 @@ def rewire_unified_surface(mcp_server) -> None:
 
     generic_tool_write.__doc__ = GENERIC_WRITE_DOC
     tm.add_tool(generic_tool_write, name="generic_tool_write")
+
+    # ── Final pass: make every served schema strict-client friendly ───────
+    # Runs LAST so it covers the unified dispatchers, the direct-survivor
+    # tools, and any tool registered before the rewire.
+    _strictify_tool_schemas(tm)
 
     logger.info(f"Unified tool surface active — {len(tm._tools)} tools: {sorted(tm._tools.keys())}")

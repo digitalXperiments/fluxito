@@ -78,7 +78,8 @@ def register_search_console_tools(mcp_server):
             "list_sitemaps",
             "get_sitemap",
             "inspect_url",
-        ],
+        ]
+        | None = None,
         site_url: CoercedStr | None = None,
         start_date: CoercedStr | None = None,
         end_date: CoercedStr | None = None,
@@ -117,6 +118,13 @@ def register_search_console_tools(mcp_server):
             return _no_gsc()
 
         sc = state.search_console_connector
+
+        if not action:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "action is required. Pass action='list_sites', 'search_analytics', 'list_sitemaps', 'get_sitemap', or 'inspect_url' in params.",
+            }
 
         if action == "list_sites":
             return await sc.list_sites(conn_id)
@@ -182,8 +190,9 @@ def register_search_console_tools(mcp_server):
             "ctr_outliers",
             "sitemap_health",
             "gsc_ga4_cross_reference",
-        ],
-        site_url: CoercedStr,
+        ]
+        | None = None,
+        site_url: CoercedStr | None = None,
         start_date: CoercedStr | None = None,
         end_date: CoercedStr | None = None,
         compare_start_date: CoercedStr | None = None,
@@ -220,6 +229,20 @@ def register_search_console_tools(mcp_server):
         conn_id = _gsc_connection_id()
         if not conn_id:
             return _no_gsc()
+
+        if not action:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "action is required. Pass action='top_movers', 'striking_distance', 'ctr_outliers', 'sitemap_health', or 'gsc_ga4_cross_reference' in params.",
+            }
+        if not site_url:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "site_url is required for search_console_audit.",
+            }
+
         sc = state.search_console_connector
 
         # -------- top_movers ---------------------------------------------

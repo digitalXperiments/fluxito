@@ -87,8 +87,9 @@ def register_marketing_tools(mcp_server):
     async def marketing_read(
         platform: Literal[
             "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "apple", "marketo"
-        ],
-        action: str,
+        ]
+        | None = None,
+        action: str = "",
         account_id: str | None = None,
         date_range_start: str | None = None,
         date_range_end: str | None = None,
@@ -109,6 +110,12 @@ def register_marketing_tools(mcp_server):
         Snap: get_adsquad_performance(+dates,campaign_id?)
         Marketo actions: get_leads, get_lead_by_id, list_lead_lists, get_list_leads, get_lead_activities, list_campaigns, list_programs, get_program, list_emails, list_landing_pages, list_forms
         """
+        if not platform:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', 'linkedin', 'pinterest', 'x', 'reddit', 'apple', or 'marketo' in params.",
+            }
         user = _get_user()
 
         # Validate action name upfront per platform
@@ -622,8 +629,9 @@ def register_marketing_tools(mcp_server):
     async def marketing_audit(
         platform: Literal[
             "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "apple", "marketo"
-        ],
-        action: str,
+        ]
+        | None = None,
+        action: str = "",
         account_id: str | None = None,
         date_range_start: str | None = None,
         date_range_end: str | None = None,
@@ -634,6 +642,12 @@ def register_marketing_tools(mcp_server):
         platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple. All: audit_tracking_setup(account_id).
         Google only: audit_budget_utilization(account_id+dates), audit_quality_scores(account_id,campaign_id?)
         """
+        if not platform:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', etc. in params.",
+            }
         user = _get_user()
         if platform != "marketo" and not account_id:
             return {
@@ -788,8 +802,9 @@ def register_marketing_tools(mcp_server):
     async def marketing_write(
         platform: Literal[
             "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "apple", "marketo"
-        ],
-        action: str,
+        ]
+        | None = None,
+        action: str = "",
         account_id: str | None = None,
         campaign_id: str | None = None,
         campaign_name: str | None = None,
@@ -810,6 +825,12 @@ def register_marketing_tools(mcp_server):
         update_campaign_budget: campaign_id, daily_budget_usd
         Marketo actions: create_or_update_leads, add_leads_to_list, remove_leads_from_list, request_campaign, schedule_campaign
         """
+        if not platform:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', etc. in params.",
+            }
         user = _get_user()
         if platform != "marketo" and not account_id:
             return {

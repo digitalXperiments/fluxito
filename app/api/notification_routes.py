@@ -53,6 +53,7 @@ async def _load_user(uid: str | None) -> dict | None:
                     "email": u.email or "",
                     "display_name": u.display_name or "",
                     "is_active": bool(u.is_active),
+                    "is_superadmin": bool(u.is_superadmin),
                     "created_at": str(u.created_at) if u.created_at else "",
                 }
     except Exception:

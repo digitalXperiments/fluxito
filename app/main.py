@@ -73,6 +73,17 @@ _mcp_transport_security = TransportSecuritySettings(
 mcp_server = FastMCP(
     name=settings.MCP_SERVER_NAME,
     transport_security=_mcp_transport_security,
+    # Cross-client robustness. The default streamable-HTTP transport (a) issues
+    # a per-session ``Mcp-Session-Id`` the client must echo on every request and
+    # (b) replies with an SSE ``text/event-stream``. Claude tolerates both, but
+    # stricter clients (e.g. Grok) that mishandle the session id or wait on the
+    # stream simply time out. This server already authenticates via a Bearer
+    # token and resolves the active project per request from Redis (see
+    # ``_apply_project_context`` below) — it keeps no per-session state — so a
+    # stateless, single-JSON-response transport is both safe and the documented
+    # intent, and it works uniformly across every MCP client.
+    stateless_http=True,
+    json_response=True,
 )
 register_all_tools(mcp_server)
 
@@ -395,6 +406,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 from app.api.access_request_routes import router as access_request_router
 from app.api.admin_routes import router as admin_router
 from app.api.audit_routes import router as audit_router
+from app.api.auditing_routes import router as auditing_platform_router
 from app.api.auth_routes import router as auth_router
 from app.api.automation_routes import router as automation_router
 from app.api.connector_metadata_routes import router as connector_metadata_router
@@ -425,6 +437,7 @@ app.include_router(integrations_router)
 app.include_router(knowledge_router)
 app.include_router(connector_metadata_router)
 app.include_router(audit_router)
+app.include_router(auditing_platform_router)
 app.include_router(project_router)
 app.include_router(sdr_router)
 app.include_router(scheduled_report_router)

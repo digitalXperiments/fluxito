@@ -35,16 +35,30 @@ class GTMConnector(BaseConnector):
 
     @friendly_errors("GTM")
     async def list_all_containers_raw(self, access_token: str) -> list:
+        import asyncio
+
         service = self._build_service(access_token)
         containers = []
         try:
             accounts_resp = await self._exec(service.accounts().list())
-            for account in accounts_resp.get("account", []):
+            accounts = accounts_resp.get("account", [])
+            if not accounts:
+                return containers
+
+            # Fetch containers for all accounts in parallel
+            tasks = []
+            account_ids = []
+            for account in accounts:
                 account_id = account["accountId"]
-                containers_resp = await self._exec(
-                    service.accounts().containers().list(parent=f"accounts/{account_id}")
-                )
-                for c in containers_resp.get("container", []):
+                account_ids.append(account_id)
+                req = service.accounts().containers().list(parent=f"accounts/{account_id}")
+                tasks.append(self._exec(req))
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for account_id, resp in zip(account_ids, results, strict=False):
+                if isinstance(resp, Exception):
+                    continue
+                for c in resp.get("container", []):
                     c["accountId"] = account_id
                     containers.append(c)
         except Exception:
@@ -104,33 +118,40 @@ class GTMConnector(BaseConnector):
 
     @friendly_errors("GTM")
     async def get_container_summary(self, connection_id: str, account_id: str, container_id: str) -> dict:
+        import asyncio
+
         token = await self.get_token(connection_id)
         service = self._build_service(token)
         parent = f"accounts/{account_id}/containers/{container_id}"
 
-        tags = (
-            await self._exec(
-                service.accounts().containers().workspaces().tags().list(parent=f"{parent}/workspaces/0")
-            )
-        ).get("tag", [])
-        triggers = (
-            await self._exec(
-                service.accounts().containers().workspaces().triggers().list(parent=f"{parent}/workspaces/0")
-            )
-        ).get("trigger", [])
-        variables = (
-            await self._exec(
-                service.accounts().containers().workspaces().variables().list(parent=f"{parent}/workspaces/0")
-            )
-        ).get("variable", [])
-        workspaces = (await self._exec(service.accounts().containers().workspaces().list(parent=parent))).get(
-            "workspace", []
+        # Fetch tags, triggers, variables, workspaces, and versions in parallel to prevent gateway timeouts
+        tags_task = self._exec(
+            service.accounts().containers().workspaces().tags().list(parent=f"{parent}/workspaces/0")
+        )
+        triggers_task = self._exec(
+            service.accounts().containers().workspaces().triggers().list(parent=f"{parent}/workspaces/0")
+        )
+        variables_task = self._exec(
+            service.accounts().containers().workspaces().variables().list(parent=f"{parent}/workspaces/0")
+        )
+        workspaces_task = self._exec(service.accounts().containers().workspaces().list(parent=parent))
+        versions_task = self._exec(service.accounts().containers().version_headers().list(parent=parent))
+
+        tags_resp, triggers_resp, variables_resp, workspaces_resp, versions_resp = await asyncio.gather(
+            tags_task, triggers_task, variables_task, workspaces_task, versions_task, return_exceptions=True
         )
 
-        # Get publish history (version_headers has .list(); versions does not)
+        tags = tags_resp.get("tag", []) if not isinstance(tags_resp, Exception) else []
+        triggers = triggers_resp.get("trigger", []) if not isinstance(triggers_resp, Exception) else []
+        variables = variables_resp.get("variable", []) if not isinstance(variables_resp, Exception) else []
+        workspaces = (
+            workspaces_resp.get("workspace", []) if not isinstance(workspaces_resp, Exception) else []
+        )
         versions = (
-            await self._exec(service.accounts().containers().version_headers().list(parent=parent))
-        ).get("containerVersionHeader", [])
+            versions_resp.get("containerVersionHeader", [])
+            if not isinstance(versions_resp, Exception)
+            else []
+        )
         latest_version = versions[0] if versions else None
 
         return {

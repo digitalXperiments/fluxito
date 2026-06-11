@@ -31,6 +31,17 @@ from app.models.dashboard import Dashboard, DashboardCard
 
 logger = logging.getLogger(__name__)
 
+# Per-card upstream timeout so a hung query can't stall a PDF/email render.
+_HYDRATE_CARD_TIMEOUT_S = 30
+
+
+def _as_bool(value) -> bool:
+    """Coerce a stored flag to bool — ``bool("false")`` is ``True``, so a
+    string-persisted flag must be parsed explicitly."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
 
 # --------------------------------------------------------------------------- #
 # Public API
@@ -101,14 +112,18 @@ async def _hydrate_one_card(
             return
 
         # Merge date overrides (respecting date_locked flag on the card)
-        card_date_locked = bool(spec.get("date_locked") or (spec.get("params") or {}).get("date_locked"))
+        card_date_locked = _as_bool(spec.get("date_locked"))
         overrides = date_filter if (date_filter and not card_date_locked) else None
         merged_spec = apply_overrides(spec, overrides)
-        call_args: dict = dict(merged_spec.get("params") or {})
+        # Params are stored flattened in query_params — exclude spec metadata keys.
+        # NOTE: "platform" is intentionally kept in call_args — it is a required
+        # named parameter for analytics_read, marketing_read, etc.
+        _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
+        call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
         if action is not None:
             call_args["action"] = action
 
-        raw_result = await tool.run(call_args)
+        raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_HYDRATE_CARD_TIMEOUT_S)
         if not isinstance(raw_result, dict):
             raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
 

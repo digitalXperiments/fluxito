@@ -4562,7 +4562,8 @@ select.f-input {
   }
   .triptych > .cell, .triptych > .trip-cell, .kpi, .platform { border-right: 0 !important; border-bottom: 1px solid var(--line); }
   .nav-links { display: none; }
-  .tabs { display: none; }
+  /* Only hide nav-context tabs (landing page); app UI tabs (admin, settings) remain visible */
+  .landing-nav .tabs { display: none; }
   .data-table .hd, .data-table .row { grid-template-columns: 1fr 80px; }
   .data-table .row > :nth-child(n+4) { display: none; }
   .footer .foot-grid { grid-template-columns: 1fr 1fr; }

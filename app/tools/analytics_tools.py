@@ -27,6 +27,24 @@ from app.tools.shared_helpers import (
 CoercedStr = Annotated[str, BeforeValidator(str)]
 
 
+def _coerce_str_list(v: Any) -> Any:
+    """Coerce a list whose items may be GA4-style {"name": "x"} dicts to plain strings."""
+    if isinstance(v, list):
+        result = []
+        for item in v:
+            if isinstance(item, dict):
+                # GA4 API format: {"name": "sessions"} → "sessions"
+                result.append(str(item.get("name", item.get("expression", next(iter(item.values()), "")))))
+            else:
+                result.append(str(item))
+        return result
+    return v
+
+
+# list[str] that also accepts items in GA4 API object format: {"name": "..."}
+CoercedStrList = Annotated[list[str], BeforeValidator(_coerce_str_list)]
+
+
 def _user():
     return get_current_user()
 
@@ -108,13 +126,13 @@ def register_analytics_tools(mcp_server):
 
     @mcp_server.tool("analytics_read")
     async def analytics_read(
-        platform: Literal["ga4", "amplitude", "adobe_analytics"],
-        action: str,
+        platform: Literal["ga4", "amplitude", "adobe_analytics"] | None = None,
+        action: str = "",
         property_id: CoercedStr | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-        metrics: list[str] | None = None,
-        dimensions: list[str] | None = None,
+        metrics: CoercedStrList | None = None,
+        dimensions: CoercedStrList | None = None,
         limit: int = 100,
         event_name: str | None = None,
         days_back: int = 30,
@@ -141,6 +159,12 @@ def register_analytics_tools(mcp_server):
           list_report_suites, get_dimensions(rsid), get_metrics(rsid),
           run_report(rsid+dims+metrics+dates), get_segments, get_calculated_metrics
         """
+        if not platform:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "platform is required. Pass platform='ga4', 'amplitude', or 'adobe_analytics' in params.",
+            }
         u = _user()
 
         if platform == "ga4":
@@ -472,8 +496,8 @@ def register_analytics_tools(mcp_server):
 
     @mcp_server.tool("analytics_audit")
     async def analytics_audit(
-        platform: Literal["ga4", "amplitude", "adobe_analytics"],
-        action: str,
+        platform: Literal["ga4", "amplitude", "adobe_analytics"] | None = None,
+        action: str = "",
         property_id: CoercedStr | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
@@ -492,6 +516,12 @@ def register_analytics_tools(mcp_server):
         Amplitude: check_taxonomy_health, check_event_volume_anomalies(days_back?)
         Adobe (property_id=rsid): audit_report_suite, check_data_quality(+days_back?)
         """
+        if not platform:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "platform is required. Pass platform='ga4', 'amplitude', or 'adobe_analytics' in params.",
+            }
         u = _user()
 
         if platform == "ga4":
@@ -677,10 +707,10 @@ def register_analytics_tools(mcp_server):
 
     @mcp_server.tool("analytics_write")
     async def analytics_write(
-        platform: Literal["ga4", "amplitude", "adobe_analytics"],
-        action: str,
-        property_id: CoercedStr,
-        config: dict[str, Any],
+        platform: Literal["ga4", "amplitude", "adobe_analytics"] | None = None,
+        action: str = "",
+        property_id: CoercedStr | None = None,
+        config: dict[str, Any] | None = None,
     ) -> dict:
         """Writes analytics config. Requires full access tier. Use analytics_read first.
 
@@ -693,6 +723,13 @@ def register_analytics_tools(mcp_server):
         Adobe: create_segment{name,rsid,definition}, update_segment{segment_id},
           delete_segment{segment_id}, create_calculated_metric{name,rsid,definition}, delete_calculated_metric{metric_id}
         """
+        if not platform:
+            return {
+                "error": True,
+                "error_type": "missing_required_param",
+                "message": "platform is required. Pass platform='ga4', 'amplitude', or 'adobe_analytics' in params.",
+            }
+        config = config or {}
         u = _user()
 
         if platform == "ga4":

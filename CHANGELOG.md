@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.4] — 2026-06-11
+
+### Added
+- **Tag Auditing platform.** Run tag/tracking audits and review the results in a
+  dedicated UI — an audits hub plus per-run detail pages — with the findings saved
+  per project. New `run_audit` and `save_audit_result` MCP tools let an AI execute an
+  audit and persist a structured, scored result.
+- **Live Tag Testing with multi-platform rule books.** Capture a page's network
+  traffic and validate the tags that actually fired against per-platform rule books,
+  via the new `live_tag_test` flow. Ships rule books for 20+ platforms — GA4
+  (standard, ecommerce, config), Google Ads (conversion & remarketing), Meta Pixel,
+  TikTok, Snap, Pinterest, LinkedIn Insight, Microsoft UET, Twitter/X, Criteo,
+  Floodlight, Hotjar, Mixpanel, Segment, Amplitude, and Adobe Analytics — plus a
+  `tag_rulebook` tool for inspecting and validating against them.
+- **Dashboard filter presets.** Save custom date-range chips on a live dashboard so
+  viewers can switch between the ranges that matter for that report.
+
+### Changed
+- **The MCP server now works reliably across every AI client.** Tool definitions were
+  rewritten to a strict, widely-compatible JSON-Schema shape (each tool advertises its
+  valid actions as an enum, and optional parameters no longer use nullable unions), and
+  the transport was switched to a stateless, single-response mode. Together these fix
+  the connection timeouts and malformed tool calls seen with stricter clients such as
+  Grok, while remaining fully compatible with Claude, ChatGPT, and Cursor.
+- **Live dashboards are faster and far more resilient.** Cards now refresh in parallel
+  with a per-card timeout and fall back to the last cached result instead of hanging
+  when an upstream source (GA4, BigQuery, …) is slow — one stuck card can no longer
+  freeze the whole dashboard. Filter changes are debounced and stale in-flight requests
+  are cancelled, so rapidly switching date ranges or dimensions no longer races or
+  flickers between results.
+
+### Fixed
+- **Stronger project isolation on dashboards.** Managing, viewing, and refreshing a
+  dashboard now verify active **project membership** in addition to ownership, so a user
+  removed from a project can no longer reach that project's dashboards. (Live refreshes
+  already resolved credentials strictly from the dashboard's own project — no data or
+  credentials were exposed across projects; this tightens the authorization checks on
+  every dashboard route to match.)
+- **Dashboard date filters could be silently ignored.** A card's "lock dates" flag, when
+  stored as text, was misread as always-on, which suppressed date-range filters on that
+  card. The flag is now parsed correctly.
+
 ## [1.1.1] — 2026-06-11
 
 ### Added

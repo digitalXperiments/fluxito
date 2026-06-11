@@ -2,6 +2,7 @@ from app.models.access_request import AccessRequest
 from app.models.activity import ActivityEvent
 from app.models.app_setting import AppSetting
 from app.models.audit import ToolCallAudit
+from app.models.auditing import AuditFinding, AuditRun, LttTestPlan, TagCustomRule
 from app.models.automation import Automation, AutomationInstallation
 from app.models.bq_connection import BQConnection
 from app.models.connection import MCPClient, OAuthConnection
@@ -44,6 +45,8 @@ __all__ = [
     "AdobeConnection",
     "AmplitudeConnection",
     "AppSetting",
+    "AuditFinding",
+    "AuditRun",
     "Automation",
     "AutomationInstallation",
     "BQConnection",
@@ -54,6 +57,7 @@ __all__ = [
     "GTMContainer",
     "GoogleAdsAccount",
     "KPIInput",
+    "LttTestPlan",
     "MCPAuthCode",
     "MCPClient",
     "MCPSession",
@@ -73,6 +77,7 @@ __all__ = [
     "SearchConsoleSite",
     "SnapAdsAccount",
     "SnowflakeConnection",
+    "TagCustomRule",
     "Template",
     "TikTokAdsAccount",
     "ToolCallAudit",

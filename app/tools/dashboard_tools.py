@@ -144,6 +144,37 @@ def _check_params_for_action(
     return errors
 
 
+_ISO_DATE_RE = __import__("re").compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _validate_filter_presets(presets: list) -> list[dict]:
+    """Validate and normalise filter_presets list.
+
+    Each entry must be a dict with:
+      label (str)  — button text shown in the UI
+      start (str)  — ISO date YYYY-MM-DD
+      end   (str)  — ISO date YYYY-MM-DD
+
+    Invalid entries are silently dropped so a bad preset doesn't block a deploy.
+    Returns a cleaned list (max 10 presets).
+    """
+    if not isinstance(presets, list):
+        return []
+    out: list[dict] = []
+    for p in presets:
+        if not isinstance(p, dict):
+            continue
+        label = str(p.get("label") or "").strip()[:60]
+        start = str(p.get("start") or "").strip()
+        end = str(p.get("end") or "").strip()
+        if not label or not _ISO_DATE_RE.match(start) or not _ISO_DATE_RE.match(end):
+            continue
+        out.append({"label": label, "start": start, "end": end})
+        if len(out) >= 10:
+            break
+    return out
+
+
 def _validate_card_specs(cards: list | None) -> list[dict]:
     """Validate the ``cards`` list passed to dashboard_deploy_batch.
 
@@ -321,6 +352,7 @@ def register_dashboard_tools(mcp_server):
         description: str | None = None,
         dashboard_id: str | None = None,
         query_token_required: bool = False,
+        filter_presets: list[dict] | None = None,
     ) -> dict:
         """Deploy a complete dashboard in a single call. PRIMARY tool for LLM dashboard creation.
 
@@ -418,6 +450,13 @@ def register_dashboard_tools(mcp_server):
             account_id, container_id
             (no date params → no filter_hooks needed)
 
+        filter_presets: optional list of custom date-range chips for the dashboard UI.
+          Each entry must be: {"label": str, "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}
+          Example: [{"label": "Year 2024", "start": "2024-01-01", "end": "2024-12-31"},
+                    {"label": "Year 2025", "start": "2025-01-01", "end": "2025-12-31"}]
+          These chips are shown alongside the built-in Last 7/30/90 day presets.
+          Omit or pass null to keep built-in presets only.
+
         Returns:
           dashboard_id (str): UUID of dashboard
           url (str): live dashboard URL
@@ -478,6 +517,8 @@ def register_dashboard_tools(mcp_server):
                 dash.title = title.strip()[:MAX_TITLE_LEN]
                 if description is not None:
                     dash.description = (description or "")[:MAX_DESC_LEN] or None
+                if filter_presets is not None:
+                    dash.filter_presets = _validate_filter_presets(filter_presets)
             else:
                 token = _secrets.token_urlsafe(32) if query_token_required else None
                 dash = Dashboard(
@@ -490,6 +531,7 @@ def register_dashboard_tools(mcp_server):
                     share_slug=_make_slug(),
                     is_public=True,
                     query_scopes=[],
+                    filter_presets=_validate_filter_presets(filter_presets or []),
                     query_token=token,
                     query_token_required=query_token_required,
                 )

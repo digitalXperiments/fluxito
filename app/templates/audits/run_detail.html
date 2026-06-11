@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% set active = 'audits' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/auditing.css?v=1"/>
+{% endblock %}
+
+{% block main %}
+<div class="app-main">
+
+  {# ── Breadcrumb ── #}
+  <div class="page-breadcrumb">
+    <a href="/audits">Auditing</a>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    <span>{{ run.title or 'Audit Run' }}</span>
+  </div>
+
+  {# ── Run header ── #}
+  <div class="page-head" style="padding-bottom:24px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap">
+      <div style="flex:1;min-width:280px">
+        <span class="label">{{ audit_type_labels.get(run.audit_type, run.audit_type) }}</span>
+        <h1 style="font-size:22px;margin:6px 0 8px">{{ run.title or 'Audit Run' }}</h1>
+        {% if run.url_tested %}
+        <div class="run-url-row">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <a href="{{ run.url_tested }}" target="_blank" rel="noopener" class="run-url-link">{{ run.url_tested[:80] }}</a>
+        </div>
+        {% endif %}
+      </div>
+      <div class="run-header-actions">
+        <button class="btn ghost sm" id="exportCsvBtn" data-run-id="{{ run.id }}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+        <button class="btn ghost sm" id="exportJsonBtn" data-run-id="{{ run.id }}">Export JSON</button>
+      </div>
+    </div>
+  </div>
+
+  {# ── Score banner ── #}
+  <div class="run-score-banner tier-{{ score_tier }}">
+    <div class="rsb-score-wrap">
+      <div class="rsb-score">{{ run.score or '—' }}</div>
+      <div class="rsb-score-label">/ 100</div>
+    </div>
+    <div class="rsb-divider"></div>
+    <div class="rsb-stats">
+      {% if run.critical > 0 %}
+      <div class="rsb-stat critical">
+        <span class="rsb-stat-val">{{ run.critical }}</span>
+        <span class="rsb-stat-label">Critical</span>
+      </div>
+      {% endif %}
+      {% if run.warning > 0 %}
+      <div class="rsb-stat warning">
+        <span class="rsb-stat-val">{{ run.warning }}</span>
+        <span class="rsb-stat-label">Warnings</span>
+      </div>
+      {% endif %}
+      {% if run.info > 0 %}
+      <div class="rsb-stat info">
+        <span class="rsb-stat-val">{{ run.info }}</span>
+        <span class="rsb-stat-label">Info</span>
+      </div>
+      {% endif %}
+      {% if run.passed > 0 %}
+      <div class="rsb-stat pass">
+        <span class="rsb-stat-val">{{ run.passed }}</span>
+        <span class="rsb-stat-label">Passed</span>
+      </div>
+      {% endif %}
+    </div>
+    <div class="rsb-meta">
+      <div class="rsb-tier-badge tier-badge-{{ score_tier }}">{{ score_tier | capitalize }}</div>
+      <div class="rsb-run-meta">
+        {% if run.triggered_by == 'claude' %}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Claude
+        {% endif %}
+        · {{ run.created_at[:10] if run.created_at else '—' }}
+        {% if run.duration_ms %}· {{ run.duration_ms }}ms{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── AI Summary (raw_summary) ── #}
+  {% if run.raw_summary %}
+  <div class="run-summary-card">
+    <div class="run-summary-header">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Claude's Analysis
+    </div>
+    <div class="run-summary-body">{{ run.raw_summary }}</div>
+  </div>
+  {% endif %}
+
+  {# ── Filters ── #}
+  <div class="finding-filters" id="findingFilters">
+    <button class="ff-chip is-active" data-filter="all">All <span class="t-seg-count" id="countAll">{{ findings | length }}</span></button>
+    <button class="ff-chip" data-filter="critical">Critical <span class="t-seg-count" id="countCritical">{{ findings | selectattr('severity', 'equalto', 'critical') | list | length }}</span></button>
+    <button class="ff-chip" data-filter="warning">Warning <span class="t-seg-count" id="countWarning">{{ findings | selectattr('severity', 'equalto', 'warning') | list | length }}</span></button>
+    <button class="ff-chip" data-filter="info">Info <span class="t-seg-count" id="countInfo">{{ findings | selectattr('severity', 'equalto', 'info') | list | length }}</span></button>
+    <button class="ff-chip" data-filter="pass">Passed <span class="t-seg-count" id="countPass">{{ findings | selectattr('passed', 'true') | list | length }}</span></button>
+
+    {# Platform filter ── auto built from findings #}
+    {% set platforms = findings | map(attribute='platform') | reject('none') | unique | list %}
+    {% if platforms | length > 1 %}
+    <div class="ff-sep"></div>
+    {% for plat in platforms %}
+    <button class="ff-chip ff-chip--plat" data-filter-platform="{{ plat }}">
+      {{ plat | replace('_', ' ') | title }}
+    </button>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  {# ── Findings list ── #}
+  <div class="findings-list" id="findingsList">
+    {% for f in findings %}
+    <div class="finding-row {{ 'finding-row--pass' if f.passed else '' }}"
+         data-severity="{{ f.severity or 'pass' }}"
+         data-platform="{{ f.platform or '' }}"
+         data-passed="{{ 'true' if f.passed else 'false' }}">
+
+      <div class="fr-left">
+        <div class="sev-dot sev-dot--{{ f.severity or 'pass' }}"></div>
+      </div>
+
+      <div class="fr-body">
+        <div class="fr-header">
+          {% if f.platform %}
+          <span class="fr-platform">{{ f.platform | replace('_', ' ') | title }}</span>
+          {% endif %}
+          {% if f.event %}
+          <span class="fr-event">{{ f.event }}</span>
+          {% endif %}
+          {% if f.rule_id %}
+          <span class="fr-ruleid">{{ f.rule_id }}</span>
+          {% endif %}
+          {% if f.severity and not f.passed %}
+          <span class="fr-sev-badge sev-badge--{{ f.severity }}">{{ f.severity }}</span>
+          {% elif f.passed %}
+          <span class="fr-sev-badge sev-badge--pass">pass</span>
+          {% endif %}
+        </div>
+        <div class="fr-message">{{ f.message or '—' }}</div>
+        {% if f.remediation and not f.passed %}
+        <div class="fr-remediation">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          {{ f.remediation }}
+        </div>
+        {% endif %}
+        {% if f.expected or f.actual %}
+        <details class="fr-detail-toggle">
+          <summary>Show expected / actual</summary>
+          <div class="fr-diff">
+            {% if f.expected %}
+            <div class="fr-diff-col">
+              <div class="fr-diff-label">Expected</div>
+              <pre class="fr-diff-code">{{ f.expected | tojson(indent=2) }}</pre>
+            </div>
+            {% endif %}
+            {% if f.actual %}
+            <div class="fr-diff-col">
+              <div class="fr-diff-label">Actual</div>
+              <pre class="fr-diff-code">{{ f.actual | tojson(indent=2) }}</pre>
+            </div>
+            {% endif %}
+          </div>
+        </details>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="audit-empty" style="padding:64px 24px">
+      <div class="audit-empty-icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      </div>
+      <h3>No findings</h3>
+      <p>This audit run produced no findings yet.</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── Back link ── #}
+  <div style="margin-top:32px">
+    <a href="/audits" class="btn ghost sm">← Back to Auditing</a>
+  </div>
+</div>
+
+<script src="/static/js/auditing.js?v=1" defer></script>
+<script>
+// Run-detail page: filter findings
+(function(){
+  var all = Array.from(document.querySelectorAll('.finding-row'));
+  var chips = document.querySelectorAll('.ff-chip');
+  var platChips = document.querySelectorAll('.ff-chip--plat');
+  var activeFilter = 'all';
+  var activePlatform = null;
+
+  function apply() {
+    all.forEach(function(row) {
+      var sev = row.dataset.severity;
+      var plat = row.dataset.platform;
+      var passed = row.dataset.passed === 'true';
+
+      var sevOk = activeFilter === 'all'
+        || (activeFilter === 'pass' && passed)
+        || (activeFilter === sev);
+      var platOk = !activePlatform || plat === activePlatform;
+      row.style.display = (sevOk && platOk) ? '' : 'none';
+    });
+  }
+
+  chips.forEach(function(c) {
+    c.addEventListener('click', function() {
+      chips.forEach(function(x){ x.classList.remove('is-active'); });
+      c.classList.add('is-active');
+      activeFilter = c.dataset.filter;
+      apply();
+    });
+  });
+
+  platChips.forEach(function(c) {
+    c.addEventListener('click', function() {
+      if (activePlatform === c.dataset.filterPlatform) {
+        activePlatform = null;
+        platChips.forEach(function(x){ x.classList.remove('is-active'); });
+      } else {
+        activePlatform = c.dataset.filterPlatform;
+        platChips.forEach(function(x){ x.classList.remove('is-active'); });
+        c.classList.add('is-active');
+      }
+      apply();
+    });
+  });
+
+  // Export buttons
+  function exportRun(fmt) {
+    var btn = document.getElementById('export' + fmt.charAt(0).toUpperCase() + fmt.slice(1) + 'Btn');
+    var runId = btn ? btn.dataset.runId : '';
+    if (!runId) return;
+    fetch('/api/audits/' + runId + '/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: fmt })
+    }).then(function(r) {
+      if (!r.ok) throw new Error('Export failed');
+      return r.blob();
+    }).then(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'audit_' + runId.slice(0,8) + '.' + fmt;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      a.remove();
+    }).catch(function(e){ alert('Export failed: ' + e.message); });
+  }
+
+  var csvBtn = document.getElementById('exportCsvBtn');
+  var jsonBtn = document.getElementById('exportJsonBtn');
+  if (csvBtn)  csvBtn.addEventListener('click',  function(){ exportRun('csv'); });
+  if (jsonBtn) jsonBtn.addEventListener('click', function(){ exportRun('json'); });
+})();
+</script>
+{% endblock %}

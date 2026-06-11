@@ -313,7 +313,7 @@ function connectGoogle() {
   var writeGTM = document.getElementById('gSvcGTM').checked && document.getElementById('gSvcGTMLevel').value === 'write' ? '1' : '0';
   var writeGSC = document.getElementById('gSvcGSC').checked && document.getElementById('gSvcGSCLevel').value === 'write' ? '1' : '0';
 
-  var url = '/api/connections/google/initiate?products=' + products.join(',') + '&write_ga4=' + writeGA4 + '&write_gtm=' + writeGTM + '&write_gsc=' + writeGSC;
+  var url = '/api/connections/google/initiate?products=' + products.join(',') + '&write_ga4=' + writeGA4 + '&write_gtm=' + writeGTM + '&write_gsc=' + writeGSC + '&project_id={{ active_project_id or "" }}';
   window.location.href = url;
 }
 </script>

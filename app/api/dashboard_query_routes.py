@@ -48,6 +48,10 @@ from app.models.dashboard import Dashboard, DashboardCard, DashboardQueryLog
 
 logger = logging.getLogger(__name__)
 
+# Per-card upstream timeout so one hung query (GA4/BigQuery/…) can't stall the
+# whole batch or the filter-options lookup.
+_QUERY_TIMEOUT_S = 25
+
 router = APIRouter(prefix="/api/dashboard-query", tags=["dashboard-query"])
 
 
@@ -179,13 +183,33 @@ def _normalize_result(platform: str, raw: Any) -> dict:
 
 async def _can_view_dashboard(request: Request, dash: Dashboard) -> bool:
     from app.auth.uid_cookie import get_uid_from_request
+    from app.utils import safe_uuid
 
     if dash.is_public:
         return True
     uid = get_uid_from_request(request)
-    if not uid:
+    if not uid or str(dash.user_id) != uid:
         return False
-    return str(dash.user_id) == uid
+    # Private dashboard: the owner must still be an active member of the
+    # dashboard's project. A user removed from a project loses access to its
+    # dashboards even though they originally created them. Legacy dashboards
+    # with no project (project_id IS NULL) fall back to owner-only access.
+    if dash.project_id is None:
+        return True
+    user_uuid = safe_uuid(uid)
+    if user_uuid is None:
+        return False
+    from app.models.project import ProjectMember
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(
+            select(ProjectMember.id).where(
+                ProjectMember.project_id == dash.project_id,
+                ProjectMember.user_id == user_uuid,
+                ProjectMember.is_active.is_(True),
+            )
+        )
+        return result.scalar_one_or_none() is not None
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +294,11 @@ async def batch_query(slug: str, body: BatchRequest, request: Request):
                     raise HTTPException(409, f"Card {req.card_id} has no 'tool' in its spec")
 
                 merged = apply_overrides(spec, req.overrides)
-                merged_params = merged.get("params") or {}
+                # Params are stored flattened in query_params — exclude spec metadata keys.
+                # NOTE: "platform" is intentionally kept — it is a required named parameter
+                # for analytics_read, marketing_read, etc.
+                _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
+                merged_params = {k: v for k, v in merged.items() if k not in _META_KEYS}
                 resource_id = str(
                     merged_params.get("property_id")
                     or merged_params.get("connection_id")
@@ -310,7 +338,7 @@ async def batch_query(slug: str, body: BatchRequest, request: Request):
                 if action is not None:
                     call_args["action"] = action
 
-                raw_result = await tool.run(call_args)
+                raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_QUERY_TIMEOUT_S)
                 normalized = _normalize_result(platform, raw_result)
                 if normalized.get("error"):
                     error_str = normalized["error"]
@@ -322,6 +350,10 @@ async def batch_query(slug: str, body: BatchRequest, request: Request):
 
             except HTTPException as http_exc:
                 error_str = http_exc.detail if isinstance(http_exc.detail, str) else str(http_exc.detail)
+                results[req.card_id] = CardResult(error=error_str)
+            except TimeoutError:
+                error_str = f"Query exceeded {_QUERY_TIMEOUT_S}s and was aborted"
+                logger.warning("dashboard_query timeout slug=%s card=%s", slug, req.card_id)
                 results[req.card_id] = CardResult(error=error_str)
             except Exception as exc:
                 error_str = str(exc)
@@ -448,7 +480,7 @@ async def get_filter_options(slug: str, request: Request, token: str | None = No
                 tool = legacy.get("warehouse_query") or tm._tools.get("warehouse_query")
                 if tool is None:
                     continue
-                raw_result = await tool.run(call_args)
+                raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_QUERY_TIMEOUT_S)
                 if raw_result.get("error"):
                     logger.debug(
                         "filter-options distinct query error dim=%s: %s",
