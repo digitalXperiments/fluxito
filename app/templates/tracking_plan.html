@@ -1,0 +1,272 @@
+{# app/templates/tracking_plan.html #}
+{% extends "base.html" %}
+{% block title %}Tracking Plan — Fluxito{% endblock %}
+{% set active = 'tracking_plan' %}
+
+{% block head_extra %}
+<style>
+  .tp-wrap { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+  .tp-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+  .tp-tabs { display:flex; gap:.25rem; border-bottom:1px solid var(--border, #2a2a2a); margin-bottom:1rem; flex-wrap:wrap; }
+  .tp-tab { padding:.5rem .9rem; cursor:pointer; border:none; background:none; color:inherit; opacity:.65; }
+  .tp-tab.is-active { opacity:1; border-bottom:2px solid var(--accent, #4a9eff); }
+  .tp-panel { display:none; } .tp-panel.is-active { display:block; }
+  .tp-table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  .tp-table th, .tp-table td { text-align:left; padding:.5rem; border-bottom:1px solid var(--border,#2a2a2a); vertical-align:top; }
+  .tp-row-actions button { margin-right:.4rem; }
+  .tp-banner { padding:.6rem .9rem; border-radius:6px; margin-bottom:1rem; font-size:.85rem; }
+  .tp-banner.warn { background:#3a2a00; } .tp-banner.ok { background:#0a2a14; }
+  .tp-form { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin:.75rem 0; }
+  .tp-form input, .tp-form select { padding:.4rem; }
+  .tp-pill { font-size:.7rem; padding:.1rem .4rem; border-radius:99px; background:#222; }
+  dialog.tp-modal { width:min(680px,92vw); border:1px solid var(--border,#333); border-radius:10px; background:var(--bg,#111); color:inherit; }
+  .tp-muted { opacity:.6; }
+</style>
+{% endblock %}
+
+{% block main %}
+<div class="tp-wrap">
+  <div class="tp-head">
+    <h1 style="margin:0;">Tracking Plan</h1>
+    <div>
+      <button class="btn" onclick="tpValidate()">Validate</button>
+      <button class="btn btn-primary" onclick="tpPublish()">Publish</button>
+    </div>
+  </div>
+  <div id="tp-banner"></div>
+
+  <div class="tp-tabs">
+    <button class="tp-tab is-active" data-tab="events" onclick="tpTab('events')">Events</button>
+    <button class="tp-tab" data-tab="properties" onclick="tpTab('properties')">Properties</button>
+    <button class="tp-tab" data-tab="sources" onclick="tpTab('sources')">Sources</button>
+    <button class="tp-tab" data-tab="destinations" onclick="tpTab('destinations')">Destinations</button>
+    <button class="tp-tab" data-tab="metrics" onclick="tpTab('metrics')">Metrics</button>
+    <button class="tp-tab" data-tab="versions" onclick="tpTab('versions')">Versions</button>
+  </div>
+
+  <div class="tp-panel is-active" data-panel="events"><div id="tp-events"></div></div>
+  <div class="tp-panel" data-panel="properties"><div id="tp-properties"></div></div>
+  <div class="tp-panel" data-panel="sources"><div id="tp-sources"></div></div>
+  <div class="tp-panel" data-panel="destinations"><div id="tp-destinations"></div></div>
+  <div class="tp-panel" data-panel="metrics"><div id="tp-metrics"></div></div>
+  <div class="tp-panel" data-panel="versions"><div id="tp-versions"></div></div>
+</div>
+
+<dialog class="tp-modal" id="tp-event-modal"><div id="tp-event-detail"></div>
+  <div style="padding:.75rem; text-align:right;"><button class="btn" onclick="document.getElementById('tp-event-modal').close()">Close</button></div>
+</dialog>
+
+<script>
+window.__TP_PROJECT_ID__ = "{{ project_id }}";
+</script>
+<script>
+(function () {
+  const PID = window.__TP_PROJECT_ID__;
+  const BASE = `/api/projects/${PID}/tracking-plan`;
+  let PLAN = null;
+
+  function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function banner(msg, kind){ const b=document.getElementById('tp-banner'); b.innerHTML = msg ? `<div class="tp-banner ${kind||'warn'}">${esc(msg)}</div>` : ''; }
+
+  async function getPlan(){ const r = await fetch(BASE); PLAN = await r.json(); render(); }
+
+  async function tpAction(action, params){
+    const r = await fetch(`${BASE}/action`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action, params})});
+    const j = await r.json();
+    if (j.error){ banner(`${j.error_type}: ${j.message}`, 'warn'); return null; }
+    banner('', 'ok');
+    await getPlan();
+    return j;
+  }
+  window.tpAction = tpAction;
+
+  window.tpTab = function(name){
+    document.querySelectorAll('.tp-tab').forEach(t=>t.classList.toggle('is-active', t.dataset.tab===name));
+    document.querySelectorAll('.tp-panel').forEach(p=>p.classList.toggle('is-active', p.dataset.panel===name));
+    if (name==='versions') loadVersions();
+  };
+
+  window.tpValidate = async function(){
+    const r = await fetch(`${BASE}/validate`); const v = await r.json();
+    const warns = v.findings.filter(f=>f.severity==='warning').length;
+    banner(`Validation: ${v.findings.length} findings (${warns} warnings). ${v.is_publishable?'Publishable.':'Resolve warnings before publish.'}`, warns?'warn':'ok');
+  };
+
+  window.tpPublish = async function(){
+    const note = prompt('Changelog for this version:'); if (note===null) return;
+    const j = await tpAction('publish', {changelog: note});
+    if (j) banner(`Published version ${j.version_number}.`, 'ok');
+  };
+
+  function table(cols, rows, rowFn){
+    return `<table class="tp-table"><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(rowFn).join('')}</tbody></table>`;
+  }
+
+  // ---- Events ----
+  function renderEvents(){
+    const opts = PLAN.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    const rows = table(['Name','Category','Sources','Destinations','Props',''], PLAN.events, e=>`
+      <tr>
+        <td><a href="#" onclick="tpOpenEvent('${e.id}');return false;">${esc(e.name)}</a><div class="tp-muted">${esc(e.purpose||'')}</div></td>
+        <td>${esc(e.category||'')}</td>
+        <td>${e.sources.map(s=>`<span class="tp-pill">${esc(s.name)}:${esc(s.implementation_status)}</span>`).join(' ')||'<span class="tp-muted">—</span>'}</td>
+        <td>${e.destinations.map(d=>esc(d.destination)).join(', ')||'<span class="tp-muted">—</span>'}</td>
+        <td>${e.properties.length}</td>
+        <td class="tp-row-actions"><button class="btn" onclick="tpDeleteEvent('${e.id}','${esc(e.name)}')">Delete</button></td>
+      </tr>`);
+    document.getElementById('tp-events').innerHTML = `
+      <div class="tp-form">
+        <input id="tp-new-event" placeholder="event name"/>
+        <select id="tp-new-event-cat"><option value="">(no category)</option>${opts}</select>
+        <button class="btn btn-primary" onclick="tpCreateEvent()">Add event</button>
+        <input id="tp-new-cat" placeholder="new category"/>
+        <button class="btn" onclick="tpCreateCategory()">Add category</button>
+      </div>${rows}`;
+  }
+  window.tpCreateEvent = function(){
+    const name = document.getElementById('tp-new-event').value.trim(); if(!name) return;
+    const cat = document.getElementById('tp-new-event-cat').value || undefined;
+    tpAction('create_event', {name, category_id: cat});
+  };
+  window.tpDeleteEvent = function(id,name){ if(confirm(`Delete event "${name}"?`)) tpAction('delete_event', {event_id:id}); };
+  window.tpCreateCategory = function(){ const name=document.getElementById('tp-new-cat').value.trim(); if(name) tpAction('create_category',{name}); };
+
+  // ---- Event detail (attach props, scope sources, map destinations) ----
+  window.tpOpenEvent = function(id){
+    const e = PLAN.events.find(x=>x.id===id); if(!e) return;
+    const libProps = PLAN.properties.event.map(p=>`<option value="${p.id}">${esc(p.name)} (${esc(p.data_type)})</option>`).join('');
+    const srcOpts = PLAN.sources.map(s=>`<label style="margin-right:.6rem;"><input type="checkbox" value="${s.id}" data-src> ${esc(s.name)}</label>`).join('');
+    const destOpts = PLAN.destinations.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    document.getElementById('tp-event-detail').innerHTML = `
+      <div style="padding:1rem;">
+        <h2>${esc(e.name)}</h2>
+        <h4>Properties</h4>
+        ${table(['Name','Type','Required','Example',''], e.properties, p=>`
+          <tr><td>${esc(p.name)}</td><td>${esc(p.data_type)}</td><td>${p.required?'yes':'no'}</td><td>${esc(p.example||'')}</td>
+          <td><button class="btn" onclick="tpDetach('${id}','${esc(p.name)}')">Remove</button></td></tr>`)}
+        <div class="tp-form">
+          <select id="tp-attach-prop">${libProps}</select>
+          <label><input type="checkbox" id="tp-attach-req"> required</label>
+          <input id="tp-attach-ex" placeholder="example"/>
+          <button class="btn" onclick="tpAttach('${id}')">Attach property</button>
+        </div>
+        <h4>Sources &amp; status</h4>
+        <div class="tp-form">${srcOpts}
+          <select id="tp-src-status"><option>planned</option><option>implemented</option><option>verified</option><option>deprecated</option></select>
+          <button class="btn" onclick="tpScopeSources('${id}')">Set sources</button>
+        </div>
+        <h4>Destination mappings</h4>
+        ${table(['Destination','Dest event name',''], e.destinations, d=>`
+          <tr><td>${esc(d.destination)}</td><td>${esc(d.dest_event_name||'')}</td>
+          <td><button class="btn" onclick="tpUnmap('${id}','${esc(d.destination)}')">Remove</button></td></tr>`)}
+        <div class="tp-form">
+          <select id="tp-map-dest">${destOpts}</select>
+          <input id="tp-map-name" placeholder="dest event name"/>
+          <button class="btn" onclick="tpMap('${id}')">Map destination</button>
+        </div>
+      </div>`;
+    document.getElementById('tp-event-modal').showModal();
+  };
+  window.tpAttach = function(eid){
+    const pid=document.getElementById('tp-attach-prop').value; if(!pid) return;
+    tpAction('attach_property', {event_id:eid, property_id:pid, required:document.getElementById('tp-attach-req').checked, example:document.getElementById('tp-attach-ex').value||null}).then(()=>tpOpenEvent(eid));
+  };
+  window.tpDetach = function(eid,pname){ const p=PLAN.properties.event.find(x=>x.name===pname); if(p) tpAction('detach_property',{event_id:eid,property_id:p.id}).then(()=>tpOpenEvent(eid)); };
+  window.tpScopeSources = function(eid){
+    const chosen=[...document.querySelectorAll('[data-src]:checked')].map(c=>c.value);
+    const status=document.getElementById('tp-src-status').value;
+    tpAction('set_event_sources', {event_id:eid, sources: chosen.map(s=>({source_id:s, implementation_status:status}))}).then(()=>tpOpenEvent(eid));
+  };
+  window.tpMap = function(eid){ const did=document.getElementById('tp-map-dest').value; if(did) tpAction('set_event_destination',{event_id:eid,destination_id:did,dest_event_name:document.getElementById('tp-map-name').value||null}).then(()=>tpOpenEvent(eid)); };
+  window.tpUnmap = function(eid,dname){ const d=PLAN.destinations.find(x=>x.name===dname); if(d) tpAction('remove_event_destination',{event_id:eid,destination_id:d.id}).then(()=>tpOpenEvent(eid)); };
+
+  // ---- Properties ----
+  function renderProperties(){
+    const rows = table(['Name','Kind','Type','PII',''], [...PLAN.properties.event, ...PLAN.properties.user], p=>`
+      <tr><td>${esc(p.name)}</td><td>${esc(p.kind)}</td><td>${esc(p.data_type)}</td><td>${p.is_pii?'yes':''}</td>
+      <td><button class="btn" onclick="tpDeleteProp('${p.id}','${esc(p.name)}')">Delete</button></td></tr>`);
+    document.getElementById('tp-properties').innerHTML = `
+      <div class="tp-form">
+        <input id="tp-prop-name" placeholder="property name"/>
+        <select id="tp-prop-type"><option>string</option><option>int</option><option>float</option><option>boolean</option><option>object</option><option>array</option></select>
+        <select id="tp-prop-kind"><option>event</option><option>user</option><option>group</option><option>system</option></select>
+        <button class="btn btn-primary" onclick="tpCreateProp()">Add property</button>
+      </div>${rows}`;
+  }
+  window.tpCreateProp = function(){
+    const name=document.getElementById('tp-prop-name').value.trim(); if(!name) return;
+    tpAction('create_property', {name, data_type:document.getElementById('tp-prop-type').value, kind:document.getElementById('tp-prop-kind').value});
+  };
+  window.tpDeleteProp = function(id,name){ if(confirm(`Delete property "${name}"?`)) tpAction('delete_property',{property_id:id}); };
+
+  // ---- Sources (+ routing) ----
+  function renderSources(){
+    const destOpts = PLAN.destinations.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    const rows = table(['Name','Type','Routes to',''], PLAN.sources, s=>`
+      <tr><td>${esc(s.name)}</td><td>${esc(s.platform_type||'')}</td><td>${s.destinations.map(esc).join(', ')||'<span class="tp-muted">—</span>'}</td>
+      <td class="tp-row-actions">
+        <select id="route-${s.id}">${destOpts}</select>
+        <button class="btn" onclick="tpRoute('${s.id}')">Route</button>
+        <button class="btn" onclick="tpDeleteSource('${s.id}','${esc(s.name)}')">Delete</button>
+      </td></tr>`);
+    document.getElementById('tp-sources').innerHTML = `
+      <div class="tp-form"><input id="tp-src-name" placeholder="source name"/>
+        <input id="tp-src-type" placeholder="platform_type (web/ios/...)"/>
+        <button class="btn btn-primary" onclick="tpCreateSource()">Add source</button></div>${rows}`;
+  }
+  window.tpCreateSource = function(){ const name=document.getElementById('tp-src-name').value.trim(); if(name) tpAction('create_source',{name, platform_type:document.getElementById('tp-src-type').value||null}); };
+  window.tpDeleteSource = function(id,name){ if(confirm(`Delete source "${name}"?`)) tpAction('delete_source',{source_id:id}); };
+  window.tpRoute = function(sid){ const did=document.getElementById('route-'+sid).value; if(did) tpAction('connect_source_destination',{source_id:sid,destination_id:did}); };
+
+  // ---- Destinations ----
+  function renderDestinations(){
+    const rows = table(['Name','Platform','Account',''], PLAN.destinations, d=>`
+      <tr><td>${esc(d.name)}</td><td>${esc(d.platform)}</td><td>${esc(d.platform_account_id||'')}</td>
+      <td><button class="btn" onclick="tpDeleteDest('${d.id}','${esc(d.name)}')">Delete</button></td></tr>`);
+    document.getElementById('tp-destinations').innerHTML = `
+      <div class="tp-form"><input id="tp-dest-name" placeholder="destination name"/>
+        <input id="tp-dest-platform" placeholder="platform (ga4/amplitude/...)"/>
+        <input id="tp-dest-acct" placeholder="account id"/>
+        <button class="btn btn-primary" onclick="tpCreateDest()">Add destination</button></div>${rows}`;
+  }
+  window.tpCreateDest = function(){
+    const name=document.getElementById('tp-dest-name').value.trim(); const platform=document.getElementById('tp-dest-platform').value.trim();
+    if(name&&platform) tpAction('create_destination',{name, platform, platform_account_id:document.getElementById('tp-dest-acct').value||null});
+  };
+  window.tpDeleteDest = function(id,name){ if(confirm(`Delete destination "${name}"?`)) tpAction('delete_destination',{destination_id:id}); };
+
+  // ---- Metrics ----
+  function renderMetrics(){
+    const evOpts = PLAN.events.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('');
+    const rows = table(['Name','Type','Event',''], PLAN.metrics, m=>`
+      <tr><td>${esc(m.name)}</td><td>${esc(m.type)}</td><td>${esc(m.event||'')}</td>
+      <td><button class="btn" onclick="tpDeleteMetric('${m.id}','${esc(m.name)}')">Delete</button></td></tr>`);
+    document.getElementById('tp-metrics').innerHTML = `
+      <div class="tp-form"><input id="tp-metric-name" placeholder="metric name"/>
+        <select id="tp-metric-type"><option>count</option><option>sum</option><option>unique</option><option>average</option><option>ratio</option></select>
+        <select id="tp-metric-event"><option value="">(no event)</option>${evOpts}</select>
+        <button class="btn btn-primary" onclick="tpCreateMetric()">Add metric</button></div>${rows}`;
+  }
+  window.tpCreateMetric = function(){
+    const name=document.getElementById('tp-metric-name').value.trim(); if(!name) return;
+    tpAction('create_metric',{name, type:document.getElementById('tp-metric-type').value, event_id:document.getElementById('tp-metric-event').value||null});
+  };
+  window.tpDeleteMetric = function(id,name){ if(confirm(`Delete metric "${name}"?`)) tpAction('delete_metric',{metric_id:id}); };
+
+  // ---- Versions ----
+  async function loadVersions(){
+    const r = await fetch(`${BASE}/versions`); const v = await r.json();
+    document.getElementById('tp-versions').innerHTML = table(['Version','Changelog','Published'], v.versions, x=>`
+      <tr><td>${esc(x.version_number)}</td><td>${esc(x.changelog||'')}</td><td>${esc(x.published_at||'')}</td></tr>`)
+      || '<p class="tp-muted">No versions published yet.</p>';
+  }
+
+  function render(){
+    renderEvents(); renderProperties(); renderSources(); renderDestinations(); renderMetrics();
+  }
+
+  getPlan();
+})();
+</script>
+{% endblock %}
