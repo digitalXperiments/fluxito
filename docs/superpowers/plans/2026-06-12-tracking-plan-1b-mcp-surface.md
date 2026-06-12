@@ -445,6 +445,7 @@ async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> d
         if action == "attach_property":
             link = await attach_property(
                 session,
+                branch,
                 p["event_id"],
                 p["property_id"],
                 required=bool(p.get("required", False)),
@@ -454,7 +455,7 @@ async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> d
             )
             return _ok(id=str(link.id))
         if action == "detach_property":
-            await detach_property(session, p["event_id"], p["property_id"])
+            await detach_property(session, branch, p["event_id"], p["property_id"])
             return _ok(detached=True)
 
         # ---- categories --------------------------------------------------

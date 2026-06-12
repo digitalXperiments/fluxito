@@ -235,7 +235,12 @@ async def test_unknown_action_returns_structured_error(tool_manager):
     result = await tracking_plan(action="bogus", params={})
     assert result.get("error") is True
     assert result.get("error_type") == "unknown_action"
-    assert set(result.get("available_actions", [])) == {
+    # available_actions lists every routed action — the 8 legacy markdown
+    # actions plus the structured v2 actions added in Plan 1B. Assert the
+    # legacy set is present and a representative v2 action shows up, rather
+    # than pinning the exact set (which would re-break on every new action).
+    available = set(result.get("available_actions", []))
+    legacy = {
         "capture_intake",
         "diagnose",
         "generate",
@@ -245,6 +250,12 @@ async def test_unknown_action_returns_structured_error(tool_manager):
         "refresh_sources",
         "save",
     }
+    assert legacy <= available, f"missing legacy actions: {legacy - available}"
+    assert {"create_event", "publish"} <= available, "v2 actions not advertised"
+
+    from app.tools.unified import TRACKING_PLAN_ROUTES
+
+    assert available == set(TRACKING_PLAN_ROUTES.keys())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
