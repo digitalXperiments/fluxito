@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 
@@ -21,6 +21,8 @@ from app.services.tracking_plan import (
     get_main_branch,
     get_or_create_plan,
     plan_to_dict,
+    plan_to_markdown,
+    plan_to_xlsx,
     validate_plan,
 )
 from app.templating import render
@@ -162,6 +164,37 @@ async def api_version_snapshot(project_id: str, version_id: str, request: Reques
         if v is None or v.plan_id != plan.id:
             raise HTTPException(status_code=404, detail="Version not found")
         return JSONResponse({"version_number": v.version_number, "snapshot": v.snapshot})
+
+
+# ----------------------------------------------------------------------------
+# Exports
+# ----------------------------------------------------------------------------
+@router.get("/api/projects/{project_id}/tracking-plan/export.md")
+async def api_export_md(project_id: str, request: Request):
+    user_uuid, proj_id, _role = await _resolve(request)
+    _check_param_pid(project_id, proj_id)
+    async with app_state.db_session_factory() as db:
+        plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
+        branch = await get_main_branch(db, plan)
+        data = await plan_to_dict(db, plan, branch)
+        await db.commit()
+        return PlainTextResponse(plan_to_markdown(data))
+
+
+@router.get("/api/projects/{project_id}/tracking-plan/export.xlsx")
+async def api_export_xlsx(project_id: str, request: Request):
+    user_uuid, proj_id, _role = await _resolve(request)
+    _check_param_pid(project_id, proj_id)
+    async with app_state.db_session_factory() as db:
+        plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
+        branch = await get_main_branch(db, plan)
+        data = await plan_to_dict(db, plan, branch)
+        await db.commit()
+        return Response(
+            plan_to_xlsx(data),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="tracking-plan.xlsx"'},
+        )
 
 
 # ----------------------------------------------------------------------------

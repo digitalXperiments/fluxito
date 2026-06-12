@@ -1257,5 +1257,13 @@
     "mutates": true,
     "scope": "admin",
     "returns": "{ ok: true, version_id, version_number } | { error: permission_denied }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "export_markdown",
+    "summary": "Render the current working draft as a Markdown document (human-readable tracking plan). Returns the markdown string in the `content` field.",
+    "params": [],
+    "mutates": false,
+    "returns": "{ ok: true, format: 'markdown', content: string }"
   }
 ]

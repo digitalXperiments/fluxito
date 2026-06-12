@@ -292,6 +292,7 @@ TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
     "update_metric": ("tracking_plan_v2", "update_metric"),
     "delete_metric": ("tracking_plan_v2", "delete_metric"),
     "publish": ("tracking_plan_v2", "publish"),
+    "export_markdown": ("tracking_plan_v2", "export_markdown"),
 }
 
 # automation_read / automation_write — renames of automation_browse /

@@ -239,6 +239,13 @@ async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> d
             await delete_metric(session, branch, p["metric_id"])
             return _ok(deleted=str(p["metric_id"]))
 
+        # ---- exports ---------------------------------------------------------
+        if action == "export_markdown":
+            from app.services.tracking_plan import plan_to_markdown
+
+            data = await plan_to_dict(session, ctx.plan, branch)
+            return _ok(format="markdown", content=plan_to_markdown(data))
+
         # ---- publish (human gate) ----------------------------------------
         if action == "publish":
             if ctx.role not in _ADMIN_ROLES:

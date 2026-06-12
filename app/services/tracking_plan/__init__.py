@@ -14,6 +14,7 @@ from .events import (
     update_event,
 )
 from .exceptions import ConflictError, NotFoundError, TrackingPlanError, ValidationError
+from .exports import plan_to_markdown, plan_to_xlsx
 from .metrics import create_metric, delete_metric, update_metric
 from .properties import (
     attach_property,
@@ -62,6 +63,8 @@ __all__ = [
     "get_or_create_plan",
     "latest_snapshot_for_project",
     "plan_to_dict",
+    "plan_to_markdown",
+    "plan_to_xlsx",
     "publish_branch",
     "remove_event_destination",
     "set_event_destination",
