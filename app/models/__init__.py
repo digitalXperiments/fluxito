@@ -36,6 +36,21 @@ from app.models.token import (
     SnapAdsAccount,
     TikTokAdsAccount,
 )
+from app.models.tracking_plan import (
+    TPBranch,
+    TPCategory,
+    TPDestination,
+    TPEvent,
+    TPEventDestination,
+    TPEventProperty,
+    TPEventSource,
+    TPMetric,
+    TPPlan,
+    TPProperty,
+    TPSource,
+    TPSourceDestination,
+    TPVersion,
+)
 from app.models.user import User
 
 __all__ = [
@@ -77,6 +92,19 @@ __all__ = [
     "SearchConsoleSite",
     "SnapAdsAccount",
     "SnowflakeConnection",
+    "TPBranch",
+    "TPCategory",
+    "TPDestination",
+    "TPEvent",
+    "TPEventDestination",
+    "TPEventProperty",
+    "TPEventSource",
+    "TPMetric",
+    "TPPlan",
+    "TPProperty",
+    "TPSource",
+    "TPSourceDestination",
+    "TPVersion",
     "TagCustomRule",
     "Template",
     "TikTokAdsAccount",
