@@ -32,6 +32,7 @@ from .routing import (
     update_destination,
     update_source,
 )
+from .serializer import plan_to_dict
 from .taxonomy import create_category, delete_category, update_category
 
 __all__ = [
@@ -57,6 +58,7 @@ __all__ = [
     "disconnect_source_destination",
     "get_main_branch",
     "get_or_create_plan",
+    "plan_to_dict",
     "remove_event_destination",
     "set_event_destination",
     "set_event_sources",
