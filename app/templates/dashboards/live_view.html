@@ -7,6 +7,7 @@
 {% block head_extra %}
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" defer></script>
 <script type="importmap">
 {
   "imports": {
@@ -462,8 +463,12 @@
     _debounceTimer = setTimeout(function(){ _debounceTimer = null; loadCards(); }, delay == null ? 250 : delay);
   }
 
-  async function loadCards(){
+  // force=true (the Refresh button) bypasses the server cache and re-queries
+  // upstream. A plain page load / filter change (force falsy) is served from
+  // cache when available, so reloads don't re-hit the analytics APIs.
+  async function loadCards(force){
     const params = buildParams();
+    if (force) params.set('refresh', '1');
     const mySeq = ++_loadSeq;
     // Cancel any request still in flight; its result is now stale.
     if (_loadAbort) { try { _loadAbort.abort(); } catch(_){} }
@@ -480,7 +485,11 @@
       const data = await res.json();
       // A newer request superseded this one while it was in flight — drop it.
       if (mySeq !== _loadSeq) return;
-      lastFetchAt = Date.now();
+      // Anchor "last refreshed" to when the data was actually queried upstream.
+      // On a cache hit that's the original fetch time, so the ticker honestly
+      // reflects the data's real age instead of resetting to "just now".
+      const genMs = data.generated_at ? Date.parse(data.generated_at) : NaN;
+      lastFetchAt = isNaN(genMs) ? Date.now() : genMs;
       tick();
       // Normalize card_type from chart_type when the backend tool doesn't set it
       // (GA4 run_report, Search Console, etc. return raw rows without card_type).
@@ -516,42 +525,88 @@
 
   var fetchAndRender = loadCards;
 
-  document.getElementById('btnApply').addEventListener('click', loadCards);
+  // Refresh button → force a re-query (bypass + repopulate the cache).
+  document.getElementById('btnApply').addEventListener('click', function(){ loadCards(true); });
 
   // ── Share PDF ─────────────────────────────────────────────────────────
+  // Capture the live dashboard DOM exactly as rendered (charts, colors, tiles)
+  // and lay it into a multi-page A4 PDF entirely client-side. No server render,
+  // so the PDF matches the on-screen dashboard pixel-for-pixel (in the current
+  // theme and filters), including ECharts canvases and sparklines.
   const btnSharePdf = document.getElementById('btnSharePdf');
   if (btnSharePdf) {
     btnSharePdf.addEventListener('click', async () => {
       const originalLabel = btnSharePdf.innerHTML;
       btnSharePdf.disabled = true;
       btnSharePdf.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:-2px;"></span>Preparing PDF…';
+
+      // Page chrome that isn't part of the dashboard itself — hidden during
+      // capture, restored in finally.
+      const captureTarget = document.querySelector('main.app-main') || document.body;
+      const hideEls = ['.lv-head-actions', '.lv-back']
+        .map(function(sel){ return document.querySelector(sel); })
+        .filter(Boolean);
+      const prevDisplay = hideEls.map(function(el){ return el.style.display; });
+
       try {
-        const params = buildParams();
-        const url = `/saved-dashboards/${encodeURIComponent(SLUG)}/pdf` +
-          (params.toString() ? '?' + params.toString() : '');
-        const res = await fetch(url, { credentials: 'same-origin' });
-        if (!res.ok) {
-          let msg = 'Failed to generate PDF.';
-          try { const err = await res.json(); if (err && err.message) msg = err.message; } catch (_) {}
-          throw new Error(msg);
+        if (typeof html2canvas !== 'function') {
+          throw new Error('Renderer still loading — try again in a moment.');
         }
-        const blob = await res.blob();
-        const downloadUrl = URL.createObjectURL(blob);
-        const cd = res.headers.get('Content-Disposition') || '';
-        let filename = 'dashboard.pdf';
-        const m = /filename="?([^"]+)"?/.exec(cd);
-        if (m && m[1]) filename = m[1];
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
+        const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+        if (!jsPDFCtor) {
+          throw new Error('PDF library still loading — try again in a moment.');
+        }
+
+        // Hide chrome, let the layout settle for two frames, then capture.
+        hideEls.forEach(function(el){ el.style.display = 'none'; });
+        await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
+
+        const bg = getComputedStyle(document.body).backgroundColor || '#ffffff';
+        const canvas = await html2canvas(captureTarget, {
+          scale: 2,                 // crisp text + charts
+          backgroundColor: bg,      // honors light/dark theme
+          useCORS: true,
+          logging: false,
+          windowWidth: document.documentElement.clientWidth,
+          scrollX: 0,
+          scrollY: -window.scrollY,
+        });
+
+        // Slice the tall capture across A4 portrait pages.
+        const pdf = new jsPDFCtor({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const margin = 8;
+        const imgW = pageW - margin * 2;
+        const imgH = canvas.height * imgW / canvas.width;
+        const imgData = canvas.toDataURL('image/png');
+        const usableH = pageH - margin * 2;
+
+        let heightLeft = imgH;
+        let position = margin;
+        pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH, undefined, 'FAST');
+        heightLeft -= usableH;
+        while (heightLeft > 0) {
+          pdf.addPage();
+          position = margin - (imgH - heightLeft);
+          pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH, undefined, 'FAST');
+          heightLeft -= usableH;
+        }
+
+        // Filename: "<title>-YYYY-MM-DD.pdf"
+        const titleEl = document.querySelector('.page-head h1');
+        const titleText = (titleEl ? titleEl.textContent : 'dashboard') || 'dashboard';
+        const safeTitle = titleText.trim().replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'dashboard';
+        const d = new Date();
+        const stamp = d.getFullYear() + '-' +
+          String(d.getMonth() + 1).padStart(2, '0') + '-' +
+          String(d.getDate()).padStart(2, '0');
+        pdf.save(safeTitle + '-' + stamp + '.pdf');
       } catch (err) {
         console.error('[SharePDF] failed', err);
         alert('Could not generate PDF: ' + (err && err.message ? err.message : 'unknown error'));
       } finally {
+        hideEls.forEach(function(el, i){ el.style.display = prevDisplay[i]; });
         btnSharePdf.disabled = false;
         btnSharePdf.innerHTML = originalLabel;
       }

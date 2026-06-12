@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Share PDF now matches the dashboard you see on screen.** The export used to render a
+  separate, plainer server-side layout (stacked value boxes, no charts) that looked nothing
+  like the live view. It now captures the dashboard exactly as rendered — colored scorecard
+  tiles, charts, the current light/dark theme, and the active date range and filters — and
+  lays it across multi-page A4. (Scheduled email/Slack report PDFs are unchanged.)
+- **Live dashboards cache their data on load, so reopening one no longer re-queries the
+  analytics APIs every time.** The first open (or pressing Refresh) pulls from the upstream
+  sources and caches the result; reloads then serve from that cache for up to an hour.
+  Refresh always forces a fresh query and repopulates the cache, and "last refreshed" now
+  reflects when the data was actually pulled.
+
+### Fixed
+- **Dashboard scorecards no longer sit jammed against the top edge of their card.**
+  Single-metric KPI tiles had almost no breathing room above the title; they now have
+  balanced top padding and a clear gap before the metric, in both light and dark mode.
+
 ## [1.1.7] — 2026-06-12
 
 ### Fixed
