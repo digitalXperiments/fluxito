@@ -35,6 +35,7 @@ PROPERTY_KINDS = ("event", "user", "group", "system")
 PROPERTY_DATA_TYPES = ("string", "int", "float", "boolean", "object", "array")
 IMPL_STATUSES = ("planned", "implemented", "verified", "deprecated")
 METRIC_TYPES = ("count", "sum", "unique", "average", "ratio")
+COMMENT_ENTITY_TYPES = ("event", "property", "source", "destination", "metric", "category", "plan", "branch")
 
 
 class TPPlan(Base):
@@ -361,4 +362,52 @@ class TPMetric(Base):
     __table_args__ = (
         UniqueConstraint("branch_id", "name", name="uq_tp_metric_name"),
         CheckConstraint("type IN ('count', 'sum', 'unique', 'average', 'ratio')", name="ck_tp_metric_type"),
+    )
+
+
+class TPComment(Base):
+    """A comment thread item on any tracking-plan entity — branch-scoped.
+
+    Comments live on the branch they were posted on and are not automatically
+    migrated when a branch is merged (that is left as future work). The UI is
+    expected to thread replies client-side via parent_id and to resolve threads
+    using the ``resolved`` flag.
+    """
+
+    __tablename__ = "tp_comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    branch_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_branches.id", ondelete="CASCADE"), nullable=False
+    )
+    # The type of entity this comment is attached to (CHECK-constrained).
+    entity_type: Mapped[str] = mapped_column(Text, nullable=False)
+    # The UUID of the commented entity (event id, property id, …).
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # Non-null → this row is a reply to an existing comment on the same branch.
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tp_comments.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # List of user UUIDs @-mentioned in the body.
+    mentions: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "entity_type IN ('event','property','source','destination','metric','category','plan','branch')",
+            name="ck_tp_comment_entity_type",
+        ),
     )

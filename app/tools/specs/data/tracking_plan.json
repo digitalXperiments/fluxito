@@ -1094,5 +1094,141 @@
     "mutates": true,
     "reversible": false,
     "returns": "{ ok: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "add_comment",
+    "summary": "Post a comment (or threaded reply) on a tracking-plan entity. Comments are branch-scoped — they live on the branch where they were posted.",
+    "params": [
+      {
+        "name": "entity_type",
+        "type": "string",
+        "required": true,
+        "enum": ["event", "property", "source", "destination", "metric", "category", "plan", "branch"],
+        "example": "event",
+        "doc": "Kind of entity the comment is attached to."
+      },
+      {
+        "name": "entity_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the entity being commented on."
+      },
+      {
+        "name": "body",
+        "type": "string",
+        "required": true,
+        "example": "This event is missing the currency property.",
+        "doc": "Comment text. Must be non-blank."
+      },
+      {
+        "name": "parent_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "UUID of the parent comment to reply to (for threaded comments)."
+      },
+      {
+        "name": "mentions",
+        "type": "array",
+        "item_type": "string",
+        "required": false,
+        "example": ["uuid"],
+        "doc": "List of user UUIDs mentioned in this comment."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "list_comments",
+    "summary": "List comments on the current branch, optionally filtered to a specific entity. Results are ordered by created_at ascending.",
+    "params": [
+      {
+        "name": "entity_type",
+        "type": "string",
+        "required": false,
+        "enum": ["event", "property", "source", "destination", "metric", "category", "plan", "branch"],
+        "example": "event",
+        "doc": "Filter to comments on this entity type only."
+      },
+      {
+        "name": "entity_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "Filter to comments on this specific entity UUID."
+      }
+    ],
+    "mutates": false,
+    "returns": "{ comments: [{ id, branch_id, entity_type, entity_id, parent_id, author_id, body, mentions, resolved, created_at, updated_at }] }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "resolve_comment",
+    "summary": "Mark a comment as resolved (or unresolved). Defaults to resolved=true.",
+    "params": [
+      {
+        "name": "comment_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the comment to resolve."
+      },
+      {
+        "name": "resolved",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "Set to false to un-resolve a comment. Defaults to true."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "edit_comment",
+    "summary": "Replace the body text of an existing comment.",
+    "params": [
+      {
+        "name": "comment_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the comment to edit."
+      },
+      {
+        "name": "body",
+        "type": "string",
+        "required": true,
+        "example": "Updated comment text.",
+        "doc": "New body text. Must be non-blank."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_comment",
+    "summary": "Delete a comment. Replies (children) are cascade-deleted automatically.",
+    "params": [
+      {
+        "name": "comment_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the comment to delete."
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true } | { error, error_type, message }"
   }
 ]

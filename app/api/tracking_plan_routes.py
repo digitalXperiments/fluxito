@@ -19,6 +19,8 @@ from app.models.project import ProjectMember
 from app.models.tracking_plan import TPVersion
 from app.services.tracking_plan import (
     get_or_create_plan,
+    list_comments,
+    comment_to_dict,
     plan_to_dict,
     plan_to_markdown,
     plan_to_xlsx,
@@ -249,6 +251,37 @@ async def api_diff(
             raise HTTPException(status_code=422, detail="Invalid branch reference")
         await db.commit()
         return JSONResponse(diff)
+
+
+# ----------------------------------------------------------------------------
+# Comments read
+# ----------------------------------------------------------------------------
+@router.get("/api/projects/{project_id}/tracking-plan/comments")
+async def api_list_comments(
+    project_id: str,
+    request: Request,
+    branch: str | None = Query(default=None, description="Branch id or name (default: main)"),
+    entity_type: str | None = Query(default=None, description="Filter by entity type"),
+    entity_id: str | None = Query(default=None, description="Filter by entity UUID"),
+):
+    user_uuid, proj_id, _role = await _resolve(request)
+    _check_param_pid(project_id, proj_id)
+    async with app_state.db_session_factory() as db:
+        plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
+        try:
+            target = await resolve_branch(db, plan, branch)
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Branch not found")
+        except ValidationError:
+            raise HTTPException(status_code=422, detail="Invalid branch reference")
+        comments = await list_comments(
+            db,
+            target,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+        await db.commit()
+        return JSONResponse({"comments": [comment_to_dict(c) for c in comments]})
 
 
 # ----------------------------------------------------------------------------

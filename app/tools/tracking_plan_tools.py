@@ -15,7 +15,9 @@ from typing import Any
 import app.app_state as state
 from app.auth.mcp_session_manager import no_active_project_response, require_project_ctx
 from app.services.tracking_plan import (
+    add_comment,
     attach_property,
+    comment_to_dict,
     connect_source_destination,
     create_category,
     create_destination,
@@ -24,6 +26,7 @@ from app.services.tracking_plan import (
     create_property,
     create_source,
     delete_category,
+    delete_comment,
     delete_destination,
     delete_event,
     delete_metric,
@@ -31,11 +34,14 @@ from app.services.tracking_plan import (
     delete_source,
     detach_property,
     disconnect_source_destination,
+    edit_comment,
     get_main_branch,
     get_or_create_plan,
+    list_comments,
     plan_to_dict,
     publish_branch,
     remove_event_destination,
+    resolve_comment,
     set_event_destination,
     set_event_sources,
     update_category,
@@ -336,6 +342,45 @@ async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> d
         if action == "abandon_branch":
             b = await _branches.get_branch(session, ctx.plan, p["branch_id"])
             await _branches.abandon_branch(session, b)
+            return _ok()
+
+        # ---- comments -------------------------------------------------------
+        if action == "add_comment":
+            c = await add_comment(
+                session,
+                branch,
+                entity_type=p["entity_type"],
+                entity_id=p["entity_id"],
+                author_id=ctx.user_id,
+                body=p.get("body", ""),
+                parent_id=p.get("parent_id"),
+                mentions=p.get("mentions"),
+            )
+            return _ok(id=str(c.id))
+
+        if action == "list_comments":
+            comments = await list_comments(
+                session,
+                branch,
+                entity_type=p.get("entity_type"),
+                entity_id=p.get("entity_id"),
+            )
+            return {"comments": [comment_to_dict(c) for c in comments]}
+
+        if action == "resolve_comment":
+            await resolve_comment(
+                session,
+                p["comment_id"],
+                resolved=bool(p.get("resolved", True)),
+            )
+            return _ok()
+
+        if action == "edit_comment":
+            await edit_comment(session, p["comment_id"], body=p.get("body", ""))
+            return _ok()
+
+        if action == "delete_comment":
+            await delete_comment(session, p["comment_id"])
             return _ok()
 
         return _err("unknown_action", f"unknown tracking_plan action '{action}'")

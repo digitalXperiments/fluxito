@@ -286,6 +286,12 @@ TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
     "merge_branch": ("tracking_plan_v2", "merge_branch"),
     "set_review_status": ("tracking_plan_v2", "set_review_status"),
     "abandon_branch": ("tracking_plan_v2", "abandon_branch"),
+    # --- Comments ---
+    "add_comment": ("tracking_plan_v2", "add_comment"),
+    "delete_comment": ("tracking_plan_v2", "delete_comment"),
+    "edit_comment": ("tracking_plan_v2", "edit_comment"),
+    "list_comments": ("tracking_plan_v2", "list_comments"),
+    "resolve_comment": ("tracking_plan_v2", "resolve_comment"),
 }
 
 # automation_read / automation_write — renames of automation_browse /

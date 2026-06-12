@@ -39,6 +39,7 @@ from app.models.token import (
 from app.models.tracking_plan import (
     TPBranch,
     TPCategory,
+    TPComment,
     TPDestination,
     TPEvent,
     TPEventDestination,
@@ -94,6 +95,7 @@ __all__ = [
     "SnowflakeConnection",
     "TPBranch",
     "TPCategory",
+    "TPComment",
     "TPDestination",
     "TPEvent",
     "TPEventDestination",
