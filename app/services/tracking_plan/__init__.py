@@ -6,12 +6,16 @@ import create_event` etc. Later tasks append to this file."""
 
 from .bootstrap import get_main_branch, get_or_create_plan
 from .exceptions import ConflictError, NotFoundError, TrackingPlanError, ValidationError
+from .taxonomy import create_category, delete_category, update_category
 
 __all__ = [
     "ConflictError",
     "NotFoundError",
     "TrackingPlanError",
     "ValidationError",
+    "create_category",
+    "delete_category",
     "get_main_branch",
     "get_or_create_plan",
+    "update_category",
 ]
