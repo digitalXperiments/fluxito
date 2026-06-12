@@ -14,6 +14,7 @@ from .events import (
     update_event,
 )
 from .exceptions import ConflictError, NotFoundError, TrackingPlanError, ValidationError
+from .metrics import create_metric, delete_metric, update_metric
 from .properties import (
     attach_property,
     create_property,
@@ -43,11 +44,13 @@ __all__ = [
     "create_category",
     "create_destination",
     "create_event",
+    "create_metric",
     "create_property",
     "create_source",
     "delete_category",
     "delete_destination",
     "delete_event",
+    "delete_metric",
     "delete_property",
     "delete_source",
     "detach_property",
@@ -60,6 +63,7 @@ __all__ = [
     "update_category",
     "update_destination",
     "update_event",
+    "update_metric",
     "update_property",
     "update_source",
 ]
