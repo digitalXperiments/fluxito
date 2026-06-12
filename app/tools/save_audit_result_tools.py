@@ -39,6 +39,20 @@ _VALID_AUDIT_TYPES = {
     "full_suite",
 }
 
+# get_score_history window query. ``:days`` is multiplied by a fixed 1-day
+# interval so the bind sits OUTSIDE any string literal. (The old
+# ``INTERVAL ':days days'`` put the placeholder inside a quoted literal, which
+# Postgres treats as literal text → parameter-count mismatch at execution.
+# stress-test 2026-06-12, FINDINGS S0/SQL.)
+_SCORE_HISTORY_SQL = """
+    SELECT audit_type, score, created_at
+    FROM audit_runs
+    WHERE project_id = :pid
+      AND status = 'complete'
+      AND created_at >= NOW() - (:days * INTERVAL '1 day')
+    ORDER BY audit_type, created_at
+"""
+
 
 def _err(error_type: str, message: str, **extra) -> dict:
     out = {"error": True, "error_type": error_type, "message": message}
@@ -355,15 +369,8 @@ def register_save_audit_result_tools(mcp_server) -> None:
 
             async with state.db_session_factory() as db:
                 result = await db.execute(
-                    text("""
-                        SELECT audit_type, score, created_at
-                        FROM audit_runs
-                        WHERE project_id = :pid
-                          AND status = 'complete'
-                          AND created_at >= NOW() - INTERVAL ':days days'
-                        ORDER BY audit_type, created_at
-                    """).bindparams(days=days),
-                    {"pid": str(project_id)},
+                    text(_SCORE_HISTORY_SQL),
+                    {"pid": str(project_id), "days": int(days)},
                 )
                 rows = result.mappings().all()
 

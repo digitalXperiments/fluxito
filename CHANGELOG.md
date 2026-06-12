@@ -7,12 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6] — 2026-06-12
+
 ### Added
 - **"Check for updates" button in the admin Updates tab.** Super-admins can now
   force an on-demand version check instead of waiting on the passive 6-hour cache.
   The button re-polls GitHub immediately, refreshes the displayed version status,
   and — when a newer release exists — reveals and scrolls to the "Update now"
   action. A short per-instance cooldown protects GitHub's rate limit.
+
+### Changed
+- **The MCP server now describes itself, so any client can use it without guessing.**
+  Every tool's description, its served JSON schema, and its error messages are now
+  generated from one source of truth, so they can no longer drift from the code.
+  Each tool lists its actions (and which platform each action is valid for), a new
+  `describe` action returns a machine-readable spec of any action's parameters, and a
+  missing parameter comes back with the full required/optional list plus a runnable
+  example — in a single round-trip. Common parameter traps are spelled out in the tool
+  text itself (e.g. the budget field is `daily_budget_usd`; Adobe Launch reuses GTM
+  parameter names with different meanings). A build check fails if any advertised
+  action lacks a spec or a working handler.
+- **Rebuilt the Fluxito skill.** Refreshed into a whole-platform operating guide with
+  audit and dashboard workflows, on top of the existing tracking-plan (SDR) depth. The
+  per-parameter reference now lives in the server, so the skill focuses on method and
+  judgment and complements the self-describing tools.
+
+### Fixed
+- **Dashboards reject incomplete cards at deploy time.** A card missing its `action`
+  (or a required parameter) used to deploy "successfully" and then return no data on
+  refresh. The deploy now fails fast with a clear message naming the missing field, and
+  the paid-social card validation (Meta/TikTok/Snap) — previously skipped due to a
+  platform-name mismatch — is enforced again.
+- **Removed analytics and audit actions that were advertised but never ran.** Several
+  GA4 actions with no handler, and an entire set of ~21 `run_audit` actions (tag rule
+  book, live tag test, audit history) that returned an internal error, now either work
+  correctly or no longer appear — so clients only see actions that succeed.
+- **Audit score history** no longer errors — fixed a SQL bug in the score-trend query.
+- **Cross-platform revenue attribution** now includes warehouse revenue again, instead
+  of silently dropping it.
+- **Warehouse SQL safety** no longer false-rejects valid read-only queries (e.g. a
+  column named `updated_at`) and now blocks additional write statements such as MERGE
+  and COPY.
+
+### Security
+- **Audit, tag-rule-book, and live-tag tools now follow role permissions consistently.**
+  Their write actions (saving audit results, editing rule books, recording test
+  sessions) require write access even when invoked through the audit tool, and the
+  direct tools are no longer blocked for users who legitimately have audit access.
+- **Secrets are no longer written to the activity log.** Tokens and credentials returned
+  by a tool — including a freshly rotated dashboard share token — are redacted from the
+  saved audit trail. The live response still shows the value once.
 
 ## [1.1.4] — 2026-06-11
 

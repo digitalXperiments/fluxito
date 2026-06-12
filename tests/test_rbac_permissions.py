@@ -62,6 +62,51 @@ def test_tracking_plan_action_mapping():
     assert eff.allows_tool("tracking_plan", action="mystery") is False
 
 
+def test_analysis_tools_are_in_permission_map():
+    # FINDINGS S1 #10: these were absent, so non-full users were denied the direct
+    # tools while the run_audit twins stayed open.
+    from app.auth.permissions import _TOOL_TO_REQ
+
+    for t in ("tag_rulebook", "live_tag_test", "save_audit_result"):
+        assert t in _TOOL_TO_REQ, f"{t} missing from the permission map"
+
+
+def test_analysis_read_allows_reads_not_writes():
+    # FINDINGS S1 #9 + #10: analysis:read covers the direct tools and run_audit
+    # READ actions, but mutations require analysis:write — even via run_audit.
+    from app.auth.permissions import EffectivePermissions
+
+    eff = EffectivePermissions(full=False, tools={"analysis": {"read"}})
+    # reads
+    assert eff.allows_tool("run_audit", action="gtm_audit_container") is True
+    assert eff.allows_tool("tag_rulebook", action="validate_payload") is True
+    assert eff.allows_tool("save_audit_result", action="list_runs") is True
+    assert eff.allows_tool("live_tag_test", action="get_test_plan") is True
+    # writes — denied under read-only
+    assert eff.allows_tool("save_audit_result", action="save") is False
+    assert eff.allows_tool("tag_rulebook", action="delete_custom_rule") is False
+    assert eff.allows_tool("run_audit", action="save_audit_result") is False
+    assert eff.allows_tool("run_audit", action="tag_delete_custom_rule") is False
+
+
+def test_analysis_write_allows_mutations():
+    from app.auth.permissions import EffectivePermissions
+
+    eff = EffectivePermissions(full=False, tools={"analysis": {"read", "write"}})
+    assert eff.allows_tool("save_audit_result", action="save") is True
+    assert eff.allows_tool("tag_rulebook", action="save_custom_rule") is True
+    assert eff.allows_tool("run_audit", action="save_audit_result") is True
+    assert eff.allows_tool("run_audit", action="live_tag_finish_session") is True
+
+
+def test_no_analysis_grant_denies_everything():
+    from app.auth.permissions import EffectivePermissions
+
+    eff = EffectivePermissions(full=False, tools={})
+    assert eff.allows_tool("tag_rulebook", action="validate_payload") is False
+    assert eff.allows_tool("run_audit", action="gtm_audit_container") is False
+
+
 def test_scripting_is_advanced_gate():
     from app.auth.permissions import EffectivePermissions
 

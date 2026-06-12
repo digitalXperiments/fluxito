@@ -146,3 +146,58 @@ def quote_identifier(value: str, *, quote: str = '"') -> str:
     validate_identifier(value)
     escaped = value.replace(quote, quote + quote)
     return f"{quote}{escaped}{quote}"
+
+
+# ---------------------------------------------------------------------------
+# Read-only query enforcement
+# ---------------------------------------------------------------------------
+# Replaces the old per-connector uppercase-substring blocklist
+# (``any(kw in query.upper())``), which both:
+#   * false-positived on column names — `SELECT updated_at` matched "UPDATE",
+#     `SELECT created_at` matched "CREATE"; and
+#   * missed write verbs not on the list — MERGE, UPSERT, CALL, COPY, etc.
+# This strips comments + string literals, requires a SINGLE statement that
+# begins with an allowed prefix, and runs a word-boundary denylist as defense in
+# depth. (stress-test 2026-06-12, REMAINING "warehouse SELECT-only".)
+
+_SQL_COMMENT_RE: Final[re.Pattern[str]] = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
+_SQL_STRING_RE: Final[re.Pattern[str]] = re.compile(r"'(?:[^']|'')*'")
+_FORBIDDEN_SQL_RE: Final[re.Pattern[str]] = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|MERGE|UPSERT|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|"
+    r"REPLACE|CALL|EXEC|EXECUTE|COPY|UNLOAD|VACUUM|LOCK|PUT|REMOVE|INTO)\b",
+    re.IGNORECASE,
+)
+
+_DEFAULT_READ_PREFIXES: Final[tuple[str, ...]] = ("SELECT", "WITH")
+
+
+def read_only_violation(
+    query: str, *, allowed_prefixes: tuple[str, ...] = _DEFAULT_READ_PREFIXES
+) -> str | None:
+    """Return an error message if ``query`` is not a single read-only statement.
+
+    Returns ``None`` when the query is safe to run. ``allowed_prefixes`` is the
+    set of statement-leading keywords permitted (default SELECT/WITH; engines
+    that also expose SHOW/DESCRIBE/EXPLAIN pass those in).
+    """
+    if not query or not query.strip():
+        return "Empty query."
+    # Remove comments, then neutralise string literals so keywords inside them
+    # (e.g. WHERE status = 'CREATE') and ';' inside them don't trip the checks.
+    cleaned = _SQL_STRING_RE.sub("''", _SQL_COMMENT_RE.sub(" ", query))
+    statements = [s for s in cleaned.split(";") if s.strip()]
+    if len(statements) > 1:
+        return "Only a single statement is permitted (found multiple ';'-separated statements)."
+    stmt = (statements[0] if statements else "").strip()
+    tokens = stmt.split(None, 1)
+    first = tokens[0].upper() if tokens else ""
+    allowed = tuple(p.upper() for p in allowed_prefixes)
+    if first not in allowed:
+        return (
+            f"Only {', '.join(allowed)} queries are permitted "
+            f"(statement begins with '{first or 'nothing'}')."
+        )
+    match = _FORBIDDEN_SQL_RE.search(stmt)
+    if match:
+        return f"Forbidden keyword '{match.group(0).upper()}' is not allowed in a read-only query."
+    return None

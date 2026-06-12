@@ -143,10 +143,11 @@ class BigQueryConnector:
         max_results: int = 1000,
     ) -> dict:
         """Runs a BigQuery SQL query and returns results (read-only)."""
-        blocked_keywords = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE", "GRANT"]
-        upper_query = query.upper()
-        if any(keyword in upper_query for keyword in blocked_keywords):
-            return {"error": True, "message": "Security violation: Only SELECT queries are permitted."}
+        from app.sql_safety import read_only_violation
+
+        violation = read_only_violation(query)
+        if violation:
+            return {"error": True, "error_type": "invalid_param", "message": f"Security violation: {violation}"}
 
         sa_json = _decrypt(service_account_encrypted)
 
@@ -190,10 +191,11 @@ class BigQueryConnector:
         query: str,
     ) -> dict:
         """Estimates bytes that would be processed by a query without executing it."""
-        blocked_keywords = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE", "GRANT"]
-        upper_query = query.upper()
-        if any(keyword in upper_query for keyword in blocked_keywords):
-            return {"error": True, "message": "Security violation: Only SELECT queries are permitted."}
+        from app.sql_safety import read_only_violation
+
+        violation = read_only_violation(query)
+        if violation:
+            return {"error": True, "error_type": "invalid_param", "message": f"Security violation: {violation}"}
 
         sa_json = _decrypt(service_account_encrypted)
 

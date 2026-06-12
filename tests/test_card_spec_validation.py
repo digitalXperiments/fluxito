@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.tools.dashboard_tools import _validate_card_specs
+from app.tools.dashboard_tools import (
+    _CARD_PARAM_REQUIREMENTS,
+    VALID_PLATFORMS,
+    _validate_card_specs,
+)
 
 
 def _ga4_card(**overrides) -> dict:
@@ -113,7 +117,7 @@ def test_meta_get_campaigns_requires_ad_account_id():
         "key": "m",
         "title": "Meta Campaigns",
         "chart_type": "table",
-        "platform": "meta",
+        "platform": "meta_ads",  # the real card platform name (was "meta": invalid + dead key)
         "tool": "marketing_read",
         "action": "get_campaigns",
         "params": {},
@@ -138,9 +142,11 @@ def test_unknown_action_is_not_validated():
     assert len(out) == 1
 
 
-def test_action_none_skips_param_check():
-    # action=None means "tool has no action dispatcher"; we skip the per-action
-    # required-field check in that case.
+def test_action_none_is_rejected_for_action_based_tool():
+    # Regression: a card with action=None is dispatched as analytics_read(action=None)
+    # at refresh, which the tool rejects ("action: Input should be a valid string").
+    # The deploy must reject it up front with an actionable message, not store a
+    # silently-broken card.
     card = {
         "key": "c",
         "title": "GA4 Card",
@@ -150,8 +156,58 @@ def test_action_none_skips_param_check():
         "action": None,
         "params": {},
     }
-    out = _validate_card_specs([card])
-    assert len(out) == 1
+    with pytest.raises(ValueError) as exc:
+        _validate_card_specs([card])
+    msg = str(exc.value)
+    assert "action" in msg and "required" in msg
+    assert "run_report" in msg  # suggests a valid ga4 action
+
+
+def test_card_param_requirement_platforms_are_all_valid():
+    # Drift guard: a requirement keyed on a platform name that a card can never
+    # carry (e.g. "meta" vs "meta_ads") is dead validation. Every requirement
+    # platform must be a real VALID_PLATFORMS value. (FINDINGS S1 #7)
+    bad = sorted({p for (p, _a) in _CARD_PARAM_REQUIREMENTS if p not in VALID_PLATFORMS})
+    assert not bad, f"requirement keys reference unknown platforms: {bad}"
+
+
+def test_meta_ads_card_required_params_are_enforced():
+    # Regression: meta_ads cards used to skip param validation because the
+    # requirement key was ("meta", ...). A meta_ads campaign-performance card
+    # missing ad_account_id must now be rejected.
+    card = {
+        "key": "meta_perf",
+        "title": "Meta Campaign Performance",
+        "chart_type": "table",
+        "platform": "meta_ads",
+        "tool": "marketing_read",
+        "action": "get_campaign_performance",
+        "params": {"start_date": "2024-01-01", "end_date": "2024-12-31"},  # no ad_account_id
+    }
+    with pytest.raises(ValueError) as exc:
+        _validate_card_specs([card])
+    assert "ad_account_id" in str(exc.value)
+
+
+def test_missing_action_key_is_rejected():
+    # The exact shape an agent produced: tool + params but no "action" key at all.
+    card = {
+        "key": "total_sessions",
+        "title": "Total Sessions (2024)",
+        "chart_type": "scorecard",
+        "platform": "ga4",
+        "tool": "analytics_read",
+        "params": {
+            "platform": "ga4",
+            "property_id": "279951751",
+            "metrics": ["sessions"],
+            "start_date": "2024-01-01",
+            "end_date": "2024-12-31",
+        },
+    }
+    with pytest.raises(ValueError) as exc:
+        _validate_card_specs([card])
+    assert "action" in str(exc.value) and "required" in str(exc.value)
 
 
 def test_search_console_requires_date_range():

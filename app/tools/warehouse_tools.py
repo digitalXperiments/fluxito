@@ -158,6 +158,34 @@ async def _list_all_connections(user_id: str) -> list:
     return await list_active_connections(BQConnection, user_id)
 
 
+# ---------------------------------------------------------------------------
+# In-process entrypoint for warehouse_query
+# ---------------------------------------------------------------------------
+# The warehouse_query tool is a closure registered inside
+# register_warehouse_tools(), so it cannot be imported directly. run_analysis's
+# revenue adapter previously did `from app.tools.warehouse_tools import
+# warehouse_query`, which ALWAYS raised ImportError — silently swallowed, so the
+# warehouse revenue ground-truth path never ran (FINDINGS S1 #6).
+# register_warehouse_tools() now publishes the registered function here, and
+# ``warehouse_query_impl`` is the stable, importable handle for in-process callers.
+_WAREHOUSE_QUERY_FN = None
+
+
+async def warehouse_query_impl(**kwargs) -> dict:
+    """Run a warehouse_query action in-process (engine, action, query, …).
+
+    Returns the same shape as the warehouse_query MCP tool. Available once the
+    warehouse tools have been registered (register_warehouse_tools()).
+    """
+    if _WAREHOUSE_QUERY_FN is None:
+        return {
+            "error": True,
+            "error_type": "not_registered",
+            "message": "Warehouse tools are not registered yet.",
+        }
+    return await _WAREHOUSE_QUERY_FN(**kwargs)
+
+
 def register_warehouse_tools(mcp_server):
     # -------------------------------------------------------------------------
     # warehouse_read — Layer 1: Discovery
@@ -620,6 +648,12 @@ def register_warehouse_tools(mcp_server):
             return {"error": True, "message": f"Unknown action '{action}' for Snowflake warehouse_query"}
 
         return {"error": True, "message": f"Unknown engine '{engine}'"}
+
+    # Publish the registered warehouse_query so in-process callers (run_analysis's
+    # revenue adapter) can invoke it without an MCP round-trip. See
+    # warehouse_query_impl above (FINDINGS S1 #6).
+    global _WAREHOUSE_QUERY_FN
+    _WAREHOUSE_QUERY_FN = warehouse_query
 
     # -------------------------------------------------------------------------
     # warehouse_audit — Layer 3: Health, cost and governance

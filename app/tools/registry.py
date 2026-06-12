@@ -25,6 +25,7 @@ The call-interception hook installed by _install_tool_hook handles:
 
 import json
 import logging
+import re
 import time
 import uuid as _uuid
 from typing import Any
@@ -160,6 +161,36 @@ def _summarize_response(data: Any) -> str:
     return "response returned"
 
 
+# Keys whose VALUE is a secret and must never be persisted to the audit trail.
+_SECRET_KEY_RE = re.compile(
+    r"(token|password|secret|api[_-]?key|private[_-]?key|credential|authorization|service_account)",
+    re.IGNORECASE,
+)
+_REDACTED = "***redacted***"
+
+
+def _redact_secrets(obj: Any, _depth: int = 0) -> Any:
+    """Deep-copy ``obj`` masking values whose key looks secret (tokens, keys, …).
+
+    Used only for the audit-trail copy — the live tool response is untouched, so a
+    tool that must return a secret to the caller (e.g. dashboard_rotate_token)
+    still works while the secret stays out of the persisted log (FINDINGS S1 #11).
+    """
+    if _depth > 8:
+        return obj
+    if isinstance(obj, dict):
+        out: dict[Any, Any] = {}
+        for k, v in obj.items():
+            if isinstance(k, str) and _SECRET_KEY_RE.search(k):
+                out[k] = _REDACTED
+            else:
+                out[k] = _redact_secrets(v, _depth + 1)
+        return out
+    if isinstance(obj, list):
+        return [_redact_secrets(v, _depth + 1) for v in obj]
+    return obj
+
+
 async def _write_audit_row(
     tool_name: str,
     arguments: dict[str, Any] | None,
@@ -173,6 +204,14 @@ async def _write_audit_row(
     Persist a single audit row. Swallows all errors — auditing must never
     break a tool call.
     """
+    # Redact secrets before persisting. A tool may legitimately RETURN a secret
+    # to the caller (e.g. dashboard_rotate_token's fresh query_token) — the live
+    # response keeps it, but it must never be written to the audit trail
+    # (FINDINGS S1 #11). Redaction is local to the logged copies only; the
+    # persisted `response_preview` is rebuilt from this redacted `parsed`.
+    arguments = _redact_secrets(arguments)
+    parsed = _redact_secrets(parsed)
+
     try:
         user_ctx = app_state.current_user_ctx.get()
     except LookupError:

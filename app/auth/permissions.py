@@ -28,12 +28,45 @@ DOMAIN_TOOLS: dict[str, dict[str, set[str]]] = {
     },
     "knowledge": {"read": {"get_knowledge"}, "write": {"deploy_knowledge"}},
     "automation": {"read": {"automation_read"}, "write": {"automation_write"}},
-    "analysis": {"read": {"run_analysis", "run_audit"}, "write": set()},
+    # tag_rulebook / live_tag_test / save_audit_result are exposed BOTH as direct
+    # tools and as run_audit actions. They were absent from this map, so
+    # allows_tool() denied the direct tools to every non-`full` user while the
+    # run_audit twins stayed open (FINDINGS S1 #10). They live in the analysis
+    # domain; their write actions are gated per-action below (FINDINGS S1 #9).
+    "analysis": {
+        "read": {"run_analysis", "run_audit", "tag_rulebook", "live_tag_test", "save_audit_result"},
+        "write": {"run_audit", "tag_rulebook", "live_tag_test", "save_audit_result"},
+    },
     "tracking_plan": {"read": {"tracking_plan"}, "write": {"tracking_plan"}},
 }
 
 _TRACKING_PLAN_WRITE_ACTIONS = {"save", "refine"}
 _TRACKING_PLAN_READ_ACTIONS = {"generate", "diagnose", "get", "list"}
+
+# Analysis-domain tools whose level depends on the action (like tracking_plan).
+# Covers the direct tools AND their run_audit twins. Any action NOT listed as a
+# write is treated as a read, so reads stay available under analysis:read while
+# mutations require analysis:write — even when invoked through run_audit
+# (FINDINGS S1 #9). Keep in sync with the routing tables in app/tools/unified.py.
+_ANALYSIS_ACTION_TOOLS: set[str] = {
+    "run_audit",
+    "tag_rulebook",
+    "live_tag_test",
+    "save_audit_result",
+}
+_ACTION_WRITE_TOOLS: dict[str, set[str]] = {
+    "tag_rulebook": {"save_custom_rule", "delete_custom_rule"},
+    "live_tag_test": {"start_session", "finish_session", "save_test_plan"},
+    "save_audit_result": {"save"},
+    "run_audit": {
+        "tag_save_custom_rule",
+        "tag_delete_custom_rule",
+        "live_tag_save_plan",
+        "live_tag_start_session",
+        "live_tag_finish_session",
+        "save_audit_result",
+    },
+}
 
 _ADVANCED_TOOLS: dict[str, str] = {
     "run_script": "scripting",
@@ -92,6 +125,11 @@ class EffectivePermissions:
         if tool_name == "tracking_plan":
             level = self._tracking_plan_level(action)
             return level in self.tools.get("tracking_plan", set())
+        if tool_name in _ANALYSIS_ACTION_TOOLS:
+            # Read vs write decided by the action (covers run_audit twins too).
+            write_actions = _ACTION_WRITE_TOOLS.get(tool_name, set())
+            level = "write" if action in write_actions else "read"
+            return level in self.tools.get("analysis", set())
         req = _TOOL_TO_REQ.get(tool_name)
         if req is None:
             return False

@@ -103,12 +103,16 @@ _CARD_PARAM_REQUIREMENTS: dict[tuple[str, str], list[str]] = {
         "start_date",
         "end_date",
     ],
-    ("meta", "get_campaigns"): ["ad_account_id"],
-    ("meta", "get_campaign_performance"): ["ad_account_id", "start_date", "end_date"],
-    ("tiktok", "get_campaigns"): ["advertiser_id"],
-    ("tiktok", "get_campaign_performance"): ["advertiser_id", "start_date", "end_date"],
-    ("snap", "get_campaigns"): ["ad_account_id"],
-    ("snap", "get_campaign_performance"): ["ad_account_id", "start_date", "end_date"],
+    # NOTE: keys MUST use the VALID_PLATFORMS names (meta_ads/tiktok_ads/snap_ads).
+    # They previously used the short marketing-tool names (meta/tiktok/snap), which
+    # never matched a card's platform, so these cards skipped required-param
+    # validation entirely (stress-test 2026-06-12, FINDINGS S1 #7).
+    ("meta_ads", "get_campaigns"): ["ad_account_id"],
+    ("meta_ads", "get_campaign_performance"): ["ad_account_id", "start_date", "end_date"],
+    ("tiktok_ads", "get_campaigns"): ["advertiser_id"],
+    ("tiktok_ads", "get_campaign_performance"): ["advertiser_id", "start_date", "end_date"],
+    ("snap_ads", "get_campaigns"): ["ad_account_id"],
+    ("snap_ads", "get_campaign_performance"): ["ad_account_id", "start_date", "end_date"],
     ("apple_ads", "get_campaign_performance"): ["account_id", "start_date", "end_date"],
     ("google_ads", "get_campaigns"): ["customer_id"],
     ("google_ads", "get_campaign_performance"): ["customer_id", "start_date", "end_date"],
@@ -128,7 +132,19 @@ def _check_params_for_action(
 ) -> list[str]:
     """Return a list of missing-field error strings for a single card, or []."""
     if not action:
-        return []
+        # A card with no action is dispatched to its tool with action=None, which
+        # every action-based read tool (analytics_read, marketing_read, seo_read,
+        # warehouse_query, …) rejects at refresh ("action: Input should be a valid
+        # string"). Fail fast at deploy with an actionable message instead of
+        # storing a card that silently returns no data. (Was: returned [] and let
+        # the broken card through — root cause of the empty-dashboard bug.)
+        suggestions = sorted({a for (p, a) in _CARD_PARAM_REQUIREMENTS if p == platform})
+        hint = f" e.g. {suggestions[0]!r}" if suggestions else ""
+        known = f" Known {platform} actions: {suggestions}." if suggestions else ""
+        return [
+            f"card '{key}' ({platform}): \"action\" is required{hint} — set the card's "
+            f"top-level \"action\" field (a sibling of \"tool\" and \"params\").{known}"
+        ]
     required = _CARD_PARAM_REQUIREMENTS.get((platform, action))
     if required is None:
         return []
@@ -395,8 +411,13 @@ def register_dashboard_tools(mcp_server):
                           gtm, adobe_launch
           tool (str): MCP tool category (e.g. analytics_read, marketing_read, warehouse_query,
                       tagmanager_read, seo_read)
-          action (str): tool action (e.g. run_report, run_query)
-          params (dict): exact parameters for the tool call (platform-specific, see below)
+          action (str): REQUIRED — the tool action this card runs, a top-level sibling of
+                      `tool`/`params` (NOT inside params). e.g. ga4 → "run_report" (or
+                      "get_realtime"); warehouse → "run_query"; search_console →
+                      "get_search_analytics". A card with no action deploys but returns
+                      NO DATA (the refresh dispatches action=None, which the tool rejects).
+          params (dict): exact parameters for the tool call (platform-specific, see below).
+                      Do NOT put `action` in here — it goes at the top level.
           filter_hooks (dict): REQUIRED for any card with filterable params (dates,
                               dimensions) — see rule above. Omit only for cards with
                               no user-controllable filters.

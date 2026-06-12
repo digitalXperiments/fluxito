@@ -2109,6 +2109,16 @@ def register_tagmanager_tools(mcp_server):
             return {"error": True, "message": f"Unknown action '{action}' for GTM tagmanager_write"}
 
         elif platform == "adobe_launch":
+            # Write gating (FINDINGS S1 #8): unlike GTM there is no Google-style
+            # per-action OAuth scope to pre-check — Adobe Launch uses a
+            # Server-to-Server credential whose Launch permissions are fixed at
+            # the IMS/credential level (the `has_launch` capability flag). Writes
+            # are therefore gated by (1) the RBAC backstop, which requires the
+            # `tagmanager:write` domain for this tool exactly as it does for GTM
+            # writes, and (2) the Adobe credential's own API permissions (the API
+            # rejects an under-privileged credential). `transition_library`
+            # (action='approve') is the production-publish equivalent and is
+            # covered by the same `tagmanager:write` gate.
             if not u or not u.has_adobe_launch:
                 return _no_adobe_launch()
             conn_id, client_id, client_secret, org_id = await _get_adobe_launch_conn(u.user_id)

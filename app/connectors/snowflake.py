@@ -280,27 +280,18 @@ class SnowflakeConnector:
         role: str | None = None,
     ) -> dict:
         """
-        Execute a SELECT query safely.
-        Blocks DROP, ALTER, INSERT, UPDATE, DELETE, CREATE, GRANT, REVOKE.
+        Execute a SELECT query safely. Read-only: a single statement that begins
+        with SELECT/WITH/SHOW/DESCRIBE/EXPLAIN and contains no write verbs.
         """
-        blocked_keywords = [
-            "DROP",
-            "DELETE",
-            "UPDATE",
-            "INSERT",
-            "ALTER",
-            "TRUNCATE",
-            "CREATE",
-            "GRANT",
-            "REVOKE",
-        ]
-        upper_query = query.upper()
-        if any(keyword in upper_query for keyword in blocked_keywords):
-            return {
-                "error": True,
-                "message": "Security violation: Only SELECT, SHOW, DESCRIBE, and EXPLAIN queries are permitted.",
-            }
+        from app.sql_safety import read_only_violation
 
+        violation = read_only_violation(
+            query, allowed_prefixes=("SELECT", "WITH", "SHOW", "DESCRIBE", "DESC", "EXPLAIN")
+        )
+        if violation:
+            return {"error": True, "error_type": "invalid_param", "message": f"Security violation: {violation}"}
+
+        upper_query = query.upper()
         # Add LIMIT guard if not already present
         if "LIMIT" not in upper_query:
             query = f"{query} LIMIT {max_results}"
@@ -364,20 +355,10 @@ class SnowflakeConnector:
         """
         Show query execution plan via EXPLAIN.
         """
-        # Block dangerous keywords first
-        blocked_keywords = [
-            "DROP",
-            "DELETE",
-            "UPDATE",
-            "INSERT",
-            "ALTER",
-            "TRUNCATE",
-            "CREATE",
-            "GRANT",
-            "REVOKE",
-        ]
-        upper_query = query.upper()
-        if any(keyword in upper_query for keyword in blocked_keywords):
+        # Only EXPLAIN read-only queries.
+        from app.sql_safety import read_only_violation
+
+        if read_only_violation(query):
             return {
                 "error": True,
                 "message": "Cannot EXPLAIN non-SELECT queries.",

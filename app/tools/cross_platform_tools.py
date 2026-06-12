@@ -441,7 +441,11 @@ async def _adapter_warehouse(
             quote_identifier,
             validate_qualified_identifier,
         )
-        from app.tools.warehouse_tools import warehouse_query as _wq_tool
+
+        # Module-level entrypoint (the warehouse_query tool itself is a closure
+        # and is NOT importable — the old `import warehouse_query` always raised
+        # ImportError, which was swallowed, so this path silently never ran).
+        from app.tools.warehouse_tools import warehouse_query_impl as _wq_tool
 
         # Validate every identifier before interpolation. SQL drivers can't
         # bind column/table names, so these come from a strict allowlist.
