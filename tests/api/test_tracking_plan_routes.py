@@ -93,3 +93,31 @@ async def test_publish_creates_version(client):
     assert r.json()["ok"] is True
     versions = (await client.get(f"/api/projects/{pid}/tracking-plan/versions")).json()
     assert versions["versions"][0]["version_number"] == "1.0"
+
+
+@pytest.mark.anyio
+async def test_version_snapshot_rejects_other_projects_version(client, db_session_factory):
+    """Cross-tenant guard: a version belonging to project B must 404 when
+    requested through project A's URL."""
+    from app.services.tracking_plan import (
+        create_event,
+        get_main_branch,
+        get_or_create_plan,
+        publish_branch,
+    )
+    from tests.services.tracking_plan.test_models import _make_project_and_user
+
+    # Build a second project (B) with its own plan and publish a version in it.
+    async with db_session_factory() as s:
+        other_pid, other_uid = await _make_project_and_user(s)
+        plan = await get_or_create_plan(s, project_id=other_pid, user_id=other_uid)
+        branch = await get_main_branch(s, plan)
+        await create_event(s, branch, name="secret_event")
+        version = await publish_branch(s, plan, branch, user_id=other_uid)
+        await s.commit()
+        other_version_id = str(version.id)
+
+    # Request project B's version through project A's URL — must be 404.
+    pid = client._pid
+    r = await client.get(f"/api/projects/{pid}/tracking-plan/versions/{other_version_id}")
+    assert r.status_code == 404

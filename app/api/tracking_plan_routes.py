@@ -15,7 +15,7 @@ from sqlalchemy import desc, select
 import app.app_state as app_state
 from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
 from app.api.project_routes import ensure_active_project, set_active_project_cookie
-from app.models.project import ROLE_ADMIN, ROLE_OWNER, ProjectMember
+from app.models.project import ProjectMember
 from app.models.tracking_plan import TPVersion
 from app.services.tracking_plan import (
     get_main_branch,
@@ -27,8 +27,6 @@ from app.templating import render
 from app.tools.tracking_plan_tools import _Ctx, run_action
 
 router = APIRouter()
-
-_ADMIN_ROLES = (ROLE_OWNER, ROLE_ADMIN)
 
 
 class ActionPayload(BaseModel):
@@ -155,11 +153,13 @@ async def api_versions(project_id: str, request: Request):
 
 @router.get("/api/projects/{project_id}/tracking-plan/versions/{version_id}")
 async def api_version_snapshot(project_id: str, version_id: str, request: Request):
-    _user, proj_id, _role = await _resolve(request)
+    user_uuid, proj_id, _role = await _resolve(request)
     _check_param_pid(project_id, proj_id)
     async with app_state.db_session_factory() as db:
+        plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
+        await db.commit()
         v = await db.get(TPVersion, uuid.UUID(version_id))
-        if v is None or v.plan_id is None:
+        if v is None or v.plan_id != plan.id:
             raise HTTPException(status_code=404, detail="Version not found")
         return JSONResponse({"version_number": v.version_number, "snapshot": v.snapshot})
 
