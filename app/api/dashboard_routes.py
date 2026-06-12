@@ -17,6 +17,8 @@ Authenticated (requires signed uid cookie):
 """
 
 import asyncio
+import hashlib
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -46,6 +48,71 @@ router = APIRouter()
 # executed one-at-a-time (slow card blocks every card behind it).
 _LIVE_CARD_TIMEOUT_S = 25
 _LIVE_CARD_CONCURRENCY = 6
+
+# Live-dashboard data cache. The first load (or an explicit Refresh) populates a
+# Redis entry keyed by slug + viewer-role + filters; every subsequent page
+# reload then serves from it, so we don't re-hit the upstream analytics APIs
+# (GA4, BigQuery, …) on each reload. The Refresh button sends ?refresh=1 to
+# bypass and repopulate. A 1h safety TTL bounds staleness even if Refresh is
+# never pressed.
+_DASH_DATA_CACHE_TTL_S = 3600
+_DASH_DATA_CACHE_PREFIX = "dashdata:v1"
+
+
+def _dashdata_cache_key(
+    slug: str,
+    is_owner: bool,
+    card_count: int,
+    dash_version: str,
+    filter_overrides: dict,
+    platforms_allowed: set,
+) -> str:
+    """Deterministic Redis key for a dashboard's live-data response.
+
+    Folds in the viewer role (owner payloads carry per-card ``live_error``),
+    the dashboard version + card count (so edits/redeploys bust the cache), and
+    every active filter (so each filter combination caches separately).
+    """
+    raw = "|".join(
+        [
+            slug,
+            "o1" if is_owner else "o0",
+            f"n{card_count}",
+            f"v{dash_version}",
+            json.dumps(filter_overrides, sort_keys=True, default=str),
+            ",".join(sorted(platforms_allowed)),
+        ]
+    )
+    digest = hashlib.sha256(raw.encode()).hexdigest()[:24]
+    return f"{_DASH_DATA_CACHE_PREFIX}:{slug}:{digest}"
+
+
+async def _dashdata_cache_get(key: str) -> dict | None:
+    """Fetch a cached data response. Returns None on miss or any Redis error —
+    the cache must never break the endpoint."""
+    redis = app_state.redis_client
+    if redis is None:
+        return None
+    try:
+        raw = await redis.get(key)
+        if raw:
+            return json.loads(raw)
+    except Exception as exc:
+        # Degrade gracefully to a live query — the cache must never break reads.
+        logger.debug("dashdata cache read failed: %s", exc)
+    return None
+
+
+async def _dashdata_cache_set(key: str, body: dict) -> None:
+    """Store a data response under ``key`` with the safety TTL. Silent on any
+    Redis error."""
+    redis = app_state.redis_client
+    if redis is None:
+        return
+    try:
+        await redis.setex(key, _DASH_DATA_CACHE_TTL_S, json.dumps(body, default=str))
+    except Exception as exc:
+        logger.debug("dashdata cache write failed: %s", exc)
 
 
 def _as_bool(value) -> bool:
@@ -817,12 +884,19 @@ async def live_dashboard_data(slug: str, request: Request):
     end_date = _resolve_relative_date(request.query_params.get("date_range_end") or "")
     platforms_filter = request.query_params.get("platforms") or ""
     platforms_allowed = {p.strip().lower() for p in platforms_filter.split(",") if p.strip()}
+    # ?refresh=1 (the Refresh button) bypasses the cache and re-queries upstream.
+    force_refresh = (request.query_params.get("refresh") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     # Build overrides dict passed to apply_overrides().
-    # Reserved params (date_range_start/end, platforms) are handled explicitly.
-    # Any other query param (e.g. ?country=US&device=mobile) is forwarded as a
-    # flat dimension override so filter_hooks can map them to card params.
-    _RESERVED_PARAMS = {"date_range_start", "date_range_end", "platforms"}
+    # Reserved params (date_range_start/end, platforms, refresh) are handled
+    # explicitly. Any other query param (e.g. ?country=US&device=mobile) is
+    # forwarded as a flat dimension override so filter_hooks can map them to
+    # card params.
+    _RESERVED_PARAMS = {"date_range_start", "date_range_end", "platforms", "refresh"}
     filter_overrides: dict = {}
     if start_date or end_date:
         filter_overrides["date_range"] = {}
@@ -862,6 +936,25 @@ async def live_dashboard_data(slug: str, request: Request):
         if platforms_allowed:
             cards = [c for c in cards if (c.platform or "").lower() in platforms_allowed]
 
+        is_owner = uid is not None and str(dash.user_id) == uid
+
+        # ── Serve from cache unless this is an explicit Refresh ────────────
+        # Keyed by slug + viewer-role + dashboard version + filters, so a plain
+        # page reload returns instantly without re-querying upstream APIs.
+        cache_key = _dashdata_cache_key(
+            slug,
+            is_owner,
+            len(cards),
+            str(getattr(dash, "updated_at", "") or ""),
+            filter_overrides,
+            platforms_allowed,
+        )
+        if not force_refresh:
+            cached_body = await _dashdata_cache_get(cache_key)
+            if cached_body is not None:
+                cached_body["cached"] = True
+                return JSONResponse(cached_body)
+
         # Build a synthetic MCP context for the dashboard owner so the tool
         # registry can resolve connections without an active MCP session.
         from app.main import mcp_server
@@ -869,7 +962,6 @@ async def live_dashboard_data(slug: str, request: Request):
         refresh_ctx = await build_refresh_context(str(dash.id))
         tm = mcp_server._tool_manager if mcp_server else None
 
-        is_owner = uid is not None and str(dash.user_id) == uid
         _sem = asyncio.Semaphore(_LIVE_CARD_CONCURRENCY)
 
         async def _exec_card(c) -> dict:
@@ -992,22 +1084,24 @@ async def live_dashboard_data(slug: str, request: Request):
             status_code=500,
         )
 
-    return JSONResponse(
-        {
-            "dashboard": {
-                "title": dash.title,
-                "slug": slug,
-                "card_count": len(payload_cards),
-            },
-            "cards": payload_cards,
-            "filters": {
-                "start": start_date,
-                "end": end_date,
-                "platforms": sorted(platforms_allowed) if platforms_allowed else [],
-            },
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-        }
-    )
+    body = {
+        "dashboard": {
+            "title": dash.title,
+            "slug": slug,
+            "card_count": len(payload_cards),
+        },
+        "cards": payload_cards,
+        "filters": {
+            "start": start_date,
+            "end": end_date,
+            "platforms": sorted(platforms_allowed) if platforms_allowed else [],
+        },
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "cached": False,
+    }
+    # Store for subsequent reloads (also repopulates after an explicit Refresh).
+    await _dashdata_cache_set(cache_key, body)
+    return JSONResponse(body)
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loads the actual dashboard, so they include the styled scorecards, the line/bar/pie
   charts, and the data tables you see on screen. Previously the PDF was a stripped-down
   text-and-grid report because the old renderer had no way to draw the JavaScript charts.
+- **Live dashboards cache their data on load, so reopening one no longer re-queries the
+  analytics APIs every time.** The first open (or pressing Refresh) pulls from the upstream
+  sources and caches the result; reloads then serve from that cache for up to an hour.
+  Refresh always forces a fresh query and repopulates the cache, and "last refreshed" now
+  reflects when the data was actually pulled.
 - **Roomier dashboard layout.** Added breathing room between the date-range filter bar
   and the first row of cards so the view no longer feels cramped.
 
@@ -23,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   proper space below the fixed nav.
 - **Share PDF ignored the date range you picked.** The export now reflects the selected
   range (e.g. "2024 Full Year") instead of always falling back to the default window.
+- **Dashboard scorecards no longer sit jammed against the top edge of their card.**
+  Single-metric KPI tiles had almost no breathing room above the title; they now have
+  balanced top padding and a clear gap before the metric, in both light and dark mode.
 
 ## [1.1.7] — 2026-06-12
 

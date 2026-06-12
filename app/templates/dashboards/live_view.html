@@ -494,8 +494,12 @@
     _debounceTimer = setTimeout(function(){ _debounceTimer = null; loadCards(); }, delay == null ? 250 : delay);
   }
 
-  async function loadCards(){
+  // force=true (the Refresh button) bypasses the server cache and re-queries
+  // upstream. A plain page load / filter change (force falsy) is served from
+  // cache when available, so reloads don't re-hit the analytics APIs.
+  async function loadCards(force){
     const params = buildParams();
+    if (force) params.set('refresh', '1');
     const mySeq = ++_loadSeq;
     // Cancel any request still in flight; its result is now stale.
     if (_loadAbort) { try { _loadAbort.abort(); } catch(_){} }
@@ -512,7 +516,11 @@
       const data = await res.json();
       // A newer request superseded this one while it was in flight — drop it.
       if (mySeq !== _loadSeq) return;
-      lastFetchAt = Date.now();
+      // Anchor "last refreshed" to when the data was actually queried upstream.
+      // On a cache hit that's the original fetch time, so the ticker honestly
+      // reflects the data's real age instead of resetting to "just now".
+      const genMs = data.generated_at ? Date.parse(data.generated_at) : NaN;
+      lastFetchAt = isNaN(genMs) ? Date.now() : genMs;
       tick();
       // Normalize card_type from chart_type when the backend tool doesn't set it
       // (GA4 run_report, Search Console, etc. return raw rows without card_type).
@@ -552,9 +560,14 @@
 
   var fetchAndRender = loadCards;
 
-  document.getElementById('btnApply').addEventListener('click', loadCards);
+  // Refresh button → force a re-query (bypass + repopulate the cache).
+  document.getElementById('btnApply').addEventListener('click', function(){ loadCards(true); });
 
   // ── Share PDF ─────────────────────────────────────────────────────────
+  // ── Share PDF ─────────────────────────────────────────────────────────
+  // Rendered server-side by the headless-Chromium PDF endpoint (real charts,
+  // theme, and the selected date range), streamed back and downloaded. No
+  // in-browser html2canvas capture — that path choked on modern CSS colours.
   const btnSharePdf = document.getElementById('btnSharePdf');
   if (btnSharePdf) {
     btnSharePdf.addEventListener('click', async () => {
