@@ -7,20 +7,24 @@
 <style>
   .tp-wrap { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
   .tp-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
-  .tp-tabs { display:flex; gap:.25rem; border-bottom:1px solid var(--border, #2a2a2a); margin-bottom:1rem; flex-wrap:wrap; }
-  .tp-tab { padding:.5rem .9rem; cursor:pointer; border:none; background:none; color:inherit; opacity:.65; }
-  .tp-tab.is-active { opacity:1; border-bottom:2px solid var(--accent, #4a9eff); }
+  .tp-tabs { display:flex; gap:.25rem; border-bottom:1px solid var(--border); margin-bottom:1rem; flex-wrap:wrap; }
+  .tp-tab { padding:.5rem .9rem; cursor:pointer; border:none; background:none; color:inherit; opacity:.6; font:inherit; }
+  .tp-tab.is-active { opacity:1; border-bottom:2px solid var(--accent); }
   .tp-panel { display:none; } .tp-panel.is-active { display:block; }
   .tp-table { width:100%; border-collapse:collapse; font-size:.9rem; }
-  .tp-table th, .tp-table td { text-align:left; padding:.5rem; border-bottom:1px solid var(--border,#2a2a2a); vertical-align:top; }
+  .tp-table th, .tp-table td { text-align:left; padding:.55rem .5rem; border-bottom:1px solid var(--border); vertical-align:top; }
+  .tp-table th { font-weight:600; opacity:.65; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; }
   .tp-row-actions button { margin-right:.4rem; }
-  .tp-banner { padding:.6rem .9rem; border-radius:6px; margin-bottom:1rem; font-size:.85rem; }
-  .tp-banner.warn { background:#3a2a00; } .tp-banner.ok { background:#0a2a14; }
+  .tp-banner { padding:.6rem .9rem; border-radius:8px; margin-bottom:1rem; font-size:.85rem; border:1px solid var(--border); }
+  .tp-banner.warn { background:color-mix(in srgb, #d97706 14%, transparent); }
+  .tp-banner.ok { background:color-mix(in srgb, #16a34a 14%, transparent); }
   .tp-form { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin:.75rem 0; }
-  .tp-form input, .tp-form select { padding:.4rem; }
-  .tp-pill { font-size:.7rem; padding:.1rem .4rem; border-radius:99px; background:#222; }
-  dialog.tp-modal { width:min(680px,92vw); border:1px solid var(--border,#333); border-radius:10px; background:var(--bg,#111); color:inherit; }
-  .tp-muted { opacity:.6; }
+  .tp-form input, .tp-form select { padding:.45rem .6rem; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:inherit; font:inherit; }
+  .tp-pill { font-size:.72rem; padding:.1rem .45rem; border-radius:99px; border:1px solid var(--border); background:color-mix(in srgb, currentColor 8%, transparent); }
+  .tp-muted { opacity:.55; }
+  #tp-event-modal .modal { max-width:720px; }
+  #tp-event-detail h4 { margin:1.1rem 0 .4rem; font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; opacity:.65; }
+  #tp-event-detail h4:first-child { margin-top:0; }
 </style>
 {% endblock %}
 
@@ -52,9 +56,15 @@
   <div class="tp-panel" data-panel="versions"><div id="tp-versions"></div></div>
 </div>
 
-<dialog class="tp-modal" id="tp-event-modal"><div id="tp-event-detail"></div>
-  <div style="padding:.75rem; text-align:right;"><button class="btn" onclick="document.getElementById('tp-event-modal').close()">Close</button></div>
-</dialog>
+<div class="modal-backdrop" id="tp-event-modal" role="dialog" aria-modal="true" onclick="if(event.target===this)tpCloseEvent()">
+  <div class="modal">
+    <div class="modal-header row-between">
+      <div class="modal-title" id="tp-event-title">Event</div>
+      <button class="btn ghost sm" onclick="tpCloseEvent()">Close</button>
+    </div>
+    <div class="modal-body" id="tp-event-detail"></div>
+  </div>
+</div>
 
 <script>
 window.__TP_PROJECT_ID__ = "{{ project_id }}";
@@ -138,9 +148,8 @@ window.__TP_PROJECT_ID__ = "{{ project_id }}";
     const libProps = PLAN.properties.event.map(p=>`<option value="${p.id}">${esc(p.name)} (${esc(p.data_type)})</option>`).join('');
     const srcOpts = PLAN.sources.map(s=>`<label style="margin-right:.6rem;"><input type="checkbox" value="${s.id}" data-src> ${esc(s.name)}</label>`).join('');
     const destOpts = PLAN.destinations.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    document.getElementById('tp-event-title').textContent = e.name;
     document.getElementById('tp-event-detail').innerHTML = `
-      <div style="padding:1rem;">
-        <h2>${esc(e.name)}</h2>
         <h4>Properties</h4>
         ${table(['Name','Type','Required','Example',''], e.properties, p=>`
           <tr><td>${esc(p.name)}</td><td>${esc(p.data_type)}</td><td>${p.required?'yes':'no'}</td><td>${esc(p.example||'')}</td>
@@ -164,10 +173,11 @@ window.__TP_PROJECT_ID__ = "{{ project_id }}";
           <select id="tp-map-dest">${destOpts}</select>
           <input id="tp-map-name" placeholder="dest event name"/>
           <button class="btn" onclick="tpMap('${id}')">Map destination</button>
-        </div>
-      </div>`;
-    document.getElementById('tp-event-modal').showModal();
+        </div>`;
+    document.getElementById('tp-event-modal').classList.add('is-open');
   };
+
+  window.tpCloseEvent = function(){ document.getElementById('tp-event-modal').classList.remove('is-open'); };
   window.tpAttach = function(eid){
     const pid=document.getElementById('tp-attach-prop').value; if(!pid) return;
     tpAction('attach_property', {event_id:eid, property_id:pid, required:document.getElementById('tp-attach-req').checked, example:document.getElementById('tp-attach-ex').value||null}).then(()=>tpOpenEvent(eid));
