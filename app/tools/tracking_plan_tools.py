@@ -318,34 +318,66 @@ def _metric_fields(p: dict) -> dict:
     return _pick(p, ("name", "description", "type", "event_id", "property_id", "filters"))
 
 
+async def _run_tracking_plan_v2(action: str, params: dict) -> dict:
+    """Resolve project/user/main-branch from the MCP session context, then run
+    one structured action through `run_action`. Commits on success, rolls back
+    on error. Shared by the dispatcher-facing shim below."""
+    project_ctx = require_project_ctx()
+    if not project_ctx:
+        return no_active_project_response()
+    user_ctx = state.current_user_ctx.get()
+    if not user_ctx:
+        return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+
+    async with state.db_session_factory() as session:
+        plan = await get_or_create_plan(session, project_id=project_ctx.project_id, user_id=user_ctx.user_id)
+        branch = await get_main_branch(session, plan)
+        ctx = _Ctx(
+            role=project_ctx.role,
+            user_id=str(user_ctx.user_id),
+            project_id=str(project_ctx.project_id),
+            plan=plan,
+        )
+        result = await run_action(session, branch, ctx, action, params)
+        if not result.get("error"):
+            await session.commit()
+        return result
+
+
+class _TrackingPlanV2Tool:
+    """Lightweight stand-in for a FastMCP `Tool`, exposing only the `.run(args)`
+    contract the unified dispatcher uses.
+
+    Why not `@mcp_server.tool`? FastMCP's `func_metadata` turns a
+    `(action: str, **params)` signature into a pydantic arg-model with a
+    REQUIRED field literally named `params`. The unified dispatcher
+    (`_make_dispatcher`) calls every legacy tool as `legacy_tool.run(call_args)`
+    with a FLAT dict like `{"action": "create_event", "name": "purchase"}` —
+    which has no `params` key, so pydantic rejected the call with
+    `ValidationError: params: Field required` BEFORE the body ran. (An
+    explicit-arg signature is no good either: FastMCP's arg-model silently
+    DROPS undeclared keys, so every action param would be lost.)
+
+    This shim is never exposed to MCP clients — discovery happens through the
+    `tracking_plan` unified dispatcher and `tracking_plan.json` spec — so it
+    needs no public schema. It simply reconstructs `(action, params)` from the
+    flat `call_args` and delegates to `run_action`."""
+
+    name = "tracking_plan_v2"
+
+    async def run(self, arguments: dict, *args: Any, **kwargs: Any) -> dict:
+        args_in = dict(arguments or {})
+        action = args_in.pop("action", "")
+        return await _run_tracking_plan_v2(action, args_in)
+
+
 def register_tracking_plan_tools(mcp_server: Any) -> None:
     """Register the structured tracking-plan tool. Wired into the unified
-    `tracking_plan` dispatcher via TRACKING_PLAN_ROUTES (Task 4)."""
+    `tracking_plan` dispatcher via TRACKING_PLAN_ROUTES (Task 4).
 
-    @mcp_server.tool("tracking_plan_v2")
-    async def tracking_plan_v2(action: str, **params: Any) -> dict:
-        """Structured tracking-plan operations (events, properties, sources,
-        destinations, mappings, metrics, validate, publish). Internal — invoked
-        via tracking_plan(action=..., params=...)."""
-        project_ctx = require_project_ctx()
-        if not project_ctx:
-            return no_active_project_response()
-        user_ctx = state.current_user_ctx.get()
-        if not user_ctx:
-            return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
-
-        async with state.db_session_factory() as session:
-            plan = await get_or_create_plan(
-                session, project_id=project_ctx.project_id, user_id=user_ctx.user_id
-            )
-            branch = await get_main_branch(session, plan)
-            ctx = _Ctx(
-                role=project_ctx.role,
-                user_id=str(user_ctx.user_id),
-                project_id=str(project_ctx.project_id),
-                plan=plan,
-            )
-            result = await run_action(session, branch, ctx, action, dict(params))
-            if not result.get("error"):
-                await session.commit()
-            return result
+    Registered as a `.run(call_args)` shim placed directly into the tool
+    manager (not via `@mcp_server.tool`) — see `_TrackingPlanV2Tool` for why.
+    It lands in `tm._tools["tracking_plan_v2"]`, so the unified rewire moves it
+    into `tm._legacy_tools` (it is listed in `legacy_names`) and drops it from
+    the public surface."""
+    mcp_server._tool_manager._tools["tracking_plan_v2"] = _TrackingPlanV2Tool()
