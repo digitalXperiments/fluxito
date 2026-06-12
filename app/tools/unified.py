@@ -51,13 +51,16 @@ ANALYTICS_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "run_report": ("analytics_read", "run_report"),
     "compare_date_ranges": ("analytics_read", "compare_date_ranges"),
     "list_properties": ("analytics_read", "list_properties"),
-    "get_property": ("analytics_read", "get_property"),
+    # NOTE: get_property / list_conversion_events / list_companies were removed —
+    # they were advertised in the enum + docstring but have NO handler in any
+    # platform branch (stress-test 2026-06-12, FINDINGS S0 #2), so every call
+    # returned "Unknown action". GA4 exposes get_conversion_events, not
+    # list_conversion_events.
     "list_audiences": ("analytics_read", "list_audiences"),
     "list_custom_dimensions": ("analytics_read", "list_custom_dimensions"),
     "list_custom_metrics": ("analytics_read", "list_custom_metrics"),
     "get_realtime": ("analytics_read", "get_realtime"),
     "list_data_streams": ("analytics_read", "list_data_streams"),
-    "list_conversion_events": ("analytics_read", "list_conversion_events"),
     "get_conversion_events": ("analytics_read", "get_conversion_events"),
     # Amplitude-specific
     "query_events": ("analytics_read", "query_events"),
@@ -72,7 +75,6 @@ ANALYTICS_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "get_event_detail": ("analytics_read", "get_event_detail"),
     # Adobe Analytics
     "list_report_suites": ("analytics_read", "list_report_suites"),
-    "list_companies": ("analytics_read", "list_companies"),
     "get_dimensions": ("analytics_read", "get_dimensions"),
     "get_metrics": ("analytics_read", "get_metrics"),
     "get_segments": ("analytics_read", "get_segments"),
@@ -184,9 +186,13 @@ WAREHOUSE_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "list_warehouses": ("warehouse_read", "list_warehouses"),
     "list_tables": ("warehouse_read", "list_tables"),
     "get_table_schema": ("warehouse_read", "get_table_schema"),
-    "preview_table": ("warehouse_read", "preview_table"),
+    # preview_table / get_warehouse_usage were routed to legacy `warehouse_read`,
+    # which has no handler for them — every call returned "Unknown action"
+    # (stress-test 2026-06-12, FINDINGS S0 #3). The real handlers live in
+    # warehouse_query (preview_table) and warehouse_audit (get_warehouse_usage).
+    "preview_table": ("warehouse_query", "preview_table"),
     "list_connections": ("warehouse_read", "list_connections"),
-    "get_warehouse_usage": ("warehouse_read", "get_warehouse_usage"),
+    "get_warehouse_usage": ("warehouse_audit", "get_warehouse_usage"),
 }
 
 # seo_read (Google Search Console + Bing Webmaster Tools) — queries only.
@@ -964,18 +970,39 @@ def _make_dispatcher(routes: dict, surface_name: str):
     """Build an async dispatcher closure for the given routing table."""
 
     async def dispatcher(action: str, params: dict | None = None) -> dict:
+        from app.tools import specs as _specs
         from app.tools.registry import _tool_manager_ref
 
         tm = _tool_manager_ref["mgr"]
         params = params or {}
+        _has_specs = _specs.has_tool(surface_name)
+
+        # ── Discovery: action="describe" (or params={"describe": true}) returns
+        #    the machine-readable spec for one action (or all) so any client can
+        #    self-serve params without guessing. ────────────────────────────────
+        if _has_specs:
+            from app.tools.spec_engine import (
+                DESCRIBE_ACTION,
+                describe_payload,
+                resolve_platform,
+            )
+
+            if action == DESCRIBE_ACTION or params.get("describe") is True:
+                sp = _specs.specs_for(surface_name)
+                target = params.get("action") if action == DESCRIBE_ACTION else action
+                return describe_payload(surface_name, sp, target, resolve_platform(params))
+
         route = routes.get(action)
         if route is None:
-            return {
+            err = {
                 "error": True,
                 "error_type": "unknown_action",
                 "message": f"Unknown action '{action}' for {surface_name}.",
                 "available_actions": sorted(routes.keys()),
             }
+            if _has_specs:
+                err["hint"] = "Call action='describe' for each action's params."
+            return err
         # Routes may be 2-tuple (tool, action) or 3-tuple
         # (tool, action, extra_kwargs: dict) — the 3rd slot lets us pre-
         # inject kwargs like platform="adobe_launch".
@@ -991,6 +1018,26 @@ def _make_dispatcher(routes: dict, surface_name: str):
                 "error_type": "server_error",
                 "message": f"Internal: legacy tool '{legacy_tool_name}' not found.",
             }
+        # ── Self-describing validation: when the action has a spec, a missing
+        #    required param returns the full required/optional list + an example
+        #    in ONE round-trip (no whack-a-mole). Runtime stays permissive for
+        #    actions without a spec yet. ──────────────────────────────────────
+        if _has_specs:
+            from app.tools.spec_engine import (
+                missing_param_error,
+                resolve_platform,
+                validate_required,
+            )
+
+            spec = next((s for s in _specs.specs_for(surface_name) if s.action == action), None)
+            if spec is not None:
+                effective = dict(params)
+                if extra:
+                    for k, v in extra.items():
+                        effective.setdefault(k, v)
+                missing = validate_required(spec, effective)
+                if missing:
+                    return missing_param_error(spec, missing, resolve_platform(effective))
         # Build args payload the legacy tool expects
         call_args: dict = dict(params)
         if legacy_action is not None:
@@ -1016,7 +1063,17 @@ def _make_dispatcher(routes: dict, surface_name: str):
     # so a bare ``string`` action + ``anyOf: [object, null]`` params left them
     # guessing or timing out. Runtime stays permissive — the dispatcher body
     # still tolerates a missing/None ``params`` and unknown actions.
-    _actions = tuple(sorted(routes.keys()))
+    _action_set = set(routes.keys())
+    # Tools backed by the spec engine also accept the reserved "describe" action.
+    # It must be in the runtime Literal or pydantic arg-validation rejects the
+    # call before the dispatcher body can answer it.
+    from app.tools import specs as _specs
+
+    if _specs.has_tool(surface_name):
+        from app.tools.spec_engine import DESCRIBE_ACTION
+
+        _action_set.add(DESCRIBE_ACTION)
+    _actions = tuple(sorted(_action_set))
     if _actions:
         dispatcher.__annotations__ = {
             "action": Literal[_actions],  # type: ignore[valid-type]
@@ -1091,6 +1148,36 @@ def _strictify_tool_schemas(tm) -> None:
     logger.info("Strict-client schema sanitize applied to %d tool schemas", cleaned)
 
 
+def apply_specs(tm) -> None:
+    """Generate description + input schema from the spec registry.
+
+    For every tool covered by ``app.tools.specs``, replace the served
+    ``description`` and ``parameters`` with output generated from the single
+    source of truth (the ActionSpec registry). Tools not in the registry are left
+    untouched, so rollout is incremental and safe. The runtime arg-model is not
+    touched — only what the client *sees*.
+    """
+    from app.tools import specs as reg
+    from app.tools.spec_engine import build_input_schema, render_description
+
+    applied = 0
+    for tool_name, sp in reg.SPECS.items():
+        tool = tm._tools.get(tool_name)
+        if tool is None:
+            continue
+        actions = sorted({s.action for s in sp})
+        desc = render_description(tool_name, sp, reg.header_for(tool_name), reg.footer_for(tool_name))
+        schema = build_input_schema(tool_name, sp, actions, reg.encoding_for(tool_name))
+        tool.description = desc
+        tool.parameters = schema
+        try:
+            tool.fn.__doc__ = desc
+        except (AttributeError, TypeError):
+            pass
+        applied += 1
+    logger.info("Spec engine generated description+schema for %d tools", applied)
+
+
 def rewire_unified_surface(mcp_server) -> None:
     """
     Rewire the MCP tool manager to expose only the unified 18-tool surface.
@@ -1157,7 +1244,16 @@ def rewire_unified_surface(mcp_server) -> None:
         "automation_browse",
         "automation_action",
     }
-    tm._legacy_tools = {n: t for n, t in tm._tools.items() if n in legacy_names}  # type: ignore[attr-defined]
+    # Tag rule book / live tag test / audit persistence are exposed as DIRECT
+    # tools (they stay in the public surface), but run_audit also routes to them
+    # (tag_*, live_tag_*, and the audit-persistence actions). They must be present
+    # in _legacy_tools so the dispatcher can reach them — yet must NOT be removed
+    # from tm._tools. Omitting them made all 21 of those run_audit routes return
+    # "Internal: legacy tool '…' not found" (stress-test 2026-06-12, FINDINGS S0 #1).
+    dual_exposed = {"tag_rulebook", "live_tag_test", "save_audit_result"}
+    tm._legacy_tools = {  # type: ignore[attr-defined]
+        n: t for n, t in tm._tools.items() if n in (legacy_names | dual_exposed)
+    }
     # Also stash a reference to tm for the dispatcher closures
     from app.tools import registry as _reg
 
@@ -1328,6 +1424,11 @@ def rewire_unified_surface(mcp_server) -> None:
 
     generic_tool_write.__doc__ = GENERIC_WRITE_DOC
     tm.add_tool(generic_tool_write, name="generic_tool_write")
+
+    # ── Spec engine: generate description + input schema from the single
+    #    source of truth for every tool the registry covers. Runs before the
+    #    strict pass so generated schemas are also sanitized. ────────────────
+    apply_specs(tm)
 
     # ── Final pass: make every served schema strict-client friendly ───────
     # Runs LAST so it covers the unified dispatchers, the direct-survivor

@@ -108,6 +108,11 @@ postgres_data/
 redis_data/
 pgdata/
 data/
+# The MCP spec registry (app/tools/specs/data/) is shipped code, not a local
+# data volume — the spec engine loads it at runtime. Keep it tracked despite the
+# broad data/ rule above.
+!app/tools/specs/data/
+!app/tools/specs/data/**
 *.sqlite
 *.sqlite3
 *.db

@@ -1,0 +1,192 @@
+[
+  {
+    "tool": "automation_write",
+    "action": "install",
+    "summary": "Record an automation install in the active project AND return the exact args (taskId, prompt, description, cronExpression) for Cowork's create_scheduled_task. Fluxito does NOT schedule anything itself.",
+    "group": "",
+    "params": [
+      {
+        "name": "slug",
+        "type": "string",
+        "required": true,
+        "example": "daily-revenue-digest",
+        "doc": "Automation slug to install. Required."
+      },
+      {
+        "name": "channel_label",
+        "type": "string",
+        "required": true,
+        "example": "Slack #growth",
+        "doc": "Free-text destination ('Slack #growth' / 'alerts@acme.com'); substituted into the prompt as channel_label. Required."
+      },
+      {
+        "name": "variables",
+        "type": "object",
+        "required": false,
+        "example": {
+          "threshold_pct": 20
+        },
+        "doc": "Override values merged over the automation's default variable values."
+      },
+      {
+        "name": "cron_expression",
+        "type": "string",
+        "required": false,
+        "example": "0 9 * * *",
+        "doc": "Override; falls back to automation.default_cron, then '0 9 * * *'."
+      },
+      {
+        "name": "task_name",
+        "type": "string",
+        "required": false,
+        "example": "Acme revenue digest",
+        "doc": "Human task label; falls back to default_task_name, then '<title> \u2014 <project>'."
+      }
+    ],
+    "platforms": [
+      "ga4",
+      "gtm",
+      "google_ads",
+      "meta",
+      "tiktok",
+      "snap",
+      "linkedin",
+      "pinterest",
+      "bigquery",
+      "amplitude",
+      "adobe_analytics",
+      "adobe_launch",
+      "adobe_marketo",
+      "redshift",
+      "snowflake"
+    ],
+    "returns": "{ success:true, automation:{slug,title,theme}, installation_id|null, next_step, scheduled_task_args:{taskId,prompt,description,cronExpression}, task_label, schedule_label, channel_label, manage_url } | {error,error_type,message,...}",
+    "reversible": false
+  },
+  {
+    "tool": "automation_write",
+    "action": "save",
+    "summary": "Author a custom (user-type) automation recipe scoped to the active project; always min_tier='pro', is_featured=False. Becomes installable via action='install'.",
+    "group": "",
+    "params": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": true,
+        "example": "Revenue anomaly alert",
+        "doc": "Automation title. Required."
+      },
+      {
+        "name": "theme",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "daily_digest",
+          "anomaly",
+          "pacing",
+          "exec_summary",
+          "tag_health",
+          "launch_monitor"
+        ],
+        "example": "anomaly",
+        "doc": "Must be in VALID_THEMES. Required."
+      },
+      {
+        "name": "prompt_template",
+        "type": "string",
+        "required": true,
+        "example": "Check {{project_name}} revenue and alert {{channel_label}} if it drops >20%.",
+        "doc": "Prompt body with {{project_name}}/{{channel_label}} placeholders for install-time substitution. Required."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false,
+        "example": "Alerts on revenue drops",
+        "doc": "Short description."
+      },
+      {
+        "name": "required_platforms",
+        "type": "array",
+        "required": false,
+        "item_type": "string",
+        "example": [
+          "meta",
+          "ga4"
+        ],
+        "doc": "Array of platform keys; stored as [] if omitted."
+      },
+      {
+        "name": "default_cron",
+        "type": "string",
+        "required": false,
+        "example": "0 9 * * *",
+        "doc": "Default cron (user-local TZ per doc)."
+      },
+      {
+        "name": "default_schedule_label",
+        "type": "string",
+        "required": false,
+        "example": "Every morning",
+        "doc": "Human schedule label."
+      },
+      {
+        "name": "channel_hints",
+        "type": "array",
+        "required": false,
+        "item_type": "string",
+        "example": [
+          "slack",
+          "email"
+        ],
+        "doc": "Array of strings used by the install UI; stored as [] if omitted."
+      },
+      {
+        "name": "cooldown_hours",
+        "type": "integer",
+        "required": false,
+        "example": 24,
+        "doc": "Min hours between runs; stored as 0 if falsy."
+      },
+      {
+        "name": "variables",
+        "type": "array",
+        "required": false,
+        "item_type": "object",
+        "example": [
+          {
+            "key": "threshold_pct",
+            "default": 20
+          }
+        ],
+        "doc": "Variable-definition dicts (array of objects). NOTE: automation_action reuses the single 'variables' param for BOTH install (dict overrides) and save (list of defs)."
+      },
+      {
+        "name": "icon",
+        "type": "string",
+        "required": false,
+        "example": "anomaly",
+        "doc": "Optional icon slug."
+      }
+    ],
+    "platforms": [
+      "ga4",
+      "gtm",
+      "google_ads",
+      "meta",
+      "tiktok",
+      "snap",
+      "linkedin",
+      "pinterest",
+      "bigquery",
+      "amplitude",
+      "adobe_analytics",
+      "adobe_launch",
+      "adobe_marketo",
+      "redshift",
+      "snowflake"
+    ],
+    "returns": "{ success:true, automation_id, slug, title, theme, view_url, note } | {error,error_type,message}",
+    "reversible": true
+  }
+]

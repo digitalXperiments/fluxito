@@ -1,0 +1,405 @@
+[
+  {
+    "tool": "tracking_plan",
+    "action": "capture_intake",
+    "summary": "Validates the 6 required intake answers and, if sdr_id is given, persists them to that SDR (SDR.intake_answers + SDRIntake history). With no sdr_id it just validates and returns a reusable snapshot.",
+    "group": "",
+    "params": [
+      {
+        "name": "intake_answers",
+        "type": "object",
+        "required": true,
+        "example": {
+          "business_model": "...",
+          "primary_kpis": "...",
+          "conversion_definition": "...",
+          "key_journeys": "...",
+          "privacy_consent": "...",
+          "ownership_complexity": "..."
+        },
+        "doc": "Dict of the 6 required intake keys (+ optional anything_else). All 6 required keys must be present & non-blank or error_type='incomplete_intake'. Signature default is None, so it is effectively required despite being typed Optional."
+      },
+      {
+        "name": "sdr_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "If provided, persists the validated intake to that SDR (must belong to active project). If omitted, only validates and returns the snapshot."
+      }
+    ],
+    "returns": "no sdr_id: { status:'captured', intake{intake_version,answered_at,answers}, instructions_for_claude } | with sdr_id: { sdr_id, status:'captured', intake, instructions_for_claude } | incomplete: { error, error_type:'incomplete_intake', missing_required_keys[], questions[], instructions_for_claude }",
+    "reversible": true
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "diagnose",
+    "summary": "Re-scans connected sources and returns a cross-referenced diagnosis (findings + readiness) without writing. sdr_id optional \u2014 if given, pulls that SDR's intake + current event names to enrich the diagnosis.",
+    "group": "",
+    "params": [
+      {
+        "name": "sdr_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "Optional. When provided, the SDR's persisted intake_answers and current event names feed the diagnosis. Must belong to the active project or access_denied."
+      },
+      {
+        "name": "connector_filter",
+        "type": "array",
+        "required": false,
+        "item_type": "string",
+        "example": [
+          "ga4",
+          "gtm"
+        ],
+        "doc": "Array of source-name strings to limit the scan; same alias normalization as generate (ads -> google_ads). Omit to scan all."
+      }
+    ],
+    "platforms": [
+      "ga4",
+      "gtm",
+      "google_ads"
+    ],
+    "returns": "{ sdr_id, status: 'diagnosis_ready', connected_sources, findings[{type,severity,summary,evidence,affected_events,recommendation,fix_location}], readiness{critical_findings_unresolved,events_volume_proven,primary_conversion_proven,unfilled_roles[]}, instructions_for_claude } | {error,error_type,message}"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "generate",
+    "summary": "Gathers SDR source data: with no intake_answers returns the 6 intake questions; with answers it scans connected sources and returns structured facts, findings, readiness, a parse-valid markdown_skeleton and a synthesis playbook. Writes NOTHING.",
+    "group": "",
+    "params": [
+      {
+        "name": "intake_answers",
+        "type": "object",
+        "required": false,
+        "example": {
+          "business_model": "B2B SaaS selling compliance automation to mid-market finance teams, freemium + usage-based",
+          "primary_kpis": "demo->paid conversion, time-to-value, feature adoption depth",
+          "conversion_definition": "qualified demo request w/ corp email + company size > 20",
+          "key_journeys": "free trial -> activation -> paid; content view -> demo request",
+          "privacy_consent": "OneTrust CMP, marketing tags consent-gated, GDPR+CCPA",
+          "ownership_complexity": "analytics eng owns taxonomy, marketing ops owns destinations, server-side fires revenue events",
+          "anything_else": "two brands share one GA4 property"
+        },
+        "doc": "Dict of the 6 REQUIRED intake keys (business_model, primary_kpis, conversion_definition, key_journeys, privacy_consent, ownership_complexity) plus optional anything_else. Omit entirely to receive the questions. If present but any required key missing/blank -> incomplete_intake error (unless phase='scan')."
+      },
+      {
+        "name": "project_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "Target project; defaults to active project. Pass to be race-free when set_active_project is called in the same parallel batch."
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false,
+        "example": "Acme SDR",
+        "doc": "SDR name; defaults to '<project_name> SDR'."
+      },
+      {
+        "name": "sources",
+        "type": "array",
+        "required": false,
+        "item_type": "string",
+        "example": [
+          "ga4",
+          "gtm",
+          "google_ads"
+        ],
+        "doc": "Array of source-name strings. Aliases normalized: 'ads'/'googleads' -> 'google_ads'. If provided, OVERRIDES the sources_ga4/sources_gtm/sources_ads booleans entirely."
+      },
+      {
+        "name": "sources_ga4",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "Include GA4 in scan. Only consulted when `sources` is not provided."
+      },
+      {
+        "name": "sources_gtm",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "Include GTM in scan. Only consulted when `sources` is not provided."
+      },
+      {
+        "name": "sources_ads",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "Include Google Ads in scan. Only consulted when `sources` is not provided."
+      },
+      {
+        "name": "business_type_hint",
+        "type": "string",
+        "required": false,
+        "enum": [
+          "ecommerce",
+          "saas",
+          "lead_gen",
+          "media",
+          "app",
+          "marketplace"
+        ],
+        "example": "saas",
+        "doc": "Industry overlay for template events. If omitted, inferred from intake then from scanned events."
+      },
+      {
+        "name": "phase",
+        "type": "string",
+        "required": false,
+        "enum": [
+          "auto",
+          "interview",
+          "scan"
+        ],
+        "example": "auto",
+        "doc": "Lowercased. phase='scan' bypasses BOTH the awaiting_intake gate AND the incomplete_intake validation, letting a scan run with zero/partial intake. 'interview' is accepted but behaves like 'auto' (only 'scan' is special-cased)."
+      },
+      {
+        "name": "regenerate",
+        "type": "boolean",
+        "required": false,
+        "example": false,
+        "doc": "Echoed back as regenerate_requested. NOTE: generate never writes, so this flag has no effect on persisted state in v2 (overwrite semantics live in save)."
+      }
+    ],
+    "platforms": [
+      "ga4",
+      "gtm",
+      "google_ads"
+    ],
+    "returns": "awaiting_intake: { status, intake_version, questions[6+1], message, instructions_for_claude, next_action } | incomplete_intake error: { error, error_type, missing_required_keys[], questions, instructions_for_claude } | data_gathered: { sdr_id (existing or null), status, name, intake{intake_version,answered_at,answers}, connected_sources, scans, industry_template{business_type,events[],rationale}, scan_summary, findings[{type,severity,summary,evidence,affected_events,recommendation,fix_location}], readiness{critical_findings_unresolved,events_volume_proven,primary_conversion_proven,unfilled_roles[]}, reproducibility, regenerate_requested, markdown_skeleton, instructions_for_claude }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "get_intake",
+    "summary": "Re-surfaces the persisted intake answers for an SDR plus the full SDRIntake history. Read-only.",
+    "group": "",
+    "params": [
+      {
+        "name": "sdr_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "The SDR whose intake to fetch. Required positional. Must belong to the active project."
+      }
+    ],
+    "returns": "{ sdr_id, status:'intake_found', intake{intake_version,answers}, history[], instructions_for_claude } | { sdr_id, status:'no_intake', instructions_for_claude } | {error,error_type,message}"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "list_sources",
+    "summary": "Reports supported sources, currently-scannable sources, connected-but-unsupported sources, and (if sdr_id given) the last-scanned set + timestamp. Read-only.",
+    "group": "",
+    "params": [
+      {
+        "name": "sdr_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "Optional. If given, adds last_scan_sources + last_full_source_scan_at from that SDR (must belong to active project)."
+      }
+    ],
+    "platforms": [
+      "ga4",
+      "gtm",
+      "google_ads"
+    ],
+    "returns": "{ sdr_id, supported_sources[ga4,gtm,google_ads], available_now[], connected_but_unsupported[], last_scan_sources[], last_full_source_scan_at|null, instructions_for_claude } | {error,error_type,message}"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "refine",
+    "summary": "DISPATCHER-LEVEL refine: routes to refine_sdr, whose OWN `action` kwarg (inside params) drives a 10-state refinement state machine. The dispatcher-level action must be 'refine'; the real behavior is selected by params.action (default 'resume'). sdr_id is required for every sub-action.",
+    "group": "",
+    "params": [
+      {
+        "name": "sdr_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "The SDR to refine. Required positional for ALL sub-actions. Must belong to the active project (access_denied otherwise)."
+      },
+      {
+        "name": "action",
+        "type": "string",
+        "required": false,
+        "enum": [
+          "resume",
+          "goto_section",
+          "submit_answer",
+          "accept_proposed",
+          "reject_proposed",
+          "skip_section",
+          "show_status",
+          "apply_source_delta",
+          "finalize",
+          "start_new_draft"
+        ],
+        "example": "resume",
+        "doc": "INTERNAL state-machine action living inside params. THIS IS NOT the dispatcher action. Invalid value -> error_type='invalid_action'. See the refine:<subaction> records for the params each one needs."
+      },
+      {
+        "name": "section",
+        "type": "string",
+        "required": false,
+        "example": "event_catalog.purchase",
+        "doc": "Required only for goto_section. Allows the 9 SECTION_ORDER values plus event_catalog.<event_name> sub-sections."
+      },
+      {
+        "name": "user_input",
+        "type": "string",
+        "required": false,
+        "example": "Add a refund event",
+        "doc": "Required only for submit_answer (natural-language user response)."
+      },
+      {
+        "name": "source_delta",
+        "type": "object",
+        "required": false,
+        "example": {
+          "deltas": {
+            "proposals": []
+          }
+        },
+        "doc": "Required only for apply_source_delta \u2014 the refresh_sources payload (or its `deltas`)."
+      },
+      {
+        "name": "changelog_note",
+        "type": "string",
+        "required": false,
+        "example": "Added refund flow [major]",
+        "doc": "Required for finalize when a prior version exists (>1.0). Contains '[major]' to force a major version bump."
+      }
+    ],
+    "returns": "Varies per sub-action; common envelope: { sdr_id, current_section, progress{...}, status_after_call, can_finalize, can_skip, proposed_changes|null, instructions_for_claude, user_options[] } | {error,error_type,message}. See refine:<subaction> records."
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "refresh_sources",
+    "summary": "Re-scans connectors for an existing SDR and returns structured deltas (added/missing events, destination & parameter changes, ready-to-stage proposals) plus before/after source fingerprints. Writes nothing.",
+    "group": "",
+    "params": [
+      {
+        "name": "sdr_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "The SDR to diff against. Must belong to the active project."
+      },
+      {
+        "name": "connector_filter",
+        "type": "array",
+        "required": false,
+        "item_type": "string",
+        "example": [
+          "ga4"
+        ],
+        "doc": "Limit the re-scan to these sources; alias-normalized (ads -> google_ads)."
+      },
+      {
+        "name": "reuse_intake",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "If True and the SDR has stored intake answers, returns them in `intake`; else intake is null."
+      }
+    ],
+    "platforms": [
+      "ga4",
+      "gtm",
+      "google_ads"
+    ],
+    "returns": "{ sdr_id, status:'delta_ready', reuse_intake, intake|null, connected_sources, scans, deltas{added_events[],removed_or_missing_from_scan[],destination_changes[],parameter_changes[],proposals[]}, reproducibility{previous_source_fingerprint,current_source_fingerprint,scan_timestamp}, instructions_for_claude } | {error,error_type,message}"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "save",
+    "summary": "Persists Claude-authored SDR markdown. Validates against the markdown contract (round-trip parse) before any DB write; errors block unless force=true. Creates the SDR if none exists for the project, else OVERWRITES the existing project SDR's markdown and bumps draft_version.",
+    "group": "",
+    "params": [
+      {
+        "name": "markdown",
+        "type": "string",
+        "required": true,
+        "example": "# Acme SDR\\n## Event Catalog\\n### `purchase`\\n...",
+        "doc": "The full SDR document. Required and must be non-blank, else error_type='invalid_markdown'. Must contain a parseable Event Catalog (>=1 event) or validation fails."
+      },
+      {
+        "name": "intake_snapshot",
+        "type": "object",
+        "required": false,
+        "example": {
+          "intake_version": "v1",
+          "answers": {}
+        },
+        "doc": "The `intake` object returned by generate. Normalized (accepts answers or intake_answers key). Persisted to SDR.intake_answers + SDRIntake history if present."
+      },
+      {
+        "name": "source_snapshot",
+        "type": "object",
+        "required": false,
+        "example": {},
+        "doc": "The `scans` object from generate. If not None it is stored as SDR.last_source_scan and used to compute the returned readiness."
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false,
+        "example": "Acme SDR",
+        "doc": "SDR name; defaults to existing name on update or '<project_name> SDR' on create."
+      },
+      {
+        "name": "sdr_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "Update a specific existing draft. If omitted, the tool finds the (single) SDR for the project and overwrites it, or creates one."
+      },
+      {
+        "name": "source_snapshot_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "Opaque id echoed back as source_snapshot_id; not used for any lookup."
+      },
+      {
+        "name": "create_initial_refinement_state",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "Seed refinement state + mark sections complete from the parsed markdown so refine can resume immediately."
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "required": false,
+        "example": false,
+        "doc": "Override structural validation errors and persist anyway. Use only intentionally \u2014 bypasses the round-trip contract gate."
+      },
+      {
+        "name": "source_xlsx_base64",
+        "type": "string",
+        "required": false,
+        "example": "UEsDBBQ...",
+        "doc": "Base64 of a source .xlsx so users can download the original. Hard limit 2 MB (2*1024*1024 bytes) of DECODED bytes; must be valid base64 AND a valid openpyxl-loadable workbook. On any failure it is silently skipped (logged as a warning) \u2014 the save still succeeds without the file."
+      },
+      {
+        "name": "source_filename",
+        "type": "string",
+        "required": false,
+        "example": "events.xlsx",
+        "doc": "Filename for the stored xlsx, truncated to 255 chars; defaults to 'source.xlsx'."
+      }
+    ],
+    "platforms": [
+      "ga4",
+      "gtm",
+      "google_ads"
+    ],
+    "returns": "validation_failed (errors & !force): { error, error_type:'validation_failed', validation{errors[],warnings[]}, instructions_for_claude } | success: { sdr_id, status:'draft_saved', draft_version, source_snapshot_id, source_snapshot_saved, sections_completed[], sections_remaining[], readiness|null, validation{errors[],warnings[]}, summary{events,todo_count,gaps,intake_version}, recommended_next_action, instructions_for_claude }",
+    "reversible": false
+  }
+]

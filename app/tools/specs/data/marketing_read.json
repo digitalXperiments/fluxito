@@ -1,0 +1,668 @@
+[
+  {
+    "tool": "marketing_read",
+    "action": "get_ad_group_performance",
+    "summary": "Google Ads ad-group-level performance for a date range, optionally filtered by campaign_id; cached 60s.",
+    "group": "PAID ADS (Google / Meta / TikTok / Snap)",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "google"
+        ],
+        "example": "google",
+        "doc": "Only 'google' accepts get_ad_group_performance (validation table). meta/tiktok/snap reject it."
+      },
+      {
+        "name": "account_id",
+        "type": "string",
+        "required": true,
+        "example": "123-456-7890",
+        "doc": "Google customer id."
+      },
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-01",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-31",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "campaign_id",
+        "type": "string",
+        "required": false,
+        "example": "987654321",
+        "doc": "Optional filter to one campaign."
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Max rows. Tool default 50."
+      }
+    ],
+    "platforms": [
+      "google"
+    ],
+    "returns": "{ ad_groups: [...] } | {error,...}"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "get_adgroup_performance",
+    "summary": "Ad-group-level performance for TikTok (and undocumented linkedin/pinterest/reddit/apple); optional campaign_id filter; cached 60s.",
+    "group": "PAID ADS (Google / Meta / TikTok / Snap)",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "tiktok",
+          "linkedin",
+          "pinterest",
+          "reddit",
+          "apple"
+        ],
+        "example": "tiktok",
+        "doc": "Platforms whose validation table includes get_adgroup_performance. google uses the underscored get_ad_group_performance instead."
+      },
+      {
+        "name": "account_id",
+        "type": "string",
+        "required": true,
+        "example": "7012345678",
+        "doc": "Ad account id."
+      },
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-01",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-31",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "campaign_id",
+        "type": "string",
+        "required": false,
+        "example": "1700000000",
+        "doc": "Optional campaign filter."
+      }
+    ],
+    "platforms": [
+      "tiktok",
+      "linkedin",
+      "pinterest",
+      "reddit",
+      "apple"
+    ],
+    "returns": "{ ad_groups: [...] } | {error,...}"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "get_adset_performance",
+    "summary": "Meta ad-set-level performance for a date range, optional campaign_id filter; cached 60s.",
+    "group": "PAID ADS (Google / Meta / TikTok / Snap)",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "meta"
+        ],
+        "example": "meta",
+        "doc": "Meta only."
+      },
+      {
+        "name": "account_id",
+        "type": "string",
+        "required": true,
+        "example": "act_1234567890",
+        "doc": "Meta ad account id."
+      },
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-01",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-31",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "campaign_id",
+        "type": "string",
+        "required": false,
+        "example": "23847000000",
+        "doc": "Optional campaign filter."
+      }
+    ],
+    "platforms": [
+      "meta"
+    ],
+    "returns": "{ ad_sets / adsets: [...] } | {error,...}"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "get_adsquad_performance",
+    "summary": "Snap ad-squad-level performance for a date range, optional campaign_id filter; cached 60s.",
+    "group": "PAID ADS (Google / Meta / TikTok / Snap)",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "snap"
+        ],
+        "example": "snap",
+        "doc": "Snap only."
+      },
+      {
+        "name": "account_id",
+        "type": "string",
+        "required": true,
+        "example": "abc-123-def",
+        "doc": "Snap ad account id."
+      },
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-01",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-31",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "campaign_id",
+        "type": "string",
+        "required": false,
+        "example": "c-9999",
+        "doc": "Optional campaign filter."
+      }
+    ],
+    "platforms": [
+      "snap"
+    ],
+    "returns": "{ ad_squads / adsquads: [...] } | {error,...}"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "get_campaign_performance",
+    "summary": "Per-campaign performance metrics for a date range; metrics[] customizable, cached 60s.",
+    "group": "PAID ADS (Google / Meta / TikTok / Snap)",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "google",
+          "meta",
+          "tiktok",
+          "snap",
+          "linkedin",
+          "pinterest",
+          "x",
+          "reddit",
+          "apple"
+        ],
+        "example": "google",
+        "doc": "Ad platform."
+      },
+      {
+        "name": "account_id",
+        "type": "string",
+        "required": true,
+        "example": "123-456-7890",
+        "doc": "Ad account / customer id. Required for all non-list_accounts actions."
+      },
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-01",
+        "doc": "YYYY-MM-DD. NOT validated by the tool \u2014 silently passed as None to the connector if omitted (connector then builds a malformed query)."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-31",
+        "doc": "YYYY-MM-DD. Not validated by the tool layer."
+      },
+      {
+        "name": "metrics",
+        "type": "array",
+        "required": false,
+        "item_type": "string",
+        "example": [
+          "clicks",
+          "impressions",
+          "cost_micros"
+        ],
+        "doc": "array of strings. Google default = clicks,impressions,cost_micros,conversions,ctr,average_cpc when omitted."
+      }
+    ],
+    "platforms": [
+      "google",
+      "meta",
+      "tiktok",
+      "snap"
+    ],
+    "returns": "{ campaigns: [ {campaign_id, campaign_name, campaign_type, status, ...metrics} ] } | {error,...}"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "get_conversion_actions",
+    "summary": "List Google Ads conversion actions for an account; cached 120s. No date range.",
+    "group": "PAID ADS (Google / Meta / TikTok / Snap)",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "google"
+        ],
+        "example": "google",
+        "doc": "Google only."
+      },
+      {
+        "name": "account_id",
+        "type": "string",
+        "required": true,
+        "example": "123-456-7890",
+        "doc": "Google customer id."
+      }
+    ],
+    "platforms": [
+      "google"
+    ],
+    "returns": "{ conversion_actions: [...] } | {error,...}"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "get_keyword_performance",
+    "summary": "Google Ads keyword-level performance for a date range, optional campaign_id filter; cached 60s.",
+    "group": "PAID ADS (Google / Meta / TikTok / Snap)",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "google"
+        ],
+        "example": "google",
+        "doc": "Google only."
+      },
+      {
+        "name": "account_id",
+        "type": "string",
+        "required": true,
+        "example": "123-456-7890",
+        "doc": "Google customer id."
+      },
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-01",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": false,
+        "example": "2026-05-31",
+        "doc": "YYYY-MM-DD; not validated."
+      },
+      {
+        "name": "campaign_id",
+        "type": "string",
+        "required": false,
+        "example": "987654321",
+        "doc": "Optional campaign filter."
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Max rows."
+      }
+    ],
+    "platforms": [
+      "google"
+    ],
+    "returns": "{ keywords: [...] } | {error,...}"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "list_accounts",
+    "summary": "Enumerate connected ad accounts for the given platform (cached 600s).",
+    "group": "PAID ADS (Google / Meta / TikTok / Snap)",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "google",
+          "meta",
+          "tiktok",
+          "snap",
+          "linkedin",
+          "pinterest",
+          "x",
+          "reddit",
+          "apple",
+          "marketo"
+        ],
+        "example": "google",
+        "doc": "Which ad platform. Required; marketo has no list_accounts."
+      }
+    ],
+    "platforms": [
+      "google",
+      "meta",
+      "tiktok",
+      "snap"
+    ],
+    "returns": "{ accounts: [...] } | {error, error_type, message} (unauthorized \u2192 connection_missing / no_ads_response)"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_get_lead",
+    "summary": "Adobe Marketo: GET /rest/v1/lead/{id}.json \u2014 a single lead by Marketo id.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "resource_id",
+        "type": "string",
+        "required": true,
+        "example": "1001",
+        "doc": "Marketo lead id."
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "fields": [
+            "firstName",
+            "email"
+          ]
+        },
+        "doc": "filters.fields (array of strings) to limit returned columns."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { requestId, success, result:[{...lead}] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_get_lead_activities",
+    "summary": "Adobe Marketo: lead activity stream filtered by activity types / list / since-datetime.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "activity_type_ids": [
+            "12",
+            "13"
+          ],
+          "list_id": "55",
+          "since_datetime": "2026-05-01T00:00:00Z"
+        },
+        "doc": "filters.activity_type_ids (array of strings), filters.list_id, filters.since_datetime (ISO)."
+      },
+      {
+        "name": "resource_id",
+        "type": "string",
+        "required": false,
+        "example": "55",
+        "doc": "Used as list_id fallback: list_id = filters.list_id or resource_id."
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Marketo batchSize. Tool default 50."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { result:[...activities] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_get_leads",
+    "summary": "Adobe Marketo Engage: GET /rest/v1/leads.json \u2014 leads matching a filter (default filter_type=email).",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "filter_type": "email",
+          "filter_values": [
+            "a@b.com"
+          ],
+          "fields": [
+            "firstName",
+            "email"
+          ]
+        },
+        "doc": "filters.filter_type (default 'email'), filters.filter_values (array of strings), filters.fields (array of strings)."
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Maps to Marketo batchSize. Tool default is 50 (overrides connector's own default of 100)."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope: { requestId, success, result: [...] } | friendly error dict"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_get_list_leads",
+    "summary": "Adobe Marketo: GET /rest/v1/list/{listId}/leads.json \u2014 members of a list.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "resource_id",
+        "type": "string",
+        "required": true,
+        "example": "55",
+        "doc": "Marketo list id."
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Marketo batchSize. Tool default 50."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { result:[...leads] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_get_program",
+    "summary": "Adobe Marketo: fetch a single program by id.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "resource_id",
+        "type": "string",
+        "required": true,
+        "example": "1042",
+        "doc": "Marketo program id."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { result:[{...program}] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_list_campaigns",
+    "summary": "Adobe Marketo: list smart/batch campaigns.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Marketo batchSize. Tool default 50."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { result:[...campaigns] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_list_emails",
+    "summary": "Adobe Marketo: list email assets.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Marketo batchSize. Tool default 50."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { result:[...emails] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_list_forms",
+    "summary": "Adobe Marketo: list form assets.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Marketo batchSize. Tool default 50."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { result:[...forms] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_list_landing_pages",
+    "summary": "Adobe Marketo: list landing-page assets.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Marketo batchSize. Tool default 50."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { result:[...landingPages] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_list_lists",
+    "summary": "Adobe Marketo: GET /rest/v1/lists.json \u2014 static/smart lists.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Marketo batchSize. Tool default 50."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { result:[...lists] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "marketo_list_programs",
+    "summary": "Adobe Marketo: list programs.",
+    "group": "ADOBE MARKETO ENGAGE",
+    "params": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Marketo batchSize. Tool default 50."
+      }
+    ],
+    "platforms": [
+      "marketo"
+    ],
+    "returns": "Raw Marketo REST envelope { result:[...programs] } | error"
+  }
+]

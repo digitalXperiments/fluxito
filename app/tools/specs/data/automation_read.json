@@ -1,0 +1,73 @@
+[
+  {
+    "tool": "automation_read",
+    "action": "browse",
+    "summary": "List the automation library for the active project (no slug) OR fetch one automation with rendered prompt preview (with slug). System automations are global; user automations only surface inside their project.",
+    "group": "",
+    "params": [
+      {
+        "name": "slug",
+        "type": "string",
+        "required": false,
+        "example": "daily-revenue-digest",
+        "doc": "Omit for the list view; pass to fetch a single automation + rendered_prompt + resolved_variables + install_hint."
+      },
+      {
+        "name": "theme",
+        "type": "string",
+        "required": false,
+        "enum": [
+          "daily_digest",
+          "anomaly",
+          "pacing",
+          "exec_summary",
+          "tag_health",
+          "launch_monitor"
+        ],
+        "example": "anomaly",
+        "doc": "List filter by theme (validated against VALID_THEMES; only checked in list view). Unknown theme -> bad_request error."
+      },
+      {
+        "name": "channel_label",
+        "type": "string",
+        "required": false,
+        "example": "Slack #growth",
+        "doc": "Folded into the single-automation rendered prompt preview (single-get only)."
+      },
+      {
+        "name": "variables",
+        "type": "object",
+        "required": false,
+        "example": {
+          "threshold_pct": 20
+        },
+        "doc": "Override values folded into the rendered preview (single-get only)."
+      },
+      {
+        "name": "show_all",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "List view: if False, hides automations whose required platforms aren't connected (but still shows featured ones, flagged needs_connection=true). True shows everything."
+      }
+    ],
+    "platforms": [
+      "ga4",
+      "gtm",
+      "google_ads",
+      "meta",
+      "tiktok",
+      "snap",
+      "linkedin",
+      "pinterest",
+      "bigquery",
+      "amplitude",
+      "adobe_analytics",
+      "adobe_launch",
+      "adobe_marketo",
+      "redshift",
+      "snowflake"
+    ],
+    "returns": "List: { automations:[serialized], total, themes:[{key,label}], browse_url }. Single: { id,slug,title,...,prompt_template, resolved_variables, rendered_prompt, install_hint }. | {error,error_type,message}"
+  }
+]

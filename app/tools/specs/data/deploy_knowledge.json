@@ -1,0 +1,139 @@
+[
+  {
+    "tool": "deploy_knowledge",
+    "action": "deploy_template",
+    "summary": "Deploy a curated/user template as a new live dashboard: resolves template variables (defaults + overrides), substitutes {key}/{{key}} into each step's params, and creates DashboardCards.",
+    "group": "",
+    "params": [
+      {
+        "name": "template_slug",
+        "type": "string",
+        "required": true,
+        "example": "ecom-weekly-review",
+        "doc": "Slug of an is_active template to deploy. Required."
+      },
+      {
+        "name": "dashboard_title",
+        "type": "string",
+        "required": false,
+        "example": "My Weekly Review",
+        "doc": "Custom dashboard title; defaults to template.title."
+      },
+      {
+        "name": "variables",
+        "type": "object",
+        "required": false,
+        "example": {
+          "date_range_start": "2026-03-01",
+          "property_id": "123456"
+        },
+        "doc": "Key/value overrides merged on top of template defaults. ALL keys are applied (not just declared vars). Special default forms: 'today' -> today's ISO date; '-Nd' -> N days ago ISO."
+      }
+    ],
+    "platforms": [
+      "ga4",
+      "gtm",
+      "google_ads",
+      "meta",
+      "tiktok",
+      "snap",
+      "bigquery",
+      "amplitude",
+      "adobe_analytics",
+      "adobe_launch",
+      "adobe_marketo",
+      "redshift",
+      "snowflake"
+    ],
+    "returns": "{ success: true, dashboard_id, title, live_url, manage_url, cards_created, template_used, note } | {error,error_type?,message,...}",
+    "reversible": false
+  },
+  {
+    "tool": "deploy_knowledge",
+    "action": "save_template",
+    "summary": "Save a set of query steps as a reusable 'user' template (always min_tier='pro'); generates a slugified id with random suffix.",
+    "group": "",
+    "params": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": true,
+        "example": "E-commerce Weekly Review",
+        "doc": "Template name. Required."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": true,
+        "example": "Weekly ecom KPI snapshot",
+        "doc": "What the template does. Required (positional, no default)."
+      },
+      {
+        "name": "category",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ecommerce",
+          "ppc",
+          "seo",
+          "gtm",
+          "analytics",
+          "cross_channel",
+          "warehouse",
+          "custom"
+        ],
+        "example": "ecommerce",
+        "doc": "Literal-typed category. Required."
+      },
+      {
+        "name": "steps",
+        "type": "array",
+        "required": true,
+        "item_type": "object",
+        "example": [
+          {
+            "tool": "analytics_read",
+            "params": {},
+            "card_title": "Sessions",
+            "card_type": "TABLE"
+          }
+        ],
+        "doc": "Non-empty list (<=20) of step dicts; each MUST have a 'tool' key. Element type: object. Required."
+      },
+      {
+        "name": "required_platforms",
+        "type": "array",
+        "required": true,
+        "item_type": "string",
+        "example": [
+          "ga4",
+          "google_ads"
+        ],
+        "doc": "List of platform keys (array of strings) that must be connected. Required."
+      },
+      {
+        "name": "variables",
+        "type": "array",
+        "required": false,
+        "item_type": "object",
+        "example": [
+          {
+            "key": "property_id",
+            "label": "GA4 Property",
+            "type": "string"
+          }
+        ],
+        "doc": "Optional list of variable-definition dicts (array of objects). Stored as [] if omitted."
+      },
+      {
+        "name": "icon",
+        "type": "string",
+        "required": false,
+        "example": "ga4",
+        "doc": "Optional icon slug; defaults to the category value."
+      }
+    ],
+    "returns": "{ success: true, template_id, slug, title, category, steps: <int count>, browse_url, note } | {error,error_type?,message}",
+    "reversible": true
+  }
+]

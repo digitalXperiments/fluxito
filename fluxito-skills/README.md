@@ -1,50 +1,57 @@
-# Fluxito Skills
+# Fluxito skill
 
-A portable [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills)
-that teaches an AI agent how to operate the **Fluxito MCP** well.
-The MCP gives the agent hands + facts; the skill gives it the operating manual.
+An [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills) that
+teaches a model how to **operate the Fluxito MCP** well — audits, tracking plans (SDR),
+analytics/warehouse/ad queries, and dashboards.
 
-It is **one hub skill** (`fluxito`) with per-feature references loaded on demand —
-single install, shared MCP basics, lean context. SDR is the first feature; future
-features (audits, dashboards) get their own `references/<feature>/` folder.
+## What it is (and isn't)
+
+The Fluxito **MCP server** is self-describing: every tool lists its actions, exposes an
+`action="describe"` discovery call, and returns self-describing errors that name the exact
+params you're missing. So **this skill does not duplicate per-action parameters** — the
+server owns those, and any client (including non-Claude ones) can read them live.
+
+What the skill adds is the part a tool description can't: **method and judgment** — which
+audits to run and how to read findings, how to derive an event taxonomy for any business,
+the exact SDR document contract, and how to sequence multi-step work.
 
 ## Prerequisite
 
-Connect the **Fluxito MCP** connector in your tool and select an
-active project. The skill drives the MCP's `tracking_plan` tool; without the
-connector it has nothing to operate.
+The Fluxito MCP connector must be connected with an **active project**. The skill checks
+this first (`references/mcp-operating-guide.md`).
 
 ## Install
 
-**Claude Code** — copy the skill folder into your skills directory:
-```bash
-cp -r fluxito ~/.claude/skills/        # personal (all projects)
-cp -r fluxito .claude/skills/          # or project-scoped
-```
+- **Claude Code** — copy `fluxito/` into `.claude/skills/` (project) or
+  `~/.claude/skills/` (personal).
+- **claude.ai / Claude Desktop** — add it as a Skill in settings where your plan supports
+  Skills.
+- **Other Agent-Skills-compatible tools** — point the tool at the `fluxito/` directory;
+  it reads `SKILL.md` and loads `references/` on demand.
 
-**Claude Desktop / claude.ai (Capabilities)** — upload the `fluxito` folder as a
-Skill where your plan supports Skills.
-
-**Other Agent-Skills-compatible tools** — point the tool at the `fluxito` folder;
-it reads `SKILL.md` and loads `references/` on demand.
-
-## Structure
+## Layout
 
 ```
-fluxito/
-├── SKILL.md                        # thin router + universal hard rules (always loaded)
-├── references/
-│   ├── mcp-basics.md               # connect, project, tracking_plan map, roles (shared)
-│   └── sdr/                        # SDR feature
-│       ├── sdr.md                  # procedure + hard rules
-│       ├── derivation-method.md    # 5-step method (works for any business)
-│       ├── markdown-schema.md      # the exact SDR doc contract
-│       ├── quality-rubric.md       # gold-standard self-check
-│       └── verticals/*.md          # optional accelerators
-└── examples/
-    └── sdr/bmk-eco-farms-sdr.md    # worked exemplar + anti-drift fixture
+fluxito-skills/
+├── README.md
+└── fluxito/
+    ├── SKILL.md                              # entry point: self-describing-server model,
+    │                                         #   intent router, universal hard rules
+    ├── references/
+    │   ├── mcp-operating-guide.md            # connect, project, tool-surface map, the
+    │   │                                     #   describe/error contract, scopes, run_script
+    │   ├── workflows/
+    │   │   ├── audit.md                       # audit & diagnose tracking / conversions
+    │   │   └── dashboards.md                  # build & deploy dashboards
+    │   └── sdr/                               # tracking plan (SDR) depth
+    │       ├── sdr.md                         # create / diagnose / refresh procedure
+    │       ├── derivation-method.md           # universal taxonomy derivation
+    │       ├── markdown-schema.md             # the exact SDR doc contract
+    │       ├── quality-rubric.md              # pre-save self-check
+    │       └── verticals/*.md                 # optional per-vertical accelerators
+    └── examples/
+        └── sdr/bmk-eco-farms-sdr.md           # worked exemplar (quality bar)
 ```
 
-Why one skill instead of one-per-feature: the features share the MCP basics and
-the markdown contract, install is one step, and progressive disclosure means only
-the reference for the current task loads — so context stays just as lean.
+Progressive disclosure: `SKILL.md` routes by intent; the model loads only the one
+reference it needs.
