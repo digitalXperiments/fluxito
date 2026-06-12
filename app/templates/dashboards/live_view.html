@@ -6,8 +6,6 @@
 
 {% block head_extra %}
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" defer></script>
 <script type="importmap">
 {
   "imports": {
@@ -18,11 +16,18 @@
 }
 </script>
 <script>
-// Dark mode: auto-detect system preference, persist in localStorage
+// Dark mode: auto-detect system preference, persist in localStorage.
 (function() {
+  {% if print_mode %}
+  // PDF render path: force light theme and the print layout (hides nav, the
+  // toolbar, the back link and the footer) so the export reads like a report.
+  document.documentElement.classList.add('print-mode');
+  document.documentElement.setAttribute('data-theme', 'light');
+  {% else %}
   var saved = localStorage.getItem('theme');
   var preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', saved || preferred);
+  {% endif %}
 })();
 </script>
 <style>
@@ -216,6 +221,25 @@
     .ai-insights::before { left: 14px; top: 16px; width: 16px; height: 16px; }
   }
 
+  /* ── PDF print mode ───────────────────────────────────────────────────
+     The headless-Chromium PDF renderer loads this view with ?print=1, which
+     adds `.print-mode` to <html>. Strip the interactive chrome (nav, sidebar,
+     toolbar, back link, footer) so the export is just the dashboard, and stop
+     cards from being split across page breaks. */
+  .print-mode .nav,
+  .print-mode .nav-landing,
+  .print-mode .sidebar,
+  .print-mode .mobile-topbar,
+  .print-mode .site-footer,
+  .print-mode .lv-head-actions,
+  .print-mode .lv-back,
+  .print-mode #pageLoader { display: none !important; }
+  .print-mode .main { margin-left: 0 !important; }
+  .print-mode .app-main { max-width: none; padding-top: 16px !important; }
+  .print-mode .dash-filter-bar { pointer-events: none; }
+  .print-mode .data-card,
+  .print-mode .metric-kpi { break-inside: avoid; page-break-inside: avoid; }
+
 </style>
 {% endblock %}
 
@@ -321,6 +345,13 @@
 
   // ── Active filters ────────────────────────────────────────────────────
   let activeRange = {start: '30daysAgo', end: 'today'};
+  // When the view is opened with ?start=&end= (e.g. the PDF renderer passes the
+  // selected range), honour it on first load so the export reflects those dates.
+  try {
+    var __metaEl = document.getElementById('dashMeta');
+    var __meta = __metaEl ? JSON.parse(__metaEl.textContent || '{}') : {};
+    if (__meta && __meta.start && __meta.end) activeRange = {start: __meta.start, end: __meta.end};
+  } catch(_){}
   let activeDims = {};  // {device_type: "mobile", country: "AE", ...}
 
   function buildParams() {
@@ -521,6 +552,10 @@
       if (grid) grid.innerHTML = `<div class="audit-empty" style="grid-column:1/-1;"><h3>Failed to load data</h3><p>${Fluxito.esc(e.message||'')}</p><button class="btn primary" style="margin-top:14px" type="button" onclick="location.reload()">Reload</button></div>`;
     }
     if (window.__dismissPageLoader) window.__dismissPageLoader();
+    // Signal the PDF renderer (headless Chromium) that the initial card +
+    // chart render has settled, so it can capture the page. Harmless on
+    // normal loads.
+    window.__pdfReady = true;
   }
 
   var fetchAndRender = loadCards;
@@ -529,84 +564,43 @@
   document.getElementById('btnApply').addEventListener('click', function(){ loadCards(true); });
 
   // ── Share PDF ─────────────────────────────────────────────────────────
-  // Capture the live dashboard DOM exactly as rendered (charts, colors, tiles)
-  // and lay it into a multi-page A4 PDF entirely client-side. No server render,
-  // so the PDF matches the on-screen dashboard pixel-for-pixel (in the current
-  // theme and filters), including ECharts canvases and sparklines.
+  // ── Share PDF ─────────────────────────────────────────────────────────
+  // Rendered server-side by the headless-Chromium PDF endpoint (real charts,
+  // theme, and the selected date range), streamed back and downloaded. No
+  // in-browser html2canvas capture — that path choked on modern CSS colours.
   const btnSharePdf = document.getElementById('btnSharePdf');
   if (btnSharePdf) {
     btnSharePdf.addEventListener('click', async () => {
       const originalLabel = btnSharePdf.innerHTML;
       btnSharePdf.disabled = true;
       btnSharePdf.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:-2px;"></span>Preparing PDF…';
-
-      // Page chrome that isn't part of the dashboard itself — hidden during
-      // capture, restored in finally.
-      const captureTarget = document.querySelector('main.app-main') || document.body;
-      const hideEls = ['.lv-head-actions', '.lv-back']
-        .map(function(sel){ return document.querySelector(sel); })
-        .filter(Boolean);
-      const prevDisplay = hideEls.map(function(el){ return el.style.display; });
-
       try {
-        if (typeof html2canvas !== 'function') {
-          throw new Error('Renderer still loading — try again in a moment.');
+        const params = buildParams();
+        const url = `/saved-dashboards/${encodeURIComponent(SLUG)}/pdf` +
+          (params.toString() ? '?' + params.toString() : '');
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) {
+          let msg = 'Failed to generate PDF.';
+          try { const err = await res.json(); if (err && err.message) msg = err.message; } catch (_) {}
+          throw new Error(msg);
         }
-        const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-        if (!jsPDFCtor) {
-          throw new Error('PDF library still loading — try again in a moment.');
-        }
-
-        // Hide chrome, let the layout settle for two frames, then capture.
-        hideEls.forEach(function(el){ el.style.display = 'none'; });
-        await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
-
-        const bg = getComputedStyle(document.body).backgroundColor || '#ffffff';
-        const canvas = await html2canvas(captureTarget, {
-          scale: 2,                 // crisp text + charts
-          backgroundColor: bg,      // honors light/dark theme
-          useCORS: true,
-          logging: false,
-          windowWidth: document.documentElement.clientWidth,
-          scrollX: 0,
-          scrollY: -window.scrollY,
-        });
-
-        // Slice the tall capture across A4 portrait pages.
-        const pdf = new jsPDFCtor({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const margin = 8;
-        const imgW = pageW - margin * 2;
-        const imgH = canvas.height * imgW / canvas.width;
-        const imgData = canvas.toDataURL('image/png');
-        const usableH = pageH - margin * 2;
-
-        let heightLeft = imgH;
-        let position = margin;
-        pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH, undefined, 'FAST');
-        heightLeft -= usableH;
-        while (heightLeft > 0) {
-          pdf.addPage();
-          position = margin - (imgH - heightLeft);
-          pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH, undefined, 'FAST');
-          heightLeft -= usableH;
-        }
-
-        // Filename: "<title>-YYYY-MM-DD.pdf"
-        const titleEl = document.querySelector('.page-head h1');
-        const titleText = (titleEl ? titleEl.textContent : 'dashboard') || 'dashboard';
-        const safeTitle = titleText.trim().replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'dashboard';
-        const d = new Date();
-        const stamp = d.getFullYear() + '-' +
-          String(d.getMonth() + 1).padStart(2, '0') + '-' +
-          String(d.getDate()).padStart(2, '0');
-        pdf.save(safeTitle + '-' + stamp + '.pdf');
+        const blob = await res.blob();
+        const downloadUrl = URL.createObjectURL(blob);
+        const cd = res.headers.get('Content-Disposition') || '';
+        let filename = 'dashboard.pdf';
+        const m = /filename="?([^"]+)"?/.exec(cd);
+        if (m && m[1]) filename = m[1];
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
       } catch (err) {
         console.error('[SharePDF] failed', err);
         alert('Could not generate PDF: ' + (err && err.message ? err.message : 'unknown error'));
       } finally {
-        hideEls.forEach(function(el, i){ el.style.display = prevDisplay[i]; });
         btnSharePdf.disabled = false;
         btnSharePdf.innerHTML = originalLabel;
       }

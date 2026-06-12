@@ -8,18 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Share PDF now matches the dashboard you see on screen.** The export used to render a
-  separate, plainer server-side layout (stacked value boxes, no charts) that looked nothing
-  like the live view. It now captures the dashboard exactly as rendered — colored scorecard
-  tiles, charts, the current light/dark theme, and the active date range and filters — and
-  lays it across multi-page A4. (Scheduled email/Slack report PDFs are unchanged.)
+- **Share PDF now looks like the live dashboard — charts and all.** Exports (and the
+  scheduled email/Slack report PDFs) are now rendered by a real headless browser that
+  loads the actual dashboard, so they include the styled scorecards, the line/bar/pie
+  charts, and the data tables you see on screen. Previously the PDF was a stripped-down
+  text-and-grid report because the old renderer had no way to draw the JavaScript charts.
 - **Live dashboards cache their data on load, so reopening one no longer re-queries the
   analytics APIs every time.** The first open (or pressing Refresh) pulls from the upstream
   sources and caches the result; reloads then serve from that cache for up to an hour.
   Refresh always forces a fresh query and repopulates the cache, and "last refreshed" now
   reflects when the data was actually pulled.
+- **Roomier dashboard layout.** Added breathing room between the date-range filter bar
+  and the first row of cards so the view no longer feels cramped.
 
 ### Fixed
+- **Share PDF on a public/shared dashboard could fail with an `oklab` colour error, and
+  the header sat tucked under the top navigation bar.** The export pipeline no longer
+  depends on the brittle in-browser screenshot path, and shared dashboards now leave
+  proper space below the fixed nav.
+- **Share PDF ignored the date range you picked.** The export now reflects the selected
+  range (e.g. "2024 Full Year") instead of always falling back to the default window.
 - **Dashboard scorecards no longer sit jammed against the top edge of their card.**
   Single-metric KPI tiles had almost no breathing room above the title; they now have
   balanced top padding and a clear gap before the metric, in both light and dark mode.

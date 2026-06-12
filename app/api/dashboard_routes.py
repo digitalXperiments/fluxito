@@ -842,6 +842,11 @@ async def live_dashboard_page(page_slug: str, request: Request):
             "is_owner": is_owner,
             "has_cards": has_cards,
             "user": user_view,
+            # Print mode: the headless-Chromium PDF renderer loads this same view
+            # with ?print=1 to hide interactive chrome (nav, toolbar, footer) and
+            # lay the cards out for paper. Auth is unchanged — ?print=1 only
+            # affects presentation.
+            "print_mode": (request.query_params.get("print") or "") in ("1", "true", "yes"),
         },
     )
 
@@ -1103,11 +1108,10 @@ async def live_dashboard_data(slug: str, request: Request):
 # Share PDF — on-demand PDF export of a live dashboard
 # ---------------------------------------------------------------------------
 #
-# No data is persisted: we hydrate the
-# dashboard in memory, render a print-only HTML template, pipe it through
-# WeasyPrint, and stream the bytes straight to the caller. Available to any
-# viewer who can see the dashboard (public dashboards → anyone; private →
-# owner only). Not plan-gated.
+# No data is persisted: a headless Chromium renders the live dashboard view
+# (charts included) to PDF and we stream the bytes straight to the caller.
+# Available to any viewer who can see the dashboard (public dashboards →
+# anyone; private → owner only). Not plan-gated.
 
 
 @router.get("/saved-dashboards/{slug}/pdf")
@@ -1115,17 +1119,20 @@ async def live_dashboard_pdf(slug: str, request: Request):
     """Generate and stream a PDF of the given dashboard.
 
     Query params:
-      start     — ISO date (YYYY-MM-DD) — lower bound
-      end       — ISO date (YYYY-MM-DD) — upper bound
-      platforms — comma-separated list (e.g. "ga4,meta") — filter cards
+      start / date_range_start — ISO date (YYYY-MM-DD) — lower bound
+      end   / date_range_end   — ISO date (YYYY-MM-DD) — upper bound
 
-    Returns a 200 with application/pdf bytes, 404 if not visible, or 500
-    if rendering fails (usually: WeasyPrint shared libs missing).
+    Returns a 200 with application/pdf bytes, 404 if not visible, 503 if the
+    renderer is unavailable (Chromium missing), or 500 if rendering fails.
     """
     uid = get_uid_from_request(request)
-    start_date = request.query_params.get("start") or ""
-    end_date = request.query_params.get("end") or ""
-    platforms_filter = request.query_params.get("platforms") or ""
+    # The Share PDF button reuses the live view's buildParams(), which emits
+    # date_range_start/date_range_end; accept those as well as the short
+    # start/end form so the export honours the selected range.
+    qp = request.query_params
+    start_date = qp.get("start") or qp.get("date_range_start") or ""
+    end_date = qp.get("end") or qp.get("date_range_end") or ""
+    platforms_filter = qp.get("platforms") or ""
     platforms_allowed = [p.strip().lower() for p in platforms_filter.split(",") if p.strip()]
 
     filter_params: dict = {}
@@ -1156,9 +1163,9 @@ async def live_dashboard_pdf(slug: str, request: Request):
                 cookies=dict(request.cookies),
             )
         except RuntimeError as exc:
-            # WeasyPrint missing / shared-lib dlopen failure. Surface a
-            # structured error so the frontend can show a toast rather than
-            # dumping a stack trace.
+            # Renderer unavailable (Chromium missing) or the render failed.
+            # Surface a structured error so the frontend can show a toast
+            # rather than dumping a stack trace.
             logger.error("PDF render failed (runtime): %s", exc)
             return JSONResponse(
                 {"error": "pdf_unavailable", "message": str(exc)},

@@ -65,8 +65,10 @@ python-multipart==0.0.20
 anthropic>=0.40.0,<1.0
 
 # ── PDF generation (dashboard export + scheduled reports) ──────────────────
-# WeasyPrint needs libpango/libcairo/libharfbuzz at runtime — see Dockerfile.
-weasyprint==63.1
+# Headless Chromium renders the live dashboard view (charts included) to PDF.
+# The Chromium browser binary + its OS deps are installed in the Dockerfile
+# via `playwright install --with-deps chromium`.
+playwright==1.49.0
 
 # ── Email delivery (scheduled reports + Share-PDF emails) ──────────────────
 # aiosmtplib: pure-Python async SMTP client (no native deps).
