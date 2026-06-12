@@ -100,7 +100,8 @@ async def test_page_renders(client):
     r = await client.get("/tracking-plan")
     assert r.status_code == 200
     assert "Tracking Plan" in r.text
-    assert "window.__TP_PROJECT_ID__" in r.text
+    assert 'id="tp-app"' in r.text
+    assert "/static/js/tracking_plan.js" in r.text
 
 
 @pytest.mark.anyio
