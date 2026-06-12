@@ -2,7 +2,7 @@
 """Shared helpers for the tracking-plan service."""
 
 import uuid
-from typing import Any
+from typing import Any, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,8 @@ from .exceptions import NotFoundError
 
 # Sentinel meaning "caller did not provide this field" (vs. explicitly None).
 _UNSET: Any = object()
+
+_M = TypeVar("_M")
 
 
 def coerce_uuid(value: Any) -> uuid.UUID:
@@ -20,8 +22,8 @@ def coerce_uuid(value: Any) -> uuid.UUID:
 
 
 async def get_or_raise(
-    session: AsyncSession, model: type, obj_id: Any, *, branch_id: uuid.UUID | None = None
-):
+    session: AsyncSession, model: type[_M], obj_id: Any, *, branch_id: uuid.UUID | None = None
+) -> _M:
     """Load a row by id or raise NotFoundError. If branch_id is given, also
     require the row's branch_id to match (prevents cross-branch references)."""
     obj = await session.get(model, coerce_uuid(obj_id))
