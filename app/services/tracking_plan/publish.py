@@ -41,10 +41,12 @@ async def publish_branch(
     )
 
     snapshot = await plan_to_dict(session, plan, branch)
+    version_number = _next_version_number(latest)
+    snapshot["__version__"] = version_number
     version = TPVersion(
         plan_id=plan.id,
         branch_id=branch.id,
-        version_number=_next_version_number(latest),
+        version_number=version_number,
         snapshot=snapshot,
         changelog=changelog,
         published_by=coerce_uuid(user_id),
