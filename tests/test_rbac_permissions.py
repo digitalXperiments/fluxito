@@ -57,8 +57,12 @@ def test_tracking_plan_action_mapping():
     from app.auth.permissions import EffectivePermissions
 
     eff = EffectivePermissions(full=False, tools={"tracking_plan": {"read"}})
-    assert eff.allows_tool("tracking_plan", action="generate") is True
-    assert eff.allows_tool("tracking_plan", action="save") is False
+    # v2 read actions are allowed with read perm
+    assert eff.allows_tool("tracking_plan", action="get_plan") is True
+    assert eff.allows_tool("tracking_plan", action="validate") is True
+    # v2 write actions (and unknown actions) require write -> denied with read-only
+    assert eff.allows_tool("tracking_plan", action="create_event") is False
+    assert eff.allows_tool("tracking_plan", action="publish") is False
     assert eff.allows_tool("tracking_plan", action="mystery") is False
 
 
