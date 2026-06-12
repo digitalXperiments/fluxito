@@ -3685,6 +3685,13 @@ section.muted   { background: var(--bg-2); }
   margin: 0 auto;
   padding: 32px var(--gutter) 80px;
 }
+/* Public (logged-out) share views render the fixed landing nav (var(--nav-h)
+   tall, out of flow). Without an offset the header tucks underneath it — the
+   back-link and page title slide behind the bar. Clear it. The logged-in
+   sidebar layout has no top nav, so the base padding above is enough. */
+body:not(.has-sidebar) .app-main {
+  padding-top: calc(var(--nav-h) + 32px);
+}
 
 /* Page header — sits at top of every app page */
 .page-head {
@@ -5200,6 +5207,8 @@ html[data-theme="dark"] {
   background: var(--surface, #fff);
   border-bottom: 1px solid var(--border, #e5e7eb);
   padding: 8px 24px;
+  /* Breathing room between the filter row and the first row of cards. */
+  margin-bottom: 24px;
   display: flex;
   align-items: center;
   gap: 8px;
