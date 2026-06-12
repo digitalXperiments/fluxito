@@ -262,6 +262,13 @@ TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
     "delete_property": ("tracking_plan_v2", "delete_property"),
     "attach_property": ("tracking_plan_v2", "attach_property"),
     "detach_property": ("tracking_plan_v2", "detach_property"),
+    # --- Property bundles ---
+    "create_bundle": ("tracking_plan_v2", "create_bundle"),
+    "update_bundle": ("tracking_plan_v2", "update_bundle"),
+    "delete_bundle": ("tracking_plan_v2", "delete_bundle"),
+    "add_property_to_bundle": ("tracking_plan_v2", "add_property_to_bundle"),
+    "remove_property_from_bundle": ("tracking_plan_v2", "remove_property_from_bundle"),
+    "attach_bundle_to_event": ("tracking_plan_v2", "attach_bundle_to_event"),
     "create_category": ("tracking_plan_v2", "create_category"),
     "update_category": ("tracking_plan_v2", "update_category"),
     "delete_category": ("tracking_plan_v2", "delete_category"),

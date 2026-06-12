@@ -1,8 +1,10 @@
 import pytest
 
 from app.services.tracking_plan import (
+    add_property_to_bundle,
     attach_property,
     connect_source_destination,
+    create_bundle,
     create_category,
     create_destination,
     create_event,
@@ -62,3 +64,27 @@ async def test_plan_to_dict_full_shape(db_session_factory):
         assert data["sources"][0]["destinations"] == ["GA4"]
         assert data["destinations"][0]["name"] == "GA4"
         assert data["metrics"][0]["name"] == "Revenue"
+
+
+@pytest.mark.anyio
+async def test_plan_to_dict_includes_bundles(db_session_factory):
+    async with db_session_factory() as session:
+        project_id, user_id = await _make_project_and_user(session)
+        plan = await get_or_create_plan(session, project_id=project_id, user_id=user_id, name="P")
+        branch = await get_main_branch(session, plan)
+
+        bundle = await create_bundle(session, branch, name="Item", description="item fields")
+        p1 = await create_property(session, branch, name="item_id", data_type="string")
+        p2 = await create_property(session, branch, name="price", data_type="float")
+        await add_property_to_bundle(session, branch, bundle.id, p1.id, required=True, sort_order=0)
+        await add_property_to_bundle(session, branch, bundle.id, p2.id, required=False, sort_order=1)
+
+        data = await plan_to_dict(session, plan, branch)
+
+        assert "bundles" in data
+        assert len(data["bundles"]) == 1
+        b = data["bundles"][0]
+        assert b["name"] == "Item"
+        assert b["description"] == "item fields"
+        assert [p["name"] for p in b["properties"]] == ["item_id", "price"]
+        assert b["properties"][0]["required"] is True

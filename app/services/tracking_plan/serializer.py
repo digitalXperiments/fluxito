@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tracking_plan import (
     TPBranch,
+    TPBundleProperty,
     TPCategory,
     TPDestination,
     TPEvent,
@@ -19,6 +20,7 @@ from app.models.tracking_plan import (
     TPMetric,
     TPPlan,
     TPProperty,
+    TPPropertyBundle,
     TPSource,
     TPSourceDestination,
 )
@@ -37,6 +39,7 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
     sources = await rows(TPSource)
     destinations = await rows(TPDestination)
     metrics = await rows(TPMetric)
+    bundles = await rows(TPPropertyBundle)
 
     cat_by_id = {c.id: c for c in categories}
     prop_by_id = {p.id: p for p in properties}
@@ -85,6 +88,24 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
         else []
     )
 
+    bundle_ids = [b.id for b in bundles]
+    bp_rows = (
+        (
+            await session.execute(
+                select(TPBundleProperty)
+                .where(TPBundleProperty.bundle_id.in_(bundle_ids))
+                .order_by(TPBundleProperty.sort_order)
+            )
+        )
+        .scalars()
+        .all()
+        if bundle_ids
+        else []
+    )
+    bp_by_bundle: dict = {}
+    for bp in bp_rows:
+        bp_by_bundle.setdefault(bp.bundle_id, []).append(bp)
+
     ep_by_event = _by_event(ep_rows)
     es_by_event = _by_event(es_rows)
     ed_by_event = _by_event(ed_rows)
@@ -102,6 +123,7 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
             "constraints": p.constraints,
             "parent_property_id": str(p.parent_property_id) if p.parent_property_id else None,
             "is_pii": p.is_pii,
+            "is_list": p.is_list,
         }
 
     def _event_dict(e: TPEvent) -> dict:
@@ -125,6 +147,7 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
                 {
                     "name": prop_by_id[link.property_id].name,
                     "data_type": prop_by_id[link.property_id].data_type,
+                    "is_list": prop_by_id[link.property_id].is_list,
                     "required": link.required,
                     "example": link.example,
                     "override_description": link.override_description,
@@ -150,6 +173,24 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
                 }
                 for link in ed_by_event.get(e.id, [])
                 if link.destination_id in dest_by_id
+            ],
+        }
+
+    def _bundle_dict(b: TPPropertyBundle) -> dict:
+        return {
+            "id": str(b.id),
+            "name": b.name,
+            "description": b.description,
+            "properties": [
+                {
+                    "property_id": str(bp.property_id),
+                    "name": prop_by_id[bp.property_id].name,
+                    "data_type": prop_by_id[bp.property_id].data_type,
+                    "required": bp.required,
+                    "sort_order": bp.sort_order,
+                }
+                for bp in bp_by_bundle.get(b.id, [])
+                if bp.property_id in prop_by_id
             ],
         }
 
@@ -208,4 +249,5 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
             }
             for m in sorted(metrics, key=lambda x: x.name)
         ],
+        "bundles": [_bundle_dict(b) for b in sorted(bundles, key=lambda x: x.name)],
     }

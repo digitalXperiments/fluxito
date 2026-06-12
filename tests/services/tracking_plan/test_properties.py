@@ -6,6 +6,7 @@ from app.services.tracking_plan import (
     create_event,
     create_property,
     detach_property,
+    plan_to_dict,
     update_property,
 )
 from app.services.tracking_plan.bootstrap import get_main_branch, get_or_create_plan
@@ -66,6 +67,34 @@ async def test_attach_detach_with_override(db_session_factory):
             select(func.count()).select_from(TPEventProperty).where(TPEventProperty.event_id == event.id)
         )
         assert n == 0
+
+
+@pytest.mark.anyio
+async def test_is_list_property_serializes_true(db_session_factory):
+    async with db_session_factory() as session:
+        project_id, user_id = await _make_project_and_user(session)
+        plan = await get_or_create_plan(session, project_id=project_id, user_id=user_id)
+        branch = await get_main_branch(session, plan)
+
+        await create_property(session, branch, name="item_ids", data_type="string", is_list=True)
+        data = await plan_to_dict(session, plan, branch)
+        prop = next(p for p in data["properties"]["event"] if p["name"] == "item_ids")
+        assert prop["is_list"] is True
+
+
+@pytest.mark.anyio
+async def test_numeric_min_greater_than_max_rejected(db_session_factory):
+    async with db_session_factory() as session:
+        branch = await _branch(session)
+        with pytest.raises(ValidationError):
+            await create_property(
+                session, branch, name="qty", data_type="int", constraints={"min": 10, "max": 1}
+            )
+        # Valid min <= max is accepted.
+        ok = await create_property(
+            session, branch, name="qty2", data_type="int", constraints={"min": 1, "max": 10}
+        )
+        assert ok.constraints == {"min": 1, "max": 10}
 
 
 @pytest.mark.anyio

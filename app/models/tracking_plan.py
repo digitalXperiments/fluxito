@@ -202,6 +202,8 @@ class TPProperty(Base):
         UUID(as_uuid=True), ForeignKey("tp_properties.id", ondelete="CASCADE"), nullable=True
     )
     is_pii: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # True when the value is an array of `data_type` (Avo "list" property).
+    is_list: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -393,9 +395,7 @@ class TPComment(Base):
         ForeignKey("tp_comments.id", ondelete="CASCADE"),
         nullable=True,
     )
-    author_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
-    )
+    author_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     # List of user UUIDs @-mentioned in the body.
     mentions: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
@@ -411,3 +411,46 @@ class TPComment(Base):
             name="ck_tp_comment_entity_type",
         ),
     )
+
+
+class TPPropertyBundle(Base):
+    """A named, reusable group of properties — branch-scoped.
+
+    Bundles are template-copy: ``attach_bundle_to_event`` copies each bundle
+    property into ``tp_event_properties`` at attach time. Editing the bundle
+    afterwards does NOT retroactively update events it was already attached to
+    (live-link is future work).
+    """
+
+    __tablename__ = "tp_property_bundles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    branch_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_branches.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("branch_id", "name", name="uq_tp_property_bundle_name"),)
+
+
+class TPBundleProperty(Base):
+    """M2M link: a property belongs to a bundle, with a per-link required flag."""
+
+    __tablename__ = "tp_bundle_properties"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    bundle_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_property_bundles.id", ondelete="CASCADE"), nullable=False
+    )
+    property_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_properties.id", ondelete="CASCADE"), nullable=False
+    )
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+    __table_args__ = (UniqueConstraint("bundle_id", "property_id", name="uq_tp_bundle_property"),)

@@ -16,15 +16,19 @@ import app.app_state as state
 from app.auth.mcp_session_manager import no_active_project_response, require_project_ctx
 from app.services.tracking_plan import (
     add_comment,
+    add_property_to_bundle,
+    attach_bundle_to_event,
     attach_property,
     comment_to_dict,
     connect_source_destination,
+    create_bundle,
     create_category,
     create_destination,
     create_event,
     create_metric,
     create_property,
     create_source,
+    delete_bundle,
     delete_category,
     delete_comment,
     delete_destination,
@@ -41,9 +45,11 @@ from app.services.tracking_plan import (
     plan_to_dict,
     publish_branch,
     remove_event_destination,
+    remove_property_from_bundle,
     resolve_comment,
     set_event_destination,
     set_event_sources,
+    update_bundle,
     update_category,
     update_destination,
     update_event,
@@ -173,6 +179,7 @@ async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> d
                 description=p.get("description"),
                 constraints=p.get("constraints"),
                 is_pii=bool(p.get("is_pii", False)),
+                is_list=bool(p.get("is_list", False)),
                 parent_property_id=p.get("parent_property_id"),
             )
             return _ok(id=str(pr.id), name=pr.name, kind=pr.kind)
@@ -197,6 +204,33 @@ async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> d
         if action == "detach_property":
             await detach_property(session, branch, p["event_id"], p["property_id"])
             return _ok(detached=True)
+
+        # ---- property bundles --------------------------------------------
+        if action == "create_bundle":
+            b = await create_bundle(session, branch, name=p.get("name", ""), description=p.get("description"))
+            return _ok(id=str(b.id), name=b.name)
+        if action == "update_bundle":
+            b = await update_bundle(session, branch, p["bundle_id"], **_bundle_fields(p))
+            return _ok(id=str(b.id), name=b.name)
+        if action == "delete_bundle":
+            await delete_bundle(session, branch, p["bundle_id"])
+            return _ok(deleted=str(p["bundle_id"]))
+        if action == "add_property_to_bundle":
+            link = await add_property_to_bundle(
+                session,
+                branch,
+                p["bundle_id"],
+                p["property_id"],
+                required=bool(p.get("required", False)),
+                sort_order=int(p.get("sort_order", 0)),
+            )
+            return _ok(id=str(link.id))
+        if action == "remove_property_from_bundle":
+            await remove_property_from_bundle(session, branch, p["bundle_id"], p["property_id"])
+            return _ok(removed=True)
+        if action == "attach_bundle_to_event":
+            links = await attach_bundle_to_event(session, branch, p["event_id"], p["bundle_id"])
+            return _ok(event_id=str(p["event_id"]), property_count=len(links))
 
         # ---- categories --------------------------------------------------
         if action == "create_category":
@@ -426,7 +460,14 @@ def _event_dest_fields(p: dict) -> dict:
 
 
 def _property_fields(p: dict) -> dict:
-    return _pick(p, ("name", "description", "data_type", "constraints", "is_pii", "parent_property_id"))
+    return _pick(
+        p,
+        ("name", "description", "data_type", "constraints", "is_pii", "is_list", "parent_property_id"),
+    )
+
+
+def _bundle_fields(p: dict) -> dict:
+    return _pick(p, ("name", "description"))
 
 
 def _category_fields(p: dict) -> dict:

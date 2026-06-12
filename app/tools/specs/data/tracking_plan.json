@@ -361,6 +361,13 @@
         "required": false
       },
       {
+        "name": "is_list",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "True when the value is an array of data_type (Avo list property)."
+      },
+      {
         "name": "parent_property_id",
         "type": "string",
         "required": false,
@@ -414,6 +421,12 @@
         "name": "is_pii",
         "type": "boolean",
         "required": false
+      },
+      {
+        "name": "is_list",
+        "type": "boolean",
+        "required": false,
+        "doc": "True when the value is an array of data_type (Avo list property)."
       },
       {
         "name": "parent_property_id",
@@ -508,6 +521,151 @@
     "mutates": true,
     "reversible": false,
     "returns": "{ ok: true, detached: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_bundle",
+    "summary": "Create a reusable property bundle — a named group of properties that can be added to events together. Bundles are template-copy: attaching to an event copies its properties (editing the bundle later does not retroactively update events).",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "Ecommerce Item",
+        "doc": "Unique bundle name on the branch."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false,
+        "doc": "Human-readable description of what the bundle groups."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "update_bundle",
+    "summary": "Update the name or description of an existing property bundle. Only supplied fields are changed.",
+    "params": [
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the bundle to update."
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_bundle",
+    "summary": "Delete a property bundle. Removes the bundle and its property links (events that previously had the bundle attached keep their copied properties).",
+    "params": [
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, deleted } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "add_property_to_bundle",
+    "summary": "Add a library property to a bundle (idempotent upsert of the link). The property and bundle must be on the same branch.",
+    "params": [
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "required",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "Whether this property is required when the bundle is attached to an event."
+      },
+      {
+        "name": "sort_order",
+        "type": "integer",
+        "required": false,
+        "example": 0
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "remove_property_from_bundle",
+    "summary": "Remove a property from a bundle. Does not delete the property from the library.",
+    "params": [
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, removed: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "attach_bundle_to_event",
+    "summary": "Attach all properties in a bundle to an event at once (template-copy: each property becomes an event-property link carrying the bundle link's required flag). Idempotent — properties already attached are skipped.",
+    "params": [
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, event_id, property_count } | { error, error_type, message }"
   },
   {
     "tool": "tracking_plan",

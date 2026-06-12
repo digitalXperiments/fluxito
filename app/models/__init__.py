@@ -38,6 +38,7 @@ from app.models.token import (
 )
 from app.models.tracking_plan import (
     TPBranch,
+    TPBundleProperty,
     TPCategory,
     TPComment,
     TPDestination,
@@ -48,6 +49,7 @@ from app.models.tracking_plan import (
     TPMetric,
     TPPlan,
     TPProperty,
+    TPPropertyBundle,
     TPSource,
     TPSourceDestination,
     TPVersion,
@@ -94,6 +96,7 @@ __all__ = [
     "SnapAdsAccount",
     "SnowflakeConnection",
     "TPBranch",
+    "TPBundleProperty",
     "TPCategory",
     "TPComment",
     "TPDestination",
@@ -104,6 +107,7 @@ __all__ = [
     "TPMetric",
     "TPPlan",
     "TPProperty",
+    "TPPropertyBundle",
     "TPSource",
     "TPSourceDestination",
     "TPVersion",

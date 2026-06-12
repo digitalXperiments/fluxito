@@ -17,16 +17,38 @@ from app.models.tracking_plan import (
 from .common import _UNSET, apply_fields, coerce_uuid, get_or_raise
 from .exceptions import ConflictError, NotFoundError, ValidationError
 
-_PROPERTY_FIELDS = {"name", "description", "data_type", "constraints", "is_pii", "parent_property_id"}
+_PROPERTY_FIELDS = {
+    "name",
+    "description",
+    "data_type",
+    "constraints",
+    "is_pii",
+    "is_list",
+    "parent_property_id",
+}
 
 
 def _validate_property_shape(*, data_type: str, constraints: dict | None) -> None:
     if data_type not in PROPERTY_DATA_TYPES:
         raise ValidationError(f"data_type must be one of {PROPERTY_DATA_TYPES}, got {data_type!r}")
-    if constraints and "allowed_values" in constraints:
+    if not constraints:
+        return
+    if "allowed_values" in constraints:
         allowed = constraints["allowed_values"]
         if not isinstance(allowed, list) or len(allowed) == 0:
             raise ValidationError("constraints.allowed_values must be a non-empty list")
+    # Numeric range: min/max, when present, must be numbers with min <= max.
+    # bool is a subclass of int, so reject it explicitly. regex/format stay opaque.
+    has_min = "min" in constraints and constraints["min"] is not None
+    has_max = "max" in constraints and constraints["max"] is not None
+    cmin = constraints.get("min")
+    cmax = constraints.get("max")
+    if has_min and (isinstance(cmin, bool) or not isinstance(cmin, (int, float))):
+        raise ValidationError("constraints.min must be a number")
+    if has_max and (isinstance(cmax, bool) or not isinstance(cmax, (int, float))):
+        raise ValidationError("constraints.max must be a number")
+    if has_min and has_max and cmin > cmax:
+        raise ValidationError("constraints.min must be <= constraints.max")
 
 
 async def _prop_name_taken(session, branch_id, kind, name, *, exclude_id=None) -> bool:
@@ -48,6 +70,7 @@ async def create_property(
     description: str | None = None,
     constraints: dict | None = None,
     is_pii: bool = False,
+    is_list: bool = False,
     parent_property_id: Any = None,
 ) -> TPProperty:
     if not name or not name.strip():
@@ -71,6 +94,7 @@ async def create_property(
         description=description,
         constraints=constraints,
         is_pii=is_pii,
+        is_list=is_list,
         parent_property_id=parent_id,
     )
     session.add(prop)
