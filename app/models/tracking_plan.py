@@ -30,6 +30,7 @@ from app.db.database import Base
 
 # Allowed enum-ish values (enforced by CHECK constraints + service validation)
 BRANCH_STATUSES = ("active", "merged", "abandoned")
+REVIEW_STATUSES = ("draft", "ready_for_review", "changes_requested", "approved")
 PROPERTY_KINDS = ("event", "user", "group", "system")
 PROPERTY_DATA_TYPES = ("string", "int", "float", "boolean", "object", "array")
 IMPL_STATUSES = ("planned", "implemented", "verified", "deprecated")
@@ -83,6 +84,11 @@ class TPBranch(Base):
     )
     base_version_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="draft")
+    reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     merged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -90,6 +96,10 @@ class TPBranch(Base):
     __table_args__ = (
         UniqueConstraint("plan_id", "name", name="uq_tp_branch_name"),
         CheckConstraint("status IN ('active', 'merged', 'abandoned')", name="ck_tp_branch_status"),
+        CheckConstraint(
+            "review_status IN ('draft', 'ready_for_review', 'changes_requested', 'approved')",
+            name="ck_tp_branch_review_status",
+        ),
     )
 
 

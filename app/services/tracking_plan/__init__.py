@@ -5,6 +5,15 @@ Public API is re-exported here so callers do `from app.services.tracking_plan
 import create_event` etc. Later tasks append to this file."""
 
 from .bootstrap import get_main_branch, get_or_create_plan
+from .branches import (
+    abandon_branch,
+    create_branch,
+    diff_branches,
+    get_branch,
+    list_branches,
+    merge_branch,
+    set_review_status,
+)
 from .events import (
     create_event,
     delete_event,
@@ -43,8 +52,10 @@ __all__ = [
     "NotFoundError",
     "TrackingPlanError",
     "ValidationError",
+    "abandon_branch",
     "attach_property",
     "connect_source_destination",
+    "create_branch",
     "create_category",
     "create_destination",
     "create_event",
@@ -58,10 +69,14 @@ __all__ = [
     "delete_property",
     "delete_source",
     "detach_property",
+    "diff_branches",
     "disconnect_source_destination",
+    "get_branch",
     "get_main_branch",
     "get_or_create_plan",
     "latest_snapshot_for_project",
+    "list_branches",
+    "merge_branch",
     "plan_to_dict",
     "plan_to_markdown",
     "plan_to_xlsx",
@@ -69,6 +84,7 @@ __all__ = [
     "remove_event_destination",
     "set_event_destination",
     "set_event_sources",
+    "set_review_status",
     "update_category",
     "update_destination",
     "update_event",
