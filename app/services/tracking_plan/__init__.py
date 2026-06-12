@@ -22,6 +22,7 @@ from .properties import (
     detach_property,
     update_property,
 )
+from .publish import latest_snapshot_for_project, publish_branch
 from .routing import (
     connect_source_destination,
     create_destination,
@@ -59,7 +60,9 @@ __all__ = [
     "disconnect_source_destination",
     "get_main_branch",
     "get_or_create_plan",
+    "latest_snapshot_for_project",
     "plan_to_dict",
+    "publish_branch",
     "remove_event_destination",
     "set_event_destination",
     "set_event_sources",
