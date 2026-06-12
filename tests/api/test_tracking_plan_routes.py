@@ -104,6 +104,57 @@ async def test_page_renders(client):
 
 
 @pytest.mark.anyio
+async def test_list_branches_returns_main(client):
+    """GET .../branches always returns at least the main branch."""
+    pid = client._pid
+    r = await client.get(f"/api/projects/{pid}/tracking-plan/branches")
+    assert r.status_code == 200
+    data = r.json()
+    assert "branches" in data
+    assert len(data["branches"]) >= 1
+    assert data["branches"][0]["is_main"] is True
+    assert data["branches"][0]["name"] == "main"
+
+
+@pytest.mark.anyio
+async def test_branch_aware_get_plan(client):
+    """POST action/create_branch, then GET ?branch=<name> reflects branch edits
+    while GET ?branch=main (or no param) does not."""
+    pid = client._pid
+
+    # Create a feature branch via the action endpoint
+    r = await client.post(
+        f"/api/projects/{pid}/tracking-plan/action",
+        json={"action": "create_branch", "params": {"name": "feat/http-test"}},
+    )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    # Add an event on the feature branch via action (branch param in params)
+    r = await client.post(
+        f"/api/projects/{pid}/tracking-plan/action",
+        json={
+            "action": "create_event",
+            "params": {"name": "branch_only_event", "branch": "feat/http-test"},
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    # GET ?branch=feat/http-test should contain the new event
+    r = await client.get(f"/api/projects/{pid}/tracking-plan?branch=feat/http-test")
+    assert r.status_code == 200
+    names = [e["name"] for e in r.json()["events"]]
+    assert "branch_only_event" in names
+
+    # GET ?branch=main (default) should NOT contain the new event
+    r = await client.get(f"/api/projects/{pid}/tracking-plan?branch=main")
+    assert r.status_code == 200
+    names = [e["name"] for e in r.json()["events"]]
+    assert "branch_only_event" not in names
+
+
+@pytest.mark.anyio
 async def test_version_snapshot_rejects_other_projects_version(client, db_session_factory):
     """Cross-tenant guard: a version belonging to project B must 404 when
     requested through project A's URL."""

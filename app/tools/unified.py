@@ -278,6 +278,14 @@ TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
     "delete_metric": ("tracking_plan_v2", "delete_metric"),
     "publish": ("tracking_plan_v2", "publish"),
     "export_markdown": ("tracking_plan_v2", "export_markdown"),
+    # --- Branch management ---
+    "create_branch": ("tracking_plan_v2", "create_branch"),
+    "list_branches": ("tracking_plan_v2", "list_branches"),
+    "get_branch": ("tracking_plan_v2", "get_branch"),
+    "diff": ("tracking_plan_v2", "diff"),
+    "merge_branch": ("tracking_plan_v2", "merge_branch"),
+    "set_review_status": ("tracking_plan_v2", "set_review_status"),
+    "abandon_branch": ("tracking_plan_v2", "abandon_branch"),
 }
 
 # automation_read / automation_write — renames of automation_browse /

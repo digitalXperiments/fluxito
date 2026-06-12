@@ -46,6 +46,8 @@ from app.services.tracking_plan import (
     update_source,
     validate_plan,
 )
+from app.services.tracking_plan import branches as _branches
+from app.services.tracking_plan.branches import get_branch
 from app.services.tracking_plan.exceptions import (
     ConflictError,
     NotFoundError,
@@ -72,6 +74,28 @@ def _ok(**kw: Any) -> dict:
 
 def _err(error_type: str, message: str) -> dict:
     return {"error": True, "error_type": error_type, "message": message}
+
+
+def _serialize_branch(b: Any) -> dict:
+    """Serialize a TPBranch to a plain dict for MCP/HTTP responses."""
+    return {
+        "id": str(b.id),
+        "name": b.name,
+        "is_main": b.is_main,
+        "status": b.status,
+        "review_status": b.review_status,
+        "description": b.description,
+        "base_branch_id": str(b.base_branch_id) if b.base_branch_id else None,
+        "created_at": b.created_at.isoformat() if b.created_at else None,
+        "merged_at": b.merged_at.isoformat() if b.merged_at else None,
+    }
+
+
+async def resolve_branch(session: Any, plan: Any, ref: Any) -> Any:
+    """Return the main branch when ref is falsy, otherwise resolve by id or name."""
+    if not ref:
+        return await get_main_branch(session, plan)
+    return await get_branch(session, plan, ref)
 
 
 async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> dict:
@@ -263,6 +287,57 @@ async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> d
             )
             return _ok(version_id=str(version.id), version_number=version.version_number)
 
+        # ---- branch management -------------------------------------------
+        if action == "create_branch":
+            from_ref = p.get("from")
+            from_branch = await resolve_branch(session, ctx.plan, from_ref) if from_ref else None
+            b = await _branches.create_branch(
+                session,
+                ctx.plan,
+                name=p["name"],
+                user_id=ctx.user_id,
+                from_branch=from_branch,
+                description=p.get("description"),
+            )
+            return _ok(id=str(b.id), name=b.name)
+
+        if action == "list_branches":
+            bs = await _branches.list_branches(session, ctx.plan)
+            return {"branches": [_serialize_branch(b) for b in bs]}
+
+        if action == "get_branch":
+            b = await _branches.get_branch(session, ctx.plan, p["branch_id"])
+            return _serialize_branch(b)
+
+        if action == "diff":
+            base_branch = await resolve_branch(session, ctx.plan, p.get("base"))
+            head_branch = await _branches.get_branch(session, ctx.plan, p["head"])
+            return await _branches.diff_branches(session, ctx.plan, base_branch, head_branch)
+
+        if action == "merge_branch":
+            if ctx.role not in _ADMIN_ROLES:
+                return _err(
+                    "permission_denied",
+                    f"Only project admins (owner/admin) can merge branches. Your role is '{ctx.role}'.",
+                )
+            b = await _branches.get_branch(session, ctx.plan, p["branch_id"])
+            result = await _branches.merge_branch(
+                session, ctx.plan, b, user_id=ctx.user_id, changelog=p.get("changelog")
+            )
+            return _ok(**result)
+
+        if action == "set_review_status":
+            b = await _branches.get_branch(session, ctx.plan, p["branch_id"])
+            b = await _branches.set_review_status(
+                session, b, p["review_status"], reviewer_id=p.get("reviewer_id")
+            )
+            return _ok(id=str(b.id), review_status=b.review_status)
+
+        if action == "abandon_branch":
+            b = await _branches.get_branch(session, ctx.plan, p["branch_id"])
+            await _branches.abandon_branch(session, b)
+            return _ok()
+
         return _err("unknown_action", f"unknown tracking_plan action '{action}'")
 
     except ConflictError as exc:
@@ -326,9 +401,13 @@ def _metric_fields(p: dict) -> dict:
 
 
 async def _run_tracking_plan_v2(action: str, params: dict) -> dict:
-    """Resolve project/user/main-branch from the MCP session context, then run
+    """Resolve project/user/target-branch from the MCP session context, then run
     one structured action through `run_action`. Commits on success, rolls back
-    on error. Shared by the dispatcher-facing shim below."""
+    on error. Shared by the dispatcher-facing shim below.
+
+    The caller may pass ``branch`` (id or name) in params to target a specific
+    branch; omitting it (or passing null/empty) defaults to main.
+    """
     project_ctx = require_project_ctx()
     if not project_ctx:
         return no_active_project_response()
@@ -336,9 +415,14 @@ async def _run_tracking_plan_v2(action: str, params: dict) -> dict:
     if not user_ctx:
         return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
 
+    # Pop the branch selector before forwarding params to run_action so it
+    # doesn't appear as an unknown field to the entity-level service calls.
+    params = dict(params or {})
+    branch_ref = params.pop("branch", None)
+
     async with state.db_session_factory() as session:
         plan = await get_or_create_plan(session, project_id=project_ctx.project_id, user_id=user_ctx.user_id)
-        branch = await get_main_branch(session, plan)
+        branch = await resolve_branch(session, plan, branch_ref)
         ctx = _Ctx(
             role=project_ctx.role,
             user_id=str(user_ctx.user_id),

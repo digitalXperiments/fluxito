@@ -947,5 +947,152 @@
     "params": [],
     "mutates": false,
     "returns": "{ ok: true, format: 'markdown', content: string }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_branch",
+    "summary": "Create a new feature branch as a copy-on-write fork of an existing branch (default: main). All content is deep-copied with new ids so the branches are fully independent.",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "feature/add-checkout-events",
+        "doc": "Unique branch name on the plan."
+      },
+      {
+        "name": "from",
+        "type": "string",
+        "required": false,
+        "example": "main",
+        "doc": "Branch id or name to fork from. Defaults to main."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false,
+        "doc": "Human-readable description of the branch purpose."
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "list_branches",
+    "summary": "List all branches for the active plan. Main branch appears first.",
+    "params": [],
+    "mutates": false,
+    "returns": "{ branches: [{ id, name, is_main, status, review_status, description, base_branch_id, created_at, merged_at }] }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "get_branch",
+    "summary": "Get details for a single branch by id.",
+    "params": [
+      {
+        "name": "branch_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the branch."
+      }
+    ],
+    "mutates": false,
+    "returns": "{ id, name, is_main, status, review_status, description, base_branch_id, created_at, merged_at } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "diff",
+    "summary": "Structural diff of a head branch against a base branch (default base: main). Reports added, removed, and changed entities across events, properties, sources, destinations, metrics, and categories.",
+    "params": [
+      {
+        "name": "head",
+        "type": "string",
+        "required": true,
+        "example": "uuid or branch-name",
+        "doc": "Head branch id or name to compare."
+      },
+      {
+        "name": "base",
+        "type": "string",
+        "required": false,
+        "example": "main",
+        "doc": "Base branch id or name. Defaults to main."
+      }
+    ],
+    "mutates": false,
+    "returns": "{ events, properties, sources, destinations, metrics, categories: { added[], removed[], changed[] }, summary: { added, removed, changed } }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "merge_branch",
+    "summary": "Merge a feature branch into main (last-writer-wins). Requires project admin (owner/admin). Publishes a new version after merging.",
+    "params": [
+      {
+        "name": "branch_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the branch to merge into main."
+      },
+      {
+        "name": "changelog",
+        "type": "string",
+        "required": false,
+        "doc": "Human-readable changelog entry for the published version."
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "scope": "admin",
+    "returns": "{ ok: true, merged_branch, version_number } | { error: permission_denied }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "set_review_status",
+    "summary": "Set the review status of a feature branch (draft, in_review, approved, rejected). Cannot be applied to the main branch.",
+    "params": [
+      {
+        "name": "branch_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "review_status",
+        "type": "string",
+        "required": true,
+        "enum": ["draft", "in_review", "approved", "rejected"],
+        "example": "in_review"
+      },
+      {
+        "name": "reviewer_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "UUID of the user performing the review."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, review_status } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "abandon_branch",
+    "summary": "Mark a feature branch as abandoned. Cannot be applied to the main branch.",
+    "params": [
+      {
+        "name": "branch_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true } | { error, error_type, message }"
   }
 ]

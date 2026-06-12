@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import desc, select
@@ -18,15 +18,15 @@ from app.api.project_routes import ensure_active_project, set_active_project_coo
 from app.models.project import ProjectMember
 from app.models.tracking_plan import TPVersion
 from app.services.tracking_plan import (
-    get_main_branch,
     get_or_create_plan,
     plan_to_dict,
     plan_to_markdown,
     plan_to_xlsx,
     validate_plan,
 )
+from app.services.tracking_plan import branches as _branches
 from app.templating import render
-from app.tools.tracking_plan_tools import _Ctx, run_action
+from app.tools.tracking_plan_tools import _Ctx, _serialize_branch, resolve_branch, run_action
 
 router = APIRouter()
 
@@ -97,25 +97,33 @@ async def tracking_plan_page(request: Request):
 # Reads
 # ----------------------------------------------------------------------------
 @router.get("/api/projects/{project_id}/tracking-plan")
-async def api_get_plan(project_id: str, request: Request):
+async def api_get_plan(
+    project_id: str,
+    request: Request,
+    branch: str | None = Query(default=None, description="Branch id or name (default: main)"),
+):
     user_uuid, proj_id, _role = await _resolve(request)
     _check_param_pid(project_id, proj_id)
     async with app_state.db_session_factory() as db:
         plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
-        branch = await get_main_branch(db, plan)
-        data = await plan_to_dict(db, plan, branch)
+        target = await resolve_branch(db, plan, branch)
+        data = await plan_to_dict(db, plan, target)
         await db.commit()  # persist auto-created plan/branch
         return JSONResponse(data)
 
 
 @router.get("/api/projects/{project_id}/tracking-plan/validate")
-async def api_validate(project_id: str, request: Request):
+async def api_validate(
+    project_id: str,
+    request: Request,
+    branch: str | None = Query(default=None, description="Branch id or name (default: main)"),
+):
     user_uuid, proj_id, _role = await _resolve(request)
     _check_param_pid(project_id, proj_id)
     async with app_state.db_session_factory() as db:
         plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
-        branch = await get_main_branch(db, plan)
-        report = await validate_plan(db, plan, branch)
+        target = await resolve_branch(db, plan, branch)
+        report = await validate_plan(db, plan, target)
         await db.commit()
         return JSONResponse(report)
 
@@ -170,25 +178,33 @@ async def api_version_snapshot(project_id: str, version_id: str, request: Reques
 # Exports
 # ----------------------------------------------------------------------------
 @router.get("/api/projects/{project_id}/tracking-plan/export.md")
-async def api_export_md(project_id: str, request: Request):
+async def api_export_md(
+    project_id: str,
+    request: Request,
+    branch: str | None = Query(default=None, description="Branch id or name (default: main)"),
+):
     user_uuid, proj_id, _role = await _resolve(request)
     _check_param_pid(project_id, proj_id)
     async with app_state.db_session_factory() as db:
         plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
-        branch = await get_main_branch(db, plan)
-        data = await plan_to_dict(db, plan, branch)
+        target = await resolve_branch(db, plan, branch)
+        data = await plan_to_dict(db, plan, target)
         await db.commit()
         return PlainTextResponse(plan_to_markdown(data))
 
 
 @router.get("/api/projects/{project_id}/tracking-plan/export.xlsx")
-async def api_export_xlsx(project_id: str, request: Request):
+async def api_export_xlsx(
+    project_id: str,
+    request: Request,
+    branch: str | None = Query(default=None, description="Branch id or name (default: main)"),
+):
     user_uuid, proj_id, _role = await _resolve(request)
     _check_param_pid(project_id, proj_id)
     async with app_state.db_session_factory() as db:
         plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
-        branch = await get_main_branch(db, plan)
-        data = await plan_to_dict(db, plan, branch)
+        target = await resolve_branch(db, plan, branch)
+        data = await plan_to_dict(db, plan, target)
         await db.commit()
         return Response(
             plan_to_xlsx(data),
@@ -198,17 +214,53 @@ async def api_export_xlsx(project_id: str, request: Request):
 
 
 # ----------------------------------------------------------------------------
+# Branch convenience reads
+# ----------------------------------------------------------------------------
+@router.get("/api/projects/{project_id}/tracking-plan/branches")
+async def api_list_branches(project_id: str, request: Request):
+    user_uuid, proj_id, _role = await _resolve(request)
+    _check_param_pid(project_id, proj_id)
+    async with app_state.db_session_factory() as db:
+        plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
+        bs = await _branches.list_branches(db, plan)
+        await db.commit()
+        return JSONResponse({"branches": [_serialize_branch(b) for b in bs]})
+
+
+@router.get("/api/projects/{project_id}/tracking-plan/diff")
+async def api_diff(
+    project_id: str,
+    request: Request,
+    head: str = Query(..., description="Head branch id or name"),
+    base: str | None = Query(default=None, description="Base branch id or name (default: main)"),
+):
+    user_uuid, proj_id, _role = await _resolve(request)
+    _check_param_pid(project_id, proj_id)
+    async with app_state.db_session_factory() as db:
+        plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
+        base_branch = await resolve_branch(db, plan, base)
+        head_branch = await _branches.get_branch(db, plan, head)
+        diff = await _branches.diff_branches(db, plan, base_branch, head_branch)
+        await db.commit()
+        return JSONResponse(diff)
+
+
+# ----------------------------------------------------------------------------
 # Writes — single action endpoint reusing run_action
 # ----------------------------------------------------------------------------
 @router.post("/api/projects/{project_id}/tracking-plan/action")
 async def api_action(project_id: str, payload: ActionPayload, request: Request):
     user_uuid, proj_id, role = await _resolve(request)
     _check_param_pid(project_id, proj_id)
+    # Pop branch selector from params before resolving; run_action receives the
+    # already-resolved branch object, not the raw ref string.
+    params = dict(payload.params)
+    branch_ref = params.pop("branch", None)
     async with app_state.db_session_factory() as db:
         plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
-        branch = await get_main_branch(db, plan)
+        branch = await resolve_branch(db, plan, branch_ref)
         ctx = _Ctx(role=role, user_id=str(user_uuid), project_id=str(proj_id), plan=plan)
-        result = await run_action(db, branch, ctx, payload.action, payload.params)
+        result = await run_action(db, branch, ctx, payload.action, params)
         if not result.get("error"):
             await db.commit()
         else:
