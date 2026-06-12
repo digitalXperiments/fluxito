@@ -147,7 +147,11 @@ class BigQueryConnector:
 
         violation = read_only_violation(query)
         if violation:
-            return {"error": True, "error_type": "invalid_param", "message": f"Security violation: {violation}"}
+            return {
+                "error": True,
+                "error_type": "invalid_param",
+                "message": f"Security violation: {violation}",
+            }
 
         sa_json = _decrypt(service_account_encrypted)
 
@@ -195,7 +199,11 @@ class BigQueryConnector:
 
         violation = read_only_violation(query)
         if violation:
-            return {"error": True, "error_type": "invalid_param", "message": f"Security violation: {violation}"}
+            return {
+                "error": True,
+                "error_type": "invalid_param",
+                "message": f"Security violation: {violation}",
+            }
 
         sa_json = _decrypt(service_account_encrypted)
 

@@ -286,7 +286,11 @@ class RedshiftConnector:
             query, allowed_prefixes=("SELECT", "WITH", "SHOW", "DESCRIBE", "DESC", "EXPLAIN")
         )
         if violation:
-            return {"error": True, "error_type": "invalid_param", "message": f"Security violation: {violation}"}
+            return {
+                "error": True,
+                "error_type": "invalid_param",
+                "message": f"Security violation: {violation}",
+            }
 
         upper_query = query.upper()
         # Add LIMIT guard if not already present

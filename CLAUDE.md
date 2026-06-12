@@ -8,6 +8,26 @@ I explicitly ask.** When I say "commit", batch the outstanding work into a sensi
 commit (or a few well-scoped commits) with a good message. Pushing then follows the
 Releasing policy below.
 
+## Before any `git push`: `tox` must be green (HARD GATE)
+
+**Never push to any branch with a red `tox`.** Before every `git push`, run the full
+local CI and confirm all three environments pass:
+
+```bash
+tox            # runs: lint, typecheck, test  (in that order)
+```
+
+- **lint** — `ruff check app tests` **and** `ruff format --check app tests`. CI uses the
+  pinned `ruff==0.8.4`; after editing any file, run `ruff format <files>` so the
+  format-check passes (a common miss — `ruff check` can pass while `ruff format --check`
+  fails on lines you added).
+- **typecheck** — `mypy` on the pinned critical modules.
+- **test** — `pytest` (needs Postgres + Redis running locally).
+
+If any environment fails, **fix it and re-run `tox` until green before pushing.** Do not
+push and "let CI catch it." If only part changed, you may scope it (`tox -e lint`,
+`tox -e lint,typecheck`), but a full `tox` must be green before the push that ships.
+
 ## Releasing: pushing to `main`
 
 Every push to `main` cuts a release: the GitHub Actions **Release** workflow builds

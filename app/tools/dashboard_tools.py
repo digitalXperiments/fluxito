@@ -143,7 +143,7 @@ def _check_params_for_action(
         known = f" Known {platform} actions: {suggestions}." if suggestions else ""
         return [
             f"card '{key}' ({platform}): \"action\" is required{hint} — set the card's "
-            f"top-level \"action\" field (a sibling of \"tool\" and \"params\").{known}"
+            f'top-level "action" field (a sibling of "tool" and "params").{known}'
         ]
     required = _CARD_PARAM_REQUIREMENTS.get((platform, action))
     if required is None:
