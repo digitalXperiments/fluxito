@@ -159,7 +159,7 @@ window.__TP_PROJECT_ID__ = "{{ project_id }}";
         <h4>Destination mappings</h4>
         ${table(['Destination','Dest event name',''], e.destinations, d=>`
           <tr><td>${esc(d.destination)}</td><td>${esc(d.dest_event_name||'')}</td>
-          <td><button class="btn" onclick="tpUnmap('${id}','${esc(d.destination)}')">Remove</button></td></tr>`)}
+          <td><button class="btn" onclick="tpUnmap('${id}','${(PLAN.destinations.find(x=>x.name===d.destination)||{id:''}).id}')">Remove</button></td></tr>`)}
         <div class="tp-form">
           <select id="tp-map-dest">${destOpts}</select>
           <input id="tp-map-name" placeholder="dest event name"/>
@@ -172,14 +172,14 @@ window.__TP_PROJECT_ID__ = "{{ project_id }}";
     const pid=document.getElementById('tp-attach-prop').value; if(!pid) return;
     tpAction('attach_property', {event_id:eid, property_id:pid, required:document.getElementById('tp-attach-req').checked, example:document.getElementById('tp-attach-ex').value||null}).then(()=>tpOpenEvent(eid));
   };
-  window.tpDetach = function(eid,pname){ const p=PLAN.properties.event.find(x=>x.name===pname); if(p) tpAction('detach_property',{event_id:eid,property_id:p.id}).then(()=>tpOpenEvent(eid)); };
+  window.tpDetach = function(eid,pname){ const all=[...PLAN.properties.event,...PLAN.properties.user,...PLAN.properties.group,...PLAN.properties.system]; const p=all.find(x=>x.name===pname); if(p) tpAction('detach_property',{event_id:eid,property_id:p.id}).then(()=>tpOpenEvent(eid)); };
   window.tpScopeSources = function(eid){
     const chosen=[...document.querySelectorAll('[data-src]:checked')].map(c=>c.value);
     const status=document.getElementById('tp-src-status').value;
     tpAction('set_event_sources', {event_id:eid, sources: chosen.map(s=>({source_id:s, implementation_status:status}))}).then(()=>tpOpenEvent(eid));
   };
   window.tpMap = function(eid){ const did=document.getElementById('tp-map-dest').value; if(did) tpAction('set_event_destination',{event_id:eid,destination_id:did,dest_event_name:document.getElementById('tp-map-name').value||null}).then(()=>tpOpenEvent(eid)); };
-  window.tpUnmap = function(eid,dname){ const d=PLAN.destinations.find(x=>x.name===dname); if(d) tpAction('remove_event_destination',{event_id:eid,destination_id:d.id}).then(()=>tpOpenEvent(eid)); };
+  window.tpUnmap = function(eid,did){ if(did) tpAction('remove_event_destination',{event_id:eid,destination_id:did}).then(()=>tpOpenEvent(eid)); };
 
   // ---- Properties ----
   function renderProperties(){
@@ -257,9 +257,10 @@ window.__TP_PROJECT_ID__ = "{{ project_id }}";
   // ---- Versions ----
   async function loadVersions(){
     const r = await fetch(`${BASE}/versions`); const v = await r.json();
-    document.getElementById('tp-versions').innerHTML = table(['Version','Changelog','Published'], v.versions, x=>`
+    document.getElementById('tp-versions').innerHTML = v.versions.length
+      ? table(['Version','Changelog','Published'], v.versions, x=>`
       <tr><td>${esc(x.version_number)}</td><td>${esc(x.changelog||'')}</td><td>${esc(x.published_at||'')}</td></tr>`)
-      || '<p class="tp-muted">No versions published yet.</p>';
+      : '<p class="tp-muted">No versions published yet.</p>';
   }
 
   function render(){
