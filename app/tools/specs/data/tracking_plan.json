@@ -1052,7 +1052,7 @@
   {
     "tool": "tracking_plan",
     "action": "set_review_status",
-    "summary": "Set the review status of a feature branch (draft, in_review, approved, rejected). Cannot be applied to the main branch.",
+    "summary": "Set the review status of a feature branch (draft, ready_for_review, changes_requested, approved). Cannot be applied to the main branch.",
     "params": [
       {
         "name": "branch_id",
@@ -1064,8 +1064,8 @@
         "name": "review_status",
         "type": "string",
         "required": true,
-        "enum": ["draft", "in_review", "approved", "rejected"],
-        "example": "in_review"
+        "enum": ["draft", "ready_for_review", "changes_requested", "approved"],
+        "example": "ready_for_review"
       },
       {
         "name": "reviewer_id",

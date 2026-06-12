@@ -25,6 +25,7 @@ from app.services.tracking_plan import (
     validate_plan,
 )
 from app.services.tracking_plan import branches as _branches
+from app.services.tracking_plan.exceptions import NotFoundError, ValidationError
 from app.templating import render
 from app.tools.tracking_plan_tools import _Ctx, _serialize_branch, resolve_branch, run_action
 
@@ -238,9 +239,14 @@ async def api_diff(
     _check_param_pid(project_id, proj_id)
     async with app_state.db_session_factory() as db:
         plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
-        base_branch = await resolve_branch(db, plan, base)
-        head_branch = await _branches.get_branch(db, plan, head)
-        diff = await _branches.diff_branches(db, plan, base_branch, head_branch)
+        try:
+            base_branch = await resolve_branch(db, plan, base)
+            head_branch = await _branches.get_branch(db, plan, head)
+            diff = await _branches.diff_branches(db, plan, base_branch, head_branch)
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Branch not found")
+        except ValidationError:
+            raise HTTPException(status_code=422, detail="Invalid branch reference")
         await db.commit()
         return JSONResponse(diff)
 
