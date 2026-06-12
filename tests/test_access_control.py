@@ -6,8 +6,6 @@ import uuid
 import pytest
 
 import app.app_state as app_state
-import app.models.access_request
-import app.models.sdr  # noqa: F401
 
 
 @pytest.fixture

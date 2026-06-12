@@ -243,25 +243,10 @@ KNOWLEDGE_ROUTES: dict[str, tuple[str, str | None]] = {
     "compute_kpi": ("compute_kpi", None),
 }
 
-# tracking_plan — collapses generate_sdr + refine_sdr into one dispatcher.
+# tracking_plan — structured tracking-plan dispatcher (v2).
 # Named "tracking_plan" because that is the industry-standard term for this
-# artifact (Amplitude / Avo / Segment all use it). Product/UI copy continues
-# to brand it as "SDR" (Solution Design Reference).
-#
-# Note: refine_sdr's own `action` kwarg (resume, submit_answer, finalize,
-# etc.) lives INSIDE params — it is distinct from the dispatcher-level
-# `action` which only picks between "generate" and "refine". Because
-# legacy_action is None in both routes, params["action"] passes through
-# to the legacy tool unchanged.
+# artifact (Amplitude / Avo / Segment all use it).
 TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
-    "generate": ("generate_sdr", None),
-    "save": ("save_sdr", None),
-    "refresh_sources": ("refresh_sdr_sources", None),
-    "capture_intake": ("capture_sdr_intake", None),
-    "get_intake": ("get_sdr_intake", None),
-    "list_sources": ("list_sdr_sources", None),
-    "diagnose": ("diagnose_sdr", None),
-    "refine": ("refine_sdr", None),
     # --- Structured (v2) actions — Plan 1B ---
     "get_plan": ("tracking_plan_v2", "get_plan"),
     "get_event": ("tracking_plan_v2", "get_event"),
@@ -744,9 +729,9 @@ for the current value.
 """
 
 TRACKING_PLAN_DOC = """
-Create, refine, and maintain a tracking plan — the project's Solution Design
-Reference (SDR): a markdown doc describing the event taxonomy, destinations,
-and tracking contract for the product.
+Create and maintain a structured tracking plan — the project's event taxonomy,
+sources, destinations, properties, and tracking contract, stored relationally
+in the database.
 
 PROJECT SCOPING: every action runs against the active project. The active
 project persists across turns once set_active_project succeeds, so in normal
@@ -755,79 +740,26 @@ action in the SAME turn (parallel tool calls), pass project_id in params here �
 the active-project selection from a sibling call in the same batch is not
 guaranteed to be visible yet. Passing project_id is always race-free.
 
-In v2 the server gathers high-fidelity facts and YOU (the model) do the
-synthesis. Typical first-time flow:
-  1. generate (no intake_answers) → returns 6 business-intake questions. Ask
-     the user conversationally, one or two at a time.
-  2. generate (with intake_answers) → scans connected sources and returns
-     structured facts + a parse-valid `markdown_skeleton` + an
-     `instructions_for_claude` synthesis playbook. NOTHING is written yet.
-  3. Synthesize the full SDR markdown by editing the skeleton per the playbook.
-  4. save → persist your markdown. Then optionally refine.
-Incremental flow when a new connector is added: refresh_sources → review
-deltas with the user → refine(action='apply_source_delta').
+Typical flow: get_plan → create_event / create_property / attach_property →
+set_event_sources / set_event_destination → publish → export_markdown.
 
-Actions:
-  generate — Gather data for an SDR (does not write the doc).
-             params:
-               project_id (optional, defaults to active project)
-               name (optional, defaults to "<project> SDR")
-               intake_answers (dict of the 6 keys: business_model,
-                   primary_kpis, conversion_definition, key_journeys,
-                   privacy_consent, ownership_complexity [+ anything_else]).
-                   Omit to receive the questions to ask first.
-               sources (optional list, e.g. ["ga4","gtm","google_ads"])
-               business_type_hint (ecommerce | saas | lead_gen | media |
-                                   app | marketplace)
-               phase ("auto" | "interview" | "scan"), regenerate (bool)
-             returns: intake, scans, industry_template, connected_sources
-                   (incl. connected_but_unsupported), **findings** + **readiness**
-                   (server-computed cross-reference diagnosis), markdown_skeleton,
-                   and instructions_for_claude (the synthesis playbook).
-
-  diagnose — Re-scan connectors and return a cross-referenced diagnosis
-             (findings + readiness) without writing. Use for "why aren't my
-             conversions firing?". Findings are platform-agnostic (works for
-             GA4, Adobe, Amplitude, warehouse — whatever fills each role).
-             params: sdr_id (optional), connector_filter (optional list)
-
-  save     — Persist a model-authored SDR markdown draft.
-             params:
-               markdown (required — the full SDR document you synthesized)
-               intake_snapshot (the `intake` object from generate)
-               source_snapshot (the `scans` object from generate)
-               sdr_id (optional — update an existing draft), name (optional)
-
-  refresh_sources — Re-scan connectors and return structured deltas (added /
-             missing / destination / parameter changes) without writing.
-             params: sdr_id (required), connector_filter (optional list),
-                     reuse_intake (bool, default True)
-
-  capture_intake — Validate / persist the 6 intake answers on their own.
-             params: intake_answers (required), sdr_id (optional)
-
-  get_intake — Re-surface the persisted intake answers for an SDR.
-             params: sdr_id (required)
-
-  list_sources — Report supported, currently-scannable, and
-             connected-but-unsupported sources for the project / SDR.
-             params: sdr_id (optional)
-
-  refine   — Conversationally edit sections of an existing SDR through a
-             resumable state machine.
-             params:
-               sdr_id (required)
-               action (resume | goto_section | submit_answer |
-                       accept_proposed | reject_proposed | skip_section |
-                       show_status | apply_source_delta | finalize |
-                       start_new_draft)
-                 NOTE: this `action` is the refinement state-machine action
-                 and lives INSIDE params. The dispatcher-level `action`
-                 above must be "refine".
-               section (e.g. "event_catalog.purchase" — for goto_section)
-               user_input (for submit_answer)
-               source_delta (the refresh_sources payload — for apply_source_delta)
-               changelog_note (required for finalize on versions >= 1.1)
+Actions (structured v2):
+  get_plan    — Return the full plan dict (events, properties, sources,
+                destinations, metrics). params: project_id (optional)
+  get_event   — Single event detail. params: event_id or name
+  validate    — Validate the plan and return errors/warnings.
+  create_event / update_event / delete_event — Manage events.
+  set_event_sources / set_event_destination / remove_event_destination
+  create_property / update_property / delete_property / attach_property /
+    detach_property — Manage properties and their event attachments.
+  create_category / update_category / delete_category
+  create_source / update_source / delete_source
+  create_destination / update_destination / delete_destination
+  connect_source_destination / disconnect_source_destination
+  create_metric / update_metric / delete_metric
+  publish     — Publish the current branch as a versioned snapshot.
+                params: changelog (optional)
+  export_markdown — Render the current plan as a markdown document.
 """
 
 AUTOMATION_READ_DOC = """
@@ -1262,15 +1194,6 @@ def rewire_unified_surface(mcp_server) -> None:
         "list_kpis",
         "get_kpi",
         "compute_kpi",
-        # SDR / tracking plan
-        "generate_sdr",
-        "save_sdr",
-        "refresh_sdr_sources",
-        "capture_sdr_intake",
-        "get_sdr_intake",
-        "list_sdr_sources",
-        "diagnose_sdr",
-        "refine_sdr",
         # Structured tracking plan v2
         "tracking_plan_v2",
         # automation

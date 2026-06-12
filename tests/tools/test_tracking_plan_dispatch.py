@@ -48,23 +48,6 @@ def test_new_actions_are_routed():
         ), f"action '{action}' has legacy_action '{legacy_action}', expected '{action}'"
 
 
-def test_legacy_markdown_actions_still_present():
-    legacy = [
-        "generate",
-        "save",
-        "refresh_sources",
-        "capture_intake",
-        "get_intake",
-        "list_sources",
-        "diagnose",
-        "refine",
-    ]
-    for action in legacy:
-        assert (
-            action in TRACKING_PLAN_ROUTES
-        ), f"legacy action '{action}' was removed from TRACKING_PLAN_ROUTES"
-
-
 def test_tracking_plan_specs_parse_and_cover_new_actions():
     spec_path = Path("app/tools/specs/data/tracking_plan.json")
     data = json.loads(spec_path.read_text())
