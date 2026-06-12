@@ -29,6 +29,7 @@ from sqlalchemy import select
 import app.app_state as app_state
 from app.auth.uid_cookie import get_uid_from_request
 from app.config import settings
+from app.dashboards.snapshot import normalize_snap as _normalize_snap
 from app.models.connection import OAuthConnection
 from app.models.dashboard import Dashboard, DashboardCard
 from app.models.project import ProjectMember
@@ -783,53 +784,10 @@ async def live_dashboard_page(page_slug: str, request: Request):
 # ---------------------------------------------------------------------------
 
 
-def _normalize_snap(snap: dict, chart_type: str | None) -> dict:
-    """Normalize a raw tool result into the flat format the card renderer expects.
-
-    GA4 `run_report` returns::
-
-        {
-          "dimension_headers": ["date"],
-          "metric_headers": ["sessions"],
-          "rows": [{"dimensions": ["20240101"], "metrics": ["1234"]}]
-        }
-
-    The card renderer expects flat rows with named keys::
-
-        {
-          "columns": ["date", "sessions"],
-          "rows": [{"date": "20240101", "sessions": "1234"}]
-        }
-
-    If the snap already has a ``columns`` key or flat rows, it is returned as-is.
-    """
-    if not isinstance(snap, dict):
-        return snap
-
-    dim_headers = snap.get("dimension_headers") or []
-    met_headers = snap.get("metric_headers") or []
-    raw_rows = snap.get("rows") or []
-
-    # Only transform when rows come in the nested GA4 format
-    if (dim_headers or met_headers) and "columns" not in snap and isinstance(raw_rows, list):
-        columns = list(dim_headers) + list(met_headers)
-        flat_rows = []
-        for r in raw_rows:
-            if isinstance(r, dict) and ("dimensions" in r or "metrics" in r):
-                row: dict = {}
-                for i, col in enumerate(dim_headers):
-                    row[col] = (r.get("dimensions") or [])[i] if i < len(r.get("dimensions") or []) else None
-                for i, col in enumerate(met_headers):
-                    row[col] = (r.get("metrics") or [])[i] if i < len(r.get("metrics") or []) else None
-                flat_rows.append(row)
-            else:
-                # Already flat — leave as-is
-                flat_rows.append(r)
-        snap = dict(snap)  # shallow copy to avoid mutating original
-        snap["columns"] = columns
-        snap["rows"] = flat_rows
-
-    return snap
+# Snapshot flattening + scorecard metric derivation live in the shared
+# ``app.dashboards.snapshot`` module (imported as ``_normalize_snap`` at the top
+# of this file) so the live web view, PDF export, and Slack/email reports all
+# normalize identically.
 
 
 @router.get("/api/saved-dashboards/{slug}/data")
@@ -976,7 +934,7 @@ async def live_dashboard_data(slug: str, request: Request):
                             "message": raw_result.get("message", str(raw_result.get("error", ""))),
                         }
                     else:
-                        snap = _normalize_snap(raw_result, c.chart_type)
+                        snap = _normalize_snap(raw_result, c.chart_type, c.chart_config)
                         is_live = True
                 except TimeoutError:
                     logger.warning(

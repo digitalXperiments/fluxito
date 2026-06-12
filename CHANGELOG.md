@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.7] — 2026-06-12
+
+### Fixed
+- **GA4 scorecards showed the date instead of the metric.** Single-value cards such as
+  "Total Sessions" or "Engagement Rate" rendered the same meaningless `20.24M` with a
+  tiny `20241003` label — the card was displaying the GA4 date (in `YYYYMMDD` form) as
+  the value. Scorecards now show the correct figure: a period total for counts and money,
+  an average for rates and durations, with the sparkline plotting the real metric trend.
+  The same fix makes these cards render in PDF and scheduled email/Slack reports, which
+  previously showed "No metrics returned."
+
 ## [1.1.6] — 2026-06-12
 
 ### Added

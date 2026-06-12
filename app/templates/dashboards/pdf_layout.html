@@ -379,7 +379,7 @@
             <div class="metric-cell">
               <div class="metric-label">{{ m.label or m.key }}</div>
               <div class="metric-value">
-                {% if m.value is number %}{{ m.value|fmt_number }}{% else %}{{ m.value }}{% endif %}
+                {% if m.display %}{{ m.display }}{% elif m.value is number %}{{ m.value|fmt_number }}{% else %}{{ m.value }}{% endif %}
               </div>
             </div>
           {% endfor %}

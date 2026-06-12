@@ -148,15 +148,30 @@ def card_to_payload(card: DashboardCard) -> dict[str, Any]:
     ``card_type``, ``is_live``, ``snap``, ``refreshed_at``. Keeping this
     shape centralised means one change propagates to all consumers.
     """
+    from app.dashboards.snapshot import card_type_from_chart_type, normalize_snap
+
     snap = getattr(card, "_live_result", None) or card.result_cache or {}
     if not isinstance(snap, dict):
         snap = {"card_type": "UNKNOWN", "raw": snap}
+
+    # Same flatten + scorecard-metric derivation the live web view applies, so
+    # GA4 scorecards (which return raw daily rows, no ``metrics`` array) render
+    # as a single headline value in the PDF/Slack renderers instead of as
+    # "No metrics returned".
+    snap = normalize_snap(snap, card.chart_type, card.chart_config)
+
+    # The PDF/Slack renderers dispatch on ``card_type`` (METRIC/TABLE/…). GA4 and
+    # other connectors return raw rows with no ``card_type``, so derive it from
+    # the card's ``chart_type`` (the browser does the same mapping client-side).
+    card_type = snap.get("card_type") or "UNKNOWN"
+    if card_type == "UNKNOWN":
+        card_type = card_type_from_chart_type(card.chart_type)
 
     return {
         "id": str(card.id),
         "title": card.title,
         "platform": (card.platform or "").lower(),
-        "card_type": snap.get("card_type", "UNKNOWN"),
+        "card_type": card_type,
         "is_live": bool(getattr(card, "_is_live", False)),
         "snap": snap,
         "refreshed_at": card.refreshed_at.isoformat() if card.refreshed_at else None,
