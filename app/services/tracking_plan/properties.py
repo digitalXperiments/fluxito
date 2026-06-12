@@ -93,6 +93,11 @@ async def update_property(session: AsyncSession, branch, property_id: Any, **fie
         fields["name"] = new_name.strip()
         if await _prop_name_taken(session, branch.id, prop.kind, fields["name"], exclude_id=prop.id):
             raise ConflictError(f"property '{fields['name']}' ({prop.kind}) already exists")
+    new_parent = fields.get("parent_property_id", _UNSET)
+    if new_parent is not _UNSET and new_parent is not None:
+        # Scope the parent to this branch (mirrors create_property), so an
+        # off-branch or bogus parent surfaces as NotFoundError, not a raw FK error.
+        await get_or_raise(session, TPProperty, new_parent, branch_id=branch.id)
     apply_fields(prop, fields, _PROPERTY_FIELDS)
     await session.flush()
     return prop

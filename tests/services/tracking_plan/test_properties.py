@@ -6,9 +6,10 @@ from app.services.tracking_plan import (
     create_event,
     create_property,
     detach_property,
+    update_property,
 )
 from app.services.tracking_plan.bootstrap import get_main_branch, get_or_create_plan
-from app.services.tracking_plan.exceptions import ConflictError, ValidationError
+from app.services.tracking_plan.exceptions import ConflictError, NotFoundError, ValidationError
 from tests.services.tracking_plan.test_models import _make_project_and_user
 
 
@@ -65,3 +66,14 @@ async def test_attach_detach_with_override(db_session_factory):
             select(func.count()).select_from(TPEventProperty).where(TPEventProperty.event_id == event.id)
         )
         assert n == 0
+
+
+@pytest.mark.anyio
+async def test_update_property_rejects_offbranch_parent(db_session_factory):
+    import uuid
+
+    async with db_session_factory() as session:
+        branch = await _branch(session)
+        prop = await create_property(session, branch, name="city", data_type="string")
+        with pytest.raises(NotFoundError):
+            await update_property(session, branch, prop.id, parent_property_id=uuid.uuid4())
