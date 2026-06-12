@@ -259,7 +259,8 @@ def _render_metric(title: str, snap: dict) -> list[dict]:
             label = m.get("label") or m.get("name") or "Value"
             value = m.get("value")
             delta = m.get("delta_pct")
-            line = f"*{_fmt(value)}* — {label}"
+            shown = m.get("display") or _fmt(value)
+            line = f"*{shown}* — {label}"
             if isinstance(delta, (int, float)):
                 arrow = ":arrow_up_small:" if delta >= 0 else ":arrow_down_small:"
                 line += f"  {arrow} {delta:+.1f}%"
