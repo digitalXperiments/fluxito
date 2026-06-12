@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     APP_SECRET_KEY: str = Field(..., min_length=32)
     APP_BASE_URL: str = "http://localhost:8000"
 
+    # URL the in-container headless browser uses to reach this app when
+    # rendering dashboard PDFs. Defaults to the app's own uvicorn port so the
+    # PDF renderer never has to leave the container (no nginx / public DNS).
+    INTERNAL_BASE_URL: str = "http://127.0.0.1:8001"
+
+    # Hard ceiling (seconds) for a single dashboard PDF render. Chromium nav +
+    # async card hydration + chart paint must finish within this budget.
+    PDF_RENDER_TIMEOUT_S: int = 60
+
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fluxito"
 

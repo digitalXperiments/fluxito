@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Share PDF now looks like the live dashboard — charts and all.** Exports (and the
+  scheduled email/Slack report PDFs) are now rendered by a real headless browser that
+  loads the actual dashboard, so they include the styled scorecards, the line/bar/pie
+  charts, and the data tables you see on screen. Previously the PDF was a stripped-down
+  text-and-grid report because the old renderer had no way to draw the JavaScript charts.
+- **Roomier dashboard layout.** Added breathing room between the date-range filter bar
+  and the first row of cards so the view no longer feels cramped.
+
+### Fixed
+- **Share PDF on a public/shared dashboard could fail with an `oklab` colour error, and
+  the header sat tucked under the top navigation bar.** The export pipeline no longer
+  depends on the brittle in-browser screenshot path, and shared dashboards now leave
+  proper space below the fixed nav.
+- **Share PDF ignored the date range you picked.** The export now reflects the selected
+  range (e.g. "2024 Full Year") instead of always falling back to the default window.
+
 ## [1.1.7] — 2026-06-12
 
 ### Fixed

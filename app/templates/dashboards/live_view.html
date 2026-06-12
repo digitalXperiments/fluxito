@@ -6,7 +6,6 @@
 
 {% block head_extra %}
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
 <script type="importmap">
 {
   "imports": {
@@ -17,11 +16,18 @@
 }
 </script>
 <script>
-// Dark mode: auto-detect system preference, persist in localStorage
+// Dark mode: auto-detect system preference, persist in localStorage.
 (function() {
+  {% if print_mode %}
+  // PDF render path: force light theme and the print layout (hides nav, the
+  // toolbar, the back link and the footer) so the export reads like a report.
+  document.documentElement.classList.add('print-mode');
+  document.documentElement.setAttribute('data-theme', 'light');
+  {% else %}
   var saved = localStorage.getItem('theme');
   var preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', saved || preferred);
+  {% endif %}
 })();
 </script>
 <style>
@@ -215,6 +221,25 @@
     .ai-insights::before { left: 14px; top: 16px; width: 16px; height: 16px; }
   }
 
+  /* ── PDF print mode ───────────────────────────────────────────────────
+     The headless-Chromium PDF renderer loads this view with ?print=1, which
+     adds `.print-mode` to <html>. Strip the interactive chrome (nav, sidebar,
+     toolbar, back link, footer) so the export is just the dashboard, and stop
+     cards from being split across page breaks. */
+  .print-mode .nav,
+  .print-mode .nav-landing,
+  .print-mode .sidebar,
+  .print-mode .mobile-topbar,
+  .print-mode .site-footer,
+  .print-mode .lv-head-actions,
+  .print-mode .lv-back,
+  .print-mode #pageLoader { display: none !important; }
+  .print-mode .main { margin-left: 0 !important; }
+  .print-mode .app-main { max-width: none; padding-top: 16px !important; }
+  .print-mode .dash-filter-bar { pointer-events: none; }
+  .print-mode .data-card,
+  .print-mode .metric-kpi { break-inside: avoid; page-break-inside: avoid; }
+
 </style>
 {% endblock %}
 
@@ -320,6 +345,13 @@
 
   // ── Active filters ────────────────────────────────────────────────────
   let activeRange = {start: '30daysAgo', end: 'today'};
+  // When the view is opened with ?start=&end= (e.g. the PDF renderer passes the
+  // selected range), honour it on first load so the export reflects those dates.
+  try {
+    var __metaEl = document.getElementById('dashMeta');
+    var __meta = __metaEl ? JSON.parse(__metaEl.textContent || '{}') : {};
+    if (__meta && __meta.start && __meta.end) activeRange = {start: __meta.start, end: __meta.end};
+  } catch(_){}
   let activeDims = {};  // {device_type: "mobile", country: "AE", ...}
 
   function buildParams() {
@@ -512,6 +544,10 @@
       if (grid) grid.innerHTML = `<div class="audit-empty" style="grid-column:1/-1;"><h3>Failed to load data</h3><p>${Fluxito.esc(e.message||'')}</p><button class="btn primary" style="margin-top:14px" type="button" onclick="location.reload()">Reload</button></div>`;
     }
     if (window.__dismissPageLoader) window.__dismissPageLoader();
+    // Signal the PDF renderer (headless Chromium) that the initial card +
+    // chart render has settled, so it can capture the page. Harmless on
+    // normal loads.
+    window.__pdfReady = true;
   }
 
   var fetchAndRender = loadCards;
