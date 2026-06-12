@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.7] — 2026-06-12
+
 ### Fixed
 - **GA4 scorecards showed the date instead of the metric.** Single-value cards such as
   "Total Sessions" or "Engagement Rate" rendered the same meaningless `20.24M` with a
