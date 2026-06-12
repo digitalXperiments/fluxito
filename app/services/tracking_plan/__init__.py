@@ -34,6 +34,7 @@ from .routing import (
 )
 from .serializer import plan_to_dict
 from .taxonomy import create_category, delete_category, update_category
+from .validation import validate_plan
 
 __all__ = [
     "ConflictError",
@@ -68,4 +69,5 @@ __all__ = [
     "update_metric",
     "update_property",
     "update_source",
+    "validate_plan",
 ]
