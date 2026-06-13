@@ -386,3 +386,15 @@
 .tp-connector { fill: none; stroke: var(--border-strong); stroke-width: 1.5; transition: stroke .12s, opacity .12s; }
 .tp-connector.is-dim { opacity: .25; }
 .tp-connector.is-lit { stroke: var(--accent); stroke-width: 2; }
+
+/* ── Metric designer ───────────────────────────────────────────────────── */
+.tp-metric-preview {
+  margin-top: 14px; padding: 12px 16px; border: 1px solid var(--accent-border);
+  background: var(--accent-soft); border-radius: var(--r-md); font-size: 14px; font-weight: 500;
+}
+.tp-filter-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.tp-filter-row { display: flex; align-items: center; gap: 8px; }
+.tp-filter-row input {
+  font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--border);
+  border-radius: var(--r-sm); background: var(--surface); color: var(--text);
+}

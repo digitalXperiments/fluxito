@@ -26,10 +26,9 @@ function masterPane(st) {
   const head = h('div', { class: 'tp-master-head' });
   const add = h('button', { class: 'btn btn-primary btn-sm btn-block' }, '+ New bundle');
   add.onclick = async () => {
-    await doAction('create_bundle', { name: 'New bundle' }, st.branch);
+    const r = await doAction('create_bundle', { name: 'New bundle' }, st.branch);
     await reload();
-    const fresh = getState().plan.bundles.find((b) => b.name === 'New bundle');
-    if (fresh) select('bundle', fresh.id);
+    if (r && r.id) select('bundle', r.id);
   };
   head.appendChild(add);
   m.appendChild(head);
