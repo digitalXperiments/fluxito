@@ -8,9 +8,9 @@ import { eventByName } from 'tp/util/format';
 export function mountView(container) {
   const host = h('div', { class: 'tp-detail' });
   mountAll(container, [host]);
+  const plan = () => state.getState().plan;
   const unsub = state.subscribe(render);
   render();
-  const plan = () => state.getState().plan;
 
   function render() {
     if (!plan()) { mountAll(host, [h('div', { class: 'tp-row-empty' }, 'Loading…')]); return; }

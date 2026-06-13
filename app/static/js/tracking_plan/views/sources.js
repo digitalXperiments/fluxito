@@ -8,10 +8,10 @@ import { destByName } from 'tp/util/format';
 export function mountView(container) {
   const host = h('div', { class: 'tp-detail' });
   mountAll(container, [host]);
-  const unsub = state.subscribe(render);
-  render();
   const plan = () => state.getState().plan;
   const run = async (action, params, ok) => { try { await api.doAction(action, params, state.getState().branch); if (ok) banner(ok, 'ok'); await state.reload(); } catch (e) { banner(e.message, 'err'); } };
+  const unsub = state.subscribe(render);
+  render();
 
   function sourceRow(s) {
     const chips = (s.destinations || []).map((dn) => h('span', { class: 'tp-chip' }, dn,

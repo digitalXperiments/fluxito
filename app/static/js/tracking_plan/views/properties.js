@@ -12,9 +12,9 @@ export function mountView(container) {
   mountAll(container, [h('div', { class: 'tp-master-detail' }, master, detail)]);
   let search = '';
   let drawer = null;
+  const plan = () => state.getState().plan;
   const unsub = state.subscribe(() => { renderList(); renderDetail(); });
   renderList(); renderDetail();
-  const plan = () => state.getState().plan;
 
   function renderList() {
     if (!plan()) { mountAll(master, [h('div', { class: 'tp-row-empty' }, 'Loading…')]); return; }

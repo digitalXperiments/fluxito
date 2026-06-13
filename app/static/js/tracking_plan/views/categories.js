@@ -7,9 +7,9 @@ import { banner } from 'tp/shell';
 export function mountView(container) {
   const host = h('div', { class: 'tp-detail' });
   mountAll(container, [host]);
+  const plan = () => state.getState().plan;
   const unsub = state.subscribe(render);
   render();
-  const plan = () => state.getState().plan;
 
   function count(cat) { return (plan().events || []).filter((e) => e.category === cat.name).length; }
 

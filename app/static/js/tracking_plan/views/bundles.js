@@ -7,9 +7,9 @@ import { banner } from 'tp/shell';
 export function mountView(container) {
   const host = h('div', { class: 'tp-detail' });
   mountAll(container, [host]);
+  const plan = () => state.getState().plan;
   const unsub = state.subscribe(render);
   render();
-  const plan = () => state.getState().plan;
 
   async function manage(b) {
     const cur = b.properties.map((x) => x.name).join(', ');
