@@ -151,3 +151,34 @@ def test_home_renders_connected_limits_section_with_deep_link():
     assert "rl-home-grid" in src
     assert "/settings#limits" in src  # deep-links into the Settings tab
     assert "consumption_note" in src
+
+
+# ── Drift checker (app/connectors/rate_limits_drift.py) ───────────────────
+
+
+def test_drift_audit_covers_every_connector():
+    from app.connectors.rate_limits_drift import audit
+
+    rows = audit(max_age_days=180)
+    assert {r["key"] for r in rows} == {c.key for c in rl.CATALOG}
+    for r in rows:
+        assert {"key", "name", "docs_url", "reviewed", "age_days", "confidence", "stale"} <= set(r)
+
+
+def test_drift_audit_staleness_is_threshold_and_date_driven():
+    import datetime as dt
+
+    from app.connectors.rate_limits_drift import audit
+
+    # Threshold extremes: -1 day flags everything, a huge window flags nothing.
+    assert all(r["stale"] for r in audit(max_age_days=-1))
+    assert not any(r["stale"] for r in audit(max_age_days=10**6))
+    # Date-driven: years after every reviewed date, all entries are overdue.
+    assert all(r["stale"] for r in audit(max_age_days=180, today=dt.date(2035, 1, 1)))
+
+
+def test_drift_prompt_is_self_contained():
+    from app.connectors.rate_limits_drift import DRIFT_PROMPT
+
+    assert "rate_limits.py" in DRIFT_PROMPT
+    assert "CHANGED" in DRIFT_PROMPT and "STALE" in DRIFT_PROMPT and "UNVERIFIED" in DRIFT_PROMPT
