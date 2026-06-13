@@ -592,15 +592,21 @@
   }
   setInterval(tick, 3000);
 
+  window.__dashRetry = function(){ loadCards(true); };
+
   function renderCard(card){
+    var html = Fluxito.renderCard(card);
     if (card.live_error) {
       const le = card.live_error;
       console.error(
         `[live-refresh] card "${card.title}" (${card.id}) failed:`,
         {error_type: le.error_type, message: le.message, detail: le.detail, platform: card.platform}
       );
+      const notice = '<div class="lv-card-error" style="margin:0 0 8px;padding:6px 10px;border:1px solid var(--danger,#dc2626);border-radius:6px;background:var(--danger-soft,#fee2e2);color:var(--danger,#b91c1c);font-size:12px;">⚠️ '
+        + Fluxito.esc(le.message || 'Could not refresh this card') + ' · <a href="#" class="lv-retry" style="text-decoration:underline;color:inherit;">Retry</a></div>';
+      html = html.replace('<div class="card-body">', '<div class="card-body">' + notice);
     }
-    return Fluxito.renderCard(card);
+    return html;
   }
 
   function mountCharts(cards){
