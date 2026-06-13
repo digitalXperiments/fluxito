@@ -1,6 +1,10 @@
 import pytest
 
-from app.dashboards.filter_specs import FilterSpecError, validate_filters
+from app.dashboards.filter_specs import (
+    FilterSpecError,
+    synthesize_filters,
+    validate_filters,
+)
 
 
 def test_empty_returns_empty():
@@ -97,3 +101,35 @@ def test_too_many_filters_rejected():
     many = [{"key": f"k{i}", "type": "search", "label": str(i)} for i in range(21)]
     with pytest.raises(FilterSpecError):
         validate_filters(many)
+
+
+# ----------------------------------------------------- synthesize_filters (legacy)
+
+
+def test_synthesize_from_legacy_hooks_and_options():
+    cards = [
+        {
+            "query_params": {
+                "filter_hooks": {"date_range.start": "start_date", "country": "filters.country"},
+                "filter_options": {"country": ["", "US", "AE"]},
+            }
+        },
+        {  # second card adds another country value + a new dim
+            "query_params": {
+                "filter_hooks": {"country": "filters.country", "device": "filters.device"},
+                "filter_options": {"country": ["EG"], "device": ["", "mobile"]},
+            }
+        },
+    ]
+    out = synthesize_filters(cards)
+    keys = {f["key"] for f in out}
+    assert keys == {"country", "device"}  # date key skipped
+    country = next(f for f in out if f["key"] == "country")
+    assert country["type"] == "single_select"
+    assert country["options"]["values"] == ["", "US", "AE", "EG"]  # merged + deduped
+    assert country["label"] == "Country"
+
+
+def test_synthesize_empty_when_no_hooks():
+    assert synthesize_filters([{"query_params": {}}]) == []
+    assert synthesize_filters([]) == []
