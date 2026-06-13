@@ -1,9 +1,5 @@
-from types import SimpleNamespace
-
 import pytest
-from sqlalchemy import select
 
-from app.models.tracking_plan import TPActivity
 from app.services.tracking_plan import get_main_branch, get_or_create_plan
 from app.services.tracking_plan.activity import (
     activity_to_dict,
