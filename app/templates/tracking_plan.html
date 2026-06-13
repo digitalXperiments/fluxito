@@ -6,9 +6,7 @@
 {{ super() }}
 <link rel="stylesheet" href="/static/css/tracking_plan.css?v={{ asset_hash('css/tracking_plan.css') }}"/>
 <script>
-  // First Tracking Plan visit only: collapse the global sidebar so the first
-  // impression is the roomy workspace. Any later manual toggle wins (we set the
-  // 'autocollapsed' flag once and never override the user's choice again).
+  // First Tracking Plan visit only: collapse the global app sidebar once (Plan 1).
   (function () {
     try {
       if (localStorage.getItem('fx-tp-autocollapsed') === null) {
@@ -18,6 +16,19 @@
       }
     } catch (e) {}
   })();
+</script>
+{% set tp_modules = [
+  'index', 'api', 'state', 'render', 'shell', 'comments',
+  'util/diff', 'util/mentions', 'util/format',
+  'views/events', 'views/properties', 'views/categories', 'views/bundles',
+  'views/sources', 'views/metrics', 'views/review', 'views/versions',
+  'views/router'
+] %}
+<script type="importmap">
+{ "imports": {
+  "tp/": "/static/js/tracking_plan/"{% for m in tp_modules %},
+  "tp/{{ m }}": "/static/js/tracking_plan/{{ m }}.js?v={{ asset_hash('js/tracking_plan/' ~ m ~ '.js') }}"{% endfor %}
+}}
 </script>
 {% endblock %}
 
@@ -32,5 +43,5 @@
     <div class="tp-empty">Loading tracking plan…</div>
   </div>
 </div>
-<script src="/static/js/tracking_plan.js?v={{ asset_hash('js/tracking_plan.js') }}"></script>
+<script type="module" src="/static/js/tracking_plan/index.js?v={{ asset_hash('js/tracking_plan/index.js') }}"></script>
 {% endblock %}
