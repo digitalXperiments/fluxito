@@ -9,6 +9,7 @@ thin testable router over the Plan-1A service functions."""
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,6 +45,7 @@ from app.services.tracking_plan import (
     list_comments,
     plan_to_dict,
     publish_branch,
+    record_activity,
     remove_event_destination,
     remove_property_from_bundle,
     resolve_comment,
@@ -110,7 +112,7 @@ async def resolve_branch(session: Any, plan: Any, ref: Any) -> Any:
     return await get_branch(session, plan, ref)
 
 
-async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> dict:
+async def _dispatch(session, branch, ctx: _Ctx, action: str, params: dict) -> dict:
     """Route one structured action to the service. Pure over (session, branch,
     ctx) — the registered tool supplies these. Maps service errors to the
     standard MCP error shape."""
@@ -429,6 +431,122 @@ async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> d
         return _err("tracking_plan_error", str(exc))
     except KeyError as exc:
         return _err("missing_param", f"missing required param: {exc}")
+
+
+# Successful write actions log one tp_activity row. Read + comment actions are
+# intentionally absent → skipped. Map: action -> the entity the change is about.
+_ENTITY_BY_ACTION: dict[str, str] = {
+    "create_event": "event",
+    "update_event": "event",
+    "delete_event": "event",
+    "set_event_sources": "event",
+    "set_event_destination": "event",
+    "remove_event_destination": "event",
+    "attach_property": "event",
+    "detach_property": "event",
+    "attach_bundle_to_event": "event",
+    "create_property": "property",
+    "update_property": "property",
+    "delete_property": "property",
+    "create_source": "source",
+    "update_source": "source",
+    "delete_source": "source",
+    "connect_source_destination": "source",
+    "disconnect_source_destination": "source",
+    "create_destination": "destination",
+    "update_destination": "destination",
+    "delete_destination": "destination",
+    "create_metric": "metric",
+    "update_metric": "metric",
+    "delete_metric": "metric",
+    "create_category": "category",
+    "update_category": "category",
+    "delete_category": "category",
+    "create_bundle": "bundle",
+    "update_bundle": "bundle",
+    "delete_bundle": "bundle",
+    "add_property_to_bundle": "bundle",
+    "remove_property_from_bundle": "bundle",
+    "create_branch": "branch",
+    "merge_branch": "branch",
+    "set_review_status": "branch",
+    "abandon_branch": "branch",
+    "publish": "plan",
+}
+_ID_PARAM_BY_ENTITY: dict[str, str] = {
+    "event": "event_id",
+    "property": "property_id",
+    "source": "source_id",
+    "destination": "destination_id",
+    "metric": "metric_id",
+    "category": "category_id",
+    "bundle": "bundle_id",
+}
+_VERB_BY_PREFIX: dict[str, str] = {
+    "create": "created",
+    "update": "updated",
+    "delete": "deleted",
+    "attach": "updated",
+    "detach": "updated",
+    "set": "updated",
+    "remove": "updated",
+    "connect": "linked",
+    "disconnect": "unlinked",
+    "add": "updated",
+    "merge": "merged",
+    "publish": "published",
+    "abandon": "abandoned",
+}
+
+
+def _activity_entity_id(action: str, entity_type: str, result: dict, params: dict, branch: Any) -> str | None:
+    rid = result.get("id")
+    if action.startswith("create_") and rid:
+        return str(rid)
+    key = _ID_PARAM_BY_ENTITY.get(entity_type)
+    if key and params.get(key):
+        return str(params[key])
+    if entity_type == "branch":
+        return str(branch.id)
+    return str(rid) if rid else None
+
+
+def _log_activity(session: Any, ctx: _Ctx, branch: Any, action: str, result: dict, params: dict) -> None:
+    if not result.get("ok"):
+        return
+    entity_type = _ENTITY_BY_ACTION.get(action)
+    if not entity_type:
+        return
+    raw_id = _activity_entity_id(action, entity_type, result, params, branch)
+    name = result.get("name") or params.get("name")
+    verb = _VERB_BY_PREFIX.get(action.split("_", 1)[0], "changed")
+    summary = f"{verb} {entity_type}" + (f" '{name}'" if name else "")
+
+    def _as_uuid(v: Any) -> uuid.UUID | None:
+        try:
+            return uuid.UUID(str(v))
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    record_activity(
+        session,
+        plan_id=ctx.plan.id,
+        branch_id=branch.id,
+        entity_type=entity_type,
+        entity_id=_as_uuid(raw_id),
+        actor_id=_as_uuid(ctx.user_id),
+        action=action,
+        summary=summary,
+    )
+
+
+async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> dict:
+    """Dispatch one action, then (for successful writes) append a tp_activity row.
+    Single choke point shared by the MCP tool and the HTTP API."""
+    result = await _dispatch(session, branch, ctx, action, params)
+    if not result.get("error"):
+        _log_activity(session, ctx, branch, action, result, params or {})
+    return result
 
 
 # --- per-entity field pickers (only forward keys the caller actually sent) ---
