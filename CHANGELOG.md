@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Revamped dashboard filters — five new filter types.** The filter bar now supports
+  multi-select dropdowns (with removable chips), free-text search, numeric min/max
+  ranges, on/off toggles, and a custom start/end date range, alongside the existing
+  single-select dropdowns and date presets. Filters translate to real query syntax for
+  each source — GA4 dimension/metric filters, parameterized warehouse SQL (quote-escaped,
+  injection-safe), and marketing parameters — and are validated at deploy time so a
+  filter can never silently do nothing.
+- **Date-range comparison on every card.** Turn on Compare to see two periods at once:
+  scorecards show a coloured ▲/▼ delta, tables gain Prev and Δ% columns, line charts
+  overlay a faded dashed comparison line, and bar charts pair current vs. previous bars.
+  Choose "Previous period", "Previous year", or a custom comparison range. A one-line
+  "biggest movers" banner summarizes the largest changes.
+- **Click-to-filter (cross-filtering).** Click a bar or point in a chart to filter the
+  whole dashboard by that value (when a matching filter exists).
+- **Shareable filtered views.** The active filters, date range, and compare state are
+  encoded in the URL, so a filtered/compared view can be bookmarked and shared, and the
+  PDF export captures exactly what's on screen.
+- **Per-card CSV export** for table cards, and a visible **error + Retry** banner when a
+  card fails to refresh (instead of silently showing stale data).
+- **`dashboard_deploy_batch` now accepts a `filters` spec** and, when you omit it,
+  suggests sensible dropdowns inferred from the cards' dimensions to confirm before
+  deploying.
+
 ### Changed
+- **Dashboards now cache live data for 24 hours (was 1 hour) and show when it was last
+  pulled.** A freshness banner reads "Cached data from <timestamp> — refreshes daily"
+  with a Refresh-now link; the TTL is configurable per dashboard. Each filter and compare
+  combination caches independently.
+- **Professional "Looker Clean" chart restyle.** A consistent Google-data-viz colour
+  palette (the same category is the same colour across every card), hairline gridlines,
+  compact number formatting (48.2K / 1.3M), a tidy legend, and softer bars.
 - **Share PDF now looks like the live dashboard — charts and all.** Exports (and the
   scheduled email/Slack report PDFs) are now rendered by a real headless browser that
   loads the actual dashboard, so they include the styled scorecards, the line/bar/pie
