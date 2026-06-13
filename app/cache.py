@@ -89,6 +89,15 @@ async def cached_tool_response(
     except Exception as e:
         logger.debug(f"Cache read error (continuing anyway): {e}")
 
+    # Cache miss → one real upstream call. Count it per project + connector
+    # (best-effort; never blocks or breaks the tool call).
+    try:
+        from app.connectors import usage as connector_usage
+
+        await connector_usage.record_cache_miss(cache_key)
+    except Exception as e:
+        logger.debug(f"Usage counter failed (non-blocking): {e}")
+
     # Call the actual function
     result = await func(*args, **kwargs)
 

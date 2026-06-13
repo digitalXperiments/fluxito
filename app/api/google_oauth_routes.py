@@ -497,6 +497,18 @@ async def home(request: Request):
     )
     connected_count, total_connector_count = count_granular_connectors(conn_flags)
 
+    # Published API rate limits + real usage for the project's connected tools,
+    # reusing the connector flags already resolved above. Marketo isn't tracked on
+    # this page's flags, so it falls into the catalog list here.
+    from app.connectors import rate_limits
+    from app.connectors import usage as connector_usage
+
+    rl_connected, rl_available = rate_limits.partition(rate_limits.connected_keys(conn_flags))
+    rl_usage = await connector_usage.usage_for(active_pid_uuid, [c.key for c in rl_connected], days=30)
+    rl_connected_view = rate_limits.to_view(rl_connected)
+    for _rl_row in rl_connected_view:
+        _rl_row["usage_count"] = rl_usage.get(_rl_row["key"])
+
     user_view = await _load_user_view(user_ctx)
 
     # Ensure active project cookie is set
@@ -509,6 +521,10 @@ async def home(request: Request):
             "user": user_view,
             "total_conns": connected_count,
             "total_platforms": total_connector_count,
+            "rate_limits_connected": rl_connected_view,
+            "rate_limits_available": rate_limits.to_view(rl_available),
+            "rate_limits_reviewed": rate_limits.REVIEWED,
+            "rate_limits_usage_days": 30,
         },
     )
 
