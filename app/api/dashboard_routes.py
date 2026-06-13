@@ -918,6 +918,26 @@ async def live_dashboard_data(slug: str, request: Request):
         if _qk not in _RESERVED_PARAMS and _qv:
             filter_overrides[_qk] = _qv
 
+    # Compare mode: a second date range. ?compare=previous_period|previous_year|custom
+    # (custom uses ?compare_start=&compare_end=). Each card is then executed twice and
+    # merged. The compare params live in filter_overrides above, so the cache key folds
+    # them in automatically (compare views cache separately from non-compare views).
+    compare_mode = (request.query_params.get("compare") or "").strip()
+    compare_active = bool(compare_mode and start_date and end_date)
+    cmp_start = cmp_end = ""
+    if compare_active:
+        if compare_mode == "custom":
+            cmp_start = _resolve_relative_date(request.query_params.get("compare_start") or "")
+            cmp_end = _resolve_relative_date(request.query_params.get("compare_end") or "")
+            compare_active = bool(cmp_start and cmp_end)
+        else:
+            from app.dashboards.compare import previous_range
+
+            try:
+                cmp_start, cmp_end = previous_range(start_date, end_date, compare_mode)
+            except ValueError:
+                compare_active = False
+
     try:
         async with app_state.db_session_factory() as db:
             result = await db.execute(select(Dashboard).where(Dashboard.share_slug == slug))
@@ -986,113 +1006,116 @@ async def live_dashboard_data(slug: str, request: Request):
 
         _sem = asyncio.Semaphore(_LIVE_CARD_CONCURRENCY)
 
-        async def _exec_card(c) -> dict:
-            """Refresh a single card. Always returns a renderable payload —
-            never raises — falling back to the cached snapshot on any error or
-            timeout so one bad card can't blank the dashboard."""
+        async def _run_card_once(c, ov_for_apply) -> tuple[dict, bool, dict | None]:
+            """Execute one card for a single date range (``ov_for_apply`` carries the
+            date_range + legacy overrides). Returns (snap, is_live, live_error).
+            Never raises — falls back to the cached snapshot on any failure."""
             spec = c.query_params or {}
             tool_name = spec.get("tool") or c.tool_name
             platform = spec.get("platform") or c.platform or "unknown"
             action = spec.get("action")
 
-            snap: dict = {}
-            is_live = False
-            live_error = None
-
             if not tool_name or tm is None:
-                snap = c.result_cache or {}
-                if not isinstance(snap, dict):
-                    snap = {"card_type": "UNKNOWN", "raw": snap}
-                live_error = {"error_type": "no_tool", "message": "Card has no registered tool."}
-            else:
-                try:
-                    legacy = getattr(tm, "_legacy_tools", {})
-                    tool = legacy.get(tool_name) or tm._tools.get(tool_name)
-                    if tool is None:
-                        raise ValueError(f"Tool '{tool_name}' not registered")
+                snap = c.result_cache if isinstance(c.result_cache, dict) else {}
+                return snap, False, {"error_type": "no_tool", "message": "Card has no registered tool."}
 
-                    # Merge date + legacy overrides (respecting the date_locked flag).
-                    # Typed filters are excluded here and applied via translate() below.
-                    card_date_locked = _as_bool(spec.get("date_locked"))
-                    merged_spec = apply_overrides(spec, overrides_for_apply if not card_date_locked else None)
-                    # Params are stored flattened in query_params — exclude spec metadata keys.
-                    # NOTE: "platform" is intentionally NOT excluded — it is a required named
-                    # parameter for analytics_read, marketing_read, etc.
-                    _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
-                    call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
-                    if action is not None:
-                        call_args["action"] = action
-                    # warehouse_query needs 'engine' (= platform) and uses 'query' not 'sql'
-                    is_warehouse = tool_name == "warehouse_query"
-                    if is_warehouse:
-                        call_args.setdefault("engine", platform)
-                        if "sql" in call_args and "query" not in call_args:
-                            call_args["query"] = call_args.pop("sql")
+            try:
+                legacy = getattr(tm, "_legacy_tools", {})
+                tool = legacy.get(tool_name) or tm._tools.get(tool_name)
+                if tool is None:
+                    raise ValueError(f"Tool '{tool_name}' not registered")
 
-                    # Apply typed dashboard filters (GA4 dimension/metric_filter,
-                    # warehouse {placeholder} substitution, marketing params). Runs
-                    # before the generic date substitution so typed SQL tokens get
-                    # properly quoted/escaped values rather than a raw card default.
-                    if not card_date_locked and dash_filter_specs:
-                        apply_card_filters(
-                            spec.get("filter_hooks"),
-                            dash_filter_specs,
-                            filter_overrides,
-                            "warehouse" if is_warehouse else platform,
-                            call_args,
-                        )
+                # Merge date + legacy overrides (respecting the date_locked flag).
+                # Typed filters are excluded here and applied via translate() below.
+                card_date_locked = _as_bool(spec.get("date_locked"))
+                merged_spec = apply_overrides(spec, ov_for_apply if not card_date_locked else None)
+                # Params are stored flattened in query_params — exclude spec metadata keys.
+                # NOTE: "platform" is intentionally NOT excluded — it is a required named
+                # parameter for analytics_read, marketing_read, etc.
+                _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
+                call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
+                if action is not None:
+                    call_args["action"] = action
+                # warehouse_query needs 'engine' (= platform) and uses 'query' not 'sql'
+                is_warehouse = tool_name == "warehouse_query"
+                if is_warehouse:
+                    call_args.setdefault("engine", platform)
+                    if "sql" in call_args and "query" not in call_args:
+                        call_args["query"] = call_args.pop("sql")
 
-                    # Substitute remaining {placeholder} tokens in the SQL template
-                    # (date ranges, card-param defaults). Targeted str.replace (not
-                    # format_map) so other curly-brace patterns in the SQL don't raise
-                    # KeyError and silently swallow all substitutions.
-                    if is_warehouse and "query" in call_args:
-                        q = call_args["query"]
-                        for _k, _v in call_args.items():
-                            if _k == "query" or not isinstance(_v, str):
-                                continue
-                            resolved = _resolve_relative_date(_v)
-                            q = q.replace("{" + _k + "}", resolved)
-                        call_args["query"] = q
+                # Apply typed dashboard filters (GA4 dimension/metric_filter,
+                # warehouse {placeholder} substitution, marketing params). Runs
+                # before the generic date substitution so typed SQL tokens get
+                # properly quoted/escaped values rather than a raw card default.
+                if not card_date_locked and dash_filter_specs:
+                    apply_card_filters(
+                        spec.get("filter_hooks"),
+                        dash_filter_specs,
+                        filter_overrides,
+                        "warehouse" if is_warehouse else platform,
+                        call_args,
+                    )
 
-                    async with _sem:
-                        raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_LIVE_CARD_TIMEOUT_S)
-                    if not isinstance(raw_result, dict):
-                        raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
+                # Substitute remaining {placeholder} tokens in the SQL template
+                # (date ranges, card-param defaults). Targeted str.replace (not
+                # format_map) so other curly-brace patterns in the SQL don't raise
+                # KeyError and silently swallow all substitutions.
+                if is_warehouse and "query" in call_args:
+                    q = call_args["query"]
+                    for _k, _v in call_args.items():
+                        if _k == "query" or not isinstance(_v, str):
+                            continue
+                        resolved = _resolve_relative_date(_v)
+                        q = q.replace("{" + _k + "}", resolved)
+                    call_args["query"] = q
 
-                    if raw_result.get("card_type") == "ERROR" or raw_result.get("error"):
-                        snap = c.result_cache or raw_result
-                        if not isinstance(snap, dict):
-                            snap = {"card_type": "UNKNOWN", "raw": snap}
-                        is_live = False
-                        live_error = {
+                async with _sem:
+                    raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_LIVE_CARD_TIMEOUT_S)
+                if not isinstance(raw_result, dict):
+                    raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
+
+                if raw_result.get("card_type") == "ERROR" or raw_result.get("error"):
+                    snap = c.result_cache if isinstance(c.result_cache, dict) else raw_result
+                    return (
+                        snap,
+                        False,
+                        {
                             "error_type": raw_result.get("error_type", "tool_error"),
                             "message": raw_result.get("message", str(raw_result.get("error", ""))),
-                        }
-                    else:
-                        snap = _normalize_snap(raw_result, c.chart_type, c.chart_config)
-                        is_live = True
-                except TimeoutError:
-                    logger.warning(
-                        "live_dashboard_data: card %s timed out after %ss", c.id, _LIVE_CARD_TIMEOUT_S
+                        },
                     )
-                    snap = c.result_cache or {}
-                    if not isinstance(snap, dict):
-                        snap = {"card_type": "UNKNOWN", "raw": snap}
-                    is_live = False
-                    live_error = {
+                return _normalize_snap(raw_result, c.chart_type, c.chart_config), True, None
+            except TimeoutError:
+                logger.warning("live_dashboard_data: card %s timed out after %ss", c.id, _LIVE_CARD_TIMEOUT_S)
+                snap = c.result_cache if isinstance(c.result_cache, dict) else {}
+                return (
+                    snap,
+                    False,
+                    {
                         "error_type": "timeout",
                         "message": f"Query exceeded {_LIVE_CARD_TIMEOUT_S}s; showing last cached result.",
-                    }
-                except Exception as tool_exc:
-                    logger.warning(
-                        "live_dashboard_data: tool dispatch failed for card %s: %s", c.id, tool_exc
-                    )
-                    snap = c.result_cache or {}
-                    if not isinstance(snap, dict):
-                        snap = {"card_type": "UNKNOWN", "raw": snap}
-                    is_live = False
-                    live_error = {"error_type": "dispatch_error", "message": str(tool_exc)[:300]}
+                    },
+                )
+            except Exception as tool_exc:
+                logger.warning("live_dashboard_data: tool dispatch failed for card %s: %s", c.id, tool_exc)
+                snap = c.result_cache if isinstance(c.result_cache, dict) else {}
+                return snap, False, {"error_type": "dispatch_error", "message": str(tool_exc)[:300]}
+
+        async def _exec_card(c) -> dict:
+            """Refresh a single card (twice when compare is on) into a payload.
+            Never raises — one bad card can't blank the dashboard."""
+            platform = (c.query_params or {}).get("platform") or c.platform or "unknown"
+            snap, is_live, live_error = await _run_card_once(c, overrides_for_apply)
+
+            # Compare mode: re-execute for the comparison range and merge.
+            if compare_active and is_live and not _as_bool((c.query_params or {}).get("date_locked")):
+                from app.dashboards.compare import merge_compare
+
+                cmp_ov = dict(overrides_for_apply)
+                cmp_ov["date_range"] = {"start": cmp_start, "end": cmp_end}
+                prev_snap, prev_live, _prev_err = await _run_card_once(c, cmp_ov)
+                if prev_live:
+                    snap = merge_compare(snap, prev_snap, c.chart_type)
 
             snap["chart_type"] = c.chart_type
             snap["chart_config"] = c.chart_config or {}
