@@ -5,14 +5,20 @@ the catalog's integrity, the connected/available partitioning, and that both
 surfaces (Project Settings tab + Home section) stay wired to the catalog.
 """
 
+import datetime as dt
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+import app.app_state as app_state
 from app.api.google_oauth_routes import GRANULAR_CONNECTOR_CATALOG
 from app.connectors import rate_limits as rl
+from app.connectors import usage as connector_usage
 
 SETTINGS_TEMPLATE = Path("app/templates/projects/settings.html")
 HOME_TEMPLATE = Path("app/templates/dashboard_home.html")
+PARTIAL_TEMPLATE = Path("app/templates/partials/rate_limit_cards.html")
 
 
 # ── Catalog integrity ────────────────────────────────────────────────────
@@ -43,6 +49,13 @@ def test_every_connector_is_well_formed():
         assert c.limits, f"{c.key} has no documented limits"
         for limit in c.limits:
             assert limit.name and limit.value and limit.window and limit.scope, (c.key, limit)
+
+
+def test_every_connector_has_a_short_usage_line():
+    # The card face shows headline + usage, so both must be present and concise.
+    for c in rl.CATALOG:
+        assert c.usage, c.key
+        assert len(c.usage) <= 60, (c.key, c.usage)
 
 
 def test_core_google_and_meta_connectors_are_present():
@@ -129,17 +142,17 @@ def test_settings_has_api_limits_tab_between_connections_and_notifications():
     assert tabs.index(">API Limits</button>") < tabs.index(">Notifications</button>")
 
 
-def test_settings_limits_panel_renders_catalog():
+def test_settings_limits_panel_renders_via_shared_partial():
     src = SETTINGS_TEMPLATE.read_text()
     assert 'data-panel="limits"' in src
-    assert "macro rl_card" in src
+    # Cards come from the shared partial, not an inline macro.
+    assert 'import "partials/rate_limit_cards.html" as rlcards' in src
+    assert "rlcards.rl_assets()" in src
+    assert "rlcards.rl_card(c)" in src
+    assert "rlcards.rl_card(c, muted=true)" in src  # catalog cards dimmed
     assert "rate_limits_connected" in src
     assert "rate_limits_available" in src
     assert "rate_limits_reviewed" in src
-    # The card surfaces the consumption estimate, limits table and docs link.
-    assert "consumption_note" in src
-    assert "c.limits" in src
-    assert "c.docs_url" in src
 
 
 # ── Home section wiring ──────────────────────────────────────────────────
@@ -147,10 +160,29 @@ def test_settings_limits_panel_renders_catalog():
 
 def test_home_renders_connected_limits_section_with_deep_link():
     src = HOME_TEMPLATE.read_text()
+    assert 'import "partials/rate_limit_cards.html" as rlcards' in src
     assert "rate_limits_connected" in src
-    assert "rl-home-grid" in src
+    assert "rlcards.rl_card(c)" in src
     assert "/settings#limits" in src  # deep-links into the Settings tab
-    assert "consumption_note" in src
+
+
+# ── Shared compact-card + modal partial ──────────────────────────────────
+
+
+def test_card_partial_is_a_minimal_row_with_usage_and_modal():
+    src = PARTIAL_TEMPLATE.read_text()
+    # Each row shows the limit + the real calls consumed, plus an info trigger.
+    assert "macro rl_card" in src
+    assert "rl-row" in src
+    assert "c.headline" in src and "usage_count" in src
+    assert "No calls yet" in src  # graceful empty state
+    assert "openRlModal(" in src
+    # Full detail lives in the per-connector hidden template, opened in one modal.
+    assert 'id="rld-{{ c.key }}"' in src
+    assert "macro rl_assets" in src and 'id="rlModal"' in src
+    # Verbose detail (note, table, error behavior, typical cost, docs) is in the modal.
+    for detail in ("consumption_note", "c.limits", "error_behavior", "c.usage", "c.docs_url"):
+        assert detail in src, detail
 
 
 # ── Drift checker (app/connectors/rate_limits_drift.py) ───────────────────
@@ -182,3 +214,49 @@ def test_drift_prompt_is_self_contained():
 
     assert "rate_limits.py" in DRIFT_PROMPT
     assert "CHANGED" in DRIFT_PROMPT and "STALE" in DRIFT_PROMPT and "UNVERIFIED" in DRIFT_PROMPT
+
+
+# ── Usage counters (app/connectors/usage.py) ─────────────────────────────
+
+
+def test_cache_key_maps_to_connector():
+    assert connector_usage.connector_for_cache_key("cache:ga4:report:abc") == "ga4"
+    assert connector_usage.connector_for_cache_key("cache:ads:campaigns:x") == "google_ads"
+    assert connector_usage.connector_for_cache_key("cache:launch:rules:x") == "adobe_launch"
+    # Non-connector / non-cache keys don't count.
+    assert connector_usage.connector_for_cache_key("cache:dashboard:123") is None
+    assert connector_usage.connector_for_cache_key("mcp:active_project:u1") is None
+
+
+def test_instrumented_connectors_are_a_subset_of_the_catalog():
+    keys = {c.key for c in rl.CATALOG}
+    assert keys >= connector_usage.INSTRUMENTED_CONNECTORS
+
+
+class _FakeRedis:
+    def __init__(self, data):
+        self.data = data
+
+    async def mget(self, keys):
+        return [self.data.get(k) for k in keys]
+
+
+@pytest.mark.asyncio
+async def test_usage_for_sums_daily_counters(monkeypatch):
+    today = dt.datetime.utcnow().date()
+    d0 = today.strftime("%Y%m%d")
+    d1 = (today - dt.timedelta(days=1)).strftime("%Y%m%d")
+    data = {
+        f"usage:proj1:ga4:{d0}": b"10",
+        f"usage:proj1:ga4:{d1}": b"5",
+        f"usage:proj1:gtm:{d0}": b"3",
+    }
+    monkeypatch.setattr(app_state, "redis_client", _FakeRedis(data))
+    out = await connector_usage.usage_for("proj1", ["ga4", "gtm", "meta_ads"], days=30)
+    assert out == {"ga4": 15, "gtm": 3}  # meta_ads has no recorded calls → omitted
+
+
+@pytest.mark.asyncio
+async def test_usage_for_is_empty_without_redis(monkeypatch):
+    monkeypatch.setattr(app_state, "redis_client", None)
+    assert await connector_usage.usage_for("p", ["ga4"]) == {}

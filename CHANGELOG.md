@@ -8,17 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **API rate limits for every connector, in plain sight.** A new **API Limits** tab in
-  Project Settings and a dedicated **API limits** section on the Home page show, for each
-  connected tool, its published rate limits/quotas (sourced from the provider's official
-  docs, with a "reviewed" date) alongside a plain-language estimate of how fast Fluxito's
-  dashboards and MCP calls actually consume them — so you can see why a busy dashboard or a
-  chatty agent can burn through a quota. Connected tools are shown first; the full catalog
-  of every supported connector is browsable below so you can check limits before connecting.
-  Covers GA4, GTM, BigQuery, Google Ads, Search Console, Meta, TikTok, LinkedIn, Pinterest,
-  Snapchat, X, Reddit, Apple Search Ads, Bing Webmaster, Adobe Analytics, Adobe Launch,
-  Marketo, Amplitude, Redshift and Snowflake. Limit figures are point-in-time and
-  consumption numbers are estimates (caching usually makes real usage lower).
+- **API rate limits and real usage for every connector.** A new **API Limits** tab in
+  Project Settings and an **API limits** section on the Home page list, for each connected
+  tool, its published rate limit (from the provider's official docs, with a "reviewed" date)
+  next to the **actual number of calls Fluxito has made on your behalf over the last 30
+  days** — so you can see at a glance how fast dashboards and MCP calls burn through a quota.
+  Each row stays minimal; an info button opens a modal with the full breakdown (every
+  documented limit, what happens when you hit it, the usage headers to watch, and a link to
+  the official docs). Connected tools are shown first; the full catalog of all 20 supported
+  connectors is browsable below to check limits before connecting. Covers GA4, GTM, BigQuery,
+  Google Ads, Search Console, Meta, TikTok, Snapchat, LinkedIn, Pinterest, X, Reddit, Apple
+  Search Ads, Bing Webmaster, Adobe Analytics, Adobe Launch, Marketo, Amplitude, Redshift and
+  Snowflake. Usage counts the upstream calls we make (cache hits don't count); a few
+  connectors that don't go through the cache layer yet show "no calls" until instrumented.
+  Limit figures are point-in-time — a `python -m app.connectors.rate_limits_drift` helper
+  flags entries that are due for re-verification.
 
 ### Changed
 - **Share PDF now looks like the live dashboard — charts and all.** Exports (and the

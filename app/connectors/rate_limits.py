@@ -69,6 +69,7 @@ class Connector:
     calls_per_card: str  # connector API calls per dashboard card / MCP read
     consumption_note: str  # grounded "how fast Fluxito burns it" estimate
     confidence: str
+    usage: str = "≈1 call per card"  # short, card-facing "approx usage" line
     reviewed: str = REVIEWED
 
 
@@ -85,6 +86,7 @@ CATALOG: tuple[Connector, ...] = (
         docs_url="https://developers.google.com/analytics/devguides/reporting/data/v1/quotas",
         flags=("has_ga4",),
         headline="200k tokens / property / day · 10 concurrent",
+        usage="≈1 report per card · cached 2 min",
         limits=(
             Limit("Core tokens", "200,000", "per day", "per property", "Analytics 360: 2,000,000"),
             Limit("Core tokens", "40,000", "per hour", "per property", "Analytics 360: 400,000"),
@@ -127,6 +129,7 @@ CATALOG: tuple[Connector, ...] = (
         docs_url="https://developers.google.com/tag-platform/tag-manager/api/v2/limits-quotas",
         flags=("has_gtm",),
         headline="0.25 req/s · 10k requests / project / day",
+        usage="≈5 calls per card · cached 5 min",
         limits=(
             Limit("Requests", "10,000", "per day", "per project", "resets at midnight PST"),
             Limit(
@@ -160,6 +163,7 @@ CATALOG: tuple[Connector, ...] = (
         docs_url="https://cloud.google.com/bigquery/quotas",
         flags=("has_bq",),
         headline="200 TiB scanned / project / day",
+        usage="≈1 query per card · billed by bytes scanned",
         limits=(
             Limit(
                 "On-demand query usage",
@@ -194,6 +198,7 @@ CATALOG: tuple[Connector, ...] = (
         docs_url="https://developers.google.com/google-ads/api/docs/best-practices/quotas",
         flags=("has_ads",),
         headline="15,000 operations / day (Basic access)",
+        usage="≈1 query per card · cached 1 min",
         limits=(
             Limit(
                 "Daily operations",
@@ -268,6 +273,7 @@ CATALOG: tuple[Connector, ...] = (
         docs_url="https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
         flags=("has_meta",),
         headline="Dynamic — scales with active ads & users",
+        usage="≈1 call per ad account · cached 1 min",
         limits=(
             Limit("Platform (app) calls", "200 × daily active users", "rolling hour", "per app"),
             Limit(
@@ -661,6 +667,7 @@ CATALOG: tuple[Connector, ...] = (
         docs_url="https://amplitude.com/docs/apis/analytics/dashboard-rest",
         flags=("has_amplitude",),
         headline="5 concurrent + cost-based (Dashboard REST)",
+        usage="≈1 query per card · metered by cost",
         limits=(
             Limit("Dashboard REST concurrency", "5 concurrent", "concurrent", "per project"),
             Limit(
@@ -696,6 +703,7 @@ CATALOG: tuple[Connector, ...] = (
         docs_url="https://docs.aws.amazon.com/redshift/latest/mgmt/amazon-redshift-limits.html",
         flags=("has_redshift",),
         headline="500–2,000 connections · ~50 query slots",
+        usage="≈1 query per card · pooled connection",
         limits=(
             Limit(
                 "Concurrent connections",
@@ -734,6 +742,7 @@ CATALOG: tuple[Connector, ...] = (
         docs_url="https://docs.snowflake.com/en/user-guide/performance-query-warehouse-max-concurrency",
         flags=("has_snowflake",),
         headline="8 concurrent queries / warehouse (default)",
+        usage="≈1 query per card · 1 warehouse slot",
         limits=(
             Limit(
                 "Max concurrency",

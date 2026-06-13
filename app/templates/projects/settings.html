@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} — Settings — Fluxito{% endblock %}
 {% set active = 'projects' %}
+{% import "partials/rate_limit_cards.html" as rlcards %}
 
 {% block main %}
 <main class="app-main">
@@ -171,57 +172,16 @@
   </div>
 
   {# ── API LIMITS TAB ── #}
-  {% macro rl_card(c, is_connected) %}
-  <div class="rl-card{% if not is_connected %} rl-card-muted{% endif %}">
-    <div class="rl-card-head">
-      <div class="rl-card-title">
-        <span class="rl-name">{{ c.name }}</span>
-        <span class="t-flag rl-cat">{{ c.category }}</span>
-      </div>
-      <span class="t-flag rl-conf rl-conf-{{ c.confidence }}" title="How firm these published numbers are">{{ c.confidence }}</span>
-    </div>
-    <div class="rl-headline">{{ c.headline }}</div>
-    <div class="rl-consume">
-      <span class="rl-consume-label">What it costs Fluxito</span>
-      <p>{{ c.consumption_note }}</p>
-    </div>
-    <details class="rl-details">
-      <summary>Limits &amp; behavior</summary>
-      <table class="rl-table">
-        <thead><tr><th>Limit</th><th>Value</th><th>Window</th><th>Scope</th></tr></thead>
-        <tbody>
-          {% for l in c.limits %}
-          <tr>
-            <td>{{ l.name }}</td>
-            <td class="rl-val">{{ l.value }}</td>
-            <td>{{ l.window }}</td>
-            <td>{{ l.scope }}</td>
-          </tr>
-          {% if l.note %}<tr class="rl-note-row"><td colspan="4">↳ {{ l.note }}</td></tr>{% endif %}
-          {% endfor %}
-        </tbody>
-      </table>
-      <div class="rl-meta">
-        <div><span>When you hit it</span><p>{{ c.error_behavior }}</p></div>
-        {% if c.headers and c.headers != '—' %}<div><span>Usage headers</span><p>{{ c.headers }}</p></div>{% endif %}
-        <div><span>Per dashboard card</span><p>{{ c.calls_per_card }} API call{% if c.calls_per_card != '1' %}s{% endif %}</p></div>
-      </div>
-      <div class="rl-foot">
-        <a href="{{ c.docs_url }}" target="_blank" rel="noopener">Official docs ↗</a>
-        <span class="rl-reviewed">Reviewed {{ c.reviewed }}</span>
-      </div>
-    </details>
-  </div>
-  {% endmacro %}
-
   <div class="ps-panel" data-panel="limits" style="display:none">
+    {{ rlcards.rl_assets() }}
     <section class="ps-card ps-section-card">
       <div class="ps-section-copy">
         <span class="label">Reference</span>
         <h2>API rate limits</h2>
-        <p>The published limits for each connected tool, plus an estimate of how fast dashboards
-          and MCP calls burn through them. The limits are point-in-time (checked {{ rate_limits_reviewed }});
-          the consumption notes are estimates — caching means real usage is usually lower.</p>
+        <p>The published limit and the calls Fluxito has consumed for each connected tool over the
+          last {{ rate_limits_usage_days | default(30) }} days — tap the info icon for the full
+          breakdown. Usage counts the upstream calls we made on your behalf; cached responses don't
+          count, and limits are point-in-time (checked {{ rate_limits_reviewed }}).</p>
       </div>
     </section>
 
@@ -230,13 +190,13 @@
       <h3 class="ps-h3">Connected tools</h3>
       <span class="ps-count-pill">{{ rate_limits_connected | length }}</span>
     </div>
-    <div class="rl-grid">
-      {% for c in rate_limits_connected %}{{ rl_card(c, true) }}{% endfor %}
+    <div class="rl-list">
+      {% for c in rate_limits_connected %}{{ rlcards.rl_card(c) }}{% endfor %}
     </div>
     {% else %}
     <div class="audit-empty" style="margin-bottom:26px">
       <h3>No tools connected yet</h3>
-      <p>Connect a platform to see its live limits highlighted here. The full catalog is below.</p>
+      <p>Connect a platform to see its limits highlighted here. The full catalog is below.</p>
       <a href="/connect" class="btn primary" style="margin-top:14px">Connect a platform</a>
     </div>
     {% endif %}
@@ -247,8 +207,8 @@
       <span class="ps-count-pill">{{ rate_limits_available | length }}</span>
     </div>
     <p class="ps-card-lede" style="margin-top:-6px">Limits for every connector Fluxito supports — handy to check before you connect.</p>
-    <div class="rl-grid">
-      {% for c in rate_limits_available %}{{ rl_card(c, false) }}{% endfor %}
+    <div class="rl-list">
+      {% for c in rate_limits_available %}{{ rlcards.rl_card(c, muted=true) }}{% endfor %}
     </div>
     {% endif %}
   </div>
@@ -1069,87 +1029,13 @@
   line-height: 1.5;
 }
 
-/* ── API limits ──────────────────────────────────── */
+/* ── API limits — section header (cards + modal styles live in the
+      partials/rate_limit_cards.html partial, shared with Home) ── */
 .rl-section-head {
   display: flex; align-items: center; gap: 10px;
   margin: 26px 0 14px;
 }
 .rl-section-head .ps-h3 { margin: 0; }
-.rl-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 14px;
-  margin-bottom: 8px;
-}
-.rl-card {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 18px 20px;
-  display: flex; flex-direction: column; gap: 12px;
-}
-.rl-card-muted { background: color-mix(in srgb, var(--bg-2) 55%, transparent); }
-.rl-card-head {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-}
-.rl-card-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.rl-name { font-weight: 600; font-size: 14.5px; color: var(--ink); letter-spacing: -0.01em; }
-.rl-cat { background: var(--bg-3); color: var(--muted); font-size: 10px; }
-.rl-conf {
-  font-family: var(--mono); font-size: 9.5px; text-transform: uppercase;
-  letter-spacing: 0.06em; flex-shrink: 0;
-}
-.rl-conf-high { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
-.rl-conf-medium { background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--amber); }
-.rl-conf-low { background: var(--bg-3); color: var(--muted); }
-.rl-headline {
-  font-size: 14px; font-weight: 500; color: var(--ink);
-  font-family: var(--mono); letter-spacing: -0.01em; line-height: 1.45;
-}
-.rl-consume {
-  background: var(--bg-2);
-  border: 1px solid var(--line-2);
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-.rl-consume-label {
-  display: block; font-family: var(--mono); font-size: 9.5px;
-  text-transform: uppercase; letter-spacing: 0.07em;
-  color: var(--muted); margin-bottom: 4px;
-}
-.rl-consume p { margin: 0; font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
-.rl-details summary {
-  cursor: pointer; font-size: 12px; color: var(--ink-soft);
-  font-weight: 500; padding: 2px 0; user-select: none;
-  list-style: none;
-}
-.rl-details summary::-webkit-details-marker { display: none; }
-.rl-details summary::before { content: '▸ '; color: var(--muted); }
-.rl-details[open] summary::before { content: '▾ '; }
-.rl-details summary:hover { color: var(--ink); }
-.rl-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
-.rl-table th {
-  text-align: left; padding: 6px 8px;
-  font-family: var(--mono); font-size: 9.5px; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--muted);
-  border-bottom: 1px solid var(--line);
-}
-.rl-table td { padding: 6px 8px; color: var(--ink-soft); vertical-align: top; border-bottom: 1px solid var(--line-2); }
-.rl-val { font-family: var(--mono); color: var(--ink); }
-.rl-note-row td { font-size: 11px; color: var(--muted); padding-top: 0; }
-.rl-meta { display: grid; gap: 8px; margin: 10px 0 4px; }
-.rl-meta > div span {
-  display: block; font-family: var(--mono); font-size: 9.5px;
-  text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 2px;
-}
-.rl-meta > div p { margin: 0; font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
-.rl-foot {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; margin-top: 6px; flex-wrap: wrap;
-}
-.rl-foot a { font-size: 12px; color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
-.rl-foot a:hover { border-bottom-color: var(--ink); }
-.rl-reviewed { font-family: var(--mono); font-size: 10px; color: var(--muted); }
 
 /* ── Section headings in notifications/general ── */
 .ps-lede {
