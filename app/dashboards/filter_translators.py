@@ -199,3 +199,64 @@ def _translate_marketing(platform: str, ftype: str, target: str, value: object, 
             _set_path(call_args, fld, val)
     else:
         raise UnsupportedFilterError(f"marketing connector '{platform}' cannot express filter type '{ftype}'")
+
+
+# ------------------------------------------------------------------ orchestration
+
+# URL/query-param encoding for active filter values (the filter bar serializes to
+# these and the data route parses them back):
+#   single_select | search : ?<key>=value
+#   multi_select            : ?<key>=v1,v2,v3   (comma-joined)
+#   number_range            : ?<key>_min=..&<key>_max=..
+#   toggle                  : ?<key>=1
+#   date_range              : ?date_range_start=..&date_range_end=..  (handled elsewhere)
+
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _truthy(v: object) -> bool:
+    return str(v).strip().lower() in _TRUTHY if v is not None else False
+
+
+def resolve_active_value(ftype: str, key: str, spec: dict, active: dict) -> object:
+    """Turn flat query-param(s) into the value shape ``translate`` expects."""
+    if ftype == "toggle":
+        applies = (spec.get("toggle") or {}).get("applies") or {}
+        return applies if _truthy(active.get(key)) else None
+    if ftype == "multi_select":
+        raw = active.get(key)
+        return [v for v in str(raw).split(",") if v] if raw else []
+    if ftype == "number_range":
+        return {"min": active.get(key + "_min"), "max": active.get(key + "_max")}
+    return active.get(key)
+
+
+def apply_card_filters(
+    filter_hooks: dict | None,
+    filter_specs: dict,
+    active: dict,
+    platform: str,
+    call_args: dict,
+) -> set[str]:
+    """Apply every non-date typed filter this card declares to ``call_args``.
+
+    ``filter_specs`` maps key -> normalized spec (from filter_specs.validate_filters).
+    ``active`` is the flat query-param dict. Returns the set of keys handled (so the
+    caller can avoid double-applying them via the legacy raw-value path).
+    """
+    handled: set[str] = set()
+    for ui_key, target in (filter_hooks or {}).items():
+        if ui_key.startswith("date_range"):
+            continue
+        spec = filter_specs.get(ui_key)
+        if not spec:
+            continue  # legacy key — left to the old raw-value path
+        ftype = spec["type"]
+        value = resolve_active_value(ftype, ui_key, spec, active)
+        try:
+            translate(platform, ftype, target, value, call_args)
+            handled.add(ui_key)
+        except UnsupportedFilterError:
+            # Validated at deploy; skip defensively so a bad combo can't 500 a refresh.
+            continue
+    return handled

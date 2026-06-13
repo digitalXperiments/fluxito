@@ -5,7 +5,12 @@ GA4 shapes match app/connectors/ga4.py:_build_filter_expression exactly.
 
 import pytest
 
-from app.dashboards.filter_translators import UnsupportedFilterError, translate
+from app.dashboards.filter_translators import (
+    UnsupportedFilterError,
+    apply_card_filters,
+    resolve_active_value,
+    translate,
+)
 
 # ----------------------------------------------------------------------- GA4
 
@@ -127,3 +132,54 @@ def test_marketing_search_unsupported():
 def test_marketing_number_range_unsupported():
     with pytest.raises(UnsupportedFilterError):
         translate("tiktok", "number_range", "x", {"min": 1, "max": 2}, {})
+
+
+# -------------------------------------------------------- orchestration
+
+
+def test_resolve_multi_select_splits_csv():
+    spec = {"type": "multi_select"}
+    assert resolve_active_value("multi_select", "ch", spec, {"ch": "Organic,Paid"}) == [
+        "Organic",
+        "Paid",
+    ]
+
+
+def test_resolve_toggle_on_returns_applies():
+    spec = {"type": "toggle", "toggle": {"applies": {"newVsReturning": "new"}}}
+    assert resolve_active_value("toggle", "nu", spec, {"nu": "1"}) == {"newVsReturning": "new"}
+    assert resolve_active_value("toggle", "nu", spec, {"nu": "0"}) is None
+
+
+def test_resolve_number_range_reads_min_max():
+    assert resolve_active_value("number_range", "s", {}, {"s_min": "100", "s_max": "5000"}) == {
+        "min": "100",
+        "max": "5000",
+    }
+
+
+def test_apply_card_filters_ga4_single_select():
+    hooks = {"country": "dimension_filter.country", "date_range.start": "start_date"}
+    specs = {"country": {"key": "country", "type": "single_select"}}
+    args: dict = {}
+    handled = apply_card_filters(hooks, specs, {"country": "US"}, "ga4", args)
+    assert handled == {"country"}
+    assert args["dimension_filter"]["filter"]["fieldName"] == "country"
+
+
+def test_apply_card_filters_skips_legacy_and_date_keys():
+    hooks = {"date_range.start": "start_date", "legacy_dim": "filters.x"}
+    specs = {"country": {"key": "country", "type": "single_select"}}
+    args: dict = {}
+    handled = apply_card_filters(hooks, specs, {"legacy_dim": "v"}, "ga4", args)
+    assert handled == set()  # legacy key not in specs; date key skipped
+    assert args == {}
+
+
+def test_apply_card_filters_unsupported_combo_skipped_not_raised():
+    hooks = {"q": "q"}
+    specs = {"q": {"key": "q", "type": "search"}}
+    args: dict = {}
+    # marketing platform can't express search -> skipped, no raise
+    handled = apply_card_filters(hooks, specs, {"q": "abc"}, "meta", args)
+    assert handled == set()

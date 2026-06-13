@@ -878,6 +878,7 @@ async def live_dashboard_data(slug: str, request: Request):
 
     from app.auth.mcp_session_manager import build_refresh_context
     from app.dashboards.filter_hooks import apply_overrides
+    from app.dashboards.filter_translators import apply_card_filters
 
     uid = get_uid_from_request(request)
     start_date = _resolve_relative_date(request.query_params.get("date_range_start") or "")
@@ -938,6 +939,18 @@ async def live_dashboard_data(slug: str, request: Request):
 
         is_owner = uid is not None and str(dash.user_id) == uid
 
+        # Typed dashboard-level filters (the six widget types). Keyed by filter key.
+        # Cards consume them via their per-card filter_hooks. Date filters stay on
+        # the apply_overrides path; typed dimension/metric filters are routed through
+        # the per-platform translation layer (so they become real query syntax).
+        dash_filter_specs = {f["key"]: f for f in (getattr(dash, "filters", None) or []) if f.get("key")}
+        typed_keys = set(dash_filter_specs)
+        # Values handed to apply_overrides exclude typed keys (translate() owns them),
+        # but keep date_range and any legacy keys not declared as typed filters.
+        overrides_for_apply = {
+            k: v for k, v in filter_overrides.items() if k == "date_range" or k not in typed_keys
+        }
+
         # ── Serve from cache unless this is an explicit Refresh ────────────
         # Keyed by slug + viewer-role + dashboard version + filters, so a plain
         # page reload returns instantly without re-querying upstream APIs.
@@ -989,9 +1002,10 @@ async def live_dashboard_data(slug: str, request: Request):
                     if tool is None:
                         raise ValueError(f"Tool '{tool_name}' not registered")
 
-                    # Merge date overrides (respecting the date_locked flag)
+                    # Merge date + legacy overrides (respecting the date_locked flag).
+                    # Typed filters are excluded here and applied via translate() below.
                     card_date_locked = _as_bool(spec.get("date_locked"))
-                    merged_spec = apply_overrides(spec, filter_overrides if not card_date_locked else None)
+                    merged_spec = apply_overrides(spec, overrides_for_apply if not card_date_locked else None)
                     # Params are stored flattened in query_params — exclude spec metadata keys.
                     # NOTE: "platform" is intentionally NOT excluded — it is a required named
                     # parameter for analytics_read, marketing_read, etc.
@@ -1000,21 +1014,37 @@ async def live_dashboard_data(slug: str, request: Request):
                     if action is not None:
                         call_args["action"] = action
                     # warehouse_query needs 'engine' (= platform) and uses 'query' not 'sql'
-                    if tool_name == "warehouse_query":
+                    is_warehouse = tool_name == "warehouse_query"
+                    if is_warehouse:
                         call_args.setdefault("engine", platform)
                         if "sql" in call_args and "query" not in call_args:
                             call_args["query"] = call_args.pop("sql")
-                        # Substitute {placeholder} tokens in the SQL template. Targeted
-                        # str.replace (not format_map) so other curly-brace patterns in the
-                        # SQL don't raise KeyError and silently swallow all substitutions.
-                        if "query" in call_args:
-                            q = call_args["query"]
-                            for _k, _v in call_args.items():
-                                if _k == "query" or not isinstance(_v, str):
-                                    continue
-                                resolved = _resolve_relative_date(_v)
-                                q = q.replace("{" + _k + "}", resolved)
-                            call_args["query"] = q
+
+                    # Apply typed dashboard filters (GA4 dimension/metric_filter,
+                    # warehouse {placeholder} substitution, marketing params). Runs
+                    # before the generic date substitution so typed SQL tokens get
+                    # properly quoted/escaped values rather than a raw card default.
+                    if not card_date_locked and dash_filter_specs:
+                        apply_card_filters(
+                            spec.get("filter_hooks"),
+                            dash_filter_specs,
+                            filter_overrides,
+                            "warehouse" if is_warehouse else platform,
+                            call_args,
+                        )
+
+                    # Substitute remaining {placeholder} tokens in the SQL template
+                    # (date ranges, card-param defaults). Targeted str.replace (not
+                    # format_map) so other curly-brace patterns in the SQL don't raise
+                    # KeyError and silently swallow all substitutions.
+                    if is_warehouse and "query" in call_args:
+                        q = call_args["query"]
+                        for _k, _v in call_args.items():
+                            if _k == "query" or not isinstance(_v, str):
+                                continue
+                            resolved = _resolve_relative_date(_v)
+                            q = q.replace("{" + _k + "}", resolved)
+                        call_args["query"] = q
 
                     async with _sem:
                         raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_LIVE_CARD_TIMEOUT_S)
