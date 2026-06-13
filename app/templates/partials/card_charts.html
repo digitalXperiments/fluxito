@@ -621,6 +621,22 @@
         var kind = el.getAttribute('data-chart');
         var inst = echarts.init(el, theme, {renderer: 'canvas'});
 
+        // Cross-filtering: clicking a bar/point sets the matching dimension filter
+        // (no-op when the dashboard has no filter for that dimension).
+        if (window.dashCrossFilter && (kind === 'custom' || kind === 'table')) {
+          inst.on('click', function(card){
+            return function(params){
+              var snap = card.snap || {};
+              var cols = snap.columns || [];
+              var numeric = F.numericColsOf ? F.numericColsOf(cols, snap.rows || []) : [];
+              var labelCol = cols.find(function(c){ return numeric.indexOf(c) === -1; });
+              if (labelCol && params && params.name != null) {
+                window.dashCrossFilter(labelCol, String(params.name));
+              }
+            };
+          }(card));
+        }
+
         if (kind === 'pie') {
           // New-style pie card rendered by renderPieChart in card_renderer_js.html
           inst.setOption(buildPieOption(card, axisColor), true);

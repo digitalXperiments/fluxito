@@ -447,6 +447,29 @@
 
   function onFilterChange() { syncUrl(); scheduleLoad(); }
 
+  // Cross-filtering: a chart/table click calls this with the clicked dimension +
+  // value. No-op (returns false) unless a matching filter widget exists, so it
+  // can never affect dashboards without that filter.
+  window.dashCrossFilter = function(dimKey, value) {
+    if (!filterBar || !dimKey || value == null || value === '') return false;
+    const sel = '[data-dim-key="' + (window.CSS && CSS.escape ? CSS.escape(dimKey) : dimKey) + '"]';
+    const widget = filterBar.querySelector(sel);
+    if (!widget) return false;
+    const ftype = widget.dataset.ftype;
+    if (ftype === 'single_select') {
+      if (!Array.from(widget.options).some(function(o){ return o.value === value; })) {
+        const o = document.createElement('option'); o.value = value; o.textContent = value; widget.appendChild(o);
+      }
+      widget.value = value; widget.classList.add('is-active');
+    } else if (ftype === 'multi_select') {
+      const cb = widget.querySelector('input[type=checkbox][value="' + (window.CSS && CSS.escape ? CSS.escape(value) : value) + '"]');
+      if (!cb) return false;
+      cb.checked = true; updateMultiLabel(widget);
+    } else { return false; }
+    onFilterChange();
+    return true;
+  };
+
   // ── Dark mode toggle ──────────────────────────────────────────────────
   const btnDarkMode = document.getElementById('btnDarkMode');
   if (btnDarkMode) {
