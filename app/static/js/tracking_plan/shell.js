@@ -11,6 +11,7 @@ import { titleCase } from 'tp/util/format';
 const NAV = [
   ['events', 'Events'],
   ['properties', 'Properties'],
+  ['bundles', 'Bundles'],
   ['categories', 'Categories'],
   ['sources', 'Sources & Destinations'],
   ['metrics', 'Metrics'],
