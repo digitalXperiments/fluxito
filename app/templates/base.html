@@ -29,6 +29,7 @@
         : mode;
       document.documentElement.setAttribute('data-theme', resolved);
       document.documentElement.setAttribute('data-theme-mode', mode);
+      try { if (localStorage.getItem('fx-sidebar-collapsed') === '1') document.documentElement.classList.add('sidebar-collapsed'); } catch(e) {}
     })();
   </script>
   {% if brand().accent %}
@@ -106,6 +107,9 @@
       <span class="version-chip" id="version-chip" data-current="{{ app_version }}" title="Version {{ app_version }}">
         v{{ app_version }}{% if user and user.is_superadmin %}<span class="update-dot" id="update-dot" hidden></span>{% endif %}
       </span>
+      <button type="button" id="sidebarCollapse" class="sidebar-collapse-btn" aria-label="Collapse sidebar" title="Collapse sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+      </button>
     </div>
 
     {# ── Project switcher (same data, compact form) ── #}

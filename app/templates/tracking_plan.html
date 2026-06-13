@@ -3,7 +3,22 @@
 {% set active = 'tracking_plan' %}
 
 {% block head_extra %}
+{{ super() }}
 <link rel="stylesheet" href="/static/css/tracking_plan.css?v={{ asset_hash('css/tracking_plan.css') }}"/>
+<script>
+  // First Tracking Plan visit only: collapse the global sidebar so the first
+  // impression is the roomy workspace. Any later manual toggle wins (we set the
+  // 'autocollapsed' flag once and never override the user's choice again).
+  (function () {
+    try {
+      if (localStorage.getItem('fx-tp-autocollapsed') === null) {
+        localStorage.setItem('fx-tp-autocollapsed', '1');
+        localStorage.setItem('fx-sidebar-collapsed', '1');
+        document.documentElement.classList.add('sidebar-collapsed');
+      }
+    } catch (e) {}
+  })();
+</script>
 {% endblock %}
 
 {% block main %}

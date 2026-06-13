@@ -197,6 +197,39 @@ body {
   scrollbar-width: none;
 }
 
+/* ── Collapsible sidebar ──────────────────────────────────────────────── */
+.sidebar-collapse-btn {
+  margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  border: none; background: transparent; color: var(--muted, #71717A);
+  border-radius: 6px; cursor: pointer; flex-shrink: 0;
+}
+.sidebar-collapse-btn:hover { background: var(--line, #E6E6E8); color: var(--ink, #0B0B0E); }
+
+@media (min-width: 769px) {
+  html.sidebar-collapsed .sidebar { width: 56px; }
+  html.sidebar-collapsed .has-sidebar .main,
+  html.sidebar-collapsed .has-sidebar .site-footer { margin-left: 56px; }
+
+  /* icon-only: hide text via font-size:0; SVGs keep their explicit px size */
+  html.sidebar-collapsed .sidebar-item { justify-content: center; gap: 0; font-size: 0; padding-left: 0; padding-right: 0; }
+  html.sidebar-collapsed .sidebar-group { align-items: center; }
+  html.sidebar-collapsed .sidebar-group-label,
+  html.sidebar-collapsed .sidebar-project-info,
+  html.sidebar-collapsed .sidebar-user-info,
+  html.sidebar-collapsed .sidebar-user-chevron,
+  html.sidebar-collapsed .version-chip,
+  html.sidebar-collapsed .beta-pill,
+  html.sidebar-collapsed .wordmark em,
+  html.sidebar-collapsed .wordmark span:not(.dot) { display: none; }
+  html.sidebar-collapsed .sidebar-header { justify-content: center; gap: 4px; }
+  html.sidebar-collapsed .sidebar-project-btn { justify-content: center; }
+  html.sidebar-collapsed .sidebar-project-btn > svg:last-child { display: none; }
+  /* point the chevrons the other way when collapsed */
+  html.sidebar-collapsed .sidebar-collapse-btn { transform: rotate(180deg); }
+}
+
 .sidebar::-webkit-scrollbar {
   display: none;
 }
