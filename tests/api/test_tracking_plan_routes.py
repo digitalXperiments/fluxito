@@ -101,7 +101,10 @@ async def test_page_renders(client):
     assert r.status_code == 200
     assert "Tracking Plan" in r.text
     assert 'id="tp-app"' in r.text
-    assert "/static/js/tracking_plan.js" in r.text
+    # The page now boots the zero-build ESM bundle via an import map + index.js
+    # (replaced the legacy monolith tracking_plan.js).
+    assert 'type="importmap"' in r.text
+    assert "/static/js/tracking_plan/index.js" in r.text
 
 
 @pytest.mark.anyio
