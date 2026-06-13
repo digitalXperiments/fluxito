@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **API rate limits for every connector, in plain sight.** A new **API Limits** tab in
+  Project Settings and a dedicated **API limits** section on the Home page show, for each
+  connected tool, its published rate limits/quotas (sourced from the provider's official
+  docs, with a "reviewed" date) alongside a plain-language estimate of how fast Fluxito's
+  dashboards and MCP calls actually consume them — so you can see why a busy dashboard or a
+  chatty agent can burn through a quota. Connected tools are shown first; the full catalog
+  of every supported connector is browsable below so you can check limits before connecting.
+  Covers GA4, GTM, BigQuery, Google Ads, Search Console, Meta, TikTok, LinkedIn, Pinterest,
+  Snapchat, X, Reddit, Apple Search Ads, Bing Webmaster, Adobe Analytics, Adobe Launch,
+  Marketo, Amplitude, Redshift and Snowflake. Limit figures are point-in-time and
+  consumption numbers are estimates (caching usually makes real usage lower).
+
 ### Changed
 - **Share PDF now looks like the live dashboard — charts and all.** Exports (and the
   scheduled email/Slack report PDFs) are now rendered by a real headless browser that

@@ -468,6 +468,15 @@ async def project_settings_page(request: Request, slug: str):
         email_senders = []
         slack_webhooks = []
 
+    # Published API rate limits, split into this project's connected tools and
+    # the rest of the catalog. Uses the shared resolver so the "connected" set
+    # matches the Home page exactly.
+    from app.connectors import rate_limits
+    from app.connectors.connection_status import resolve_connection_flags
+
+    conn_flags = await resolve_connection_flags(uid, project.id)
+    rl_connected, rl_available = rate_limits.partition(rate_limits.connected_keys(conn_flags))
+
     from app.templating import render
 
     response = render(
@@ -487,6 +496,9 @@ async def project_settings_page(request: Request, slug: str):
             "connections": connections,
             "email_senders": email_senders,
             "slack_webhooks": slack_webhooks,
+            "rate_limits_connected": rate_limits.to_view(rl_connected),
+            "rate_limits_available": rate_limits.to_view(rl_available),
+            "rate_limits_reviewed": rate_limits.REVIEWED,
             "membership": {"role": membership.role},
             "user_project_role": membership.role,
             "user": user,

@@ -125,6 +125,33 @@
     </div>
   </div>
 
+  {# ── API limits (connected tools) ── #}
+  {% if rate_limits_connected %}
+  {% set rlns = namespace(slug=None) %}
+  {% for p in nav_projects %}{% if p.id == active_project_id %}{% set rlns.slug = p.slug %}{% endif %}{% endfor %}
+  <div class="section-head home-section-head rl-home-head">
+    <div>
+      <div class="label">API limits</div>
+      <h2>How fast your tools <em class="serif-italic">burn quota.</em></h2>
+    </div>
+    {% if rlns.slug %}<a href="/project/{{ rlns.slug }}/settings#limits" class="btn sm">View all limits →</a>{% endif %}
+  </div>
+  <div class="rl-home-grid">
+    {% for c in rate_limits_connected %}
+    <div class="rl-home-card">
+      <div class="rl-home-top">
+        <span class="rl-home-name">{{ c.name }}</span>
+        <span class="t-flag rl-home-cat">{{ c.category }}</span>
+      </div>
+      <div class="rl-home-headline">{{ c.headline }}</div>
+      <p class="rl-home-note">{{ c.consumption_note }}</p>
+      <a href="{{ c.docs_url }}" target="_blank" rel="noopener" class="rl-home-docs">Docs ↗</a>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="rl-home-foot">Published limits, checked {{ rate_limits_reviewed }}. Consumption figures are estimates — caching usually makes real usage lower.</p>
+  {% endif %}
+
   {# ── Your workspace (quickstart tiles) ── #}
   <div class="section-head home-section-head">
     <div class="label">Your workspace</div>
@@ -315,6 +342,38 @@
   min-height: 76px;
   padding: 15px var(--home-card-pad-x);
 }
+
+/* API limits (connected tools) */
+.rl-home-head {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+}
+.rl-home-head .btn { flex-shrink: 0; }
+.rl-home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(264px, 1fr));
+  gap: 14px;
+}
+.rl-home-card {
+  border: 1px solid var(--line); border-radius: var(--r-m);
+  background: var(--bg); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: border-color 0.15s ease;
+}
+.rl-home-card:hover { border-color: var(--ink-soft); }
+.rl-home-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rl-home-name { font-weight: 600; font-size: 14px; color: var(--ink); letter-spacing: -0.01em; }
+.rl-home-cat { background: var(--bg-3); color: var(--muted); font-size: 9.5px; }
+.rl-home-headline {
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink);
+  letter-spacing: -0.01em; line-height: 1.4;
+}
+.rl-home-note {
+  margin: 0; font-size: 12px; color: var(--ink-soft); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rl-home-docs { font-size: 11.5px; color: var(--muted); text-decoration: none; margin-top: auto; }
+.rl-home-docs:hover { color: var(--ink); }
+.rl-home-foot { margin: 12px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 
 /* Workspace tiles */
 .workspace-grid {
