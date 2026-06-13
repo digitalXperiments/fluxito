@@ -69,6 +69,13 @@ class Dashboard(Base):
     # Each entry: {"label": "Year 2024", "start": "2024-01-01", "end": "2024-12-31"}
     filter_presets: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb"))
 
+    # Dashboard-level filter declarations (the six widget types). Each entry:
+    #   {"key", "label", "type": date_range|single_select|multi_select|search|
+    #    number_range|toggle, "options"?, "toggle"?, "default", "ui"}
+    # Empty => the live route synthesizes filters from legacy per-card filter_hooks.
+    # See app/dashboards/filter_specs.py for the validated/normalized shape.
+    filters: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb"))
+
     # Sharing
     share_slug: Mapped[str] = mapped_column(String(16), unique=True, nullable=False, index=True)
     share_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
