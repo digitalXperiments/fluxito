@@ -16,11 +16,14 @@ import app.app_state as app_state
 from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
 from app.api.project_routes import ensure_active_project, set_active_project_cookie
 from app.models.project import ProjectMember
+from app.models.user import User
 from app.models.tracking_plan import TPVersion
 from app.services.tracking_plan import (
-    get_or_create_plan,
-    list_comments,
+    activity_to_dict,
     comment_to_dict,
+    get_or_create_plan,
+    list_activity,
+    list_comments,
     plan_to_dict,
     plan_to_markdown,
     plan_to_xlsx,
@@ -282,6 +285,59 @@ async def api_list_comments(
         )
         await db.commit()
         return JSONResponse({"comments": [comment_to_dict(c) for c in comments]})
+
+
+# ----------------------------------------------------------------------------
+# Activity read (per-entity feed + branch timeline)
+# ----------------------------------------------------------------------------
+@router.get("/api/projects/{project_id}/tracking-plan/activity")
+async def api_list_activity(
+    project_id: str,
+    request: Request,
+    branch: str | None = Query(default=None, description="Branch id or name (default: main)"),
+    entity_type: str | None = Query(default=None, description="Filter by entity type"),
+    entity_id: str | None = Query(default=None, description="Filter by entity UUID"),
+):
+    user_uuid, proj_id, _role = await _resolve(request)
+    _check_param_pid(project_id, proj_id)
+    async with app_state.db_session_factory() as db:
+        plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
+        try:
+            target = await resolve_branch(db, plan, branch)
+        except NotFoundError:
+            raise HTTPException(status_code=404, detail="Branch not found")
+        except ValidationError:
+            raise HTTPException(status_code=422, detail="Invalid branch reference")
+        rows = await list_activity(db, target, entity_type=entity_type, entity_id=entity_id)
+        return JSONResponse({"activity": [activity_to_dict(a) for a in rows]})
+
+
+# ----------------------------------------------------------------------------
+# Project members (for @mention autocomplete)
+# ----------------------------------------------------------------------------
+@router.get("/api/projects/{project_id}/members")
+async def api_list_members(project_id: str, request: Request):
+    _user_uuid, proj_id, _role = await _resolve(request)
+    _check_param_pid(project_id, proj_id)
+    async with app_state.db_session_factory() as db:
+        rows = (
+            await db.execute(
+                select(ProjectMember, User)
+                .join(User, User.id == ProjectMember.user_id)
+                .where(ProjectMember.project_id == proj_id, ProjectMember.is_active.is_(True))
+            )
+        ).all()
+        members = []
+        for _m, u in rows:
+            label = (getattr(u, "display_name", None) or u.email or "").strip()
+            members.append(
+                {
+                    "id": str(u.id),
+                    "display_name": getattr(u, "display_name", None) or u.email,
+                    "initials": (label[:2] or "?").upper(),
+                }
+            )
+        return JSONResponse({"members": members})
 
 
 # ----------------------------------------------------------------------------

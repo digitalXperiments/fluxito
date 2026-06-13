@@ -181,3 +181,44 @@ async def test_version_snapshot_rejects_other_projects_version(client, db_sessio
     pid = client._pid
     r = await client.get(f"/api/projects/{pid}/tracking-plan/versions/{other_version_id}")
     assert r.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_activity_endpoint_lists_writes(client):
+    pid = client._pid
+    r = await client.post(
+        f"/api/projects/{pid}/tracking-plan/action",
+        json={"action": "create_event", "params": {"name": "signup"}},
+    )
+    assert r.status_code == 200
+    a = await client.get(f"/api/projects/{pid}/tracking-plan/activity")
+    assert a.status_code == 200
+    items = a.json()["activity"]
+    assert any(x["action"] == "create_event" and x["entity_type"] == "event" for x in items)
+
+
+@pytest.mark.anyio
+async def test_activity_endpoint_filters_by_entity(client):
+    pid = client._pid
+    r = await client.post(
+        f"/api/projects/{pid}/tracking-plan/action",
+        json={"action": "create_event", "params": {"name": "signup2"}},
+    )
+    eid = r.json()["id"]
+    a = await client.get(
+        f"/api/projects/{pid}/tracking-plan/activity",
+        params={"entity_type": "event", "entity_id": eid},
+    )
+    assert a.status_code == 200
+    items = a.json()["activity"]
+    assert items and all(x["entity_id"] == eid for x in items)
+
+
+@pytest.mark.anyio
+async def test_members_endpoint_returns_seeded_owner(client):
+    pid = client._pid
+    r = await client.get(f"/api/projects/{pid}/members")
+    assert r.status_code == 200
+    members = r.json()["members"]
+    assert len(members) >= 1
+    assert all({"id", "display_name", "initials"} <= set(m) for m in members)
