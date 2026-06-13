@@ -76,6 +76,13 @@ class Dashboard(Base):
     # See app/dashboards/filter_specs.py for the validated/normalized shape.
     filters: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb"))
 
+    # Live-data cache TTL in seconds. First load of each filter combo queries
+    # upstream and caches for this long; a freshness banner shows the age. Default
+    # 24h (86400). Owners can override per dashboard.
+    cache_ttl_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=86400, server_default="86400"
+    )
+
     # Sharing
     share_slug: Mapped[str] = mapped_column(String(16), unique=True, nullable=False, index=True)
     share_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

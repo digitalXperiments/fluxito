@@ -53,10 +53,26 @@ _LIVE_CARD_CONCURRENCY = 6
 # Redis entry keyed by slug + viewer-role + filters; every subsequent page
 # reload then serves from it, so we don't re-hit the upstream analytics APIs
 # (GA4, BigQuery, …) on each reload. The Refresh button sends ?refresh=1 to
-# bypass and repopulate. A 1h safety TTL bounds staleness even if Refresh is
-# never pressed.
-_DASH_DATA_CACHE_TTL_S = 3600
+# bypass and repopulate. Each dashboard's cache_ttl_seconds (default 24h) bounds
+# staleness even if Refresh is never pressed; this constant is only the fallback.
+_DASH_DATA_CACHE_TTL_S = 86400
 _DASH_DATA_CACHE_PREFIX = "dashdata:v1"
+
+
+def _cards_signature(cards: list) -> str:
+    """Content hash of the cards' specs + last-refresh, so the live-data cache
+    busts when any card changes — not only when ``dashboard.updated_at`` moves
+    (the prior key only used updated_at, so a card-level refresh went unnoticed)."""
+    sig = [
+        {
+            "qp": getattr(c, "query_params", None),
+            "ct": getattr(c, "chart_type", None),
+            "cc": getattr(c, "chart_config", None),
+            "ra": str(getattr(c, "refreshed_at", "") or ""),
+        }
+        for c in cards
+    ]
+    return hashlib.sha256(json.dumps(sig, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
 def _dashdata_cache_key(
@@ -66,12 +82,14 @@ def _dashdata_cache_key(
     dash_version: str,
     filter_overrides: dict,
     platforms_allowed: set,
+    cards_sig: str = "",
 ) -> str:
     """Deterministic Redis key for a dashboard's live-data response.
 
-    Folds in the viewer role (owner payloads carry per-card ``live_error``),
-    the dashboard version + card count (so edits/redeploys bust the cache), and
-    every active filter (so each filter combination caches separately).
+    Folds in the viewer role (owner payloads carry per-card ``live_error``), the
+    dashboard version + card count, a content hash of the cards (so a card edit or
+    refresh busts the cache), and every active filter + compare state (each
+    combination caches separately).
     """
     raw = "|".join(
         [
@@ -79,6 +97,7 @@ def _dashdata_cache_key(
             "o1" if is_owner else "o0",
             f"n{card_count}",
             f"v{dash_version}",
+            f"c{cards_sig}",
             json.dumps(filter_overrides, sort_keys=True, default=str),
             ",".join(sorted(platforms_allowed)),
         ]
@@ -103,14 +122,14 @@ async def _dashdata_cache_get(key: str) -> dict | None:
     return None
 
 
-async def _dashdata_cache_set(key: str, body: dict) -> None:
-    """Store a data response under ``key`` with the safety TTL. Silent on any
-    Redis error."""
+async def _dashdata_cache_set(key: str, body: dict, ttl: int = _DASH_DATA_CACHE_TTL_S) -> None:
+    """Store a data response under ``key`` with the given TTL (default 24h). Silent
+    on any Redis error."""
     redis = app_state.redis_client
     if redis is None:
         return
     try:
-        await redis.setex(key, _DASH_DATA_CACHE_TTL_S, json.dumps(body, default=str))
+        await redis.setex(key, max(60, int(ttl)), json.dumps(body, default=str))
     except Exception as exc:
         logger.debug("dashdata cache write failed: %s", exc)
 
@@ -983,6 +1002,7 @@ async def live_dashboard_data(slug: str, request: Request):
         # ── Serve from cache unless this is an explicit Refresh ────────────
         # Keyed by slug + viewer-role + dashboard version + filters, so a plain
         # page reload returns instantly without re-querying upstream APIs.
+        cache_ttl = int(getattr(dash, "cache_ttl_seconds", None) or _DASH_DATA_CACHE_TTL_S)
         cache_key = _dashdata_cache_key(
             slug,
             is_owner,
@@ -990,6 +1010,7 @@ async def live_dashboard_data(slug: str, request: Request):
             str(getattr(dash, "updated_at", "") or ""),
             filter_overrides,
             platforms_allowed,
+            _cards_signature(cards),
         )
         if not force_refresh:
             cached_body = await _dashdata_cache_get(cache_key)
@@ -1170,7 +1191,7 @@ async def live_dashboard_data(slug: str, request: Request):
             body["insights"] = movers
         body["compare"] = {"start": cmp_start, "end": cmp_end, "mode": compare_mode}
     # Store for subsequent reloads (also repopulates after an explicit Refresh).
-    await _dashdata_cache_set(cache_key, body)
+    await _dashdata_cache_set(cache_key, body, cache_ttl)
     return JSONResponse(body)
 
 
