@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canMerge, reviewActionsFor } from "../../../app/static/js/tracking_plan/views/review.js";
+import { canMerge, reviewActionsFor } from "../../../app/static/js/tracking_plan/util/review_gating.js";
 
 test("canMerge: admin + approved only", () => {
   assert.equal(canMerge("approved", "admin"), true);

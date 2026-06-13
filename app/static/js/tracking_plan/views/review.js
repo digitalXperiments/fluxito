@@ -1,78 +1,273 @@
-// app/static/js/tracking_plan/views/review.js  (pure gating — exported for tests)
-// Pure predicates are at the top, before any browser-only imports, so that
-// node --test can import this module directly (tests/js/tracking_plan/review_gating.test.mjs).
+// app/static/js/tracking_plan/views/review.js
+// Branch-review screen (§5.10): diff viewer + review panel + merge & publish.
+// Pure gating predicates are in tp/util/review_gating (Node-testable separately).
 
-const ADMIN_ROLES = new Set(["owner", "admin"]);
+import { h, mount } from "tp/render";
+import * as state from "tp/state";
+import * as api from "tp/api";
+import { groupDiff } from "tp/util/diff";
+import { initials, relativeTime } from "tp/util/format";
+import { mountDrawer } from "tp/comments";
+import { renderChangeList } from "tp/views/_changelist";
+import { canMerge, reviewActionsFor } from "tp/util/review_gating";
 
-export function canMerge(reviewStatus, role) {
-  return ADMIN_ROLES.has(role) && reviewStatus === "approved";
-}
+// Re-export for any legacy import sites (none expected after refactor).
+export { canMerge, reviewActionsFor };
 
-// Returns the ordered review actions to render for the current branch state.
-// Each: { id, label, status?, kind } — `status` is the set_review_status target;
-// `merge` has no status (it calls merge_branch). `disabled` gates the button.
-export function reviewActionsFor(reviewStatus, role, isMain) {
-  if (isMain) return [];
-  const isAdmin = ADMIN_ROLES.has(role);
-  const out = [];
-  if (reviewStatus === "draft") {
-    out.push({ id: "request_review", label: "Request review", status: "ready_for_review", kind: "secondary" });
+const BASE_BRANCH = "main";
+
+// ---------------------------------------------------------------------------
+// Contract entry point — SYNC; returns a cleanup function.
+// ---------------------------------------------------------------------------
+export function mountView(container) {
+  let _drawer = null;
+
+  function render() {
+    // Destroy any lingering drawer from the previous render cycle.
+    if (_drawer) { _drawer.destroy(); _drawer = null; }
+    paint(container, (d) => { _drawer = d; });
   }
-  if (reviewStatus === "ready_for_review") {
-    out.push({ id: "approve", label: "Approve", status: "approved", kind: "secondary" });
-    out.push({ id: "request_changes", label: "Request changes", status: "changes_requested", kind: "ghost" });
-  }
-  if (reviewStatus === "changes_requested") {
-    out.push({ id: "request_review", label: "Re-request review", status: "ready_for_review", kind: "secondary" });
-  }
-  if (reviewStatus === "approved") {
-    out.push({ id: "request_changes", label: "Request changes", status: "changes_requested", kind: "ghost" });
-  }
-  if (isAdmin && reviewStatus !== "draft") {
-    out.push({ id: "merge", label: "Merge & publish", kind: "primary", disabled: !canMerge(reviewStatus, role) });
-  }
-  return out;
+
+  const unsub = state.subscribe(render);
+  render();
+
+  return () => { unsub(); if (_drawer) _drawer.destroy(); };
 }
 
 // ---------------------------------------------------------------------------
-// Browser view (browser-only imports are inside the function to keep the
-// module importable from Node for unit-testing the pure predicates above).
+// paint — called sync; kicks off async data loads independently.
 // ---------------------------------------------------------------------------
-export async function mountView(container) {
-  const { h, mountAll } = await import("tp/render");
-  const state = await import("tp/state");
-  const api = await import("tp/api");
-  const { groupDiff } = await import("tp/util/diff");
+function paint(container, onDrawer) {
+  const { branch } = state.getState();
+  const isMain = !branch || branch === BASE_BRANCH ||
+    (typeof branch === "object" && (branch.is_main || branch.name === BASE_BRANCH));
 
-  const host = h("div", { class: "tp-detail-inner" });
-  mountAll(container, [host]);
-  load();
-  async function load() {
-    mountAll(host, [h("div", { class: "tp-muted" }, "Loading changes…")]);
-    let diff;
-    try { diff = await api.diff(state.getState().branch, "main"); }
-    catch (e) { mountAll(host, [h("div", { class: "tp-empty" }, String(e.message || e))]); return; }
-    const s = diff.summary || { added: 0, changed: 0, removed: 0 };
-    const groups = groupDiff(diff);
-    const nodes = [
-      h("h2", { style: { margin: "0 0 12px" } }, "Changes vs ", h("span", { class: "tp-mono" }, "main")),
-      h("div", { class: "tp-diff-summary" },
-        h("span", { class: "tp-diff-stat add" }, `+${s.added} added`),
-        h("span", { class: "tp-diff-stat chg" }, `~${s.changed} changed`),
-        h("span", { class: "tp-diff-stat rem" }, `−${s.removed} removed`)),
-    ];
-    if (!groups.length) nodes.push(h("div", { class: "tp-empty" }, "No differences from main yet."));
-    for (const g of groups) {
-      const grp = h("div", { class: "tp-diff-group" }, h("h3", {}, g.group));
-      for (const c of g.changes) {
-        const markCls = c.marker === "+" ? "add" : c.marker === "-" ? "rem" : "chg";
-        const item = h("div", { class: "tp-diff-item" }, h("span", { class: "tp-diff-mark " + markCls }, c.marker), c.name);
-        grp.appendChild(item);
-        for (const f of c.fields || []) grp.appendChild(h("div", { class: "tp-diff-field" }, `${f.key}: `, h("span", { class: "tp-was" }, String(f.was ?? "∅")), " → ", h("span", { class: "tp-now" }, String(f.now ?? "∅"))));
-      }
-      nodes.push(grp);
+  // Normalise: branch may be a string (state stores branch name) or an object.
+  const branchObj = (typeof branch === "object" && branch) || null;
+  const branchName = branchObj ? branchObj.name : (branch || BASE_BRANCH);
+
+  // On main: show empty state, no review actions.
+  if (isMain) {
+    mount(container, h("div", { class: "tp-empty" },
+      h("div", {}, "Branch review is available on a feature branch."),
+      h("div", { class: "tp-muted" },
+        "Create a branch from the switcher to open a pull-request style review.")));
+    return;
+  }
+
+  // Build shell synchronously so the page isn't blank while data loads.
+  const reviewStatus = (branchObj && branchObj.review_status) || "draft";
+  const role = resolveRole();
+
+  const head = h("div", { class: "tp-review-head" },
+    h("div", { class: "tp-review-title" },
+      h("span", { class: "tp-mono" }, branchName),
+      h("span", { class: "tp-review-arrow" }, "→"),
+      h("span", { class: "tp-mono" }, BASE_BRANCH),
+      h("span", { class: "tp-review-pill", "data-s": reviewStatus },
+        reviewStatus.replace(/_/g, " "))),
+    h("div", { class: "tp-review-actions" },
+      ...buildActionButtons(branchObj || { name: branchName, review_status: reviewStatus }, role)));
+
+  const changesCol = h("div", { class: "tp-review-changes" },
+    h("div", { class: "tp-muted" }, "Loading changes…"));
+  const panelCol = h("div", { class: "tp-review-panel" });
+
+  mount(container, h("div", { class: "tp-review-screen" },
+    head,
+    h("div", { class: "tp-review-body" }, changesCol, panelCol)));
+
+  // Async data fills — fire-and-forget; each catches its own errors.
+  fillChanges(changesCol, branchObj || { name: branchName, review_status: reviewStatus });
+  fillPanel(panelCol, branchObj || { name: branchName, review_status: reviewStatus }, onDrawer);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function resolveRole() {
+  const el = document.getElementById("tp-app");
+  if (el && el.dataset.admin === "true") return "admin";
+  return "editor";
+}
+
+function buildActionButtons(branch, role) {
+  const actions = reviewActionsFor(branch.review_status || "draft", role, !!branch.is_main);
+  return actions.map((a) => {
+    const attrs = { class: "btn btn-" + a.kind + " btn-sm" };
+    if (a.disabled) {
+      attrs.disabled = "disabled";
+      attrs.title = "Branch must be approved before merging";
     }
-    mountAll(host, nodes);
+    const btn = h("button", attrs, a.label);
+    if (!a.disabled) {
+      btn.addEventListener("click", () => {
+        if (a.id === "merge") {
+          doMerge(branch);
+        } else {
+          doSetReview(branch, a.status);
+        }
+      });
+    }
+    return btn;
+  });
+}
+
+async function doSetReview(branch, status) {
+  try {
+    await api.doAction("set_review_status", { status }, branch.name);
+    await state.reload();
+  } catch (e) {
+    showBanner((e.errorType || "error") + ": " + e.message, "err");
   }
-  return () => {};
+}
+
+async function doMerge(branch) {
+  // merge_branch auto-publishes; its changelog becomes the published version's changelog.
+  const note = window.prompt("Changelog for the merged version:", "Merged " + branch.name);
+  if (note === null) return; // user cancelled
+  try {
+    const r = await api.doAction("merge_branch", { changelog: note }, branch.name);
+    showBanner("Merged → published " + (r.version_number || "") + ".", "ok");
+    state.setBranch(BASE_BRANCH);
+    state.setView("events");
+    await state.reload();
+  } catch (e) {
+    showBanner((e.errorType || "error") + ": " + e.message, "err");
+  }
+}
+
+async function fillChanges(col, branch) {
+  let diffResp;
+  try {
+    diffResp = await api.diff(branch.name, BASE_BRANCH);
+  } catch (e) {
+    mount(col, h("div", { class: "tp-empty" },
+      "Could not load diff: " + (e.message || String(e))));
+    return;
+  }
+
+  const grouped = groupDiff(diffResp);
+  const counts = await fetchCommentCounts(branch);
+
+  // Replace loading placeholder — use DOM methods, not innerHTML, to avoid XSS.
+  col.textContent = "";
+  col.appendChild(renderChangeList(grouped, {
+    summary: diffResp.summary,
+    commentCounts: counts,
+    onToggleInline: (change, _rowEl, bodyEl) => {
+      const slot = h("div", { class: "tp-inline-comments" });
+      bodyEl.appendChild(slot);
+      mountDrawer(slot, {
+        entityType: change.entityType,
+        entityId: change.id,
+        branch: branch.name,
+      });
+    },
+  }));
+}
+
+async function fetchCommentCounts(branch) {
+  try {
+    // api.listComments is positional: (entityType, entityId, branch)
+    const resp = await api.listComments(null, null, branch.name);
+    const comments = resp.comments || [];
+    const out = {};
+    for (const c of comments) {
+      if (!c.entity_type || !c.entity_id) continue;
+      const k = c.entity_type + ":" + c.entity_id;
+      out[k] = (out[k] || 0) + 1;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+async function fillPanel(col, branch, onDrawer) {
+  col.textContent = "";
+
+  // --- Reviewers section ---
+  const reviewersSection = h("div", { class: "tp-review-section" },
+    h("h4", {}, "Reviewers"));
+
+  // --- Activity timeline section ---
+  const timelineSection = h("div", { class: "tp-review-section" },
+    h("h4", {}, "Activity"));
+  const tlBody = h("div", { class: "tp-activity-timeline" },
+    h("div", { class: "tp-muted" }, "Loading…"));
+  timelineSection.appendChild(tlBody);
+
+  // --- Discussion section ---
+  const discussSection = h("div", { class: "tp-review-section" },
+    h("h4", {}, "Discussion"));
+  const discSlot = h("div", {});
+  discussSection.appendChild(discSlot);
+
+  col.appendChild(reviewersSection);
+  col.appendChild(timelineSection);
+  col.appendChild(discussSection);
+
+  // Mount the general-discussion drawer immediately (branch entity).
+  const drawer = mountDrawer(discSlot, {
+    entityType: "branch",
+    entityId: branch.id || branch.name,
+    branch: branch.name,
+  });
+  if (onDrawer) onDrawer(drawer);
+
+  // Fill reviewers + activity timeline from the branch activity feed.
+  try {
+    // api.listActivity is positional: (entityType, entityId, branch)
+    const resp = await api.listActivity(null, null, branch.name);
+    const activity = resp.activity || [];
+
+    tlBody.textContent = "";
+    if (!activity.length) {
+      tlBody.appendChild(h("div", { class: "tp-muted" }, "No activity yet."));
+    }
+
+    const seen = new Set();
+    for (const a of activity) {
+      tlBody.appendChild(h("div", { class: "tp-activity-row" },
+        h("span", { class: "tp-avatar" }, initials(a.actor_id || "?")),
+        h("div", { class: "tp-activity-main" },
+          h("div", { class: "tp-activity-summary" }, String(a.summary || a.action || "")),
+          h("div", { class: "tp-activity-when" }, relativeTime(a.created_at)))));
+
+      // Per-person review status: last set_review_status event per actor.
+      if (a.action === "set_review_status" && a.actor_id && !seen.has(a.actor_id)) {
+        seen.add(a.actor_id);
+        const statusLabel = String(a.summary || "reviewed").replace(/^.*?branch\s*/i, "");
+        reviewersSection.appendChild(h("div", { class: "tp-reviewer-row" },
+          h("span", { class: "tp-avatar" }, initials(a.actor_id)),
+          h("span", { class: "tp-mono" }, a.actor_id.slice(0, 8)),
+          h("span", { class: "tp-status", "data-s": "implemented" }, statusLabel)));
+      }
+    }
+
+    // If no reviewer rows were added, show a placeholder (the h4 is childElementCount === 1).
+    if (reviewersSection.childElementCount === 1) {
+      reviewersSection.appendChild(h("div", { class: "tp-muted" }, "No review actions yet."));
+    }
+  } catch {
+    tlBody.textContent = "";
+    tlBody.appendChild(h("div", { class: "tp-muted" }, "Activity unavailable."));
+  }
+}
+
+// Lightweight banner — reuses #tp-banner if the TP shell provides it.
+function showBanner(msg, kind) {
+  const b = document.getElementById("tp-banner");
+  if (!b) {
+    if (kind === "err") console.error(msg);
+    return;
+  }
+  b.className = "tp-banner " + (kind || "ok");
+  b.style.display = "flex";
+  b.textContent = msg;
+  if (kind !== "err") {
+    setTimeout(() => { b.style.display = "none"; b.textContent = ""; }, 3200);
+  }
 }
