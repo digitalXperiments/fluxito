@@ -143,7 +143,9 @@ export function mountDrawer(container, { entityType, entityId, branch }) {
     const body = commentsBody();
     // append a reply composer under the thread
     const c = composer(parentId);
-    body.querySelector('.tp-drawer-body').appendChild(c);
+    // `body` IS the .tp-drawer-body div, so append the reply composer to it directly
+    // (querySelector searches descendants and would return null here).
+    body.appendChild(c);
     mountAll(drawer, [drawer.querySelector('.tp-drawer-tabs'), body]);
   }
   function startEdit(c) {
