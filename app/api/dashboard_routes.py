@@ -1161,6 +1161,14 @@ async def live_dashboard_data(slug: str, request: Request):
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "cached": False,
     }
+    # Compare mode: surface the biggest movers as a one-line insight banner.
+    if compare_active:
+        from app.dashboards.insights import biggest_movers
+
+        movers = biggest_movers(payload_cards)
+        if movers:
+            body["insights"] = movers
+        body["compare"] = {"start": cmp_start, "end": cmp_end, "mode": compare_mode}
     # Store for subsequent reloads (also repopulates after an explicit Refresh).
     await _dashdata_cache_set(cache_key, body)
     return JSONResponse(body)

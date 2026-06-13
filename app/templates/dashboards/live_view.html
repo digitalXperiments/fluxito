@@ -321,6 +321,9 @@
     <button class="dash-filter-chip" id="clearAllFilters" title="Reset all filters">Clear all</button>
   </div>
 
+  <div id="insightBanner" style="display:none;margin:10px 0 0;padding:8px 12px;border:1px solid var(--border);border-radius:var(--r-sm,6px);background:var(--surface-2,#fafafa);font-size:13px;"></div>
+  <div id="freshnessBanner" style="display:none;margin:8px 0 0;font-size:12px;color:var(--text-subtle);"></div>
+
   <div id="cardGrid" class="grid grid-cards">
     <!-- cards are rendered client-side from initialCards, then updated on Apply -->
   </div>
@@ -675,6 +678,32 @@
         return c;
       });
       renderAll(cards);
+
+      // Insight banner (biggest movers when compare is on)
+      const ib = document.getElementById('insightBanner');
+      if (ib) {
+        if (data.insights && data.insights.length) {
+          const esc = (window.Fluxito && Fluxito.esc) ? Fluxito.esc : function(s){ return s; };
+          let html = '💡 ' + data.insights.map(esc).join('  ·  ');
+          if (data.compare && data.compare.start) {
+            html += ' <span style="color:var(--text-subtle)">vs ' + esc(data.compare.start) + ' – ' + esc(data.compare.end) + '</span>';
+          }
+          ib.innerHTML = html; ib.style.display = '';
+        } else { ib.style.display = 'none'; ib.innerHTML = ''; }
+      }
+
+      // Freshness banner ("Cached data from <ts>" / "Live as of <ts>")
+      const fb = document.getElementById('freshnessBanner');
+      if (fb) {
+        const when = data.generated_at ? new Date(data.generated_at) : new Date();
+        const stamp = isNaN(when.getTime()) ? '' : when.toLocaleString(undefined, {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
+        fb.innerHTML = data.cached
+          ? '🕓 Cached data from ' + stamp + ' — refreshes daily · <a href="#" id="freshRefresh" style="text-decoration:underline">Refresh now</a>'
+          : '🟢 Live data as of ' + stamp;
+        fb.style.display = '';
+        const fr = document.getElementById('freshRefresh');
+        if (fr) fr.addEventListener('click', function(ev){ ev.preventDefault(); loadCards(true); });
+      }
     } catch(e) {
       // An aborted request was deliberately superseded — not an error.
       if (e && e.name === 'AbortError') return;
