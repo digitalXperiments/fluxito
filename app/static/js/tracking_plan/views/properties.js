@@ -21,6 +21,9 @@ function allProps(plan) {
   return [...p.event, ...p.user, ...p.group, ...p.system];
 }
 
+// Single comments drawer instance for this view; torn down on navigation.
+let _drawer = null;
+
 export function mountView(container) {
   let search = "";
 
@@ -37,8 +40,15 @@ export function mountView(container) {
   };
 
   // subscribe AFTER render is defined — no TDZ risk
-  subscribe(render);
+  const unsub = subscribe(render);
   render();
+  return () => {
+    unsub();
+    if (_drawer) {
+      _drawer.destroy();
+      _drawer = null;
+    }
+  };
 }
 
 function masterPanel(st, search, onSearch) {
@@ -184,8 +194,11 @@ function detailPanel(st) {
     await reload();
   };
   delBtn.onclick = () => confirmDelete(st, p);
-  drawerBtn.onclick = () =>
-    mountDrawer(document.body, { entityType: "property", entityId: p.id, branch: st.branch });
+  drawerBtn.onclick = () => {
+    if (_drawer) _drawer.destroy();
+    _drawer = mountDrawer(document.body, { entityType: "property", entityId: p.id, branch: st.branch });
+    _drawer.open();
+  };
 
   d.appendChild(inner);
   return d;
@@ -210,7 +223,8 @@ function membersSection(st, parent) {
   } else {
     children.forEach((child) => {
       const tr = h("tr", {});
-      tr.innerHTML = `<td class="tp-pname">${child.name}</td><td><span class="tp-typebadge">${child.data_type}</span></td>`;
+      tr.appendChild(h("td", { class: "tp-pname" }, child.name));
+      tr.appendChild(h("td", {}, h("span", { class: "tp-typebadge" }, child.data_type)));
       const td = h("td", { class: "tp-cell-act" });
       const rm = h("button", { class: "btn btn-ghost btn-sm" }, "Remove");
       rm.onclick = async () => {
