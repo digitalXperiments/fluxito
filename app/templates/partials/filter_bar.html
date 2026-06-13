@@ -1,0 +1,89 @@
+{# Dashboard filter widgets rendered from the `filters` context (the six widget
+   types). The date presets + compare controls live in the host template's bar;
+   this partial renders the dimension widgets. Each widget carries data-dim-key +
+   data-ftype so the view JS can serialize active values to query params:
+     single_select | search : ?<key>=value
+     multi_select            : ?<key>=v1,v2
+     number_range            : ?<key>_min=..&<key>_max=..
+     toggle                  : ?<key>=1
+#}
+<style>
+  .lv-multi { position: relative; display: inline-block; }
+  .lv-multi > summary {
+    list-style: none; cursor: pointer; padding: 6px 10px; border: 1px solid var(--border);
+    border-radius: var(--r-sm, 6px); background: var(--surface); font-size: 13px; white-space: nowrap;
+  }
+  .lv-multi > summary::-webkit-details-marker { display: none; }
+  .lv-multi[open] > summary { border-color: var(--dv-c1, #4285F4); }
+  .lv-multi-menu {
+    position: absolute; z-index: 30; margin-top: 4px; min-width: 160px; max-height: 240px;
+    overflow: auto; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-sm, 6px); box-shadow: var(--shadow-md); padding: 6px;
+  }
+  .lv-multi-opt { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 13px; cursor: pointer; }
+  .lv-multi-opt:hover { background: var(--surface-2); border-radius: 4px; }
+  .lv-search {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-sm, 6px);
+    background: var(--surface); font-size: 13px; min-width: 150px;
+  }
+  .lv-range { display: inline-flex; align-items: center; gap: 4px; }
+  .lv-range input {
+    width: 72px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--r-sm, 6px);
+    background: var(--surface); font-size: 13px;
+  }
+  .lv-range-dash { color: var(--text-subtle); }
+  .lv-toggle { display: inline-flex; align-items: center; cursor: pointer; }
+  .lv-toggle input { display: none; }
+  .lv-toggle-track {
+    width: 34px; height: 18px; border-radius: 999px; background: var(--border-strong, #cbd5e1);
+    position: relative; transition: background .15s;
+  }
+  .lv-toggle-track::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: #fff; transition: transform .15s;
+  }
+  .lv-toggle input:checked + .lv-toggle-track { background: var(--dv-c1, #4285F4); }
+  .lv-toggle input:checked + .lv-toggle-track::after { transform: translateX(16px); }
+  .lv-chip-count { background: var(--dv-c1, #4285F4); color: #fff; border-radius: 999px; padding: 0 6px; font-size: 11px; margin-left: 4px; }
+</style>
+{% for f in filters %}
+  {% if f.type and f.type != 'date_range' %}
+  <span class="lv-divider"></span>
+  <span class="dash-filter-label">{{ f.label }}</span>
+  {% if f.type == 'single_select' %}
+    <select class="lv-dim-select" data-dim-key="{{ f.key }}" data-ftype="single_select">
+      {% if f.options and f.options.values %}
+        {% for opt in f.options.values %}
+        <option value="{{ opt }}">{{ opt if opt else 'All' }}</option>
+        {% endfor %}
+      {% else %}
+        <option value="">All</option>
+      {% endif %}
+    </select>
+  {% elif f.type == 'multi_select' %}
+    <details class="lv-multi" data-dim-key="{{ f.key }}" data-ftype="multi_select">
+      <summary><span class="lv-multi-label">All</span></summary>
+      <div class="lv-multi-menu">
+        {% for opt in (f.options.values if f.options else []) %}
+          {% if opt %}
+          <label class="lv-multi-opt"><input type="checkbox" value="{{ opt }}"> {{ opt }}</label>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </details>
+  {% elif f.type == 'search' %}
+    <input type="search" class="lv-search" data-dim-key="{{ f.key }}" data-ftype="search"
+           placeholder="Search {{ f.label|lower }}…">
+  {% elif f.type == 'number_range' %}
+    <span class="lv-range" data-dim-key="{{ f.key }}" data-ftype="number_range">
+      <input type="number" class="lv-range-min" placeholder="min">
+      <span class="lv-range-dash">–</span>
+      <input type="number" class="lv-range-max" placeholder="max">
+    </span>
+  {% elif f.type == 'toggle' %}
+    <label class="lv-toggle" data-dim-key="{{ f.key }}" data-ftype="toggle">
+      <input type="checkbox"><span class="lv-toggle-track"></span>
+    </label>
+  {% endif %}
+  {% endif %}
+{% endfor %}

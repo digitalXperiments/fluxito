@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.models.dashboard import Dashboard, DashboardCard
-from app.tools.dashboard_tools import _card_to_dict, _validate_card_specs
+from app.tools.dashboard_tools import _card_to_dict, _suggest_filters, _validate_card_specs
 
 # ---------------------------------------------------------------------------
 # Model field assertions
@@ -171,3 +171,29 @@ def test_card_to_dict_key_none_when_missing():
     )
     d = _card_to_dict(card)
     assert d["key"] is None
+
+
+# ---------------------------------------------------------------------------
+# _suggest_filters — infer dropdown filters from card dimensions
+# ---------------------------------------------------------------------------
+
+
+def test_suggest_filters_picks_up_known_dimensions():
+    cards = [
+        {"params": {"dimensions": ["date", "country", "deviceCategory"]}},
+        {"params": {"dimensions": ["country"]}},  # dup country -> deduped
+    ]
+    out = _suggest_filters(cards)
+    keys = {f["key"] for f in out}
+    assert keys == {"country", "deviceCategory"}
+    assert all(f["type"] == "single_select" for f in out)
+    assert next(f for f in out if f["key"] == "country")["label"] == "Country"
+
+
+def test_suggest_filters_ignores_unknown_and_missing_dims():
+    cards = [
+        {"params": {"dimensions": ["date", "someCustomDim"]}},
+        {"params": {}},  # no dimensions
+        {"params": {"dimensions": "not-a-list"}},
+    ]
+    assert _suggest_filters(cards) == []
