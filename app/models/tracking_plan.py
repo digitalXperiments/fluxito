@@ -18,6 +18,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -454,3 +455,36 @@ class TPBundleProperty(Base):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     __table_args__ = (UniqueConstraint("bundle_id", "property_id", name="uq_tp_bundle_property"),)
+
+
+class TPActivity(Base):
+    """Append-only change log for tracking-plan mutations — branch-scoped.
+
+    Written centrally by the action dispatcher (``run_action``) on every
+    successful write, so the per-entity Activity feed and the branch-review
+    timeline share one source. Reads never write here. Not surfaced in
+    ``plan_to_dict`` / version snapshots.
+    """
+
+    __tablename__ = "tp_activity"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    branch_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_branches.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_type: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_tp_activity_entity", "plan_id", "branch_id", "entity_type", "entity_id"),
+        Index("ix_tp_activity_feed", "plan_id", "branch_id", "created_at"),
+    )

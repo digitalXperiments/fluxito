@@ -4,6 +4,7 @@
 Public API is re-exported here so callers do `from app.services.tracking_plan
 import create_event` etc. Later tasks append to this file."""
 
+from .activity import activity_to_dict, list_activity, record_activity
 from .bootstrap import get_main_branch, get_or_create_plan
 from .branches import (
     abandon_branch,
@@ -67,6 +68,9 @@ from .validation import validate_plan
 
 __all__ = [
     "ConflictError",
+    "activity_to_dict",
+    "list_activity",
+    "record_activity",
     "NotFoundError",
     "TrackingPlanError",
     "ValidationError",
