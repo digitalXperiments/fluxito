@@ -402,10 +402,13 @@
     var derivCols = cols.filter(function(c){ return numericCols.indexOf(c) !== -1 && F.isChangeMetric(c); });
     var isDeriv = function(c){ return derivCols.indexOf(c) !== -1; };
     var hasChart = numericCols.length >= 1 && rows.length >= 2 && labelCol;
+    // Compare mode: these numeric columns carry __prev / __delta_pct on each row.
+    var compareCols = (snap.compare && Array.isArray(snap.compare_columns)) ? snap.compare_columns : [];
+    var isCmp = function(c){ return compareCols.indexOf(c) !== -1; };
 
     var tableHtml = '';
     if (rows.length) {
-      tableHtml = '<div class="table-wrap"><table><thead><tr>' + cols.map(function(c){ return '<th>'+F.esc(c)+'</th>'; }).join('') + '</tr></thead><tbody>' +
+      tableHtml = '<div class="table-wrap"><table><thead><tr>' + cols.map(function(c){ return '<th>'+F.esc(c)+'</th>' + (isCmp(c) ? '<th style="text-align:right;">Prev</th><th style="text-align:right;">Δ%</th>' : ''); }).join('') + '</tr></thead><tbody>' +
         rows.map(function(r){
           return '<tr>' + cols.map(function(c){
             var v = r[c];
@@ -431,7 +434,15 @@
             }
             var isTrueNum = isNum && !_isDateColName(c) && !_isMonthColName(c) && !_isYearColName(c);
             var alignStyle = isTrueNum ? ' style="text-align:right;font-variant-numeric:tabular-nums;"' : '';
-            return '<td' + alignStyle + '>' + cellHtml + '</td>';
+            var cmpTds = '';
+            if (isCmp(c)) {
+              var pv = r[c + '__prev'];
+              var dpct = r[c + '__delta_pct'];
+              cmpTds = '<td style="text-align:right;color:var(--text-subtle);font-variant-numeric:tabular-nums;">' +
+                       (pv == null || pv === '' ? '—' : F.fmtNum(pv)) + '</td>' +
+                       '<td style="text-align:right;">' + (dpct == null ? '—' : F.fmtDeltaCell(dpct)) + '</td>';
+            }
+            return '<td' + alignStyle + '>' + cellHtml + '</td>' + cmpTds;
           }).join('') + '</tr>';
         }).join('') +
         '</tbody></table>' + (snap.truncated ? '<p class="truncation-note">Showing '+rows.length+' of '+(snap.total_rows||rows.length)+'</p>' : '') + '</div>';

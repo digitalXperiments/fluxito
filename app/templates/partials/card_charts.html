@@ -284,6 +284,30 @@
 
     var seriesAll = buildSeries(leftSeries, 0, 0).concat(buildSeries(rightSeries, 1, leftSeries.length));
 
+    // Compare mode: overlay the comparison period per charted column. Line charts
+    // get a faded dashed line; bar charts get a paired lighter bar (grouped).
+    if (snap.compare && snap.compare_series) {
+      var cmpColor = isDark ? '#6b7280' : '#cbd5e1';
+      leftSeries.concat(rightSeries).forEach(function(s){
+        var prev = snap.compare_series[s.col];
+        if (!prev || !prev.length) return;
+        var base = {name: s.col + ' (prev)', data: prev, emphasis: {focus: 'series'}};
+        if (isHorizontal) { base.xAxisIndex = 0; } else { base.yAxisIndex = 0; }
+        if (dateLike) {
+          seriesAll.push(Object.assign(base, {
+            type: 'line', smooth: true, symbol: 'none',
+            lineStyle: {width: 2, type: 'dashed', color: cmpColor},
+            itemStyle: {color: cmpColor},
+          }));
+        } else {
+          seriesAll.push(Object.assign(base, {
+            type: 'bar', barMaxWidth: 28,
+            itemStyle: {color: cmpColor, borderRadius: isHorizontal ? [0,2,2,0] : [2,2,0,0]},
+          }));
+        }
+      });
+    }
+
     var leftFmt = getColFmt(leftSeries[0].col);
     var rightFmt = rightSeries.length ? getColFmt(rightSeries[0].col) : null;
     // Build col→formatter map for tooltip so each series value shows with its own unit
