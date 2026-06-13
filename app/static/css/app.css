@@ -223,7 +223,7 @@ body {
   html.sidebar-collapsed .beta-pill,
   html.sidebar-collapsed .wordmark em,
   html.sidebar-collapsed .wordmark span:not(.dot) { display: none; }
-  html.sidebar-collapsed .sidebar-header { justify-content: center; gap: 4px; }
+  html.sidebar-collapsed .sidebar-header { justify-content: center; gap: 4px; padding: 14px 4px; }
   html.sidebar-collapsed .sidebar-project-btn { justify-content: center; }
   html.sidebar-collapsed .sidebar-project-btn > svg:last-child { display: none; }
   /* point the chevrons the other way when collapsed */

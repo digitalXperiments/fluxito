@@ -21,6 +21,7 @@ export function mountView(container) {
 
   let search = '';
   let drawer = null;
+  let drawerEntityId = null;
 
   const unsub = state.subscribe(() => { renderList(); renderDetail(); });
   renderList();
@@ -87,8 +88,8 @@ export function mountView(container) {
     if (!plan()) { mountAll(detail, [h('div', { class: 'tp-empty' }, 'Loading…')]); return; }
     const sel = state.getState().selection;
     const e = sel.type === 'event' ? (plan().events || []).find((x) => x.id === sel.id) : null;
-    if (drawer) { drawer.destroy(); drawer = null; }
     if (!e) {
+      if (drawer) { drawer.destroy(); drawer = null; drawerEntityId = null; }
       mountAll(detail, [h('div', { class: 'tp-empty' }, 'Select an event, or create one.')]);
       return;
     }
@@ -99,9 +100,14 @@ export function mountView(container) {
     inner.appendChild(sourcesSection(e));
     inner.appendChild(destSection(e));
     mountAll(detail, [inner]);
-    // drawer mounts into the workspace root (fixed-position), toggled by the header button
-    drawer = mountDrawer(document.querySelector('.tp-workspace') || document.body,
-      { entityType: 'event', entityId: e.id, branch: state.getState().branch });
+    // Recreate the drawer only when the selected event changes, so an open Comments
+    // panel survives field edits (which re-render the detail) instead of closing.
+    if (drawerEntityId !== e.id) {
+      if (drawer) { drawer.destroy(); drawer = null; }
+      drawer = mountDrawer(document.querySelector('.tp-workspace') || document.body,
+        { entityType: 'event', entityId: e.id, branch: state.getState().branch });
+      drawerEntityId = e.id;
+    }
   }
 
   // ---- header: inline name, category, trigger badge, tags, comments, ⋯ ----
@@ -169,7 +175,7 @@ export function mountView(container) {
         onChange: () => attach(e, p, idx, { example: exInput.value || null }) });
       const ovInput = h('input', { class: 'tp-cell-input', value: p.override_description || '', placeholder: 'override description',
         onChange: () => attach(e, p, idx, { override_description: ovInput.value || null }) });
-      const row = h('tr', { class: 'tp-prow', draggable: 'true', dataset: { name: p.name, idx } },
+      const row = h('tr', { class: 'tp-prow', draggable: 'true', dataset: { name: p.name } },
         h('td', { class: 'tp-drag' }, '⋮⋮'),
         h('td', { class: 'tp-pname' }, p.name),
         h('td', {}, h('span', { class: 'tp-typebadge' }, typeBadge(p.data_type, p.is_list))),
