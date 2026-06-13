@@ -38,13 +38,13 @@ export function mountView(container) {
 // paint — called sync; kicks off async data loads independently.
 // ---------------------------------------------------------------------------
 function paint(container, onDrawer) {
-  const { branch } = state.getState();
-  const isMain = !branch || branch === BASE_BRANCH ||
-    (typeof branch === "object" && (branch.is_main || branch.name === BASE_BRANCH));
-
-  // Normalise: branch may be a string (state stores branch name) or an object.
-  const branchObj = (typeof branch === "object" && branch) || null;
-  const branchName = branchObj ? branchObj.name : (branch || BASE_BRANCH);
+  const st = state.getState();
+  // state.branch is always a branch NAME string (e.g. "main" or "feat/x").
+  const branchName = st.branch || BASE_BRANCH;
+  // Look up the full branch object from the loaded branches list.
+  const branchObj = (st.branches || []).find((b) => b.name === branchName) || null;
+  const isMain = !branchName || branchName === BASE_BRANCH ||
+    (branchObj && branchObj.is_main);
 
   // On main: show empty state, no review actions.
   if (isMain) {
@@ -56,8 +56,12 @@ function paint(container, onDrawer) {
   }
 
   // Build shell synchronously so the page isn't blank while data loads.
-  const reviewStatus = (branchObj && branchObj.review_status) || "draft";
+  // Use the real review_status from the looked-up branch object; fall back to
+  // "draft" only when branches haven't loaded yet (branchObj === null).
+  const reviewStatus = branchObj?.review_status || "draft";
   const role = resolveRole();
+  // Synthetic fallback used only for rendering while branches are still loading.
+  const effectiveBranch = branchObj || { name: branchName, review_status: reviewStatus };
 
   const head = h("div", { class: "tp-review-head" },
     h("div", { class: "tp-review-title" },
@@ -67,7 +71,7 @@ function paint(container, onDrawer) {
       h("span", { class: "tp-review-pill", "data-s": reviewStatus },
         reviewStatus.replace(/_/g, " "))),
     h("div", { class: "tp-review-actions" },
-      ...buildActionButtons(branchObj || { name: branchName, review_status: reviewStatus }, role)));
+      ...buildActionButtons(effectiveBranch, role)));
 
   const changesCol = h("div", { class: "tp-review-changes" },
     h("div", { class: "tp-muted" }, "Loading changes…"));
@@ -78,8 +82,8 @@ function paint(container, onDrawer) {
     h("div", { class: "tp-review-body" }, changesCol, panelCol)));
 
   // Async data fills — fire-and-forget; each catches its own errors.
-  fillChanges(changesCol, branchObj || { name: branchName, review_status: reviewStatus });
-  fillPanel(panelCol, branchObj || { name: branchName, review_status: reviewStatus }, onDrawer);
+  fillChanges(changesCol, effectiveBranch);
+  fillPanel(panelCol, effectiveBranch, onDrawer);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,8 +119,13 @@ function buildActionButtons(branch, role) {
 }
 
 async function doSetReview(branch, status) {
+  // Guard: branch.id must be present (real branch object from state.branches).
+  if (!branch.id) {
+    showBanner("Branch not loaded yet — please try again.", "err");
+    return;
+  }
   try {
-    await api.doAction("set_review_status", { status }, branch.name);
+    await api.doAction("set_review_status", { branch_id: branch.id, review_status: status }, branch.name);
     await state.reload();
   } catch (e) {
     showBanner((e.errorType || "error") + ": " + e.message, "err");
@@ -124,11 +133,16 @@ async function doSetReview(branch, status) {
 }
 
 async function doMerge(branch) {
+  // Guard: branch.id must be present (real branch object from state.branches).
+  if (!branch.id) {
+    showBanner("Branch not loaded yet — please try again.", "err");
+    return;
+  }
   // merge_branch auto-publishes; its changelog becomes the published version's changelog.
   const note = window.prompt("Changelog for the merged version:", "Merged " + branch.name);
   if (note === null) return; // user cancelled
   try {
-    const r = await api.doAction("merge_branch", { changelog: note }, branch.name);
+    const r = await api.doAction("merge_branch", { branch_id: branch.id, changelog: note }, branch.name);
     showBanner("Merged → published " + (r.version_number || "") + ".", "ok");
     state.setBranch(BASE_BRANCH);
     state.setView("events");
@@ -242,7 +256,7 @@ async function fillPanel(col, branch, onDrawer) {
         const statusLabel = String(a.summary || "reviewed").replace(/^.*?branch\s*/i, "");
         reviewersSection.appendChild(h("div", { class: "tp-reviewer-row" },
           h("span", { class: "tp-avatar" }, initials(a.actor_id)),
-          h("span", { class: "tp-mono" }, a.actor_id.slice(0, 8)),
+          h("span", { class: "tp-mono" }, (a.actor_id || "").slice(0, 8)),
           h("span", { class: "tp-status", "data-s": "implemented" }, statusLabel)));
       }
     }
