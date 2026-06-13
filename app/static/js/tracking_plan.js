@@ -40,11 +40,11 @@
   const branchQS = () => (S.branch && S.branch !== "main" ? `?branch=${encodeURIComponent(S.branch)}` : "");
 
   async function loadPlan() {
-    S.plan = await getJSON("/tracking-plan" + branchQS());
+    S.plan = await getJSON(branchQS());
     const lb = await action("list_branches"); S.branches = lb ? lb.branches : [{ name: "main", is_main: true }];
     render();
   }
-  async function refresh() { S.plan = await getJSON("/tracking-plan" + branchQS()); render(); }
+  async function refresh() { S.plan = await getJSON(branchQS()); render(); }
 
   // ---- lookups ----
   const allProps = () => { const p = S.plan.properties; return [...p.event, ...p.user, ...p.group, ...p.system]; };
