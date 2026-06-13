@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} — Settings — Fluxito{% endblock %}
 {% set active = 'projects' %}
+{% import "partials/rate_limit_cards.html" as rlcards %}
 
 {% block main %}
 <main class="app-main">
@@ -35,6 +36,7 @@
     <button class="ps-tab" data-tab="roles" onclick="switchTab('roles')">User Roles</button>
     {% endif %}
     <button class="ps-tab" data-tab="connections" onclick="switchTab('connections')">Connections</button>
+    <button class="ps-tab" data-tab="limits" onclick="switchTab('limits')">API Limits</button>
     {% if membership.role in ('owner', 'admin') %}
     <button class="ps-tab" data-tab="notifications" onclick="switchTab('notifications')">Notifications</button>
     {% endif %}
@@ -165,6 +167,48 @@
       <h3>No connections yet</h3>
       <p>Connect a platform to start pulling data into this project.</p>
       <a href="/connect" class="btn primary" style="margin-top:14px">Connect a platform</a>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── API LIMITS TAB ── #}
+  <div class="ps-panel" data-panel="limits" style="display:none">
+    {{ rlcards.rl_assets() }}
+    <section class="ps-card ps-section-card">
+      <div class="ps-section-copy">
+        <span class="label">Reference</span>
+        <h2>API rate limits</h2>
+        <p>The published limit and the calls Fluxito has consumed for each connected tool over the
+          last {{ rate_limits_usage_days | default(30) }} days — tap the info icon for the full
+          breakdown. Usage counts the upstream calls we made on your behalf; cached responses don't
+          count, and limits are point-in-time (checked {{ rate_limits_reviewed }}).</p>
+      </div>
+    </section>
+
+    {% if rate_limits_connected %}
+    <div class="rl-section-head">
+      <h3 class="ps-h3">Connected tools</h3>
+      <span class="ps-count-pill">{{ rate_limits_connected | length }}</span>
+    </div>
+    <div class="rl-list">
+      {% for c in rate_limits_connected %}{{ rlcards.rl_card(c) }}{% endfor %}
+    </div>
+    {% else %}
+    <div class="audit-empty" style="margin-bottom:26px">
+      <h3>No tools connected yet</h3>
+      <p>Connect a platform to see its limits highlighted here. The full catalog is below.</p>
+      <a href="/connect" class="btn primary" style="margin-top:14px">Connect a platform</a>
+    </div>
+    {% endif %}
+
+    {% if rate_limits_available %}
+    <div class="rl-section-head">
+      <h3 class="ps-h3">Full catalog</h3>
+      <span class="ps-count-pill">{{ rate_limits_available | length }}</span>
+    </div>
+    <p class="ps-card-lede" style="margin-top:-6px">Limits for every connector Fluxito supports — handy to check before you connect.</p>
+    <div class="rl-list">
+      {% for c in rate_limits_available %}{{ rlcards.rl_card(c, muted=true) }}{% endfor %}
     </div>
     {% endif %}
   </div>
@@ -984,6 +1028,14 @@
   border: 1px solid color-mix(in srgb, var(--amber) 25%, var(--line));
   line-height: 1.5;
 }
+
+/* ── API limits — section header (cards + modal styles live in the
+      partials/rate_limit_cards.html partial, shared with Home) ── */
+.rl-section-head {
+  display: flex; align-items: center; gap: 10px;
+  margin: 26px 0 14px;
+}
+.rl-section-head .ps-h3 { margin: 0; }
 
 /* ── Section headings in notifications/general ── */
 .ps-lede {
@@ -2061,6 +2113,14 @@ function switchTab(tabName) {
   var panel = document.querySelector('[data-panel="' + tabName + '"]');
   if (panel) { panel.style.display = ''; panel.classList.add('is-active'); }
 }
+
+// Deep-link a tab via URL hash (e.g. /project/<slug>/settings#limits from Home).
+(function() {
+  var hash = (location.hash || '').replace('#', '');
+  if (hash && document.querySelector('.ps-tab[data-tab="' + hash + '"]')) {
+    switchTab(hash);
+  }
+})();
 
 // ── Invite member ──
 var inviteForm = document.getElementById('inviteForm');
