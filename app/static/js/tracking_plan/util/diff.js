@@ -12,8 +12,32 @@ const GROUPS = [
   ['categories', 'Categories', 'category'],
 ];
 
+const VOLATILE = new Set(['id', 'branch_id', 'plan_id', 'created_at', 'updated_at', 'sort_order']);
+
+function scalarish(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+export function fieldDiff(before, after) {
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  const out = [];
+  for (const key of keys) {
+    if (VOLATILE.has(key)) continue;
+    const was = scalarish((before || {})[key]);
+    const now = scalarish((after || {})[key]);
+    if (was !== now) out.push({ key, was, now });
+  }
+  return out.sort((a, b) => a.key.localeCompare(b.key));
+}
+
 function _fields(item) {
-  // changed items may carry fields as { key: {was, now} }.
+  // Derive field-level diff from before/after (diff endpoint shape).
+  if (item.before !== undefined || item.after !== undefined) {
+    return fieldDiff(item.before, item.after);
+  }
+  // Legacy fallback: changed items may carry fields as { key: {was, now} }.
   const f = item.fields;
   if (!f || typeof f !== 'object') return [];
   return Object.entries(f).map(([key, v]) => ({
