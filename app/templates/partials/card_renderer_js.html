@@ -203,21 +203,34 @@
 
   var _MONTH_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+  // Canonical date-label formatter — mirrors app/dashboards/date_labels.py.
+  // Keep the two in sync. Unrecognized input is returned unchanged.
+  //   202401   -> "Jan 2024"     (GA4 yearMonth)
+  //   20240105 -> "Jan 5, 2024"  (GA4 date)
+  //   2024-Q1  -> "Q1 2024"      2024W03 -> "Wk 03 '24"      2024 -> "2024"
+  F.formatDateLabel = function(value){
+    if (value === null || value === undefined) return '';
+    var s = String(value).trim();
+    if (!s) return '';
+    var m;
+    if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) {
+      var d = parseInt(m[3], 10);
+      if (_MONTH_S[+m[2]-1] && d >= 1 && d <= 31) return _MONTH_S[+m[2]-1] + ' ' + d + ', ' + m[1];
+    }
+    if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)) && _MONTH_S[+m[2]-1]) return _MONTH_S[+m[2]-1] + ' ' + (+m[3]) + ', ' + (+m[1]);
+    if ((m = s.match(/^(\d{4})-?Q([1-4])$/i))) return 'Q' + m[2] + ' ' + m[1];
+    if ((m = s.match(/^(\d{4})-?W(\d{1,2})$/i))) return "Wk " + (('0'+m[2]).slice(-2)) + " '" + m[1].slice(2);
+    if ((m = s.match(/^(\d{4})(\d{2})$/)) && _MONTH_S[+m[2]-1]) return _MONTH_S[+m[2]-1] + ' ' + m[1];
+    if ((m = s.match(/^(\d{4})-(\d{1,2})$/)) && _MONTH_S[+m[2]-1]) return _MONTH_S[+m[2]-1] + ' ' + (+m[1]);
+    if (/^\d{4}$/.test(s)) return s;
+    return s;
+  };
+
   function _isDateColName(c){ return /^(date|day|report_date|week|week_start|week_end|period|timestamp|datetime|created_at|updated_at)$/i.test(c); }
   function _isMonthColName(c){ return /^month(_num(ber)?)?$/i.test(c); }
   function _isYearColName(c){ return /^year$/i.test(c); }
   function _isRateCol(c){ var n = c.toLowerCase().replace(/_/g,''); return /rate$/.test(n) || /^ctr$|ctr$|^cvr$|cvr$/.test(n); }
   function _isDurationCol(c){ var n = c.toLowerCase().replace(/_/g,''); return /duration|timeon|timespent|dwelltime|avgtime/.test(n); }
-
-  function _fmtYYYYMMDD(v){
-    var s = String(v == null ? '' : v).trim();
-    if (/^\d{8}$/.test(s)) {
-      var mo = parseInt(s.slice(4,6), 10) - 1;
-      var d = parseInt(s.slice(6,8), 10);
-      return (_MONTH_S[mo] || s.slice(4,6)) + ' ' + d + ', ' + s.slice(0,4);
-    }
-    return s;
-  }
 
   function numericColsOf(columns, rows){
     return columns.filter(function(c){
@@ -401,7 +414,7 @@
             if (isDeriv(c)) {
               cellHtml = F.fmtDeltaCell(v);
             } else if (isNum && _isDateColName(c)) {
-              cellHtml = F.esc(_fmtYYYYMMDD(v));
+              cellHtml = F.esc(F.formatDateLabel(v));
             } else if (isNum && _isMonthColName(c)) {
               var mn = parseInt(v, 10);
               cellHtml = F.esc((mn >= 1 && mn <= 12) ? _MONTH_S[mn-1] : String(v == null ? '' : v));

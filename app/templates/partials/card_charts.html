@@ -34,6 +34,11 @@
     if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(s)) return true;
     // Month names
     if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(s)) return true;
+    // YYYYMM compact integer (e.g. 202401) — GA4 yearMonth
+    if (/^\d{6}$/.test(s)) {
+      var ym = parseInt(s.slice(4,6), 10);
+      if (parseInt(s.slice(0,4), 10) > 1900 && ym >= 1 && ym <= 12) return true;
+    }
     // YYYYMMDD compact integer (e.g. 20251126)
     if (/^\d{8}$/.test(s)) {
       var y = parseInt(s.slice(0,4), 10), mo = parseInt(s.slice(4,6), 10), d = parseInt(s.slice(6,8), 10);
@@ -42,16 +47,8 @@
     return false;
   }
 
-  // Format a date-like label into a human-readable string
-  function fmtDateLabel(s){
-    s = String(s).trim();
-    if (/^\d{8}$/.test(s)) {
-      var mo = parseInt(s.slice(4,6), 10) - 1;
-      var d = parseInt(s.slice(6,8), 10);
-      return (_MONTH_SHORT[mo] || s.slice(4,6)) + ' ' + d + ', ' + s.slice(0,4);
-    }
-    return s;
-  }
+  // Date labels are formatted by the canonical window.Fluxito.formatDateLabel
+  // (defined in card_renderer_js.html, mirrors app/dashboards/date_labels.py).
 
   // Format a month-number label (1–12) into abbreviated month name
   function fmtMonthLabel(s){
@@ -186,7 +183,7 @@
       });
     }
     var rawLabels = takeRows.map(function(r){ return String(r[labelCol] == null ? '' : r[labelCol]); });
-    var labels = dateLike ? rawLabels.map(fmtDateLabel) : (isMonthNum ? rawLabels.map(fmtMonthLabel) : rawLabels);
+    var labels = dateLike ? rawLabels.map(F.formatDateLabel) : (isMonthNum ? rawLabels.map(fmtMonthLabel) : rawLabels);
     var isHorizontal = !dateLike && !isMonthNum && take <= 8;
 
     // Pick series: prefer a single primary metric unless the columns all look
@@ -408,7 +405,7 @@
       });
     }
     var rawXLabels = sortedRows.map(function(r){ return String(r[xCol] == null ? '' : r[xCol]); });
-    var labels = xDateLike ? rawXLabels.map(fmtDateLabel) : (xMonthNum ? rawXLabels.map(fmtMonthLabel) : rawXLabels);
+    var labels = xDateLike ? rawXLabels.map(F.formatDateLabel) : (xMonthNum ? rawXLabels.map(fmtMonthLabel) : rawXLabels);
     var hasRight = cfg.series.some(function(s){ return s.axis === 'right'; });
     var highlightLast = cfg.highlight_last !== false; // default true
 
