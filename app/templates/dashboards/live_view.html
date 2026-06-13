@@ -301,21 +301,24 @@
     <button class="dash-filter-chip" data-range="{{ p.start }},{{ p.end }}">{{ p.label }}</button>
     {% endfor %}
     {% endif %}
-    {% if dimension_filters %}
     <span class="lv-divider"></span>
-    {% for f in dimension_filters %}
-    <span class="dash-filter-label">{{ f.label }}</span>
-    <select class="lv-dim-select" data-dim-key="{{ f.key }}" id="dimFilter_{{ f.key }}">
-      {% if f.options %}
-        {% for opt in f.options %}
-        <option value="{{ opt }}">{{ opt if opt else 'All' }}</option>
-        {% endfor %}
-      {% else %}
-        <option value="">All</option>
-      {% endif %}
+    <label class="lv-toggle" id="compareToggle" title="Compare two date ranges">
+      <input type="checkbox" id="compareChk"><span class="lv-toggle-track"></span>
+    </label>
+    <span class="dash-filter-label">Compare</span>
+    <select class="lv-dim-select" id="compareMode" style="display:none;">
+      <option value="previous_period">Previous period</option>
+      <option value="previous_year">Previous year</option>
+      <option value="custom">Custom…</option>
     </select>
-    {% endfor %}
+    <span id="compareCustom" style="display:none;">
+      <input type="date" id="cmpStart" class="lv-search"><span class="lv-range-dash">–</span><input type="date" id="cmpEnd" class="lv-search">
+    </span>
+    {% if filters %}
+    {% include "partials/filter_bar.html" %}
     {% endif %}
+    <span class="lv-divider"></span>
+    <button class="dash-filter-chip" id="clearAllFilters" title="Reset all filters">Clear all</button>
   </div>
 
   <div id="cardGrid" class="grid grid-cards">
@@ -352,17 +355,94 @@
     var __meta = __metaEl ? JSON.parse(__metaEl.textContent || '{}') : {};
     if (__meta && __meta.start && __meta.end) activeRange = {start: __meta.start, end: __meta.end};
   } catch(_){}
-  let activeDims = {};  // {device_type: "mobile", country: "AE", ...}
+  // Compare state: null when off, else {mode, start, end}.
+  let compareState = null;
+
+  const filterBar = document.getElementById('filterBar');
+
+  // Serialize the six dimension widgets straight from the DOM (single source of
+  // truth — no separate state to drift). Encoding matches the backend's
+  // resolve_active_value(): single/search -> key=v; multi -> key=v1,v2;
+  // number_range -> key_min/key_max; toggle -> key=1.
+  function serializeFilters(params) {
+    if (!filterBar) return;
+    filterBar.querySelectorAll('[data-dim-key][data-ftype]').forEach(function(el) {
+      const key = el.dataset.dimKey, ftype = el.dataset.ftype;
+      if (ftype === 'single_select' || ftype === 'search') {
+        if (el.value) params.set(key, el.value);
+      } else if (ftype === 'multi_select') {
+        const vals = Array.from(el.querySelectorAll('input[type=checkbox]:checked')).map(function(c){ return c.value; });
+        if (vals.length) params.set(key, vals.join(','));
+      } else if (ftype === 'number_range') {
+        const mn = el.querySelector('.lv-range-min').value, mx = el.querySelector('.lv-range-max').value;
+        if (mn !== '') params.set(key + '_min', mn);
+        if (mx !== '') params.set(key + '_max', mx);
+      } else if (ftype === 'toggle') {
+        if (el.querySelector('input[type=checkbox]').checked) params.set(key, '1');
+      }
+    });
+  }
 
   function buildParams() {
     const params = new URLSearchParams();
     if (activeRange.start) params.set('date_range_start', activeRange.start);
     if (activeRange.end)   params.set('date_range_end',   activeRange.end);
-    Object.keys(activeDims).forEach(function(k) {
-      if (activeDims[k]) params.set(k, activeDims[k]);
-    });
+    if (compareState) {
+      params.set('compare', compareState.mode);
+      if (compareState.mode === 'custom') {
+        if (compareState.start) params.set('compare_start', compareState.start);
+        if (compareState.end)   params.set('compare_end',   compareState.end);
+      }
+    }
+    serializeFilters(params);
     return params;
   }
+
+  // Reflect the current filter state in the URL so a filtered view is shareable
+  // and the PDF/Share export captures exactly what's on screen.
+  function syncUrl() {
+    try {
+      const qs = buildParams().toString();
+      history.replaceState(null, '', qs ? ('?' + qs) : location.pathname);
+    } catch (_) {}
+  }
+
+  // Restore filter widgets from the URL on first load (shareable links).
+  (function restoreFromUrl() {
+    if (!filterBar) return;
+    const qs = new URLSearchParams(location.search);
+    if (qs.get('date_range_start') && qs.get('date_range_end')) {
+      activeRange = {start: qs.get('date_range_start'), end: qs.get('date_range_end')};
+    }
+    if (qs.get('compare')) {
+      compareState = {mode: qs.get('compare'), start: qs.get('compare_start') || '', end: qs.get('compare_end') || ''};
+    }
+    filterBar.querySelectorAll('[data-dim-key][data-ftype]').forEach(function(el) {
+      const key = el.dataset.dimKey, ftype = el.dataset.ftype;
+      if (ftype === 'single_select' || ftype === 'search') {
+        if (qs.get(key)) el.value = qs.get(key);
+      } else if (ftype === 'multi_select') {
+        const want = (qs.get(key) || '').split(',').filter(Boolean);
+        el.querySelectorAll('input[type=checkbox]').forEach(function(c){ c.checked = want.indexOf(c.value) !== -1; });
+        updateMultiLabel(el);
+      } else if (ftype === 'number_range') {
+        if (qs.get(key + '_min')) el.querySelector('.lv-range-min').value = qs.get(key + '_min');
+        if (qs.get(key + '_max')) el.querySelector('.lv-range-max').value = qs.get(key + '_max');
+      } else if (ftype === 'toggle') {
+        el.querySelector('input[type=checkbox]').checked = (qs.get(key) === '1');
+      }
+    });
+  })();
+
+  function updateMultiLabel(el) {
+    const checked = el.querySelectorAll('input[type=checkbox]:checked');
+    const lbl = el.querySelector('.lv-multi-label');
+    if (lbl) lbl.innerHTML = checked.length
+      ? 'Selected <span class="lv-chip-count">' + checked.length + '</span>'
+      : 'All';
+  }
+
+  function onFilterChange() { syncUrl(); scheduleLoad(); }
 
   // ── Dark mode toggle ──────────────────────────────────────────────────
   const btnDarkMode = document.getElementById('btnDarkMode');
@@ -375,32 +455,85 @@
     });
   }
 
-  // ── Date range chips ──────────────────────────────────────────────────
-  const filterBar = document.getElementById('filterBar');
   if (filterBar) {
-    filterBar.querySelectorAll('.dash-filter-chip').forEach(function(chip) {
+    // ── Date range chips ─────────────────────────────────────────────────
+    filterBar.querySelectorAll('.dash-filter-chip[data-range]').forEach(function(chip) {
       chip.addEventListener('click', function() {
-        filterBar.querySelectorAll('.dash-filter-chip').forEach(function(c) { c.classList.remove('active'); });
+        filterBar.querySelectorAll('.dash-filter-chip[data-range]').forEach(function(c) { c.classList.remove('active'); });
         chip.classList.add('active');
         const parts = chip.dataset.range.split(',');
         activeRange = {start: parts[0], end: parts[1]};
-        scheduleLoad();
+        onFilterChange();
       });
     });
 
-    // ── Dimension filter selects ────────────────────────────────────────
-    filterBar.querySelectorAll('.lv-dim-select').forEach(function(sel) {
-      const key = sel.dataset.dimKey;
+    // ── Compare controls ─────────────────────────────────────────────────
+    const compareChk = document.getElementById('compareChk');
+    const compareMode = document.getElementById('compareMode');
+    const compareCustom = document.getElementById('compareCustom');
+    function syncCompare() {
+      const on = compareChk && compareChk.checked;
+      if (compareMode) compareMode.style.display = on ? '' : 'none';
+      const custom = on && compareMode && compareMode.value === 'custom';
+      if (compareCustom) compareCustom.style.display = custom ? '' : 'none';
+      compareState = on ? {
+        mode: compareMode ? compareMode.value : 'previous_period',
+        start: (document.getElementById('cmpStart') || {}).value || '',
+        end: (document.getElementById('cmpEnd') || {}).value || ''
+      } : null;
+    }
+    if (compareChk) compareChk.addEventListener('change', function(){ syncCompare(); onFilterChange(); });
+    if (compareMode) compareMode.addEventListener('change', function(){ syncCompare(); onFilterChange(); });
+    ['cmpStart','cmpEnd'].forEach(function(id){
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', function(){ syncCompare(); onFilterChange(); });
+    });
+    if (compareState) { // restored from URL
+      if (compareChk) compareChk.checked = true;
+      if (compareMode) compareMode.value = compareState.mode;
+      if (compareState.mode === 'custom') {
+        if (document.getElementById('cmpStart')) document.getElementById('cmpStart').value = compareState.start;
+        if (document.getElementById('cmpEnd')) document.getElementById('cmpEnd').value = compareState.end;
+      }
+      syncCompare();
+    }
+
+    // ── Dimension widgets ────────────────────────────────────────────────
+    filterBar.querySelectorAll('.lv-dim-select[data-ftype=single_select]').forEach(function(sel) {
       sel.addEventListener('change', function() {
-        activeDims[key] = sel.value;
         sel.classList.toggle('is-active', !!sel.value);
-        scheduleLoad();
+        onFilterChange();
+      });
+    });
+    filterBar.querySelectorAll('.lv-search').forEach(function(inp) {
+      inp.addEventListener('input', onFilterChange);  // scheduleLoad is debounced
+    });
+    filterBar.querySelectorAll('.lv-range input').forEach(function(inp) {
+      inp.addEventListener('input', onFilterChange);
+    });
+    filterBar.querySelectorAll('.lv-toggle input[type=checkbox]').forEach(function(chk) {
+      if (chk.closest('#compareToggle')) return;  // compare handled above
+      chk.addEventListener('change', onFilterChange);
+    });
+    filterBar.querySelectorAll('.lv-multi').forEach(function(det) {
+      det.querySelectorAll('input[type=checkbox]').forEach(function(chk) {
+        chk.addEventListener('change', function(){ updateMultiLabel(det); onFilterChange(); });
       });
     });
 
-    // Lazy-populate any dimension selects that have no options yet
+    // ── Clear all ────────────────────────────────────────────────────────
+    const clearBtn = document.getElementById('clearAllFilters');
+    if (clearBtn) clearBtn.addEventListener('click', function() {
+      filterBar.querySelectorAll('.lv-dim-select[data-ftype=single_select]').forEach(function(s){ s.value=''; s.classList.remove('is-active'); });
+      filterBar.querySelectorAll('.lv-search, .lv-range input').forEach(function(i){ i.value=''; });
+      filterBar.querySelectorAll('.lv-toggle input[type=checkbox], .lv-multi input[type=checkbox]').forEach(function(c){ if(!c.closest('#compareToggle')) c.checked=false; });
+      filterBar.querySelectorAll('.lv-multi').forEach(updateMultiLabel);
+      onFilterChange();
+    });
+
+    // Lazy-populate any single-selects that have no options yet (warehouse dims)
     (function fetchMissingFilterOptions() {
-      const emptySelects = Array.from(filterBar.querySelectorAll('.lv-dim-select')).filter(
+      const emptySelects = Array.from(filterBar.querySelectorAll('.lv-dim-select[data-ftype=single_select]')).filter(
         function(s) { return s.options.length <= 1; }
       );
       if (!emptySelects.length) return;
@@ -409,19 +542,17 @@
         .then(function(opts) {
           if (!opts) return;
           emptySelects.forEach(function(sel) {
-            const key = sel.dataset.dimKey;
-            const vals = opts[key];
+            const vals = opts[sel.dataset.dimKey];
             if (!vals || !vals.length) return;
             sel.innerHTML = '<option value="">All</option>';
             vals.forEach(function(v) {
               const opt = document.createElement('option');
-              opt.value = v;
-              opt.textContent = v;
+              opt.value = v; opt.textContent = v;
               sel.appendChild(opt);
             });
           });
         })
-        .catch(function() {});  // silently ignore fetch errors
+        .catch(function() {});
     })();
   }
 

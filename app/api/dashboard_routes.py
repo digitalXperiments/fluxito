@@ -817,6 +817,14 @@ async def live_dashboard_page(page_slug: str, request: Request):
 
     dimension_filters = list(_dim_keys_seen.values())
 
+    # Unified filter model: the dashboard's typed filters if declared, else a
+    # render-only synthesis from legacy per-card filter_hooks/filter_options.
+    from app.dashboards.filter_specs import synthesize_filters
+
+    dashboard_filters = dash.filters or synthesize_filters(
+        [{"query_params": c.query_params or {}} for c in cards]
+    )
+
     user_view = await _load_user_view_from_uid(uid)
     is_owner = uid is not None and str(dash.user_id) == uid
     has_cards = len(cards) > 0
@@ -837,6 +845,7 @@ async def live_dashboard_page(page_slug: str, request: Request):
             "current_end": end_date,
             "platforms": platforms_in_dash,
             "dimension_filters": dimension_filters,
+            "filters": dashboard_filters,
             "filter_presets": dash.filter_presets or [],
             "slug": page_slug,
             "is_owner": is_owner,
