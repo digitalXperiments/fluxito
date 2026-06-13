@@ -40,6 +40,7 @@ export function mountView(container) {
   }
 
   function renderListBody(listBody) {
+    if (!plan()) { mountAll(listBody, [h('div', { class: 'tp-row-empty' }, 'Loading…')]); return; }
     const sel = state.getState().selection;
     let evs = (plan().events || []).slice().sort((a, b) => a.name.localeCompare(b.name));
     if (search) {
@@ -83,6 +84,7 @@ export function mountView(container) {
   }
 
   function renderDetail() {
+    if (!plan()) { mountAll(detail, [h('div', { class: 'tp-empty' }, 'Loading…')]); return; }
     const sel = state.getState().selection;
     const e = sel.type === 'event' ? (plan().events || []).find((x) => x.id === sel.id) : null;
     if (drawer) { drawer.destroy(); drawer = null; }
@@ -277,7 +279,7 @@ export function mountView(container) {
     (plan().sources || []).forEach((s) => {
       const on = s.name in cur;
       const box = h('input', { type: 'checkbox', checked: on });
-      const sel = h('select', ...['planned', 'implemented', 'verified', 'deprecated'].map((x) => h('option', { selected: cur[s.name] === x }, x)));
+      const sel = h('select', {}, ...['planned', 'implemented', 'verified', 'deprecated'].map((x) => h('option', { selected: cur[s.name] === x }, x)));
       wrap.appendChild(h('label', { class: 'tp-src-toggle' + (on ? ' is-on' : ''), dataset: { sid: s.id } }, box, h('span', { class: 'tp-src-name' }, s.name), sel));
     });
     const saveBtn = h('button', { class: 'btn btn-secondary btn-sm', style: { marginTop: '10px' },
@@ -306,7 +308,7 @@ export function mountView(container) {
     if (!(e.destinations || []).length) tbody.appendChild(h('tr', {}, h('td', { class: 'tp-muted', colspan: '3', style: { padding: '14px' } }, 'Not mapped to any destination.')));
     sec.appendChild(h('table', { class: 'tp-itable' }, h('thead', {}, h('tr', {}, h('th', {}, 'Destination'), h('th', {}, 'Maps to'), h('th', {}))), tbody));
     if ((plan().destinations || []).length) {
-      const sel = h('select', ...(plan().destinations || []).map((d) => h('option', { value: d.id }, d.name)));
+      const sel = h('select', {}, ...(plan().destinations || []).map((d) => h('option', { value: d.id }, d.name)));
       const nameIn = h('input', { class: 'tp-mono-input', placeholder: 'dest event name (optional)' });
       sec.appendChild(h('div', { class: 'tp-inline-add' }, sel, nameIn,
         h('button', { class: 'btn btn-secondary btn-sm',

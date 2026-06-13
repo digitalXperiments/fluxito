@@ -16,7 +16,7 @@ export function mountView(container) {
   function sourceRow(s) {
     const chips = (s.destinations || []).map((dn) => h('span', { class: 'tp-chip' }, dn,
       h('button', { onClick: () => { const d = destByName(plan(), dn); if (d) run('disconnect_source_destination', { source_id: s.id, destination_id: d.id }); } }, '✕')));
-    const route = h('select', h('option', { value: '' }, 'route to…'), ...(plan().destinations || []).map((d) => h('option', { value: d.id }, d.name)));
+    const route = h('select', {}, h('option', { value: '' }, 'route to…'), ...(plan().destinations || []).map((d) => h('option', { value: d.id }, d.name)));
     route.onchange = () => { if (route.value) run('connect_source_destination', { source_id: s.id, destination_id: route.value }); };
     return h('div', { class: 'tp-ver-row' },
       h('div', { class: 'tp-ver-main' }, h('div', { class: 'tp-mono', style: { fontWeight: '600' } }, s.name),
@@ -32,6 +32,7 @@ export function mountView(container) {
   }
 
   function render() {
+    if (!plan()) { mountAll(host, [h('div', { class: 'tp-row-empty' }, 'Loading…')]); return; }
     const srcRows = (plan().sources || []).map(sourceRow);
     if (!srcRows.length) srcRows.push(h('div', { class: 'tp-row-empty' }, 'No sources yet.'));
     const destRows = (plan().destinations || []).map(destRow);

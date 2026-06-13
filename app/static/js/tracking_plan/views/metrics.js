@@ -13,6 +13,7 @@ export function mountView(container) {
   const plan = () => state.getState().plan;
 
   function render() {
+    if (!plan()) { mountAll(host, [h('div', { class: 'tp-row-empty' }, 'Loading…')]); return; }
     const rows = (plan().metrics || []).map((m) => h('div', { class: 'tp-ver-row' },
       h('div', { class: 'tp-ver-num', style: { fontSize: '11px', textTransform: 'uppercase' } }, m.type),
       h('div', { class: 'tp-ver-main' }, h('div', { class: 'tp-mono', style: { fontWeight: '600' } }, m.name),

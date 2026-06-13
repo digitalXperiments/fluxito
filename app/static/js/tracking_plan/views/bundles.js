@@ -21,6 +21,7 @@ export function mountView(container) {
   }
 
   function render() {
+    if (!plan()) { mountAll(host, [h('div', { class: 'tp-row-empty' }, 'Loading…')]); return; }
     const rows = (plan().bundles || []).map((b) => h('div', { class: 'tp-ver-row' },
       h('div', { class: 'tp-ver-num' }, b.properties.length),
       h('div', { class: 'tp-ver-main' }, h('div', { class: 'tp-mono', style: { fontWeight: '600' } }, b.name),

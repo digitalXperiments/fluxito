@@ -14,6 +14,7 @@ export function mountView(container) {
   function count(cat) { return (plan().events || []).filter((e) => e.category === cat.name).length; }
 
   function render() {
+    if (!plan()) { mountAll(host, [h('div', { class: 'tp-row-empty' }, 'Loading…')]); return; }
     const rows = (plan().categories || []).map((c) => {
       const nameI = h('input', { value: c.name, class: 'tp-mono-input' });
       const colorI = h('input', { type: 'color', value: c.color || '#888888' });

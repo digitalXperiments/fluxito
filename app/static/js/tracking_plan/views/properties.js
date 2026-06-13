@@ -17,6 +17,7 @@ export function mountView(container) {
   const plan = () => state.getState().plan;
 
   function renderList() {
+    if (!plan()) { mountAll(master, [h('div', { class: 'tp-row-empty' }, 'Loading…')]); return; }
     const head = h('div', { class: 'tp-master-head' },
       h('div', { class: 'tp-search' }, h('input', { placeholder: 'Search properties', value: search, onInput: (e) => { search = e.target.value; renderList(); } })),
       h('button', { class: 'btn btn-primary btn-sm btn-block', onClick: create }, '+ New property'));
@@ -45,14 +46,15 @@ export function mountView(container) {
   }
 
   function renderDetail() {
+    if (!plan()) { mountAll(detail, [h('div', { class: 'tp-empty' }, 'Loading…')]); return; }
     const sel = state.getState().selection;
     const p = sel.type === 'property' ? allProps(plan()).find((x) => x.id === sel.id) : null;
     if (drawer) { drawer.destroy(); drawer = null; }
     if (!p) { mountAll(detail, [h('div', { class: 'tp-empty' }, 'Select a property to edit its type & constraints.')]); return; }
     const c = p.constraints || {};
     const nameI = h('input', { class: 'tp-titlefield', value: p.name });
-    const kindS = h('select', ...['event', 'user', 'group', 'system'].map((k) => h('option', { selected: p.kind === k }, k)));
-    const typeS = h('select', ...['string', 'int', 'float', 'boolean', 'object', 'array'].map((t) => h('option', { selected: p.data_type === t }, t)));
+    const kindS = h('select', {}, ...['event', 'user', 'group', 'system'].map((k) => h('option', { selected: p.kind === k }, k)));
+    const typeS = h('select', {}, ...['string', 'int', 'float', 'boolean', 'object', 'array'].map((t) => h('option', { selected: p.data_type === t }, t)));
     const listC = h('input', { type: 'checkbox', checked: p.is_list });
     const piiC = h('input', { type: 'checkbox', checked: p.is_pii });
     const descT = h('textarea', {}); descT.value = p.description || '';
