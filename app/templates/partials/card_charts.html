@@ -112,18 +112,33 @@
     return ratio > 5;
   }
 
-  // Palette (matches the accent used in Fluxito CSS vars, with companions)
+  // Read a CSS custom property off :root, with a hardcoded fallback.
+  function cssVar(name, fallback){
+    try {
+      var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    } catch(e){ return fallback; }
+  }
+
+  // Palette — Looker Clean. Reads the --dv-* tokens from app.css so a category
+  // is the same color in charts and everywhere else. Hex fallbacks match app.css.
   function palette(isDark){
     return {
-      accent:    isDark ? '#fbbf24' : '#b47800',   // amber (current brand)
-      primary:   isDark ? '#60a5fa' : '#2563eb',   // blue
-      secondary: isDark ? '#34d399' : '#059669',   // green
-      neg:       isDark ? '#f87171' : '#dc2626',   // red
-      neutral:   isDark ? '#9ca3af' : '#6b7280',   // gray
-      pink:      isDark ? '#f472b6' : '#db2777',
-      cyan:      isDark ? '#22d3ee' : '#0891b2',
-      muted:     isDark ? '#64748b' : '#94a3b8',
+      primary:   cssVar('--dv-c1', isDark ? '#8ab4f8' : '#4285F4'),
+      secondary: cssVar('--dv-c2', isDark ? '#81c995' : '#34A853'),
+      accent:    cssVar('--dv-c3', isDark ? '#fdd663' : '#FBBC04'),
+      neg:       cssVar('--dv-c4', isDark ? '#f28b82' : '#EA4335'),
+      pink:      cssVar('--dv-c5', isDark ? '#c58af9' : '#A142F4'),
+      cyan:      cssVar('--dv-c6', isDark ? '#78d9ec' : '#24C1E0'),
+      orange:    cssVar('--dv-c7', isDark ? '#fcad70' : '#FF6D01'),
+      neutral:   cssVar('--dv-neutral', isDark ? '#9aa0a6' : '#5F6368'),
+      muted:     isDark ? '#5f6368' : '#94a3b8',
     };
+  }
+
+  // Canonical categorical color order — same sequence as the --dv-* tokens.
+  function paletteSeq(pal){
+    return [pal.primary, pal.secondary, pal.accent, pal.neg, pal.pink, pal.cyan, pal.orange];
   }
 
   // Resolve a semantic color role or hex to an actual color
@@ -221,7 +236,7 @@
     }
 
     var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    var colors = [pal.primary, pal.secondary, pal.pink, pal.cyan];
+    var colors = paletteSeq(pal);
     var highlightColor = pal.accent;
 
     // For line/bar charts: highlight last point by color-splitting the first series.
@@ -254,13 +269,13 @@
           return Object.assign(base, {
             type: 'bar',
             barMaxWidth: 28,
-            itemStyle: {color: color, borderRadius: [0, 4, 4, 0]},
+            itemStyle: {color: color, borderRadius: [0, 2, 2, 0]},
           });
         }
         return Object.assign(base, {
           type: 'bar',
           barMaxWidth: 28,
-          itemStyle: {color: color, borderRadius: [4, 4, 0, 0]},
+          itemStyle: {color: color, borderRadius: [2, 2, 0, 0]},
           // Highlight the last bar (most recent period) in accent color
           data: group.length === 1 ? withHighlightLast(s.data, color, highlightColor) : s.data,
         });
@@ -321,7 +336,7 @@
       option = {
         grid: {top: rightSeries.length ? 46 : 30, right: 30, bottom: 30, left: 10, containLabel: true},
         tooltip: {trigger: 'axis', axisPointer: {type: 'shadow'}, formatter: tooltipFmt},
-        legend: {top: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
+        legend: {top: 0, left: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
         yAxis: {type: 'category', data: labels, axisLabel: {color: axisColor, fontSize: 11}, axisLine: {lineStyle: {color: gridColor}}, inverse: true},
         xAxis: xAxes,
         series: seriesAll,
@@ -330,7 +345,7 @@
       option = {
         grid: {top: 30, right: rightSeries.length ? 52 : 14, bottom: 30, left: 48, containLabel: true},
         tooltip: {trigger: 'axis', axisPointer: {type: 'shadow'}, formatter: tooltipFmt},
-        legend: {top: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
+        legend: {top: 0, left: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
         xAxis: {type: 'category', data: labels, axisLabel: {color: axisColor, fontSize: 10, rotate: labels.length > 8 ? 35 : 0}, axisLine: {lineStyle: {color: gridColor}}},
         yAxis: yAxes,
         series: seriesAll,
@@ -378,7 +393,7 @@
           label: {color: axisColor, fontSize: 11},
           itemStyle: {borderColor: 'var(--surface)', borderWidth: 2},
         }],
-        color: [pal.primary, pal.secondary, pal.pink, pal.cyan, pal.accent, pal.muted],
+        color: paletteSeq(pal),
       }, true);
       return;
     }
@@ -425,7 +440,7 @@
     var rightColC = hasRight ? ((cfg.series.find(function(s){ return s.axis === 'right'; }) || {col: null}).col) : null;
 
     var seriesSpec = cfg.series.map(function(s, i){
-      var color = resolveColor(s.color, pal) || [pal.primary, pal.secondary, pal.pink, pal.cyan][i % 4];
+      var color = resolveColor(s.color, pal) || paletteSeq(pal)[i % 7];
       var raw = sortedRows.map(function(r){ return toNum(r[s.col] === undefined ? null : r[s.col]); });
       var axisIdx = s.axis === 'right' ? 1 : 0;
       var base = {
@@ -449,7 +464,7 @@
       var barOpts = {
         type: 'bar',
         barMaxWidth: 28,
-        itemStyle: {color: color, borderRadius: isHorizontal ? [0,4,4,0] : [4,4,0,0]},
+        itemStyle: {color: color, borderRadius: isHorizontal ? [0,2,2,0] : [2,2,0,0]},
       };
       if (isStacked) barOpts.stack = s.stack || 'total';
       var data = (highlightLast && cfg.series.length === 1 && !isStacked)
@@ -496,7 +511,7 @@
       option = {
         grid: {top: hasRight ? 46 : 30, right: 30, bottom: 30, left: 10, containLabel: true},
         tooltip: {trigger: 'axis', axisPointer: {type: 'shadow'}, formatter: tooltipFmtC},
-        legend: {top: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
+        legend: {top: 0, left: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
         yAxis: {type: 'category', data: labels, axisLabel: {color: axisColor, fontSize: 11}, axisLine: {lineStyle: {color: gridColor}}, inverse: true},
         xAxis: xAxesH,
         series: seriesSpec,
@@ -505,7 +520,7 @@
       option = {
         grid: {top: 30, right: hasRight ? 52 : 14, bottom: 30, left: 48, containLabel: true},
         tooltip: {trigger: 'axis', axisPointer: {type: 'shadow'}, formatter: tooltipFmtC},
-        legend: {top: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
+        legend: {top: 0, left: 0, textStyle: {color: axisColor, fontSize: 11}, icon: 'roundRect'},
         xAxis: {type: 'category', data: labels, axisLabel: {color: axisColor, fontSize: 10, rotate: labels.length > 8 ? 35 : 0}, axisLine: {lineStyle: {color: gridColor}}},
         yAxis: yAxes,
         series: seriesSpec,
@@ -539,7 +554,7 @@
     return {
       tooltip: {trigger: 'item', formatter: function(p){ return p.name + ': ' + (F.fmtNum ? F.fmtNum(p.value) : p.value) + ' (' + p.percent + '%)'; }},
       legend: showLegend ? {bottom: 0, textStyle: {color: axisColor, fontSize: 11}} : {show: false},
-      color: ['#6366f1','#10b981','#f59e0b','#ec4899','#14b8a6','#8b5cf6','#ef4444'],
+      color: paletteSeq(palette(document.documentElement.getAttribute('data-theme') === 'dark')),
       series: [{
         type: 'pie',
         radius: isDonut ? ['45%','70%'] : '70%',
@@ -572,7 +587,7 @@
     var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     var theme = isDark ? 'dark' : null;
     var axisColor = isDark ? '#9ca3af' : '#6b7280';
-    var gridColor = isDark ? '#374151' : '#e5e7eb';
+    var gridColor = cssVar('--dv-grid', isDark ? '#2A2A30' : '#ECEFF1');
     var pal = palette(isDark);
     var root = gridEl || document;
 
