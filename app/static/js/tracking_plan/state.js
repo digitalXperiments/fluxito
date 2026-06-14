@@ -63,7 +63,7 @@ export function select(type, id) {
 
 // Editors set this true when their draft diverges from server, false on
 // save/discard. The shell guards entity/view navigation on it.
-export function setDirty(b) { _state.dirty = !!b; _notify(); }
+export function setDirty(b) { const v = !!b; if (_state.dirty === v) return; _state.dirty = v; _notify(); }
 
 // ---- legacy save-status stubs ----
 // Editors own save now (tp/util/editor); these remain only so util/persist's

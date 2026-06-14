@@ -71,7 +71,23 @@ export function mountView(container) {
   let draft = null; // live draft (editable slice) — editor renders from this
   let saving = false;
 
-  const unsub = state.subscribe(() => { renderList(); renderDetail(); });
+  // A pure setDirty() notification (same plan ref + same selection) must NOT
+  // re-render the detail: that would steal focus from the input being typed in,
+  // and because paint() ends with syncDirty() it would recurse. Mirror events.js —
+  // track the last (plan, selection) rendered and ignore no-op notifications.
+  // Real changes (reload, branch/entity switch) still re-render the detail;
+  // buffered field edits refresh only the header in place (refreshHead).
+  let lastPlan;
+  let lastSelKey;
+  const unsub = state.subscribe(() => {
+    const st = state.getState();
+    const selKey = st.selection.type + ':' + st.selection.id;
+    if (st.plan === lastPlan && selKey === lastSelKey) return; // pure dirty toggle
+    lastPlan = st.plan;
+    lastSelKey = selKey;
+    renderList();
+    renderDetail();
+  });
   renderList();
   renderDetail();
 
@@ -231,7 +247,7 @@ export function mountView(container) {
   function typeFlagsCard(p) {
     const nameInp = h('input', {
       class: 'input mono', id: 'pd-name', value: draft.name,
-      onInput: (e) => { draft.name = e.target.value; syncDirty(); rePaintHeaderName(); },
+      onInput: (e) => { draft.name = e.target.value; syncDirty(); refreshHead(); },
     });
 
     const kindSel = h('select', {
@@ -249,7 +265,7 @@ export function mountView(container) {
 
     const desc = h('textarea', { class: 'textarea', id: 'pd-desc', placeholder: 'What does this property capture?' });
     desc.value = draft.description || '';
-    desc.addEventListener('input', () => { draft.description = desc.value; syncDirty(); });
+    desc.addEventListener('input', () => { draft.description = desc.value; syncDirty(); refreshHead(); });
 
     return card('Type & flags', null,
       h('div', { class: 'tp-card-b' },
@@ -264,17 +280,16 @@ export function mountView(container) {
           h('label', { class: 'tp-lbl' }, 'Description'), desc)));
   }
 
-  // Live-update just the header mono name while typing, without a full repaint
-  // (so the name input keeps focus/caret).
-  function rePaintHeaderName() {
-    const n = detail.querySelector('.tp-ed-name');
-    if (n) n.textContent = draft.name || '';
-    // keep the dirty cluster in step
+  // Rebuild the sticky header in place after a buffered field edit — refreshes the
+  // mono name mirror, chips, and the save cluster (● Unsaved / Save enabled/gated)
+  // WITHOUT re-rendering the cards, so the focused input keeps its caret. Every
+  // editable input lives in a card (#pd-name, #pd-desc, #pd-enum/min/max/regex),
+  // never in the header, so replacing the header never steals focus.
+  function refreshHead() {
     const head = detail.querySelector('.tp-ed-head');
-    if (head) {
-      const fresh = header(currentProp(), isValidRegex((draft.constraints && draft.constraints.regex) || ''));
-      head.replaceWith(fresh);
-    }
+    if (!head) return;
+    const regexValid = isValidRegex((draft.constraints && draft.constraints.regex) || '');
+    head.replaceWith(header(currentProp(), regexValid));
   }
 
   // ---- card: Constraints (live regex hint, applies vs draft.constraints) ----
@@ -300,6 +315,7 @@ export function mountView(container) {
       });
       draft.constraints = next;
       syncDirty();
+      refreshHead();
     };
     const refreshRegexHint = () => {
       const val = regexInp.value;
