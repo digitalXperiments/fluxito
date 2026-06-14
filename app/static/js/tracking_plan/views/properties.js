@@ -7,6 +7,7 @@ import { h, mount } from "tp/render";
 import { mountDrawer } from "tp/comments";
 import { typeBadge } from "tp/util/format";
 import { isValidRegex, buildConstraints, usedByEvents } from "tp/util/constraints";
+import { persist } from "tp/util/persist";
 
 const KINDS = [
   ["event", "Event"],
@@ -56,14 +57,16 @@ function masterPanel(st, search, onSearch) {
   const head = h("div", { class: "tp-master-head" });
   const box = h("div", { class: "tp-search" });
   box.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>`;
-  const inp = h("input", { placeholder: "Search properties", value: search });
+  const inp = h("input", { class: "input", placeholder: "Search properties", value: search });
   inp.oninput = (e) => onSearch(e.target.value);
   box.appendChild(inp);
   head.appendChild(box);
 
   const add = h("button", { class: "btn btn-primary btn-sm btn-block" }, "+ New property");
   add.onclick = async () => {
-    await doAction("create_property", { name: "new_property", data_type: "string", kind: "event" }, st.branch);
+    await persist("Property created", () =>
+      doAction("create_property", { name: "new_property", data_type: "string", kind: "event" }, st.branch)
+    );
     await reload();
     const fresh = getState().plan.properties.event.find((p) => p.name === "new_property");
     if (fresh) select("property", fresh.id);
@@ -113,12 +116,12 @@ function detailPanel(st) {
   // header
   const head = h("div", { class: "tp-d-head" });
   const title = h("div", { class: "tp-d-title" });
-  const nameInp = h("input", { class: "tp-titlefield", id: "pd-name", value: p.name });
+  const nameInp = h("input", { class: "input tp-titlefield", id: "pd-name", value: p.name });
   title.appendChild(nameInp);
   head.appendChild(title);
   const acts = h("div", { class: "tp-d-actions" });
   const drawerBtn = h("button", { class: "btn btn-ghost btn-sm" }, "💬 Comments");
-  const delBtn = h("button", { class: "btn btn-ghost btn-sm" }, "Delete");
+  const delBtn = h("button", { class: "btn btn-danger btn-sm" }, "Delete");
   const saveBtn = h("button", { class: "btn btn-primary btn-sm" }, "Save");
   acts.appendChild(drawerBtn);
   acts.appendChild(delBtn);
@@ -133,7 +136,7 @@ function detailPanel(st) {
   grid.appendChild(field("Data type", selectEl("pd-type", DATA_TYPES, p.data_type)));
   grid.appendChild(checkField("List / array", "pd-list", "values are a list", p.is_list));
   grid.appendChild(checkField("PII", "pd-pii", "contains personal data", p.is_pii));
-  const desc = h("textarea", { id: "pd-desc" }, p.description || "");
+  const desc = h("textarea", { class: "textarea", id: "pd-desc" }, p.description || "");
   grid.appendChild(field("Description", desc, true));
   core.appendChild(grid);
   inner.appendChild(core);
@@ -144,13 +147,13 @@ function detailPanel(st) {
   const cwrap = h("div", { class: "tp-constraints" });
   const enumInp = h("input", {
     id: "pd-enum",
-    class: "tp-mono-input",
+    class: "input tp-mono-input",
     value: (c.allowed_values || []).join(", "),
   });
   cwrap.appendChild(field("Allowed values (enum) — comma separated", enumInp, true));
-  cwrap.appendChild(field("Min", h("input", { id: "pd-min", type: "number", value: c.min ?? "" })));
-  cwrap.appendChild(field("Max", h("input", { id: "pd-max", type: "number", value: c.max ?? "" })));
-  const regexInp = h("input", { id: "pd-regex", class: "tp-mono-input", value: c.regex || "" });
+  cwrap.appendChild(field("Min", h("input", { class: "input", id: "pd-min", type: "number", value: c.min ?? "" })));
+  cwrap.appendChild(field("Max", h("input", { class: "input", id: "pd-max", type: "number", value: c.max ?? "" })));
+  const regexInp = h("input", { id: "pd-regex", class: "input tp-mono-input", value: c.regex || "" });
   const regexHint = h("span", { class: "tp-regex-hint" }, "");
   const regexField = field("Regex / format", regexInp, true);
   regexField.appendChild(regexHint);
@@ -181,16 +184,18 @@ function detailPanel(st) {
       max: inner.querySelector("#pd-max").value,
       regex: regexInp.value,
     });
-    await doAction("update_property", {
-      property_id: p.id,
-      name: nameInp.value.trim(),
-      kind: inner.querySelector("#pd-kind").value,
-      data_type: inner.querySelector("#pd-type").value,
-      is_list: inner.querySelector("#pd-list").checked,
-      is_pii: inner.querySelector("#pd-pii").checked,
-      description: desc.value || null,
-      constraints: cons2,
-    }, st.branch);
+    await persist("Saved", () =>
+      doAction("update_property", {
+        property_id: p.id,
+        name: nameInp.value.trim(),
+        kind: inner.querySelector("#pd-kind").value,
+        data_type: inner.querySelector("#pd-type").value,
+        is_list: inner.querySelector("#pd-list").checked,
+        is_pii: inner.querySelector("#pd-pii").checked,
+        description: desc.value || null,
+        constraints: cons2,
+      }, st.branch)
+    );
     await reload();
   };
   delBtn.onclick = () => confirmDelete(st, p);
@@ -228,7 +233,9 @@ function membersSection(st, parent) {
       const td = h("td", { class: "tp-cell-act" });
       const rm = h("button", { class: "btn btn-ghost btn-sm" }, "Remove");
       rm.onclick = async () => {
-        await doAction("delete_property", { property_id: child.id }, st.branch);
+        await persist("Member removed", () =>
+          doAction("delete_property", { property_id: child.id }, st.branch)
+        );
         await reload();
       };
       td.appendChild(rm);
@@ -240,18 +247,20 @@ function membersSection(st, parent) {
   sec.appendChild(table);
 
   const addRow = h("div", { class: "tp-inline-add" });
-  const nm = h("input", { placeholder: "member name", style: "width:150px" });
+  const nm = h("input", { class: "input", placeholder: "member name", style: "width:150px" });
   const ty = selectEl("", DATA_TYPES, "string");
   const btn = h("button", { class: "btn btn-secondary btn-sm" }, "Add member");
   btn.onclick = async () => {
     const name = nm.value.trim();
     if (!name) return;
-    await doAction("create_property", {
-      name,
-      data_type: ty.value,
-      kind: parent.kind,
-      parent_property_id: parent.id,
-    }, st.branch);
+    await persist("Member added", () =>
+      doAction("create_property", {
+        name,
+        data_type: ty.value,
+        kind: parent.kind,
+        parent_property_id: parent.id,
+      }, st.branch)
+    );
     await reload();
   };
   addRow.appendChild(nm);
@@ -284,11 +293,16 @@ function usedBySection(st, p) {
 
 function confirmDelete(st, p) {
   const events = usedByEvents(st.plan, p);
-  const overlay = h("div", { class: "tp-modal-overlay" });
-  const modal = h("div", { class: "tp-modal" });
-  modal.appendChild(h("h3", {}, `Delete property "${p.name}"?`));
+  const overlay = h("div", { class: "modal-backdrop is-open" });
+  const modal = h("div", { class: "modal" });
+
+  const header = h("div", { class: "modal-header" });
+  header.appendChild(h("div", { class: "modal-title" }, `Delete property "${p.name}"?`));
+  modal.appendChild(header);
+
+  const body = h("div", { class: "modal-body" });
   if (events.length) {
-    modal.appendChild(
+    body.appendChild(
       h(
         "div",
         { class: "tp-warn" },
@@ -297,20 +311,27 @@ function confirmDelete(st, p) {
           .join(", ")}. Deleting also removes those attachments.`
       )
     );
+  } else {
+    body.appendChild(h("div", { class: "tp-muted", style: "font-size:13px" }, "This property is not attached to any event."));
   }
-  const row = h("div", { class: "tp-modal-actions" });
-  const cancel = h("button", { class: "btn btn-ghost btn-sm" }, "Cancel");
-  const del = h("button", { class: "btn btn-danger btn-sm" }, "Delete");
+  modal.appendChild(body);
+
+  const footer = h("div", { class: "modal-footer" });
+  const cancel = h("button", { class: "btn btn-ghost" }, "Cancel");
+  const del = h("button", { class: "btn btn-danger" }, "Delete");
   cancel.onclick = () => overlay.remove();
   del.onclick = async () => {
     overlay.remove();
-    await doAction("delete_property", { property_id: p.id }, st.branch);
+    await persist("Property deleted", () =>
+      doAction("delete_property", { property_id: p.id }, st.branch)
+    );
     select("property", null);
     await reload();
   };
-  row.appendChild(cancel);
-  row.appendChild(del);
-  modal.appendChild(row);
+  footer.appendChild(cancel);
+  footer.appendChild(del);
+  modal.appendChild(footer);
+
   overlay.appendChild(modal);
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   document.body.appendChild(overlay);
@@ -319,14 +340,14 @@ function confirmDelete(st, p) {
 // ---- small DOM helpers (local) ----
 function field(label, control, full) {
   const f = h("div", { class: "tp-field" + (full ? " tp-col-2" : "") });
-  f.appendChild(h("label", {}, label));
+  f.appendChild(h("label", { class: "label" }, label));
   f.appendChild(control);
   return f;
 }
 
 function checkField(label, id, text, checked) {
   const f = h("div", { class: "tp-field" });
-  f.appendChild(h("label", {}, label));
+  f.appendChild(h("label", { class: "label" }, label));
   const wrap = h("label", { class: "tp-checkline" });
   const cb = h("input", { type: "checkbox", id });
   if (checked) cb.checked = true;
@@ -339,7 +360,7 @@ function checkField(label, id, text, checked) {
 function selectEl(id, opts, selected) {
   // Always pass an attrs object as 2nd arg to h() — never spread opts directly
   // (the first spread item would land in the attrs slot and be silently dropped).
-  const s = h("select", id ? { id } : {});
+  const s = h("select", id ? { class: "select", id } : { class: "select" });
   opts.forEach((o) => {
     const op = h("option", { value: o }, o);
     if (o === selected) op.selected = true;
