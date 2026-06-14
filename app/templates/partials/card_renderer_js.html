@@ -500,9 +500,14 @@
     }
 
     // Keep backward-compat: also handle old ct-based paths for cards without chart_type
-    // (detectChartType already maps old card_type → chart type above, so this is a safety net)
+    // (detectChartType already maps old card_type → chart type above, so this is a safety net).
+    // Non-owners see a neutral "unavailable" message — "older format" is only meaningful
+    // to the owner who can redeploy (D6).
     if (!snap.chart_type && ct === 'UNKNOWN') {
-      body = '<p class="empty">This card uses an older format. Redeploy it to refresh.</p>';
+      var isOwner = (typeof IS_OWNER !== 'undefined') ? IS_OWNER : false;
+      body = isOwner
+        ? '<p class="empty">This card uses an older format. Redeploy it to refresh.</p>'
+        : '<p class="empty">Data temporarily unavailable.</p>';
     }
 
     // Determine card width heuristics

@@ -147,6 +147,12 @@
 
 <script>
 // Intercept dashboard open links and show overlay
+var _overlayFallbackTimer = null;
+function hideOverlay() {
+  var overlay = document.getElementById('dashLoadingOverlay');
+  if (overlay) overlay.style.display = 'none';
+  if (_overlayFallbackTimer) { clearTimeout(_overlayFallbackTimer); _overlayFallbackTimer = null; }
+}
 document.addEventListener('click', function(e) {
   const link = e.target.closest('a[href^="/live-dashboards/"]');
   if (!link) return;
@@ -158,9 +164,17 @@ document.addEventListener('click', function(e) {
     ? 'Loading ' + name + '…'
     : 'Loading dashboard…';
   overlay.style.display = 'flex';
+  // Fallback: hide overlay after 9 seconds if navigation hasn't completed (D5).
+  if (_overlayFallbackTimer) clearTimeout(_overlayFallbackTimer);
+  _overlayFallbackTimer = setTimeout(hideOverlay, 9000);
 });
 window.addEventListener('pageshow', function(e) {
-  if (e.persisted) document.getElementById('dashLoadingOverlay').style.display = 'none';
+  if (e.persisted) hideOverlay();
+});
+// Also hide overlay if the page becomes visible again without a proper pageshow
+// (handles cancelled navigations or browser focus restoration).
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible') hideOverlay();
 });
 
 async function deleteDash(id, name) {
