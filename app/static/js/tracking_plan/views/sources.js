@@ -1,34 +1,51 @@
 // app/static/js/tracking_plan/views/sources.js
-// Sources & Destinations catalog + click-to-connect routing graph (spec §5.7).
+// Sources & Destinations (spec §5.7), redesigned to the approved mockup
+// (/tmp/tp_redesign_mockup.html): a refined 2-column CATALOG of .tp-card source
+// and destination cards, plus a clean ROUTING GRAPH with SVG connectors.
+//
+// SAVE MODEL (per the buffered-save requirement): each catalog card holds a
+// local DRAFT of its editable FIELDS ({name, platform_type/platform,
+// account_id}); typing mutates the draft only and never hits the API. The card
+// header shows the save cluster (● Unsaved / Discard / Save) via util/editor;
+// Save commits one update_<entity> and reloads; Discard restores the draft.
+// Routing (connect/disconnect) stays IMMEDIATE — it is a direct routing action,
+// not a field edit — exactly as the brief permits.
+//
+// Hyperscript notes (render.js): h(tag, attrs, ...children); the 2nd arg MUST be
+// a plain attrs object (never a node). SVG shapes use createElementNS (h() makes
+// HTMLElements, which are invisible as SVG). All user text goes through h()
+// children / value attrs — no innerHTML.
+
 import { getState, subscribe, reload } from "tp/state";
 import { doAction } from "tp/api";
 import { h, mount } from "tp/render";
 import { routingLinks, isLinked } from "tp/util/routing";
 import { persist } from "tp/util/persist";
+import { clone, isDirty, saveCluster } from "tp/util/editor";
 
 const PLATFORM_TYPES = ["ios", "android", "web", "server", "warehouse"];
 
-// transient (non-plan) UI state: a pending source selection in the graph + hover
+// transient (non-plan) UI state for the routing graph: pending source + hover.
 let pendingSourceId = null;
 let hoverNodeId = null;
 
 export function mountView(container) {
-  // Declare render before subscribe to avoid TDZ (bug pattern 1).
+  // Declare render before subscribe to avoid TDZ.
   const render = () => {
     const st = getState();
     if (!st.plan) return;
     const root = h("div", { class: "tp-pane is-active" });
     const detail = h("div", { class: "tp-detail", style: "flex:1" });
     const inner = h("div", { class: "tp-detail-inner", style: "max-width:1040px" });
-    inner.appendChild(catalog(st));
-    inner.appendChild(graph(st, render));
+    inner.appendChild(headerSection(st, render));
+    inner.appendChild(catalogSection(st, render));
+    inner.appendChild(graphSection(st, render));
     detail.appendChild(inner);
     root.appendChild(detail);
     mount(container, root);
     drawConnectors(detail, st);
   };
 
-  // Capture unsub so mountView can return a cleanup (bug pattern 3).
   const unsub = subscribe(render);
   render();
 
@@ -44,139 +61,263 @@ export function mountView(container) {
   };
 }
 
-function catalog(st) {
+// ── page header: title + add buttons ────────────────────────────────────────
+function headerSection(st, rerender) {
+  const head = h("div", { class: "tp-d-head" });
+  const title = h(
+    "div",
+    { class: "tp-d-title" },
+    h("h2", { style: "margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em" }, "Sources & destinations"),
+  );
+  head.appendChild(title);
+
+  const addSrc = h("button", { class: "btn btn-secondary btn-sm" }, "+ Add source");
+  addSrc.onclick = async () => {
+    await persist("Source created", () =>
+      doAction("create_source", { name: "New source", platform_type: "web" }, getState().branch),
+    );
+    await reload();
+  };
+  const addDest = h("button", { class: "btn btn-primary btn-sm" }, "+ Add destination");
+  addDest.onclick = async () => {
+    await persist("Destination created", () =>
+      doAction("create_destination", { name: "New destination", platform: "ga4" }, getState().branch),
+    );
+    await reload();
+  };
+  head.appendChild(h("div", { class: "tp-d-actions" }, addSrc, addDest));
+  // keep rerender referenced (header has no buffered field of its own)
+  void rerender;
+  return head;
+}
+
+// ── 2-column catalog of source + destination cards ──────────────────────────
+function catalogSection(st, rerender) {
   const sec = h("div", { class: "tp-section" });
-  sec.appendChild(h("h3", {}, "Catalog"));
-  // 2nd arg to h('div', ...) is a plain attrs object — never a node (bug pattern 2).
   const cols = h("div", { class: "tp-catalog" });
 
-  // ── sources column ────────────────────────────────────────────────────
+  // sources column
   const sCol = h("div", { class: "tp-catalog-col" });
   sCol.appendChild(h("div", { class: "tp-catalog-head" }, "Sources"));
-  (st.plan.sources || []).forEach((s) => {
-    const row = h("div", { class: "tp-catalog-row" });
-    const nm = h("input", { class: "input tp-cat-name", value: s.name });
-    const ty = h("select", { class: "select" });
-    ty.appendChild(h("option", { value: "" }, "platform…"));
-    PLATFORM_TYPES.forEach((t) => {
-      const o = h("option", { value: t }, t);
-      if (s.platform_type === t) o.selected = true;
-      ty.appendChild(o);
-    });
-    const save = h("button", { class: "btn btn-ghost btn-sm" }, "Save");
-    save.onclick = async () => {
-      await persist("Source renamed", () =>
-        doAction(
-          "update_source",
-          { source_id: s.id, name: nm.value.trim(), platform_type: ty.value || null },
-          st.branch,
-        ),
-      );
-      await reload();
-    };
-    const del = h("button", { class: "btn btn-danger btn-sm" }, "Delete");
-    del.onclick = async () => {
-      await persist("Source deleted", () =>
-        doAction("delete_source", { source_id: s.id }, st.branch),
-      );
-      await reload();
-    };
-    row.appendChild(nm);
-    row.appendChild(ty);
-    row.appendChild(save);
-    row.appendChild(del);
-    sCol.appendChild(row);
-  });
-  const addS = h("button", { class: "btn btn-secondary btn-sm" }, "+ Add source");
-  addS.onclick = async () => {
-    await persist("Source created", () =>
-      doAction("create_source", { name: "New source", platform_type: "web" }, st.branch),
-    );
-    await reload();
-  };
-  sCol.appendChild(addS);
+  const sources = st.plan.sources || [];
+  if (!sources.length) {
+    sCol.appendChild(h("div", { class: "tp-row-empty" }, "No sources yet."));
+  }
+  sources.forEach((s) => sCol.appendChild(sourceCard(s, st.branch, rerender)));
   cols.appendChild(sCol);
 
-  // ── destinations column ───────────────────────────────────────────────
+  // destinations column
   const dCol = h("div", { class: "tp-catalog-col" });
   dCol.appendChild(h("div", { class: "tp-catalog-head" }, "Destinations"));
-  (st.plan.destinations || []).forEach((dest) => {
-    const row = h("div", { class: "tp-catalog-row" });
-    const nm = h("input", { class: "input tp-cat-name", value: dest.name });
-    const pl = h("input", {
-      class: "input tp-mono-input",
-      value: dest.platform || "",
-      placeholder: "platform",
-      style: "width:110px",
-    });
-    const acct = h("input", {
-      class: "input",
-      value: dest.platform_account_id || "",
-      placeholder: "account id",
-      style: "width:120px",
-    });
-    const save = h("button", { class: "btn btn-ghost btn-sm" }, "Save");
-    save.onclick = async () => {
-      await persist("Destination renamed", () =>
-        doAction(
-          "update_destination",
-          {
-            destination_id: dest.id,
-            name: nm.value.trim(),
-            platform: pl.value.trim(),
-            platform_account_id: acct.value || null,
-          },
-          st.branch,
-        ),
-      );
-      await reload();
-    };
-    const del = h("button", { class: "btn btn-danger btn-sm" }, "Delete");
-    del.onclick = async () => {
-      await persist("Destination deleted", () =>
-        doAction("delete_destination", { destination_id: dest.id }, st.branch),
-      );
-      await reload();
-    };
-    row.appendChild(nm);
-    row.appendChild(pl);
-    row.appendChild(acct);
-    row.appendChild(save);
-    row.appendChild(del);
-    dCol.appendChild(row);
-  });
-  const addD = h("button", { class: "btn btn-secondary btn-sm" }, "+ Add destination");
-  addD.onclick = async () => {
-    await persist("Destination created", () =>
-      doAction("create_destination", { name: "New destination", platform: "ga4" }, st.branch),
-    );
-    await reload();
-  };
-  dCol.appendChild(addD);
+  const dests = st.plan.destinations || [];
+  if (!dests.length) {
+    dCol.appendChild(h("div", { class: "tp-row-empty" }, "No destinations yet."));
+  }
+  dests.forEach((d) => dCol.appendChild(destCard(d, st.branch, rerender)));
   cols.appendChild(dCol);
 
   sec.appendChild(cols);
   return sec;
 }
 
-function graph(st, rerender) {
-  const sec = h("div", { class: "tp-section" });
-  sec.appendChild(h("h3", {}, "Routing graph"));
-  const hint = h(
+// A single source .tp-card with a buffered {name, platform_type} draft.
+function sourceCard(s, branch, rerender) {
+  const server = { name: s.name, platform_type: s.platform_type || "" };
+  const draft = clone(server);
+  let saving = false;
+
+  const card = h("div", { class: "tp-card", style: "margin-bottom:12px" });
+  const headHa = h("div", { class: "tp-card-ha" });
+  const head = h(
     "div",
-    { class: "tp-muted", style: "font-size:12px;margin-bottom:10px" },
-    pendingSourceId
-      ? "Click a destination to connect/disconnect, or the source again to cancel."
-      : "Click a source, then a destination, to route events between them.",
+    { class: "tp-card-h" },
+    h("span", { class: "tp-sd green" }),
+    h("h3", { class: "tp-mono" }, s.name),
+    headHa,
   );
-  sec.appendChild(hint);
+  card.appendChild(head);
+
+  const refreshCluster = () => {
+    const dirty = isDirty(draft, server);
+    mount(
+      headHa,
+      saveCluster({
+        dirty,
+        saving,
+        onSave: doSave,
+        onDiscard: () => {
+          Object.assign(draft, clone(server));
+          rerender();
+        },
+      }),
+    );
+  };
+
+  async function doSave() {
+    saving = true;
+    refreshCluster();
+    try {
+      await persist("Source saved", () =>
+        doAction(
+          "update_source",
+          { source_id: s.id, name: draft.name.trim(), platform_type: draft.platform_type || null },
+          getState().branch,
+        ),
+      );
+      await reload(); // re-snapshots from a fresh render
+    } catch (err) {
+      saving = false;
+      refreshCluster();
+    }
+  }
+
+  const body = h("div", { class: "tp-card-b" });
+  const grid = h("div", { class: "tp-grid2" });
+
+  // name (mono identifier)
+  const nameInp = h("input", { class: "input mono", value: draft.name, placeholder: "source_name" });
+  nameInp.oninput = () => { draft.name = nameInp.value; refreshCluster(); };
+  grid.appendChild(field("Name", nameInp));
+
+  // platform type
+  const plSel = h("select", { class: "select" });
+  plSel.appendChild(h("option", { value: "" }, "platform…"));
+  PLATFORM_TYPES.forEach((t) => {
+    const o = h("option", { value: t, selected: draft.platform_type === t }, t);
+    plSel.appendChild(o);
+  });
+  plSel.onchange = () => { draft.platform_type = plSel.value; refreshCluster(); };
+  grid.appendChild(field("Platform", plSel));
+
+  body.appendChild(grid);
+
+  const del = h("button", { class: "btn btn-danger btn-sm", style: "margin-top:14px" }, "Delete source");
+  del.onclick = async () => {
+    if (!confirm(`Delete source "${s.name}"?`)) return;
+    await persist("Source deleted", () => doAction("delete_source", { source_id: s.id }, branch));
+    await reload();
+  };
+  body.appendChild(del);
+
+  card.appendChild(body);
+  refreshCluster();
+  return card;
+}
+
+// A single destination .tp-card with a buffered {name, platform, account_id} draft.
+function destCard(dest, branch, rerender) {
+  const server = {
+    name: dest.name,
+    platform: dest.platform || "",
+    account_id: dest.platform_account_id || "",
+  };
+  const draft = clone(server);
+  let saving = false;
+
+  const card = h("div", { class: "tp-card", style: "margin-bottom:12px" });
+  const headHa = h("div", { class: "tp-card-ha" });
+  const head = h("div", { class: "tp-card-h" }, h("h3", { class: "tp-mono" }, dest.name), headHa);
+  card.appendChild(head);
+
+  const refreshCluster = () => {
+    const dirty = isDirty(draft, server);
+    mount(
+      headHa,
+      saveCluster({
+        dirty,
+        saving,
+        onSave: doSave,
+        onDiscard: () => {
+          Object.assign(draft, clone(server));
+          rerender();
+        },
+      }),
+    );
+  };
+
+  async function doSave() {
+    saving = true;
+    refreshCluster();
+    try {
+      await persist("Destination saved", () =>
+        doAction(
+          "update_destination",
+          {
+            destination_id: dest.id,
+            name: draft.name.trim(),
+            platform: draft.platform.trim(),
+            platform_account_id: draft.account_id || null,
+          },
+          getState().branch,
+        ),
+      );
+      await reload();
+    } catch (err) {
+      saving = false;
+      refreshCluster();
+    }
+  }
+
+  const body = h("div", { class: "tp-card-b" });
+  const grid = h("div", { class: "tp-grid2" });
+
+  const nameInp = h("input", { class: "input mono", value: draft.name, placeholder: "Destination" });
+  nameInp.oninput = () => { draft.name = nameInp.value; refreshCluster(); };
+  grid.appendChild(field("Name", nameInp));
+
+  const plInp = h("input", { class: "input mono", value: draft.platform, placeholder: "ga4 / amplitude / …" });
+  plInp.oninput = () => { draft.platform = plInp.value; refreshCluster(); };
+  grid.appendChild(field("Platform", plInp));
+
+  const acctInp = h("input", { class: "input mono", value: draft.account_id, placeholder: "account id" });
+  acctInp.oninput = () => { draft.account_id = acctInp.value; refreshCluster(); };
+  grid.appendChild(field("Account ID", acctInp));
+
+  body.appendChild(grid);
+
+  const del = h("button", { class: "btn btn-danger btn-sm", style: "margin-top:14px" }, "Delete destination");
+  del.onclick = async () => {
+    if (!confirm(`Delete destination "${dest.name}"?`)) return;
+    await persist("Destination deleted", () => doAction("delete_destination", { destination_id: dest.id }, branch));
+    await reload();
+  };
+  body.appendChild(del);
+
+  card.appendChild(body);
+  refreshCluster();
+  return card;
+}
+
+function field(label, control) {
+  return h("div", { class: "tp-field" }, h("label", { class: "tp-lbl" }, label), control);
+}
+
+// ── routing graph: clean card nodes + SVG connectors, click-to-connect ───────
+function graphSection(st, rerender) {
+  const sec = h("div", { class: "tp-card" });
+  const hint = pendingSourceId
+    ? "Click a destination to connect or disconnect, or the source again to cancel."
+    : "Click a source, then a destination, to route events between them.";
+  sec.appendChild(
+    h(
+      "div",
+      { class: "tp-card-h" },
+      h("h3", {}, "Routing graph"),
+      h("span", { class: "tp-card-ha tp-muted", style: "font-size:12px;font-weight:400" }, hint),
+    ),
+  );
+
+  const body = h("div", { class: "tp-card-b" });
+
+  if (!(st.plan.sources || []).length && !(st.plan.destinations || []).length) {
+    body.appendChild(h("div", { class: "tp-row-empty" }, "Add a source and a destination to route between them."));
+    sec.appendChild(body);
+    return sec;
+  }
 
   const board = h("div", { class: "tp-graph" });
 
-  // SVG overlay for connectors — must be createElementNS, not createElement / h().
-  // h() uses document.createElement which produces an HTMLElement, not SVGElement;
-  // SVG shape elements created that way are invisible. We inject the SVG overlay
-  // directly here and let drawConnectors() populate it after layout.
+  // SVG overlay — createElementNS (h()/createElement produce invisible SVG).
   const svgNS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(svgNS, "svg");
   svg.setAttribute("class", "tp-graph-svg");
@@ -189,24 +330,16 @@ function graph(st, rerender) {
         "tp-graph-node tp-graph-source" +
         (pendingSourceId === s.id ? " is-pending" : "") +
         (hoverNodeId === s.id ? " is-hover" : ""),
+      dataset: { nodeId: s.id, side: "source" },
     });
-    node.dataset.nodeId = s.id;
-    node.dataset.side = "source";
-    // Use h() children for safe text insertion — no innerHTML (bug pattern 4).
     node.appendChild(h("span", { class: "tp-node-name" }, s.name));
     node.appendChild(h("span", { class: "tp-node-meta" }, s.platform_type || "—"));
     node.onclick = () => {
       pendingSourceId = pendingSourceId === s.id ? null : s.id;
       rerender();
     };
-    node.onmouseenter = () => {
-      hoverNodeId = s.id;
-      highlight(board, st);
-    };
-    node.onmouseleave = () => {
-      hoverNodeId = null;
-      highlight(board, st);
-    };
+    node.onmouseenter = () => { hoverNodeId = s.id; highlight(board, st); };
+    node.onmouseleave = () => { hoverNodeId = null; highlight(board, st); };
     sCol.appendChild(node);
   });
 
@@ -214,14 +347,12 @@ function graph(st, rerender) {
   (st.plan.destinations || []).forEach((dest) => {
     const node = h("div", {
       class: "tp-graph-node tp-graph-dest" + (hoverNodeId === dest.id ? " is-hover" : ""),
+      dataset: { nodeId: dest.id, side: "dest" },
     });
-    node.dataset.nodeId = dest.id;
-    node.dataset.side = "dest";
     node.appendChild(h("span", { class: "tp-node-name" }, dest.name));
     node.appendChild(h("span", { class: "tp-node-meta" }, dest.platform || "—"));
     node.onclick = async () => {
       if (!pendingSourceId) return;
-      // isLinked resolves name→id via util/routing internally.
       const linked = isLinked(getState().plan, pendingSourceId, dest.id);
       const action = linked ? "disconnect_source_destination" : "connect_source_destination";
       const src = pendingSourceId;
@@ -231,20 +362,15 @@ function graph(st, rerender) {
       );
       await reload();
     };
-    node.onmouseenter = () => {
-      hoverNodeId = dest.id;
-      highlight(board, st);
-    };
-    node.onmouseleave = () => {
-      hoverNodeId = null;
-      highlight(board, st);
-    };
+    node.onmouseenter = () => { hoverNodeId = dest.id; highlight(board, st); };
+    node.onmouseleave = () => { hoverNodeId = null; highlight(board, st); };
     dCol.appendChild(node);
   });
 
   board.appendChild(sCol);
   board.appendChild(dCol);
-  sec.appendChild(board);
+  body.appendChild(board);
+  sec.appendChild(body);
   return sec;
 }
 
@@ -257,7 +383,7 @@ function drawConnectors(detailEl, st) {
   const brect = board.getBoundingClientRect();
   svg.setAttribute("width", String(brect.width));
   svg.setAttribute("height", String(brect.height));
-  // Clear existing connectors safely via SVG DOM (no innerHTML to avoid XSS).
+  // Clear existing connectors via SVG DOM (no innerHTML).
   while (svg.firstChild) svg.removeChild(svg.firstChild);
 
   const svgNS = "http://www.w3.org/2000/svg";
@@ -276,7 +402,6 @@ function drawConnectors(detailEl, st) {
     const a = pos(l.sourceId);
     const b = pos(l.destinationId);
     if (!a || !b) return;
-    // Connector path — createElementNS ensures a real SVGPathElement.
     const path = document.createElementNS(svgNS, "path");
     const midX = (a.x + b.x) / 2;
     path.setAttribute("d", `M ${a.x} ${a.y} C ${midX} ${a.y}, ${midX} ${b.y}, ${b.x} ${b.y}`);
@@ -296,14 +421,10 @@ function highlight(board, st) {
     p.classList.toggle("is-dim", !touches);
     p.classList.toggle("is-lit", !!hoverNodeId && touches);
   });
-  // Also highlight connected nodes when hovering.
   const links = routingLinks(st.plan);
   board.querySelectorAll(".tp-graph-node").forEach((node) => {
     const nid = node.dataset.nodeId;
-    if (!hoverNodeId) {
-      node.classList.remove("is-hover");
-      return;
-    }
+    if (!hoverNodeId) { node.classList.remove("is-hover"); return; }
     const connected =
       nid === hoverNodeId ||
       links.some(
