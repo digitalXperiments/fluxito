@@ -51,7 +51,7 @@
       {% if metrics and metrics|length == 1 %}
         {% set m = metrics[0] %}
         <div class="big-metric" style="padding:4px 0 6px;">
-          <div class="metric-value">{{ m.get('value','') }}</div>
+          <div class="metric-value">{{ m.get('display', m.get('value','')) }}</div>
           <div class="metric-label">{{ m.get('label') or m.get('key','') }}</div>
         </div>
       {% elif metrics %}
@@ -59,7 +59,7 @@
         {% for m in metrics %}
         <div class="metric-kpi">
           <div class="l">{{ m.get('label') or m.get('key','') }}</div>
-          <div class="v">{{ m.get('value','') }}</div>
+          <div class="v">{{ m.get('display', m.get('value','')) }}</div>
         </div>
         {% endfor %}
       </div>
