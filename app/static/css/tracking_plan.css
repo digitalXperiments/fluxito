@@ -868,8 +868,201 @@
 @media (max-width: 860px) {
   .tp-ov-grid { grid-template-columns: 1fr; }
 }
-@media (max-width: 720px) {
+
+/* ---------------------------------------------------------------------------
+   Back control — hidden on desktop; shown only inside @media below.
+   --------------------------------------------------------------------------- */
+.tp-back { display: none; }
+
+/* ---------------------------------------------------------------------------
+   Mobile — primary breakpoint (matches base.html).
+   Replaces the old 720px block entirely.
+   --------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+
+  /* A.1 — Shell height reconciliation.
+     base.html sets .has-sidebar .main { padding-top: calc(var(--nav-h) + 40px) } on mobile.
+     Switch from 100vh to auto so content is not clipped under the fixed topbar. */
+  .tp-shell { height: auto; min-height: calc(100vh - var(--nav-h) - 40px); }
+  .tp-workspace { height: auto; }
+  .tp-ws-body { height: auto; }
+
+  /* A.2 — Nav → horizontal scrollable pill strip */
   .tp-ws-body { flex-direction: column; }
-  .tp-nav { width: 100%; flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid var(--tp-border); }
-  .tp-nav-list { flex-direction: row; flex-wrap: wrap; }
+
+  .tp-nav {
+    width: 100%;
+    flex: none;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--tp-border);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+  .tp-nav::-webkit-scrollbar { display: none; }
+
+  .tp-nav-list {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 6px;
+    flex: none;
+  }
+
+  .tp-nav-item {
+    flex: none;
+    white-space: nowrap;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: var(--tp-r-full);
+    font-size: 13px;
+    border: 1px solid var(--tp-border-2);
+    background: var(--tp-surface-2);
+    scroll-snap-align: start;
+  }
+  .tp-nav-item.is-active {
+    background: var(--tp-accent-soft);
+    border-color: var(--tp-accent-border);
+    color: var(--tp-accent);
+  }
+  .tp-nav-review { margin-top: 0; }
+
+  /* A.3 — Branch picker + review pill inside the strip */
+  .tp-branchpick {
+    flex: none;
+    margin: 0;
+    max-width: 46vw;
+  }
+  .tp-branchpick > .tp-branch-btn,
+  .tp-branchpick > button {
+    min-height: 44px;
+    padding: 0 12px;
+  }
+  .tp-branchpick .tp-menu {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    min-width: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+  .tp-review { flex: none; align-self: center; height: 28px; padding: 0 12px; }
+
+  /* A.4 — Master-detail → drill-down */
+  .tp-body,
+  .tp-master-detail {
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - var(--nav-h) - 40px - 60px);
+    overflow: visible;
+  }
+
+  .tp-master {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+    border-right: none;
+    border-bottom: 1px solid var(--tp-border);
+  }
+  .tp-detail { display: none; }
+
+  #tp-viewhost.tp-detail-open .tp-master { display: none; }
+  #tp-viewhost.tp-detail-open .tp-detail { display: block; flex: 1 1 auto; width: 100%; }
+
+  /* A.5 — Back control: shown only when drilled in */
+  .tp-ws-main:has(#tp-viewhost.tp-detail-open) .tp-back {
+    display: inline-flex;
+  }
+  .tp-back {
+    align-items: center;
+    gap: 7px;
+    min-height: 44px;
+    width: 100%;
+    padding: 0 14px;
+    border: none;
+    border-bottom: 1px solid var(--tp-border);
+    background: var(--tp-surface);
+    color: var(--tp-accent);
+    font: inherit;
+    font-weight: 550;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  /* A.6 — Editor forms → single column, tighter padding */
+  .tp-grid2, .tp-fieldgrid, .tp-constraints { grid-template-columns: 1fr; gap: 12px; }
+  .tp-detail-inner, .tp-ed-body { max-width: 100%; padding: 16px 14px 48px; }
+  .tp-ed-head { padding: 12px 14px; }
+  .tp-ed-id-row, .tp-d-head { flex-wrap: wrap; gap: 10px; }
+  .tp-ed-name, .tp-titlefield { font-size: 15px; word-break: break-word; }
+  .tp-ed-actions, .tp-d-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
+  .tp-card-b { padding: 14px; }
+  .tp-card-h { flex-wrap: wrap; padding: 12px 14px; }
+  .tp-card-ha { margin-left: 0; width: 100%; }
+
+  /* A.7 — Data tables → horizontal scroll inside container */
+  .tp-card-b, .tp-detail-inner, .tp-ed-body { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tp-ptable, .tp-itable { min-width: 560px; }
+  .tp-pn, .tp-pname { max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* A.8 — Tap targets ≥44px */
+  .tp-workspace .btn { height: 40px; padding: 0 14px; }
+  .tp-workspace .btn.btn-sm { height: 40px; padding: 0 14px; font-size: 13px; }
+  .tp-ev, .tp-row { min-height: 44px; padding: 10px; }
+  .tp-search input, .tp-search .input { height: 44px; min-height: 44px; }
+  .tp-toggle { width: 44px; height: 26px; }
+  .tp-toggle::after { width: 22px; height: 22px; top: 2px; }
+  .tp-toggle.on::after { left: 20px; }
+  .tp-statusel { height: 40px; }
+  .tp-drawer-close, .tp-drawer-tab { min-height: 44px; }
+
+  /* A.9 — Topbar actions → wrap/compact */
+  .tp-topbar {
+    height: auto;
+    min-height: 52px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .tp-crumb { font-size: 12px; min-width: 0; flex: 1 1 100%; }
+  .tp-crumb .tp-crumb-cur, .tp-crumb b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
+  .tp-topbar-actions { margin-left: 0; width: 100%; flex-wrap: wrap; gap: 6px; }
+  .tp-export .tp-menu { left: auto; right: 0; }
+
+  /* A.10 — Comments drawer full width; modals near-full */
+  .tp-drawer { width: 100vw; max-width: 100vw; }
+  .tp-comment.tp-reply { margin-left: 16px; }
+  .tp-mention-pop { max-width: 100%; }
+  .modal { max-width: calc(100vw - 24px); }
+  .modal-footer { flex-wrap: wrap; }
+  .modal-footer .btn { flex: 1 1 auto; }
+
+  /* A.11 — Routing graph → horizontal scroll */
+  .tp-graph {
+    gap: 48px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    min-width: 0;
+  }
+  .tp-graph-col, .tp-graph-sources, .tp-graph-dests { width: 180px; flex: none; }
+  .tp-graph-node, .tp-graph-dest { min-height: 44px; }
+
+  /* A.12 — Single-column view padding (overview / review / versions) */
+  .tp-overview, .tp-versions, .tp-diff { padding: 16px; max-width: 100%; }
+  .tp-ov-kpis { grid-template-columns: 1fr; }
+  .tp-ov-grid, .tp-catalog { grid-template-columns: 1fr; }
+  .tp-ov-head, .tp-ov-head-main { flex-direction: column; }
+  .tp-ov-actions, .tp-ov-head-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
+  .tp-review-head { flex-direction: column; align-items: flex-start; padding: 12px 16px; }
+  .tp-review-actions { flex-wrap: wrap; }
+  .tp-review-changes { padding: 14px 16px; border-right: none; }
+  .tp-ver-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+
 }

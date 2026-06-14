@@ -37,18 +37,54 @@ const VIEW_META = {
   versions: { label: 'Versions' },
 };
 
+// Views that use the master-detail drill-down on mobile. `sources` is listed
+// for intent but never sets a selection, so it never triggers the class.
+const MD_VIEWS = new Set(['events', 'properties', 'categories', 'bundles', 'sources', 'metrics']);
+const MOBILE_MQ = '(max-width: 768px)';
+
 export function mountShell(root) {
   root.classList.add('tp-workspace');
   const rail = h('aside', { class: 'tp-nav' });
   const top = h('div', { class: 'tp-topbar' });
   const viewHost = h('div', { class: 'tp-viewhost', id: 'tp-viewhost' });
-  const body = h('div', { class: 'tp-ws-body' }, rail, h('div', { class: 'tp-ws-main' }, top, viewHost));
+  const wsMain = h('div', { class: 'tp-ws-main' }, top, viewHost);
+  const body = h('div', { class: 'tp-ws-body' }, rail, wsMain);
   mountAll(root, [body]);
+
+  // --- mobile drill-down coordinator (central; no per-view edits) ---
+  installDrillDown(viewHost, wsMain);
 
   const renderChrome = () => { renderRail(rail); renderTop(top); };
   state.subscribe(renderChrome);
   renderChrome();
   return viewHost;
+}
+
+// Toggles `tp-detail-open` on #tp-viewhost when, on a small screen, the current
+// view is a master-detail view AND an entity is selected. Provides a persistent
+// .tp-back control (cleared via state.select(null, null)). Engages only via
+// matchMedia so desktop is unaffected, and survives shell re-renders because it
+// owns elements the renderers never clear.
+function installDrillDown(viewHost, wsMain) {
+  const mq = window.matchMedia(MOBILE_MQ);
+
+  // Persistent back button, inserted once as the first child of .tp-ws-main
+  // (renderTop/renderRail never touch .tp-ws-main's children directly, and
+  // mountAll(top, …) only clears `top`, so this survives every re-render).
+  const back = h('button', { class: 'tp-back', type: 'button',
+    onClick: () => state.select(null, null) },
+    h('span', { 'aria-hidden': 'true' }, '‹'), 'Back to list');
+  wsMain.insertBefore(back, wsMain.firstChild);
+
+  const sync = () => {
+    const s = state.getState();
+    const open = mq.matches && MD_VIEWS.has(s.view) && s.selection != null && s.selection.id != null;
+    viewHost.classList.toggle('tp-detail-open', open);
+  };
+
+  state.subscribe(sync);               // re-evaluate on every state change
+  mq.addEventListener('change', sync); // re-evaluate when crossing the breakpoint
+  sync();                              // initial
 }
 
 function curBranch() {
