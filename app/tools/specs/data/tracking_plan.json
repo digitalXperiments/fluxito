@@ -2,7 +2,7 @@
   {
     "tool": "tracking_plan",
     "action": "get_plan",
-    "summary": "Return the full structured tracking plan for the active project's main branch (events, property library, sources, destinations, routing, mappings, metrics). Pass summary=true for counts only.",
+    "summary": "Return the FULL nested tracking plan for the active project's main branch (events with attached properties/sources/destinations, property library, sources, destinations, routing, mappings, metrics). This can be large — for a cheap first read use get_overview, then get_plan/get_event when you need full detail. Pass summary=true for counts only.",
     "params": [
       {
         "name": "summary",
@@ -14,6 +14,14 @@
     ],
     "mutates": false,
     "returns": "{ plan, branch, categories[], events[], properties{event[],user[],group[],system[]}, sources[], destinations[], metrics[] } | { plan, counts }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "get_overview",
+    "summary": "Concise, reasoning-ready summary of the plan for the active branch — the cheap first read. Returns counts, per-category event counts, lightweight event/source/destination rows, and a health snapshot (validation findings by severity + is_publishable) WITHOUT the full nested payload. Reach for get_plan or get_event only when you need full detail.",
+    "params": [],
+    "mutates": false,
+    "returns": "{ plan{name}, branch{name,is_main}, counts{events,event_properties,user_properties,sources,destinations,metrics,categories,bundles}, categories[{name,event_count}], events[{name,category,property_count,source_count,destination_count}], sources[{name,platform_type,destination_count}], destinations[{name,platform}], health{findings_by_severity{warning,info},is_publishable} }"
   },
   {
     "tool": "tracking_plan",
@@ -115,6 +123,90 @@
     "mutates": true,
     "reversible": true,
     "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_event_with_properties",
+    "summary": "Create an event AND attach its properties in one atomic call. Takes every create_event field plus a `properties` list. For each property: if property_id is given it is attached; otherwise an existing event-kind library property with that name is reused (find-or-create), creating it from data_type/is_pii/is_list when absent. Saves the get-then-attach round-trips of create_event + N attach_property calls.",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "purchase",
+        "doc": "Unique event name on the branch."
+      },
+      {
+        "name": "display_name",
+        "type": "string",
+        "required": false,
+        "doc": "Human-friendly label."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "category_id",
+        "type": "string",
+        "required": false,
+        "doc": "UUID of an existing category."
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "item_type": "string",
+        "required": false
+      },
+      {
+        "name": "trigger_type",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "trigger_config",
+        "type": "object",
+        "required": false
+      },
+      {
+        "name": "purpose",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "owner_business",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "owner_technical",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "consent_required",
+        "type": "boolean",
+        "required": false
+      },
+      {
+        "name": "properties",
+        "type": "array",
+        "required": false,
+        "example": [
+          {
+            "name": "value",
+            "data_type": "float",
+            "required": true,
+            "example": "9.99"
+          }
+        ],
+        "doc": "Properties to attach. Each item: { name, data_type?, required?, example?, is_pii?, is_list?, property_id? }. With property_id, that library property is attached; otherwise an event-kind property is found-by-name or created (data_type defaults to 'string')."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name, attached:[{ name, property_id, created }], skipped:[...] } | { error, error_type, message }"
   },
   {
     "tool": "tracking_plan",

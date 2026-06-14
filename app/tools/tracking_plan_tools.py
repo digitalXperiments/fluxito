@@ -13,6 +13,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import select
+
 import app.app_state as state
 from app.auth.mcp_session_manager import no_active_project_response, require_project_ctx
 from app.services.tracking_plan import (
@@ -147,11 +149,16 @@ async def _dispatch(session, branch, ctx: _Ctx, action: str, params: dict) -> di
         if action == "validate":
             return await validate_plan(session, ctx.plan, branch)
 
+        if action == "get_overview":
+            return await _build_overview(session, ctx.plan, branch)
+
         # ---- events ------------------------------------------------------
         if action == "create_event":
             fields = _event_fields(p)
             ev = await create_event(session, branch, name=fields.pop("name", p.get("name", "")), **fields)
             return _ok(id=str(ev.id), name=ev.name)
+        if action == "create_event_with_properties":
+            return await _create_event_with_properties(session, branch, p)
         if action == "update_event":
             ev = await update_event(session, branch, p["event_id"], **_event_fields(p))
             return _ok(id=str(ev.id), name=ev.name)
@@ -437,6 +444,7 @@ async def _dispatch(session, branch, ctx: _Ctx, action: str, params: dict) -> di
 # intentionally absent → skipped. Map: action -> the entity the change is about.
 _ENTITY_BY_ACTION: dict[str, str] = {
     "create_event": "event",
+    "create_event_with_properties": "event",
     "update_event": "event",
     "delete_event": "event",
     "set_event_sources": "event",
@@ -547,6 +555,148 @@ async def run_action(session, branch, ctx: _Ctx, action: str, params: dict) -> d
     if not result.get("error"):
         _log_activity(session, ctx, branch, action, result, params or {})
     return result
+
+
+async def _build_overview(session: Any, plan: Any, branch: Any) -> dict:
+    """Compose a concise, reasoning-ready plan summary purely from the existing
+    plan_to_dict + validate_plan reads (no new service/persistence code)."""
+    data = await plan_to_dict(session, plan, branch)
+    report = await validate_plan(session, plan, branch)
+
+    events = data["events"]
+    sources = data["sources"]
+    destinations = data["destinations"]
+
+    event_count_by_category: dict[str, int] = {}
+    for ev in events:
+        cat = ev.get("category")
+        if cat:
+            event_count_by_category[cat] = event_count_by_category.get(cat, 0) + 1
+
+    by_severity: dict[str, int] = {"warning": 0, "info": 0}
+    for finding in report["findings"]:
+        sev = finding.get("severity")
+        if sev in by_severity:
+            by_severity[sev] += 1
+
+    return {
+        "plan": {"name": data["plan"]["name"]},
+        "branch": {"name": data["branch"]["name"], "is_main": data["branch"]["is_main"]},
+        "counts": {
+            "events": len(events),
+            "event_properties": len(data["properties"]["event"]),
+            "user_properties": len(data["properties"]["user"]),
+            "sources": len(sources),
+            "destinations": len(destinations),
+            "metrics": len(data["metrics"]),
+            "categories": len(data["categories"]),
+            "bundles": len(data["bundles"]),
+        },
+        "categories": [
+            {"name": c["name"], "event_count": event_count_by_category.get(c["name"], 0)}
+            for c in data["categories"]
+        ],
+        "events": [
+            {
+                "name": ev["name"],
+                "category": ev.get("category"),
+                "property_count": len(ev["properties"]),
+                "source_count": len(ev["sources"]),
+                "destination_count": len(ev["destinations"]),
+            }
+            for ev in events
+        ],
+        "sources": [
+            {
+                "name": s["name"],
+                "platform_type": s["platform_type"],
+                "destination_count": len(s["destinations"]),
+            }
+            for s in sources
+        ],
+        "destinations": [{"name": d["name"], "platform": d["platform"]} for d in destinations],
+        "health": {
+            "findings_by_severity": by_severity,
+            "is_publishable": report["is_publishable"],
+        },
+    }
+
+
+async def _find_event_property_by_name(session: Any, branch: Any, name: str) -> Any:
+    """Return an existing event-kind library property on the branch by name, or
+    None. Mirrors the (branch_id, kind, name) uniqueness used by the service."""
+    from app.models.tracking_plan import TPProperty
+
+    result = await session.execute(
+        select(TPProperty).where(
+            TPProperty.branch_id == branch.id,
+            TPProperty.kind == "event",
+            TPProperty.name == name,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _create_event_with_properties(session: Any, branch: Any, p: dict) -> dict:
+    """Create an event, then find-or-create + attach each requested property.
+
+    Orchestrates existing services only (create_event / create_property /
+    attach_property). The whole MCP call commits once, so the event + every
+    attachment are atomic. Property resolution per item:
+      • property_id given  → attach that library property.
+      • else, by name      → reuse an existing event-kind property if present,
+                             otherwise create one (find-or-create).
+    """
+    fields = _event_fields(p)
+    ev = await create_event(session, branch, name=fields.pop("name", p.get("name", "")), **fields)
+
+    attached: list[dict] = []
+    skipped: list[dict] = []
+    for spec in p.get("properties") or []:
+        if not isinstance(spec, dict):
+            skipped.append({"property": spec, "reason": "not an object"})
+            continue
+        pname = (spec.get("name") or "").strip()
+        prop_id = spec.get("property_id")
+        created = False
+        if prop_id:
+            prop = await get_or_raise_property(session, branch, prop_id)
+            pname = prop.name
+        else:
+            if not pname:
+                skipped.append({"property": spec, "reason": "missing name and property_id"})
+                continue
+            prop = await _find_event_property_by_name(session, branch, pname)
+            if prop is None:
+                prop = await create_property(
+                    session,
+                    branch,
+                    name=pname,
+                    data_type=spec.get("data_type", "string"),
+                    kind="event",
+                    is_pii=bool(spec.get("is_pii", False)),
+                    is_list=bool(spec.get("is_list", False)),
+                )
+                created = True
+        await attach_property(
+            session,
+            branch,
+            ev.id,
+            prop.id,
+            required=bool(spec.get("required", False)),
+            example=spec.get("example"),
+        )
+        attached.append({"name": pname, "property_id": str(prop.id), "created": created})
+
+    return _ok(id=str(ev.id), name=ev.name, attached=attached, skipped=skipped)
+
+
+async def get_or_raise_property(session: Any, branch: Any, property_id: Any) -> Any:
+    """Resolve a branch-scoped library property by id (raises NotFoundError)."""
+    from app.models.tracking_plan import TPProperty
+    from app.services.tracking_plan.common import get_or_raise
+
+    return await get_or_raise(session, TPProperty, property_id, branch_id=branch.id)
 
 
 # --- per-entity field pickers (only forward keys the caller actually sent) ---

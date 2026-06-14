@@ -249,9 +249,11 @@ KNOWLEDGE_ROUTES: dict[str, tuple[str, str | None]] = {
 TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
     # --- Structured (v2) actions — Plan 1B ---
     "get_plan": ("tracking_plan_v2", "get_plan"),
+    "get_overview": ("tracking_plan_v2", "get_overview"),
     "get_event": ("tracking_plan_v2", "get_event"),
     "validate": ("tracking_plan_v2", "validate"),
     "create_event": ("tracking_plan_v2", "create_event"),
+    "create_event_with_properties": ("tracking_plan_v2", "create_event_with_properties"),
     "update_event": ("tracking_plan_v2", "update_event"),
     "delete_event": ("tracking_plan_v2", "delete_event"),
     "set_event_sources": ("tracking_plan_v2", "set_event_sources"),
