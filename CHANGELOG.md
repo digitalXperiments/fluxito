@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `create_event_with_properties`.
 - **Structured Markdown and Excel exports** of the tracking plan, generated on demand. The
   markdown that was previously the source of truth is now just one of these export artifacts.
+- **Mobile-responsive Tracking Plan workspace.** On phones the section nav collapses to a
+  horizontal scrollable pill strip and the master–detail editors become a drill-down — tap a
+  list row to open the full-screen editor with a back control — with forms, data tables, the
+  comments drawer and dialogs all adapted for small screens.
 
 ### Changed
 - **Audit and Live Tag Test now read the published tracking-plan snapshot** instead of parsing the
