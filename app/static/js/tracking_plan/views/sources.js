@@ -4,6 +4,7 @@ import { getState, subscribe, reload } from "tp/state";
 import { doAction } from "tp/api";
 import { h, mount } from "tp/render";
 import { routingLinks, isLinked } from "tp/util/routing";
+import { persist } from "tp/util/persist";
 
 const PLATFORM_TYPES = ["ios", "android", "web", "server", "warehouse"];
 
@@ -54,8 +55,8 @@ function catalog(st) {
   sCol.appendChild(h("div", { class: "tp-catalog-head" }, "Sources"));
   (st.plan.sources || []).forEach((s) => {
     const row = h("div", { class: "tp-catalog-row" });
-    const nm = h("input", { class: "tp-cat-name", value: s.name });
-    const ty = h("select", {});
+    const nm = h("input", { class: "input tp-cat-name", value: s.name });
+    const ty = h("select", { class: "select" });
     ty.appendChild(h("option", { value: "" }, "platform…"));
     PLATFORM_TYPES.forEach((t) => {
       const o = h("option", { value: t }, t);
@@ -64,16 +65,20 @@ function catalog(st) {
     });
     const save = h("button", { class: "btn btn-ghost btn-sm" }, "Save");
     save.onclick = async () => {
-      await doAction(
-        "update_source",
-        { source_id: s.id, name: nm.value.trim(), platform_type: ty.value || null },
-        st.branch,
+      await persist("Source renamed", () =>
+        doAction(
+          "update_source",
+          { source_id: s.id, name: nm.value.trim(), platform_type: ty.value || null },
+          st.branch,
+        ),
       );
       await reload();
     };
-    const del = h("button", { class: "btn btn-ghost btn-sm" }, "Delete");
+    const del = h("button", { class: "btn btn-danger btn-sm" }, "Delete");
     del.onclick = async () => {
-      await doAction("delete_source", { source_id: s.id }, st.branch);
+      await persist("Source deleted", () =>
+        doAction("delete_source", { source_id: s.id }, st.branch),
+      );
       await reload();
     };
     row.appendChild(nm);
@@ -84,7 +89,9 @@ function catalog(st) {
   });
   const addS = h("button", { class: "btn btn-secondary btn-sm" }, "+ Add source");
   addS.onclick = async () => {
-    await doAction("create_source", { name: "New source", platform_type: "web" }, st.branch);
+    await persist("Source created", () =>
+      doAction("create_source", { name: "New source", platform_type: "web" }, st.branch),
+    );
     await reload();
   };
   sCol.appendChild(addS);
@@ -95,35 +102,40 @@ function catalog(st) {
   dCol.appendChild(h("div", { class: "tp-catalog-head" }, "Destinations"));
   (st.plan.destinations || []).forEach((dest) => {
     const row = h("div", { class: "tp-catalog-row" });
-    const nm = h("input", { class: "tp-cat-name", value: dest.name });
+    const nm = h("input", { class: "input tp-cat-name", value: dest.name });
     const pl = h("input", {
-      class: "tp-mono-input",
+      class: "input tp-mono-input",
       value: dest.platform || "",
       placeholder: "platform",
       style: "width:110px",
     });
     const acct = h("input", {
+      class: "input",
       value: dest.platform_account_id || "",
       placeholder: "account id",
       style: "width:120px",
     });
     const save = h("button", { class: "btn btn-ghost btn-sm" }, "Save");
     save.onclick = async () => {
-      await doAction(
-        "update_destination",
-        {
-          destination_id: dest.id,
-          name: nm.value.trim(),
-          platform: pl.value.trim(),
-          platform_account_id: acct.value || null,
-        },
-        st.branch,
+      await persist("Destination renamed", () =>
+        doAction(
+          "update_destination",
+          {
+            destination_id: dest.id,
+            name: nm.value.trim(),
+            platform: pl.value.trim(),
+            platform_account_id: acct.value || null,
+          },
+          st.branch,
+        ),
       );
       await reload();
     };
-    const del = h("button", { class: "btn btn-ghost btn-sm" }, "Delete");
+    const del = h("button", { class: "btn btn-danger btn-sm" }, "Delete");
     del.onclick = async () => {
-      await doAction("delete_destination", { destination_id: dest.id }, st.branch);
+      await persist("Destination deleted", () =>
+        doAction("delete_destination", { destination_id: dest.id }, st.branch),
+      );
       await reload();
     };
     row.appendChild(nm);
@@ -135,7 +147,9 @@ function catalog(st) {
   });
   const addD = h("button", { class: "btn btn-secondary btn-sm" }, "+ Add destination");
   addD.onclick = async () => {
-    await doAction("create_destination", { name: "New destination", platform: "ga4" }, st.branch);
+    await persist("Destination created", () =>
+      doAction("create_destination", { name: "New destination", platform: "ga4" }, st.branch),
+    );
     await reload();
   };
   dCol.appendChild(addD);
@@ -212,7 +226,9 @@ function graph(st, rerender) {
       const action = linked ? "disconnect_source_destination" : "connect_source_destination";
       const src = pendingSourceId;
       pendingSourceId = null;
-      await doAction(action, { source_id: src, destination_id: dest.id }, getState().branch);
+      await persist(linked ? "Unrouted" : "Routed", () =>
+        doAction(action, { source_id: src, destination_id: dest.id }, getState().branch),
+      );
       await reload();
     };
     node.onmouseenter = () => {

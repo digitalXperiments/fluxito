@@ -6,7 +6,7 @@ import { doAction } from "tp/api";
 import { h, mount } from "tp/render";
 import { mountDrawer } from "tp/comments";
 import { metricPreview } from "tp/util/metricPreview";
-import { banner } from "tp/shell";
+import { persist } from "tp/util/persist";
 
 const TYPES = ["count", "sum", "unique", "average", "ratio"];
 const NEEDS_PROP = new Set(["sum", "unique", "average"]);
@@ -42,14 +42,12 @@ function buildMaster(st) {
   const head = h("div", { class: "tp-master-head" });
   const add = h("button", { class: "btn btn-primary btn-sm btn-block" }, "+ New metric");
   add.onclick = async () => {
-    try {
-      // Use returned id from doAction (NOT find-by-name after reload)
-      const r = await doAction("create_metric", { name: "New metric", type: "count" }, getState().branch);
-      await reload();
-      if (r && r.id) select("metric", r.id);
-    } catch (e) {
-      banner(e.message, "err");
-    }
+    // Use returned id from doAction (NOT find-by-name after reload)
+    const r = await persist("Metric created", () =>
+      doAction("create_metric", { name: "New metric", type: "count" }, getState().branch),
+    );
+    await reload();
+    if (r && r.id) select("metric", r.id);
   };
   head.appendChild(add);
   m.appendChild(head);
@@ -105,14 +103,14 @@ function buildDetail(st) {
   const head = h("div", { class: "tp-d-head" });
   const title = h("div", { class: "tp-d-title" });
   // Use h('input') with value attr — not innerHTML (XSS fix)
-  const nameInp = h("input", { class: "tp-titlefield", value: draft.name });
+  const nameInp = h("input", { class: "input tp-titlefield", value: draft.name });
   nameInp.oninput = () => { draft.name = nameInp.value; refreshPreview(); };
   title.appendChild(nameInp);
   head.appendChild(title);
 
   const acts = h("div", { class: "tp-d-actions" });
   const drawerBtn = h("button", { class: "btn btn-ghost btn-sm" }, "💬 Comments");
-  const del = h("button", { class: "btn btn-ghost btn-sm" }, "Delete");
+  const del = h("button", { class: "btn btn-danger btn-sm" }, "Delete");
   const save = h("button", { class: "btn btn-primary btn-sm" }, "Save");
   acts.appendChild(drawerBtn);
   acts.appendChild(del);
@@ -132,7 +130,7 @@ function buildDetail(st) {
   const grid = h("div", { class: "tp-fieldgrid" });
 
   // Type select — 2nd arg is plain attrs object (dropped-first-option fix)
-  const typeSel = h("select", {});
+  const typeSel = h("select", { class: "select" });
   TYPES.forEach((t) => {
     const o = h("option", { value: t }, t);
     if (draft.type === t) o.selected = true;
@@ -141,7 +139,7 @@ function buildDetail(st) {
   grid.appendChild(wrapField("Type", typeSel));
 
   // Event select — 2nd arg is plain attrs object (dropped-first-option fix)
-  const evSel = h("select", {});
+  const evSel = h("select", { class: "select" });
   evSel.appendChild(h("option", { value: "" }, "(no event)"));
   (st.plan.events || []).forEach((e) => {
     const o = h("option", { value: e.name }, e.name);
@@ -154,7 +152,7 @@ function buildDetail(st) {
   // Property picker — only visible for sum/unique/average
   const propField = wrapField("Property", null);
   // Property select — 2nd arg is plain attrs object (dropped-first-option fix)
-  const propSel = h("select", {});
+  const propSel = h("select", { class: "select" });
   propSel.appendChild(h("option", { value: "" }, "(no property)"));
   (st.plan.properties && st.plan.properties.event ? st.plan.properties.event : []).forEach((p) => {
     const o = h("option", { value: p.name }, p.name);
@@ -172,7 +170,7 @@ function buildDetail(st) {
   syncPropVisibility();
 
   // Description textarea — use h() with text child (not innerHTML)
-  const descTa = h("textarea", {});
+  const descTa = h("textarea", { class: "textarea" });
   descTa.value = draft.description;
   descTa.oninput = () => { draft.description = descTa.value; };
   grid.appendChild(wrapField("Description", descTa, true));
@@ -191,8 +189,8 @@ function buildDetail(st) {
     Object.keys(draft.filters).forEach((k) => {
       const r = h("div", { class: "tp-filter-row" });
       // Use h('input') with value attr — not innerHTML (XSS fix)
-      const kIn = h("input", { value: k, placeholder: "property", class: "tp-mono-input" });
-      const vIn = h("input", { value: draft.filters[k], placeholder: "value" });
+      const kIn = h("input", { value: k, placeholder: "property", class: "input tp-mono-input" });
+      const vIn = h("input", { value: draft.filters[k], placeholder: "value", class: "input" });
       const rm = h("button", { class: "btn btn-ghost btn-sm" }, "✕");
       kIn.onchange = () => {
         const nv = draft.filters[k];
@@ -239,8 +237,8 @@ function buildDetail(st) {
     Object.keys(draft.filters).forEach((k) => {
       if (k.trim()) cleanFilters[k] = draft.filters[k];
     });
-    try {
-      await doAction(
+    await persist("Saved", () =>
+      doAction(
         "update_metric",
         {
           metric_id: m.id,
@@ -251,24 +249,20 @@ function buildDetail(st) {
           property_id: pr ? pr.id : null,
           filters: Object.keys(cleanFilters).length ? cleanFilters : null,
         },
-        getState().branch
-      );
-      await reload();
-    } catch (e) {
-      banner(e.message, "err");
-    }
+        getState().branch,
+      ),
+    );
+    await reload();
   };
 
   del.onclick = async () => {
     if (!confirm(`Delete metric "${m.name}"?`)) return;
-    try {
-      await doAction("delete_metric", { metric_id: m.id }, getState().branch);
-      // 2-positional select (stale spec fix); null clears selection
-      select("metric", null);
-      await reload();
-    } catch (e) {
-      banner(e.message, "err");
-    }
+    await persist("Metric deleted", () =>
+      doAction("delete_metric", { metric_id: m.id }, getState().branch),
+    );
+    // 2-positional select (stale spec fix); null clears selection
+    select("metric", null);
+    await reload();
   };
 
   // Mount drawer into workspace root (fixed-position), toggled by button
@@ -286,7 +280,7 @@ function buildDetail(st) {
 
 function wrapField(label, control, full) {
   const f = h("div", { class: "tp-field" + (full ? " tp-col-2" : "") });
-  f.appendChild(h("label", {}, label));
+  f.appendChild(h("label", { class: "label" }, label));
   if (control) f.appendChild(control);
   return f;
 }
