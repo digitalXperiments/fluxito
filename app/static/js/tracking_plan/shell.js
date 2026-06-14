@@ -137,7 +137,9 @@ function crumbFor(s) {
   const parts = [h('span', { class: 'tp-crumb-root' }, meta.label)];
   const sel = s.selection || {};
   if (sel.id != null && meta.coll) {
-    const list = (s.plan && s.plan[meta.coll]) || [];
+    const raw = (s.plan && s.plan[meta.coll]) || [];
+    // properties is an object keyed by kind ({event,user,group,system}); flatten it.
+    const list = Array.isArray(raw) ? raw : Object.values(raw).flat();
     const ent = list.find((x) => x.id === sel.id || x.name === sel.id);
     const name = ent ? (ent.name || ent.display_name || String(sel.id)) : String(sel.id);
     parts.push(h('span', { class: 'tp-crumb-sep' }, '/'));
