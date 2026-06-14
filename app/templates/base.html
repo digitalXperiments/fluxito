@@ -100,6 +100,8 @@
   <aside class="sidebar">
     {# ── Header: wordmark ── #}
     <div class="sidebar-header">
+      {# Compact brand mark — shown only when the rail is collapsed (logo always visible) #}
+      <a href="/home" class="sidebar-logo-mark" aria-label="{{ brand().name }} home" title="{{ brand().name }}">{% if brand().logo_url %}<img src="{{ brand().logo_url }}" alt="{{ brand().name }}">{% elif brand().name == 'Fluxito' %}f{% else %}{{ brand().name[0] | upper }}{% endif %}</a>
       <a href="/home" class="wordmark">
         {{ wordmark() }}
       </a>
