@@ -1,13 +1,17 @@
 // app/static/js/tracking_plan/shell.js
 // Workspace shell: nav rail (top: branch switcher + review pill), top action bar.
 // Subscribes to state; calls setView/setBranch. Hosts the view container.
+//
+// TOPBAR (redesign): left = breadcrumb (.tp-crumb) showing 'Events / <current>'
+// or just the view name; right = .tp-topbar-actions with the GLOBAL plan actions
+// (Validate, Export ▾ → .md/.xlsx, Publish / branch review+merge). There is no
+// global save-state indicator anymore — save is per-editor (tp/util/editor).
 
 import { h, mountAll } from 'tp/render';
 import * as state from 'tp/state';
 import * as api from 'tp/api';
 import { getPid } from 'tp/api';
-import { titleCase, relativeTime } from 'tp/util/format';
-import { hasRetry, retryLast } from 'tp/util/persist';
+import { titleCase } from 'tp/util/format';
 
 const NAV = [
   ['overview', 'Overview'],
@@ -18,6 +22,20 @@ const NAV = [
   ['sources', 'Sources & Destinations'],
   ['metrics', 'Metrics'],
 ];
+
+// view key → breadcrumb label + the plan collection holding its entities (for
+// resolving a selected entity's display name in the crumb).
+const VIEW_META = {
+  overview: { label: 'Overview' },
+  events: { label: 'Events', coll: 'events' },
+  properties: { label: 'Properties', coll: 'properties' },
+  bundles: { label: 'Bundles', coll: 'bundles' },
+  categories: { label: 'Categories', coll: 'categories' },
+  sources: { label: 'Sources & Destinations' },
+  metrics: { label: 'Metrics', coll: 'metrics' },
+  review: { label: 'Branch review' },
+  versions: { label: 'Versions' },
+};
 
 export function mountShell(root) {
   root.classList.add('tp-workspace');
@@ -55,6 +73,7 @@ function renderRail(rail) {
       class: 'tp-menu-item' + (br.name === s.branch ? ' is-active' : ''),
       onClick: async () => {
         menu.classList.remove('is-open');
+        if (!guardNav()) return;
         state.setBranch(br.name);
         state.setView('overview');
         await state.reload();
@@ -74,22 +93,57 @@ function renderRail(rail) {
   // nav items
   const items = NAV.map(([key, label]) => h('button', {
     class: 'tp-nav-item' + (s.view === key ? ' is-active' : ''),
-    onClick: () => state.setView(key),
+    onClick: () => navTo(key),
   }, label));
 
   // Branch review entry (non-main only)
   if (!onMain) {
     items.push(h('button', {
       class: 'tp-nav-item tp-nav-review' + (s.view === 'review' ? ' is-active' : ''),
-      onClick: () => state.setView('review'),
+      onClick: () => navTo('review'),
     }, 'Branch review'));
   }
   items.push(h('button', {
     class: 'tp-nav-item' + (s.view === 'versions' ? ' is-active' : ''),
-    onClick: () => state.setView('versions'),
+    onClick: () => navTo('versions'),
   }, 'Versions'));
 
   mountAll(rail, [switcher, pill, h('div', { class: 'tp-nav-list' }, ...items)].filter(Boolean));
+}
+
+// ---- navigation guard ----
+// If an editor has an unsaved draft (state.dirty), confirm before navigating
+// away (switching view, branch, or selecting a different entity). Returns false
+// when the user cancels — callers must abort the navigation. Editors clear
+// state.dirty on save/discard; selecting WITHIN a view is guarded by the view.
+function guardNav() {
+  if (!state.getState().dirty) return true;
+  // eslint-disable-next-line no-alert
+  if (confirm('Discard unsaved changes?')) { state.setDirty(false); return true; }
+  return false;
+}
+
+function navTo(view) {
+  if (view === state.getState().view) return;
+  if (!guardNav()) return;
+  state.setView(view);
+}
+
+// ---- breadcrumb ----
+// 'Events / checkout_started' when an entity is selected in a list view, else
+// just the view label.
+function crumbFor(s) {
+  const meta = VIEW_META[s.view] || { label: titleCase(s.view || '') };
+  const parts = [h('span', { class: 'tp-crumb-root' }, meta.label)];
+  const sel = s.selection || {};
+  if (sel.id != null && meta.coll) {
+    const list = (s.plan && s.plan[meta.coll]) || [];
+    const ent = list.find((x) => x.id === sel.id || x.name === sel.id);
+    const name = ent ? (ent.name || ent.display_name || String(sel.id)) : String(sel.id);
+    parts.push(h('span', { class: 'tp-crumb-sep' }, '/'));
+    parts.push(h('b', { class: 'tp-crumb-cur' }, name));
+  }
+  return h('div', { class: 'tp-crumb' }, ...parts);
 }
 
 function renderTop(top) {
@@ -101,11 +155,10 @@ function renderTop(top) {
 
   const acts = [
     h('button', { class: 'btn btn-ghost btn-sm', onClick: validate }, 'Validate'),
-    h('a', { class: 'btn btn-ghost btn-sm', href: `${base}/export.md${qs}`, target: '_blank' }, '.md'),
-    h('a', { class: 'btn btn-ghost btn-sm', href: `${base}/export.xlsx${qs}`, target: '_blank' }, '.xlsx'),
+    exportMenu(base, qs),
   ];
   if (onMain) {
-    acts.push(h('button', { class: 'btn btn-primary btn-sm', onClick: publish }, 'Publish'));
+    acts.push(h('button', { class: 'btn btn-primary btn-sm tp-publish', onClick: publish }, 'Publish'));
   } else {
     const rs = b.review_status || 'draft';
     if (rs === 'draft') acts.push(h('button', { class: 'btn btn-secondary btn-sm', onClick: () => setReview(b, 'ready_for_review') }, 'Request review'));
@@ -113,33 +166,28 @@ function renderTop(top) {
       acts.push(h('button', { class: 'btn btn-secondary btn-sm', onClick: () => setReview(b, 'approved') }, 'Approve'));
       acts.push(h('button', { class: 'btn btn-ghost btn-sm', onClick: () => setReview(b, 'changes_requested') }, 'Request changes'));
     }
-    if (state.isAdmin()) acts.push(h('button', { class: 'btn btn-primary btn-sm', onClick: () => mergeBranch(b) }, 'Merge & publish'));
+    if (state.isAdmin()) acts.push(h('button', { class: 'btn btn-primary btn-sm tp-publish', onClick: () => mergeBranch(b) }, 'Merge & publish'));
   }
-  mountAll(top, [renderSaveState(s), h('div', { class: 'tp-topbar-actions' }, ...acts)]);
+  mountAll(top, [crumbFor(s), h('div', { class: 'tp-topbar-actions' }, ...acts)]);
 }
 
-// Persistent save-state indicator (left of the topbar action buttons). Reflects
-// the state save-status lifecycle; re-rendered on every notify via renderTop.
-function renderSaveState(s) {
-  const st = s.saveStatus;
-  const box = h('div', { class: 'tp-savestate', dataset: { s: st } });
-  if (st === 'saving') {
-    box.appendChild(h('span', {}, '⟳ Saving…'));
-  } else if (st === 'saved') {
-    const rel = s.savedAt ? relativeTime(s.savedAt) : '';
-    box.appendChild(h('span', {}, '✓ All changes saved' + (rel ? ' · ' + rel : '')));
-  } else if (st === 'error') {
-    box.appendChild(h('span', {}, '⚠ Couldn’t save'));
-    if (hasRetry()) {
-      box.appendChild(h('button', { class: 'btn btn-ghost btn-sm tp-savestate-retry', onClick: () => { retryLast().catch(() => {}); } }, 'Retry'));
-    } else {
-      box.appendChild(h('span', {}, ' — change again to retry'));
-    }
-  } else if (s.plan) {
-    // idle, once a plan is loaded: a muted resting state.
-    box.appendChild(h('span', { class: 'tp-savestate-muted' }, 'All changes saved'));
-  }
-  return box;
+// Export ▾ — a small dropdown grouping the two export links (.md / .xlsx).
+function exportMenu(base, qs) {
+  const wrap = h('div', { class: 'tp-export' });
+  const menu = h('div', { class: 'tp-menu tp-export-menu' },
+    h('a', { class: 'tp-menu-item', href: `${base}/export.md${qs}`, target: '_blank' }, 'Markdown (.md)'),
+    h('a', { class: 'tp-menu-item', href: `${base}/export.xlsx${qs}`, target: '_blank' }, 'Excel (.xlsx)'));
+  const btn = h('button', {
+    class: 'btn btn-secondary btn-sm',
+    onClick: (e) => {
+      e.stopPropagation();
+      const open = menu.classList.toggle('is-open');
+      if (open) document.addEventListener('click', () => menu.classList.remove('is-open'), { once: true });
+    },
+  }, 'Export ▾');
+  wrap.appendChild(btn);
+  wrap.appendChild(menu);
+  return wrap;
 }
 
 // ---- shell actions ----

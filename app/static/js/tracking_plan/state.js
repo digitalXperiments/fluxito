@@ -3,6 +3,13 @@
 // re-render on every change. Every successful write calls reload(), which
 // re-fetches the plan for the current branch — so a create can never leave the
 // list stale (the headline-bug structural fix).
+//
+// SAVE MODEL: editors now own save (explicit buffered-save via tp/util/editor).
+// State no longer drives a global autosave indicator. We keep `dirty` purely as
+// the navigation guard signal — the shell reads state.getState().dirty to decide
+// whether to confirm('Discard unsaved changes?') before switching entity/view.
+// beginSave/endSave are retained as no-op-safe stubs only because util/persist
+// still imports them; they have no UI effect anymore.
 
 import * as api from 'tp/api';
 
@@ -12,11 +19,7 @@ const _state = {
   branches: [],
   view: 'overview',
   selection: { type: null, id: null },
-  dirty: false,
-  saveStatus: 'idle', // idle | saving | saved | error
-  savedAt: null,
-  saveError: null,
-  pending: 0,
+  dirty: false, // editor has unsaved draft changes — drives the nav guard only
 };
 const _subs = new Set();
 
@@ -43,15 +46,13 @@ export function setBranch(b) {
   _state.branch = b;
   _state.selection = { type: null, id: null };
   _state.dirty = false;
-  _state.saveStatus = 'idle';
-  _state.pending = 0;
-  _state.saveError = null;
   // switching branch implies a fresh plan; caller awaits reload().
 }
 
 export function setView(name) {
   _state.view = name;
   _state.selection = { type: null, id: null };
+  _state.dirty = false;
   _notify();
 }
 
@@ -60,35 +61,18 @@ export function select(type, id) {
   _notify();
 }
 
+// Editors set this true when their draft diverges from server, false on
+// save/discard. The shell guards entity/view navigation on it.
 export function setDirty(b) { _state.dirty = !!b; _notify(); }
 
-// ---- save-status lifecycle ----
-// beginSave/endSave bracket every write; pending counts in-flight writes so
-// concurrent saves don't flip the indicator to 'saved' while one is still going.
-export function beginSave() {
-  _state.pending++;
-  _state.saveStatus = 'saving';
-  _state.dirty = true;
-  _notify();
-}
-
-export function endSave(ok, err) {
-  _state.pending--;
-  if (_state.pending <= 0) {
-    _state.pending = 0;
-    _state.saveStatus = ok ? 'saved' : 'error';
-    _state.savedAt = ok ? Date.now() : _state.savedAt;
-    _state.saveError = ok ? null : err;
-    _state.dirty = !ok;
-  }
-  _notify();
-}
+// ---- legacy save-status stubs ----
+// Editors own save now (tp/util/editor); these remain only so util/persist's
+// imports keep resolving. They are no-op-safe and drive no UI.
+export function beginSave() {}
+export function endSave() {}
 
 // Re-fetch the plan (+ branch list) for the current branch and publish it.
 export async function reload() {
-  _state.saveStatus = 'idle';
-  _state.pending = 0;
-  _state.saveError = null;
   const plan = await api.getPlan(_state.branch);
   _state.plan = plan;
   try {
