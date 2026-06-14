@@ -10,9 +10,13 @@ const _state = {
   branch: 'main',
   plan: null,
   branches: [],
-  view: 'events',
+  view: 'overview',
   selection: { type: null, id: null },
   dirty: false,
+  saveStatus: 'idle', // idle | saving | saved | error
+  savedAt: null,
+  saveError: null,
+  pending: 0,
 };
 const _subs = new Set();
 
@@ -39,6 +43,9 @@ export function setBranch(b) {
   _state.branch = b;
   _state.selection = { type: null, id: null };
   _state.dirty = false;
+  _state.saveStatus = 'idle';
+  _state.pending = 0;
+  _state.saveError = null;
   // switching branch implies a fresh plan; caller awaits reload().
 }
 
@@ -55,8 +62,33 @@ export function select(type, id) {
 
 export function setDirty(b) { _state.dirty = !!b; _notify(); }
 
+// ---- save-status lifecycle ----
+// beginSave/endSave bracket every write; pending counts in-flight writes so
+// concurrent saves don't flip the indicator to 'saved' while one is still going.
+export function beginSave() {
+  _state.pending++;
+  _state.saveStatus = 'saving';
+  _state.dirty = true;
+  _notify();
+}
+
+export function endSave(ok, err) {
+  _state.pending--;
+  if (_state.pending <= 0) {
+    _state.pending = 0;
+    _state.saveStatus = ok ? 'saved' : 'error';
+    _state.savedAt = ok ? Date.now() : _state.savedAt;
+    _state.saveError = ok ? null : err;
+    _state.dirty = !ok;
+  }
+  _notify();
+}
+
 // Re-fetch the plan (+ branch list) for the current branch and publish it.
 export async function reload() {
+  _state.saveStatus = 'idle';
+  _state.pending = 0;
+  _state.saveError = null;
   const plan = await api.getPlan(_state.branch);
   _state.plan = plan;
   try {

@@ -6,9 +6,11 @@ import { h, mountAll } from 'tp/render';
 import * as state from 'tp/state';
 import * as api from 'tp/api';
 import { getPid } from 'tp/api';
-import { titleCase } from 'tp/util/format';
+import { titleCase, relativeTime } from 'tp/util/format';
+import { hasRetry, retryLast } from 'tp/util/persist';
 
 const NAV = [
+  ['overview', 'Overview'],
   ['events', 'Events'],
   ['properties', 'Properties'],
   ['bundles', 'Bundles'],
@@ -54,7 +56,7 @@ function renderRail(rail) {
       onClick: async () => {
         menu.classList.remove('is-open');
         state.setBranch(br.name);
-        state.setView('events');
+        state.setView('overview');
         await state.reload();
       },
     }, h('span', { class: 'tp-mono' }, br.name),
@@ -113,7 +115,31 @@ function renderTop(top) {
     }
     if (state.isAdmin()) acts.push(h('button', { class: 'btn btn-primary btn-sm', onClick: () => mergeBranch(b) }, 'Merge & publish'));
   }
-  mountAll(top, [h('div', { class: 'tp-topbar-actions' }, ...acts)]);
+  mountAll(top, [renderSaveState(s), h('div', { class: 'tp-topbar-actions' }, ...acts)]);
+}
+
+// Persistent save-state indicator (left of the topbar action buttons). Reflects
+// the state save-status lifecycle; re-rendered on every notify via renderTop.
+function renderSaveState(s) {
+  const st = s.saveStatus;
+  const box = h('div', { class: 'tp-savestate', dataset: { s: st } });
+  if (st === 'saving') {
+    box.appendChild(h('span', {}, '⟳ Saving…'));
+  } else if (st === 'saved') {
+    const rel = s.savedAt ? relativeTime(s.savedAt) : '';
+    box.appendChild(h('span', {}, '✓ All changes saved' + (rel ? ' · ' + rel : '')));
+  } else if (st === 'error') {
+    box.appendChild(h('span', {}, '⚠ Couldn’t save'));
+    if (hasRetry()) {
+      box.appendChild(h('button', { class: 'btn btn-ghost btn-sm tp-savestate-retry', onClick: () => { retryLast().catch(() => {}); } }, 'Retry'));
+    } else {
+      box.appendChild(h('span', {}, ' — change again to retry'));
+    }
+  } else if (s.plan) {
+    // idle, once a plan is loaded: a muted resting state.
+    box.appendChild(h('span', { class: 'tp-savestate-muted' }, 'All changes saved'));
+  }
+  return box;
 }
 
 // ---- shell actions ----
@@ -134,7 +160,7 @@ async function createBranch() {
   const description = prompt("What's this branch for? (optional)") || null;
   try {
     const r = await api.doAction('create_branch', { name, description }, state.getState().branch);
-    state.setBranch(r.name); state.setView('events'); await state.reload();
+    state.setBranch(r.name); state.setView('overview'); await state.reload();
     banner(`Branch "${r.name}" created.`, 'ok');
   } catch (e) { banner(e.message, 'err'); }
 }
@@ -144,7 +170,7 @@ async function mergeBranch(b) {
   try {
     const r = await api.doAction('merge_branch', { branch_id: b.id, changelog }, state.getState().branch);
     banner(`Merged → published ${r.version_number}.`, 'ok');
-    state.setBranch('main'); state.setView('events'); await state.reload();
+    state.setBranch('main'); state.setView('overview'); await state.reload();
   } catch (e) { banner(e.message, 'err'); }
 }
 async function setReview(b, review_status) {

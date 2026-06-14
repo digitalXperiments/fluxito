@@ -6,6 +6,15 @@ import * as state from 'tp/state';
 import { mountShell } from 'tp/shell';
 import { mountActiveView } from 'tp/views/router';
 
+// Warn before leaving while a save is in flight or there are unsaved changes.
+window.addEventListener('beforeunload', function (e) {
+  var s = state.getState();
+  if (s.saveStatus === 'saving' || s.dirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
 const root = document.getElementById('tp-app');
 if (root) {
   initApi(root.dataset);
