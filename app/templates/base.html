@@ -520,8 +520,17 @@
         var br = btn.getBoundingClientRect();
         var gap = 4;
         menu.style.position = 'fixed';
-        menu.style.left = br.left + 'px';
-        menu.style.width = br.width + 'px';
+        var collapsed = document.documentElement.classList.contains('sidebar-collapsed') && window.matchMedia('(min-width: 769px)').matches;
+        if (collapsed) {
+          var rail = group.closest('.sidebar');
+          var railRight = rail ? rail.getBoundingClientRect().right : br.right;
+          var w = 240;
+          menu.style.left = Math.min(railRight + gap, window.innerWidth - w - 8) + 'px';
+          menu.style.width = w + 'px';
+        } else {
+          menu.style.left = br.left + 'px';
+          menu.style.width = br.width + 'px';
+        }
         if (group.classList.contains('sidebar-user')) {
           // Opens upwards from near bottom of sidebar
           menu.style.top = 'auto';

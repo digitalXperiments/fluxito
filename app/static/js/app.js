@@ -377,10 +377,10 @@
   // In collapsed mode the labels are hidden; expose them as native tooltips.
   function syncTitles() {
     document.querySelectorAll('.sidebar-item').forEach(function (el) {
-      if (!el.getAttribute('title')) {
-        var t = (el.textContent || '').trim();
-        if (t) el.setAttribute('title', t);
-      }
+      var t = (el.textContent || '').trim();
+      if (!t) return;
+      if (!el.getAttribute('title')) el.setAttribute('title', t);
+      if (!el.getAttribute('data-label')) el.setAttribute('data-label', t);
     });
   }
   syncTitles();

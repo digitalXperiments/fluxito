@@ -228,6 +228,37 @@ body {
   html.sidebar-collapsed .sidebar-project-btn > svg:last-child { display: none; }
   /* point the chevrons the other way when collapsed */
   html.sidebar-collapsed .sidebar-collapse-btn { transform: rotate(180deg); }
+
+  /* flyouts must keep a real width even though they anchor to the 56px rail */
+  html.sidebar-collapsed .sidebar-user-menu,
+  html.sidebar-collapsed .sidebar-project-menu { min-width: 220px; }
+
+  /* hover tooltip for the icon-only items (labels are font-size:0 when collapsed) */
+  html.sidebar-collapsed .sidebar-item { position: relative; }
+  html.sidebar-collapsed .sidebar-item::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--bg, #fff);
+    background: var(--ink, #0B0B0E);
+    padding: 6px 9px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px -2px rgba(11, 11, 14, .25);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 80;
+    transition: opacity .12s;
+  }
+  html.sidebar-collapsed .sidebar-item:hover::after { opacity: 1; }
+
+  /* let the tooltip escape the rail's overflow clipping (collapsed rail is short) */
+  html.sidebar-collapsed .sidebar,
+  html.sidebar-collapsed .sidebar-nav { overflow: visible; }
 }
 
 .sidebar::-webkit-scrollbar {
