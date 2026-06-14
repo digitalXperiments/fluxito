@@ -7,12 +7,48 @@
 //   commentCounts  : Map/obj entityKey -> N      -> badge on a row (entityKey = `${entityType}:${id}`)
 //   onToggleInline : (change, rowEl, bodyEl) => void  -> called when a row expands,
 //                    so review can mount inline comments under it (versions omits this)
+//
+// Design system: refined to the approved mockup. Each change row is a hairline
+// card row (.tp-diff-item) with a colored marker chip (.tp-diff-mark add/chg/rem),
+// a mono identifier name, an optional comment badge, and a rotate-on-open chevron.
+// Field-level before/after renders as the .tp-fielddiff table.
 import { h } from "tp/render";
 
 const MARK_CLASS = { "+": "add", "~": "chg", "-": "rem" };
+const MARK_GLYPH = { "+": "+", "~": "~", "-": "−" };
 
 export function entityKey(c) {
   return `${c.entityType}:${c.id || c.name}`;
+}
+
+// Small inline-SVG speech bubble for the comment badge (no emoji — sans system).
+function commentIcon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.8");
+  svg.setAttribute("width", "12");
+  svg.setAttribute("height", "12");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z");
+  svg.appendChild(path);
+  return svg;
+}
+
+// Chevron used on expandable rows (rotates via .is-open on the parent item).
+function chevronIcon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2.2");
+  svg.setAttribute("width", "13");
+  svg.setAttribute("height", "13");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M9 6l6 6-6 6");
+  svg.appendChild(path);
+  return svg;
 }
 
 function summaryBar(s, breakdown) {
@@ -55,10 +91,13 @@ function changeRow(c, opts) {
   const count = opts.commentCounts ? (opts.commentCounts[entityKey(c)] || 0) : 0;
 
   const header = h("div", { class: "tp-diff-item" + (expandable ? " is-expandable" : "") },
-    h("span", { class: "tp-diff-mark " + cls }, c.marker),
+    h("span", { class: "tp-diff-mark " + cls }, MARK_GLYPH[c.marker] || c.marker),
     h("span", { class: "tp-diff-name" }, String(c.name)),
-    count ? h("span", { class: "tp-diff-comments", title: `${count} comments` }, "💬 " + count) : null,
-    expandable ? h("span", { class: "tp-diff-chevron" }, "▸") : null,
+    count
+      ? h("span", { class: "tp-diff-comments", title: `${count} comment${count === 1 ? "" : "s"}` },
+          commentIcon(), String(count))
+      : null,
+    expandable ? h("span", { class: "tp-diff-chevron" }, chevronIcon()) : null,
   );
 
   const body = h("div", { class: "tp-diff-body" });

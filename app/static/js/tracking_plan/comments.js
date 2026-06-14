@@ -2,12 +2,33 @@
 // Reusable right-side drawer: Comments (threaded) + Activity (change history).
 // mountDrawer(container, {entityType, entityId, branch}) returns { open, close,
 // destroy }. Used by every entity view.
+//
+// Design system: refined to the approved mockup. The tab bar uses pill tabs
+// (.tp-drawer-tab); comment rows pair an avatar with a mono author handle + a
+// sentence-case relative time and a resolved status pill; the composer is a
+// clean .textarea + .btn cluster with @mention autocomplete; the Activity tab
+// is the same refined avatar+summary row used on the review panel.
 
 import { h, mountAll } from 'tp/render';
 import * as api from 'tp/api';
 import { isAdmin, myId } from 'tp/state';
 import { renderMentions, parseMentions } from 'tp/util/mentions';
 import { initials, relativeTime, titleCase } from 'tp/util/format';
+
+// Inline-SVG close glyph (no raw "✕" — keep the sans system clean).
+function closeIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('width', '15');
+  svg.setAttribute('height', '15');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M18 6L6 18M6 6l12 12');
+  svg.appendChild(path);
+  return svg;
+}
 
 export function mountDrawer(container, { entityType, entityId, branch }) {
   let tab = 'comments';
@@ -37,7 +58,7 @@ export function mountDrawer(container, { entityType, entityId, branch }) {
     const tabs = h('div', { class: 'tp-drawer-tabs' },
       tabBtn('comments', `Comments${comments.length ? ' · ' + comments.length : ''}`),
       tabBtn('activity', 'Activity'),
-      h('button', { class: 'tp-drawer-close', title: 'Close', onClick: close }, '✕'),
+      h('button', { class: 'tp-drawer-close', title: 'Close', onClick: close }, closeIcon()),
     );
     const bodyNode = tab === 'comments' ? commentsBody() : activityBody();
     mountAll(drawer, [tabs, bodyNode]);
@@ -72,8 +93,14 @@ export function mountDrawer(container, { entityType, entityId, branch }) {
       h('div', { class: 'tp-comment-main' }, meta, bodyEl, acts),
     );
   }
-  const actBtn = (label, fn, kind = 'ghost') =>
-    h('button', { class: `btn btn-${kind} btn-sm`, onClick: fn }, label);
+  // Comment action affordances are quiet text buttons — .tp-comment-actions
+  // button (in the CSS) styles them as small muted links. The danger variant
+  // simply tints red (inline, since the shared button rule owns the rest).
+  const actBtn = (label, fn, kind) => {
+    const attrs = { onClick: fn };
+    if (kind === 'danger') attrs.style = { color: 'var(--tp-red)' };
+    return h('button', attrs, label);
+  };
 
   function commentsBody() {
     const list = h('div', { class: 'tp-comments' });
@@ -97,7 +124,7 @@ export function mountDrawer(container, { entityType, entityId, branch }) {
     if (initialText) ta.value = initialText;
     const pop = h('div', { class: 'tp-mention-pop', style: { display: 'none' } });
     const wrap = h('div', { class: 'tp-comment-box' }, ta, pop,
-      h('button', { class: 'btn btn-secondary btn-sm', onClick: submit }, parentId ? 'Reply' : 'Comment'),
+      h('button', { class: 'btn btn-primary btn-sm', onClick: submit }, parentId ? 'Reply' : 'Comment'),
     );
 
     ta.addEventListener('input', () => maybeMention(ta, pop));
@@ -163,7 +190,7 @@ export function mountDrawer(container, { entityType, entityId, branch }) {
             h('div', { class: 'tp-activity-when' }, relativeTime(a.created_at)),
           )))
       : [h('div', { class: 'tp-muted', style: { padding: '6px 0' } }, 'No activity yet.')];
-    return h('div', { class: 'tp-drawer-body' }, ...rows);
+    return h('div', { class: 'tp-drawer-body' }, h('div', { class: 'tp-activity-timeline' }, ...rows));
   }
 
   async function doAndRefresh(action, params) {

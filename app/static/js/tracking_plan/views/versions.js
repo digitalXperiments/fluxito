@@ -1,4 +1,10 @@
 // app/static/js/tracking_plan/views/versions.js
+//
+// Published versions list + version-to-version compare. Design system: refined
+// to the approved mockup. The page lead is a .tp-d-head (sentence-case title +
+// muted description); the version list lives in a .tp-card; each row is a
+// .tp-ver-row (mono version number badge, changelog, mono timestamp, base/head
+// radios). Compare renders the shared .tp-diff change-list inside its own card.
 import { h, mount } from "tp/render";
 import * as state from "tp/state";
 import * as api from "tp/api";
@@ -36,7 +42,11 @@ async function paint(container) {
 
   const list = h("div", { class: "tp-version-list" });
   versions.forEach((v) => list.appendChild(versionRow(v, container, versions)));
-  wrap.appendChild(list);
+  wrap.appendChild(h("div", { class: "tp-card" },
+    h("div", { class: "tp-card-h" },
+      h("h3", {}, "Versions"),
+      h("span", { class: "tp-ct" }, String(versions.length))),
+    h("div", { class: "tp-card-b" }, list)));
 
   const out = h("div", { id: "tp-version-compare" });
   wrap.appendChild(out);
@@ -67,24 +77,28 @@ function baseRadio(side, v, checked, container, versions) {
 }
 
 async function renderCompare(out, baseId, headId, versions) {
-  out.innerHTML = "";
-  out.appendChild(h("div", { class: "tp-muted" }, "Loading compare…"));
+  out.replaceChildren(h("div", { class: "tp-card" },
+    h("div", { class: "tp-card-b" }, h("div", { class: "tp-muted" }, "Loading compare…"))));
   let baseV, headV;
   try {
     [baseV, headV] = await Promise.all([api.version(baseId), api.version(headId)]);
   } catch (e) {
-    out.innerHTML = "";
-    out.appendChild(h("div", { class: "tp-empty" }, `Compare failed: ${e.message || e}`));
+    out.replaceChildren(h("div", { class: "tp-empty" }, `Compare failed: ${e.message || e}`));
     return;
   }
 
   const diffResp = diffSnapshots(baseV.snapshot, headV.snapshot);
   const grouped = groupDiff(diffResp);
 
-  out.innerHTML = "";
-  out.appendChild(h("h3", { class: "tp-compare-title" },
-    `Diff v${baseV.version_number} → v${headV.version_number}`));
-  // SAME renderer as Branch review — no comments here (snapshots are immutable).
-  out.appendChild(renderChangeList(grouped, { summary: diffResp.summary }));
+  const card = h("div", { class: "tp-card" },
+    h("div", { class: "tp-card-h" },
+      h("h3", {}, "Compare"),
+      h("span", { class: "tp-ct" },
+        h("span", { class: "tp-mono" }, `v${baseV.version_number}`),
+        " → ",
+        h("span", { class: "tp-mono" }, `v${headV.version_number}`))),
+    // SAME renderer as Branch review — no comments here (snapshots are immutable).
+    h("div", { class: "tp-card-b" }, renderChangeList(grouped, { summary: diffResp.summary })));
+  out.replaceChildren(card);
   out.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }

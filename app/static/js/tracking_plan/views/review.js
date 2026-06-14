@@ -1,6 +1,12 @@
 // app/static/js/tracking_plan/views/review.js
 // Branch-review screen (§5.10): diff viewer + review panel + merge & publish.
 // Pure gating predicates are in tp/util/review_gating (Node-testable separately).
+//
+// Design system: refined to the approved mockup. The review header reads like an
+// editor head (.tp-ed-head spirit) — a kicker, the mono branch→main identifier,
+// a semantic review-status pill, and the action buttons (.btn variants). The
+// change-list is the shared .tp-diff renderer; the side panel sections
+// (Reviewers / Activity / Discussion) use refined .tp-review-section markup.
 
 import { h, mount } from "tp/render";
 import * as state from "tp/state";
@@ -64,12 +70,14 @@ function paint(container, onDrawer) {
   const effectiveBranch = branchObj || { name: branchName, review_status: reviewStatus };
 
   const head = h("div", { class: "tp-review-head" },
-    h("div", { class: "tp-review-title" },
-      h("span", { class: "tp-mono" }, branchName),
-      h("span", { class: "tp-review-arrow" }, "→"),
-      h("span", { class: "tp-mono" }, BASE_BRANCH),
-      h("span", { class: "tp-review-pill", "data-s": reviewStatus },
-        reviewStatus.replace(/_/g, " "))),
+    h("div", { class: "tp-review-id" },
+      h("div", { class: "tp-ed-kicker" }, "Branch review"),
+      h("div", { class: "tp-review-title" },
+        h("span", { class: "tp-mono" }, branchName),
+        h("span", { class: "tp-review-arrow" }, "→"),
+        h("span", { class: "tp-mono" }, BASE_BRANCH),
+        h("span", { class: "tp-review-pill", dataset: { s: reviewStatus } },
+          reviewStatus.replace(/_/g, " ")))),
     h("div", { class: "tp-review-actions" },
       ...buildActionButtons(effectiveBranch, role)));
 
@@ -257,7 +265,7 @@ async function fillPanel(col, branch, onDrawer) {
         reviewersSection.appendChild(h("div", { class: "tp-reviewer-row" },
           h("span", { class: "tp-avatar" }, initials(a.actor_id)),
           h("span", { class: "tp-mono" }, (a.actor_id || "").slice(0, 8)),
-          h("span", { class: "tp-status", "data-s": "implemented" }, statusLabel)));
+          h("span", { class: "tp-status", dataset: { s: "implemented" } }, statusLabel)));
       }
     }
 
