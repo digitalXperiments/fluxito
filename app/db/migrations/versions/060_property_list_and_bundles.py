@@ -19,8 +19,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "058_property_list_and_bundles"
-down_revision = "057_tp_comments"
+revision = "060_property_list_and_bundles"
+down_revision = "059_tp_comments"
 branch_labels = None
 depends_on = None
 

@@ -58,7 +58,6 @@ Error-handling philosophy
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 import uuid
@@ -70,6 +69,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.app_state as app_state
 from app.dashboards.hydration import card_to_payload, hydrate_dashboard_cards
+from app.dashboards.pdf_renderer import render_dashboard_pdf
 from app.models.dashboard import Dashboard, DashboardCard
 from app.models.scheduled_report import (
     FAILURE_AUTO_DISABLE_THRESHOLD,
@@ -338,14 +338,18 @@ async def _dispatch_channels(
         ch_type = (ch.get("type") or "").lower()
         try:
             if ch_type == "email":
-                # Lazy PDF render, shared across any email channels.
+                # Lazy PDF render, shared across any email channels. Rendered
+                # via headless Chromium against the live view (charts included);
+                # no request cookies here, so render_dashboard_pdf mints an
+                # owner cookie for the dashboard's user.
                 if rendered_pdf_bytes is None:
-                    rendered_pdf_bytes = await _render_pdf_bytes(
-                        dashboard=dashboard,
-                        cards=cards,
+                    _pdf_result = await render_dashboard_pdf(
+                        db,
+                        dashboard,
                         filter_params=filter_params,
                         include_insights=bool(schedule.include_insights),
                     )
+                    rendered_pdf_bytes = _pdf_result.pdf_bytes
                 results.append(
                     await _send_email_channel(
                         db,
@@ -378,49 +382,6 @@ async def _dispatch_channels(
             results.append(_ChannelResult(False, error=f"{ch_type}: {exc}"))
 
     return results
-
-
-async def _render_pdf_bytes(
-    dashboard: Dashboard,
-    cards: list[DashboardCard],
-    filter_params: dict[str, Any],
-    include_insights: bool,
-) -> bytes:
-    """Render the hydrated dashboard to PDF bytes.
-
-    Cards are already hydrated at this point — we pass them through the
-    template directly rather than going through ``render_dashboard_pdf``
-    (which would re-load + re-hydrate). Saves one DB round trip and one
-    full card-execution pass per email channel.
-    """
-    from datetime import datetime as _dt
-
-    from app.dashboards.pdf_renderer import _html_to_pdf_bytes  # internal helper
-    from app.templating import templates
-
-    card_payloads = [card_to_payload(c) for c in cards]
-    live_count = sum(1 for c in cards if getattr(c, "_is_live", False))
-
-    generated_at = _dt.utcnow()
-    html = templates.get_template("dashboards/pdf_layout.html").render(
-        dash={
-            "title": dashboard.title,
-            "description": dashboard.description or "",
-            "insights": "",
-            "share_slug": dashboard.share_slug,
-        },
-        cards=card_payloads,
-        filter_params={
-            "start_date": filter_params.get("start_date") or "",
-            "end_date": filter_params.get("end_date") or "",
-            "platforms": filter_params.get("platforms") or [],
-        },
-        generated_at=generated_at,
-        base_url="",
-        card_count=len(cards),
-        live_card_count=live_count,
-    )
-    return await asyncio.to_thread(_html_to_pdf_bytes, html, "")
 
 
 async def _send_email_channel(

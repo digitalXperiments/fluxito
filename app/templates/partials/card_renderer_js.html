@@ -203,21 +203,34 @@
 
   var _MONTH_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+  // Canonical date-label formatter — mirrors app/dashboards/date_labels.py.
+  // Keep the two in sync. Unrecognized input is returned unchanged.
+  //   202401   -> "Jan 2024"     (GA4 yearMonth)
+  //   20240105 -> "Jan 5, 2024"  (GA4 date)
+  //   2024-Q1  -> "Q1 2024"      2024W03 -> "Wk 03 '24"      2024 -> "2024"
+  F.formatDateLabel = function(value){
+    if (value === null || value === undefined) return '';
+    var s = String(value).trim();
+    if (!s) return '';
+    var m;
+    if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) {
+      var d = parseInt(m[3], 10);
+      if (_MONTH_S[+m[2]-1] && d >= 1 && d <= 31) return _MONTH_S[+m[2]-1] + ' ' + d + ', ' + m[1];
+    }
+    if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)) && _MONTH_S[+m[2]-1]) return _MONTH_S[+m[2]-1] + ' ' + (+m[3]) + ', ' + (+m[1]);
+    if ((m = s.match(/^(\d{4})-?Q([1-4])$/i))) return 'Q' + m[2] + ' ' + m[1];
+    if ((m = s.match(/^(\d{4})-?W(\d{1,2})$/i))) return "Wk " + (('0'+m[2]).slice(-2)) + " '" + m[1].slice(2);
+    if ((m = s.match(/^(\d{4})(\d{2})$/)) && _MONTH_S[+m[2]-1]) return _MONTH_S[+m[2]-1] + ' ' + m[1];
+    if ((m = s.match(/^(\d{4})-(\d{1,2})$/)) && _MONTH_S[+m[2]-1]) return _MONTH_S[+m[2]-1] + ' ' + (+m[1]);
+    if (/^\d{4}$/.test(s)) return s;
+    return s;
+  };
+
   function _isDateColName(c){ return /^(date|day|report_date|week|week_start|week_end|period|timestamp|datetime|created_at|updated_at)$/i.test(c); }
   function _isMonthColName(c){ return /^month(_num(ber)?)?$/i.test(c); }
   function _isYearColName(c){ return /^year$/i.test(c); }
   function _isRateCol(c){ var n = c.toLowerCase().replace(/_/g,''); return /rate$/.test(n) || /^ctr$|ctr$|^cvr$|cvr$/.test(n); }
   function _isDurationCol(c){ var n = c.toLowerCase().replace(/_/g,''); return /duration|timeon|timespent|dwelltime|avgtime/.test(n); }
-
-  function _fmtYYYYMMDD(v){
-    var s = String(v == null ? '' : v).trim();
-    if (/^\d{8}$/.test(s)) {
-      var mo = parseInt(s.slice(4,6), 10) - 1;
-      var d = parseInt(s.slice(6,8), 10);
-      return (_MONTH_S[mo] || s.slice(4,6)) + ' ' + d + ', ' + s.slice(0,4);
-    }
-    return s;
-  }
 
   function numericColsOf(columns, rows){
     return columns.filter(function(c){
@@ -248,44 +261,81 @@
   };
 
   // ── Scorecard renderer (.sc-card Pastel Pop tiles) ─────────────────────
+
+  // One Pastel Pop tile. label/value are raw (escaped here); delta/spark are
+  // pre-built HTML fragments.
+  function scTile(scheme, label, value, deltaHtml, sparkHtml){
+    return '<div class="sc-card" style="--sc-border:var(--pp-'+scheme+'-border);--sc-bg:var(--pp-'+scheme+'-bg);--sc-accent:var(--pp-'+scheme+'-accent);--sc-label-color:var(--pp-'+scheme+'-label);">' +
+      '<div class="sc-label" title="'+F.esc(label)+'">'+F.esc(label)+'</div>' +
+      '<div class="sc-value">'+F.esc(value)+'</div>' + (deltaHtml||'') + (sparkHtml||'') + '</div>';
+  }
+
+  // Colored delta pill from a metric-like object {delta_pct, inverse, direction}.
+  function scDelta(m){
+    if (!m || m.delta_pct === null || m.delta_pct === undefined) return '';
+    var n = Number(m.delta_pct);
+    if (isNaN(n)) return '';
+    var good = m.inverse ? n < 0 : n > 0;
+    var bad  = m.inverse ? n > 0 : n < 0;
+    var cls = good ? 'pos' : (bad ? 'neg' : 'neu');
+    var arrow = n > 0 ? '▲' : (n < 0 ? '▼' : '•');
+    var pct = (Math.round(Math.abs(n)*10)/10).toString().replace(/\.0$/,'');
+    return '<span class="sc-delta ' + cls + '">' + arrow + ' ' + pct + '%' + (m.direction ? ' ' + F.esc(m.direction) : '') + '</span>';
+  }
+
+  // Mini sparkline over the last ~6 values of `valCol`, or equal-height bars.
+  function scSparkline(rows, valCol, show){
+    if (show === false) return '';
+    var sparkVals = (rows||[]).slice(-6).map(function(r){ return Number(String(r[valCol]==null?0:r[valCol]).replace(/,/g,'')); });
+    if (sparkVals.length < 2) sparkVals = [1,1,1,1,1,1];
+    var sparkMax = Math.max.apply(null, sparkVals) || 1;
+    var barW = Math.floor(100 / sparkVals.length);
+    var bars = sparkVals.map(function(v, i){
+      var h = Math.round((v / sparkMax) * 100);
+      var isLast = i === sparkVals.length - 1;
+      var fill = isLast ? 'var(--sc-accent,#1d4ed8)' : 'var(--sc-border,#93c5fd)';
+      return '<rect x="'+(i*barW+1)+'" y="'+(100-h)+'" width="'+(barW-2)+'" height="'+h+'" fill="'+fill+'" rx="1"/>';
+    }).join('');
+    return '<div class="sc-sparkline"><svg viewBox="0 0 100 100" preserveAspectRatio="none" width="100%" height="100%">' + bars + '</svg></div>';
+  }
+
   function renderScorecard(snap){
     var cfg = snap.chart_config || {};
     var scheme = PP_SCHEMES.indexOf(cfg.color_scheme) >= 0 ? cfg.color_scheme : 'blue';
     var unit = cfg.unit || snap.unit || 'number';
     var showSparkline = cfg.sparkline !== false;
-
-    // Try metrics array first (METRIC card), then fall back to rows/columns
+    var rows = snap.rows || [];
     var metrics = snap.metrics || [];
+
+    // Single headline metric (the common GA4 scorecard — the server collapses
+    // the daily rows into metrics[0]): one big tile with a sparkline trend
+    // drawn from the underlying rows.
+    if (metrics.length === 1) {
+      var m0 = metrics[0];
+      var v0 = F.fmtMetricValue(m0.value, m0.unit || unit, {currency_code: m0.currency_code});
+      return scTile(scheme, m0.label || m0.key || '', v0, scDelta(m0), scSparkline(rows, m0.key, showSparkline));
+    }
+
+    // Multiple metrics: a grid of tiles (no sparkline — too many series).
     if (metrics.length) {
-      // Multi-metric: render a grid of Pastel Pop tiles
       var tiles = metrics.map(function(m, i){
         var s = PP_SCHEMES[i % PP_SCHEMES.length];
         var v = F.fmtMetricValue(m.value, m.unit || unit, {currency_code: m.currency_code});
-        var d = '';
-        if (m.delta_pct !== null && m.delta_pct !== undefined) {
-          var n = Number(m.delta_pct);
-          if (!isNaN(n)) {
-            var good = m.inverse ? n < 0 : n > 0;
-            var bad  = m.inverse ? n > 0 : n < 0;
-            var dcls = good ? 'pos' : (bad ? 'neg' : 'neu');
-            var arrow = n > 0 ? '▲' : (n < 0 ? '▼' : '•');
-            var dpct = (Math.round(Math.abs(n)*10)/10).toString().replace(/\.0$/,'');
-            d = '<span class="sc-delta ' + dcls + '">' + arrow + ' ' + dpct + '%' + (m.direction ? ' ' + F.esc(m.direction) : '') + '</span>';
-          }
-        }
-        var lbl = m.label || m.key || '';
-        return '<div class="sc-card" style="--sc-border:var(--pp-'+s+'-border);--sc-bg:var(--pp-'+s+'-bg);--sc-accent:var(--pp-'+s+'-accent);--sc-label-color:var(--pp-'+s+'-label);">' +
-          '<div class="sc-label" title="'+F.esc(lbl)+'">'+F.esc(lbl)+'</div>' +
-          '<div class="sc-value">'+F.esc(v)+'</div>' + d + '</div>';
+        return scTile(s, m.label || m.key || '', v, scDelta(m), '');
       });
       return '<div class="metric-kpi-grid">' + tiles.join('') + '</div>';
     }
 
-    // Fallback: first numeric value from rows
-    var rows = snap.rows || [];
+    // Fallback: derive a value straight from rows/columns (non-GA4 tools, or a
+    // scorecard the server couldn't aggregate). CRITICAL: never pick a
+    // date/month/year dimension column as the value — a GA4 "date" column holds
+    // 20241003, which fmtNum would render as "20.24M".
     var cols = snap.columns || [];
     var numCols = numericColsOf(cols, rows);
-    var valCol = numCols[0];
+    var valueCols = numCols.filter(function(c){
+      return !_isDateColName(c) && !_isMonthColName(c) && !_isYearColName(c);
+    });
+    var valCol = valueCols[0] || numCols[0];
     var deltaCol = numCols.find(function(c){ return F.isChangeMetric(c); }) || null;
 
     if (!rows.length || !valCol) {
@@ -293,43 +343,15 @@
     }
 
     var firstRow = rows[0];
-    var rawVal = firstRow[valCol];
-    var valStr = F.fmtMetricValue(rawVal, unit);
-    var labelCol = cols.find(function(c){ return numCols.indexOf(c) === -1; }) || cols[0];
-    var lbl = labelCol ? F.esc(String(firstRow[labelCol] == null ? valCol : firstRow[labelCol])) : F.esc(valCol);
+    var valStr = F.fmtMetricValue(firstRow[valCol], unit);
+    // Label: a non-numeric dimension's value if there is one, else the metric
+    // column name itself — never the metric's own cell value.
+    var labelCol = cols.find(function(c){ return numCols.indexOf(c) === -1; });
+    var lbl = labelCol ? String(firstRow[labelCol] == null ? valCol : firstRow[labelCol]) : valCol;
+    var deltaHtml = (deltaCol && firstRow[deltaCol] !== null && firstRow[deltaCol] !== undefined)
+      ? scDelta({delta_pct: firstRow[deltaCol]}) : '';
 
-    var deltaHtml = '';
-    if (deltaCol && firstRow[deltaCol] !== null && firstRow[deltaCol] !== undefined) {
-      var dn = Number(firstRow[deltaCol]);
-      if (!isNaN(dn)) {
-        var dGood = dn > 0, dBad = dn < 0;
-        var dCls = dGood ? 'pos' : (dBad ? 'neg' : 'neu');
-        var dArrow = dn > 0 ? '▲' : (dn < 0 ? '▼' : '•');
-        var dPct = (Math.round(Math.abs(dn)*10)/10).toString().replace(/\.0$/,'');
-        deltaHtml = '<span class="sc-delta ' + dCls + '">' + dArrow + ' ' + dPct + '%</span>';
-      }
-    }
-
-    // Mini sparkline: take last 6 numeric values from series, or equal-height bars
-    var sparkHtml = '';
-    if (showSparkline) {
-      var sparkVals = rows.slice(-6).map(function(r){ return Number(String(r[valCol]||0).replace(/,/g,'')); });
-      if (sparkVals.length < 2) sparkVals = [1,1,1,1,1,1];
-      var sparkMax = Math.max.apply(null, sparkVals) || 1;
-      var barW = Math.floor(100 / sparkVals.length);
-      var bars = sparkVals.map(function(v, i){
-        var h = Math.round((v / sparkMax) * 100);
-        var isLast = i === sparkVals.length - 1;
-        var fill = isLast ? 'var(--sc-accent,#1d4ed8)' : 'var(--sc-border,#93c5fd)';
-        return '<rect x="'+(i*barW+1)+'" y="'+(100-h)+'" width="'+(barW-2)+'" height="'+h+'" fill="'+fill+'" rx="1"/>';
-      }).join('');
-      sparkHtml = '<div class="sc-sparkline"><svg viewBox="0 0 100 100" preserveAspectRatio="none" width="100%" height="100%">' + bars + '</svg></div>';
-    }
-
-    return '<div class="sc-card" style="--sc-border:var(--pp-'+scheme+'-border);--sc-bg:var(--pp-'+scheme+'-bg);--sc-accent:var(--pp-'+scheme+'-accent);--sc-label-color:var(--pp-'+scheme+'-label);">' +
-      '<div class="sc-label">'+lbl+'</div>' +
-      '<div class="sc-value">'+F.esc(valStr)+'</div>' +
-      deltaHtml + sparkHtml + '</div>';
+    return scTile(scheme, lbl, valStr, deltaHtml, scSparkline(rows, valCol, showSparkline));
   }
 
   // ── Pie / donut renderer (emits data-chart-type for mountCharts) ────────
@@ -380,10 +402,14 @@
     var derivCols = cols.filter(function(c){ return numericCols.indexOf(c) !== -1 && F.isChangeMetric(c); });
     var isDeriv = function(c){ return derivCols.indexOf(c) !== -1; };
     var hasChart = numericCols.length >= 1 && rows.length >= 2 && labelCol;
+    // Compare mode: these numeric columns carry __prev / __delta_pct on each row.
+    var compareCols = (snap.compare && Array.isArray(snap.compare_columns)) ? snap.compare_columns : [];
+    var isCmp = function(c){ return compareCols.indexOf(c) !== -1; };
 
     var tableHtml = '';
     if (rows.length) {
-      tableHtml = '<div class="table-wrap"><table><thead><tr>' + cols.map(function(c){ return '<th>'+F.esc(c)+'</th>'; }).join('') + '</tr></thead><tbody>' +
+      var csvBtn = snap._card_id ? '<div style="text-align:right;margin-bottom:4px;"><button class="lv-csv-btn" data-card-id="'+F.esc(snap._card_id)+'" title="Download CSV" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;">⬇ CSV</button></div>' : '';
+      tableHtml = '<div class="table-wrap">' + csvBtn + '<table><thead><tr>' + cols.map(function(c){ return '<th>'+F.esc(c)+'</th>' + (isCmp(c) ? '<th style="text-align:right;">Prev</th><th style="text-align:right;">Δ%</th>' : ''); }).join('') + '</tr></thead><tbody>' +
         rows.map(function(r){
           return '<tr>' + cols.map(function(c){
             var v = r[c];
@@ -392,7 +418,7 @@
             if (isDeriv(c)) {
               cellHtml = F.fmtDeltaCell(v);
             } else if (isNum && _isDateColName(c)) {
-              cellHtml = F.esc(_fmtYYYYMMDD(v));
+              cellHtml = F.esc(F.formatDateLabel(v));
             } else if (isNum && _isMonthColName(c)) {
               var mn = parseInt(v, 10);
               cellHtml = F.esc((mn >= 1 && mn <= 12) ? _MONTH_S[mn-1] : String(v == null ? '' : v));
@@ -409,7 +435,15 @@
             }
             var isTrueNum = isNum && !_isDateColName(c) && !_isMonthColName(c) && !_isYearColName(c);
             var alignStyle = isTrueNum ? ' style="text-align:right;font-variant-numeric:tabular-nums;"' : '';
-            return '<td' + alignStyle + '>' + cellHtml + '</td>';
+            var cmpTds = '';
+            if (isCmp(c)) {
+              var pv = r[c + '__prev'];
+              var dpct = r[c + '__delta_pct'];
+              cmpTds = '<td style="text-align:right;color:var(--text-subtle);font-variant-numeric:tabular-nums;">' +
+                       (pv == null || pv === '' ? '—' : F.fmtNum(pv)) + '</td>' +
+                       '<td style="text-align:right;">' + (dpct == null ? '—' : F.fmtDeltaCell(dpct)) + '</td>';
+            }
+            return '<td' + alignStyle + '>' + cellHtml + '</td>' + cmpTds;
           }).join('') + '</tr>';
         }).join('') +
         '</tbody></table>' + (snap.truncated ? '<p class="truncation-note">Showing '+rows.length+' of '+(snap.total_rows||rows.length)+'</p>' : '') + '</div>';
@@ -460,6 +494,9 @@
 
     // Inject card ID into snap so sub-renderers can emit data-card-id attributes
     snap._card_id = card.id;
+    // Registry for client-side CSV export (keyed by card id).
+    F._snaps = F._snaps || {};
+    F._snaps[card.id] = snap;
 
     // chart_type from the new card spec takes precedence; fall back to heuristic
     var chartType = snap.chart_type || F.detectChartType(snap);
@@ -504,5 +541,42 @@
       '<div class="row" style="gap:8px;"><span class="card-meta">' + F.esc(String(card.platform||'').toUpperCase()) + '</span></div></div>' +
       '<div class="card-body">' + body + '</div></div>';
   };
+
+  // ── CSV export (client-side, from the snap registry) ───────────────────
+  F.exportCsv = function(cardId){
+    var snap = (F._snaps || {})[cardId];
+    if (!snap || !snap.rows || !snap.columns) return;
+    var cols = snap.columns;
+    var esc = function(v){
+      var s = (v == null) ? '' : String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    var lines = [cols.map(esc).join(',')];
+    snap.rows.forEach(function(r){
+      lines.push(cols.map(function(c){
+        var v = r[c];
+        if (_isDateColName(c)) v = F.formatDateLabel(v);
+        return esc(v);
+      }).join(','));
+    });
+    var blob = new Blob([lines.join('\n')], {type: 'text/csv;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = (snap.title || cardId || 'card') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  };
+
+  // One delegated listener for CSV export + per-card retry buttons.
+  if (typeof document !== 'undefined' && !F._delegatedClicks) {
+    F._delegatedClicks = true;
+    document.addEventListener('click', function(ev){
+      var t = ev.target;
+      var csv = t.closest && t.closest('.lv-csv-btn');
+      if (csv) { ev.preventDefault(); F.exportCsv(csv.getAttribute('data-card-id')); return; }
+      var retry = t.closest && t.closest('.lv-retry');
+      if (retry) { ev.preventDefault(); if (window.__dashRetry) window.__dashRetry(); }
+    });
+  }
 })();
 </script>

@@ -17,6 +17,8 @@ Authenticated (requires signed uid cookie):
 """
 
 import asyncio
+import hashlib
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -29,6 +31,7 @@ from sqlalchemy import select
 import app.app_state as app_state
 from app.auth.uid_cookie import get_uid_from_request
 from app.config import settings
+from app.dashboards.snapshot import normalize_snap as _normalize_snap
 from app.models.connection import OAuthConnection
 from app.models.dashboard import Dashboard, DashboardCard
 from app.models.project import ProjectMember
@@ -45,6 +48,90 @@ router = APIRouter()
 # executed one-at-a-time (slow card blocks every card behind it).
 _LIVE_CARD_TIMEOUT_S = 25
 _LIVE_CARD_CONCURRENCY = 6
+
+# Live-dashboard data cache. The first load (or an explicit Refresh) populates a
+# Redis entry keyed by slug + viewer-role + filters; every subsequent page
+# reload then serves from it, so we don't re-hit the upstream analytics APIs
+# (GA4, BigQuery, …) on each reload. The Refresh button sends ?refresh=1 to
+# bypass and repopulate. Each dashboard's cache_ttl_seconds (default 24h) bounds
+# staleness even if Refresh is never pressed; this constant is only the fallback.
+_DASH_DATA_CACHE_TTL_S = 86400
+_DASH_DATA_CACHE_PREFIX = "dashdata:v1"
+
+
+def _cards_signature(cards: list) -> str:
+    """Content hash of the cards' specs + last-refresh, so the live-data cache
+    busts when any card changes — not only when ``dashboard.updated_at`` moves
+    (the prior key only used updated_at, so a card-level refresh went unnoticed)."""
+    sig = [
+        {
+            "qp": getattr(c, "query_params", None),
+            "ct": getattr(c, "chart_type", None),
+            "cc": getattr(c, "chart_config", None),
+            "ra": str(getattr(c, "refreshed_at", "") or ""),
+        }
+        for c in cards
+    ]
+    return hashlib.sha256(json.dumps(sig, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def _dashdata_cache_key(
+    slug: str,
+    is_owner: bool,
+    card_count: int,
+    dash_version: str,
+    filter_overrides: dict,
+    platforms_allowed: set,
+    cards_sig: str = "",
+) -> str:
+    """Deterministic Redis key for a dashboard's live-data response.
+
+    Folds in the viewer role (owner payloads carry per-card ``live_error``), the
+    dashboard version + card count, a content hash of the cards (so a card edit or
+    refresh busts the cache), and every active filter + compare state (each
+    combination caches separately).
+    """
+    raw = "|".join(
+        [
+            slug,
+            "o1" if is_owner else "o0",
+            f"n{card_count}",
+            f"v{dash_version}",
+            f"c{cards_sig}",
+            json.dumps(filter_overrides, sort_keys=True, default=str),
+            ",".join(sorted(platforms_allowed)),
+        ]
+    )
+    digest = hashlib.sha256(raw.encode()).hexdigest()[:24]
+    return f"{_DASH_DATA_CACHE_PREFIX}:{slug}:{digest}"
+
+
+async def _dashdata_cache_get(key: str) -> dict | None:
+    """Fetch a cached data response. Returns None on miss or any Redis error —
+    the cache must never break the endpoint."""
+    redis = app_state.redis_client
+    if redis is None:
+        return None
+    try:
+        raw = await redis.get(key)
+        if raw:
+            return json.loads(raw)
+    except Exception as exc:
+        # Degrade gracefully to a live query — the cache must never break reads.
+        logger.debug("dashdata cache read failed: %s", exc)
+    return None
+
+
+async def _dashdata_cache_set(key: str, body: dict, ttl: int = _DASH_DATA_CACHE_TTL_S) -> None:
+    """Store a data response under ``key`` with the given TTL (default 24h). Silent
+    on any Redis error."""
+    redis = app_state.redis_client
+    if redis is None:
+        return
+    try:
+        await redis.setex(key, max(60, int(ttl)), json.dumps(body, default=str))
+    except Exception as exc:
+        logger.debug("dashdata cache write failed: %s", exc)
 
 
 def _as_bool(value) -> bool:
@@ -749,6 +836,14 @@ async def live_dashboard_page(page_slug: str, request: Request):
 
     dimension_filters = list(_dim_keys_seen.values())
 
+    # Unified filter model: the dashboard's typed filters if declared, else a
+    # render-only synthesis from legacy per-card filter_hooks/filter_options.
+    from app.dashboards.filter_specs import synthesize_filters
+
+    dashboard_filters = dash.filters or synthesize_filters(
+        [{"query_params": c.query_params or {}} for c in cards]
+    )
+
     user_view = await _load_user_view_from_uid(uid)
     is_owner = uid is not None and str(dash.user_id) == uid
     has_cards = len(cards) > 0
@@ -769,11 +864,17 @@ async def live_dashboard_page(page_slug: str, request: Request):
             "current_end": end_date,
             "platforms": platforms_in_dash,
             "dimension_filters": dimension_filters,
+            "filters": dashboard_filters,
             "filter_presets": dash.filter_presets or [],
             "slug": page_slug,
             "is_owner": is_owner,
             "has_cards": has_cards,
             "user": user_view,
+            # Print mode: the headless-Chromium PDF renderer loads this same view
+            # with ?print=1 to hide interactive chrome (nav, toolbar, footer) and
+            # lay the cards out for paper. Auth is unchanged — ?print=1 only
+            # affects presentation.
+            "print_mode": (request.query_params.get("print") or "") in ("1", "true", "yes"),
         },
     )
 
@@ -783,53 +884,10 @@ async def live_dashboard_page(page_slug: str, request: Request):
 # ---------------------------------------------------------------------------
 
 
-def _normalize_snap(snap: dict, chart_type: str | None) -> dict:
-    """Normalize a raw tool result into the flat format the card renderer expects.
-
-    GA4 `run_report` returns::
-
-        {
-          "dimension_headers": ["date"],
-          "metric_headers": ["sessions"],
-          "rows": [{"dimensions": ["20240101"], "metrics": ["1234"]}]
-        }
-
-    The card renderer expects flat rows with named keys::
-
-        {
-          "columns": ["date", "sessions"],
-          "rows": [{"date": "20240101", "sessions": "1234"}]
-        }
-
-    If the snap already has a ``columns`` key or flat rows, it is returned as-is.
-    """
-    if not isinstance(snap, dict):
-        return snap
-
-    dim_headers = snap.get("dimension_headers") or []
-    met_headers = snap.get("metric_headers") or []
-    raw_rows = snap.get("rows") or []
-
-    # Only transform when rows come in the nested GA4 format
-    if (dim_headers or met_headers) and "columns" not in snap and isinstance(raw_rows, list):
-        columns = list(dim_headers) + list(met_headers)
-        flat_rows = []
-        for r in raw_rows:
-            if isinstance(r, dict) and ("dimensions" in r or "metrics" in r):
-                row: dict = {}
-                for i, col in enumerate(dim_headers):
-                    row[col] = (r.get("dimensions") or [])[i] if i < len(r.get("dimensions") or []) else None
-                for i, col in enumerate(met_headers):
-                    row[col] = (r.get("metrics") or [])[i] if i < len(r.get("metrics") or []) else None
-                flat_rows.append(row)
-            else:
-                # Already flat — leave as-is
-                flat_rows.append(r)
-        snap = dict(snap)  # shallow copy to avoid mutating original
-        snap["columns"] = columns
-        snap["rows"] = flat_rows
-
-    return snap
+# Snapshot flattening + scorecard metric derivation live in the shared
+# ``app.dashboards.snapshot`` module (imported as ``_normalize_snap`` at the top
+# of this file) so the live web view, PDF export, and Slack/email reports all
+# normalize identically.
 
 
 @router.get("/api/saved-dashboards/{slug}/data")
@@ -848,18 +906,26 @@ async def live_dashboard_data(slug: str, request: Request):
 
     from app.auth.mcp_session_manager import build_refresh_context
     from app.dashboards.filter_hooks import apply_overrides
+    from app.dashboards.filter_translators import apply_card_filters
 
     uid = get_uid_from_request(request)
     start_date = _resolve_relative_date(request.query_params.get("date_range_start") or "")
     end_date = _resolve_relative_date(request.query_params.get("date_range_end") or "")
     platforms_filter = request.query_params.get("platforms") or ""
     platforms_allowed = {p.strip().lower() for p in platforms_filter.split(",") if p.strip()}
+    # ?refresh=1 (the Refresh button) bypasses the cache and re-queries upstream.
+    force_refresh = (request.query_params.get("refresh") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     # Build overrides dict passed to apply_overrides().
-    # Reserved params (date_range_start/end, platforms) are handled explicitly.
-    # Any other query param (e.g. ?country=US&device=mobile) is forwarded as a
-    # flat dimension override so filter_hooks can map them to card params.
-    _RESERVED_PARAMS = {"date_range_start", "date_range_end", "platforms"}
+    # Reserved params (date_range_start/end, platforms, refresh) are handled
+    # explicitly. Any other query param (e.g. ?country=US&device=mobile) is
+    # forwarded as a flat dimension override so filter_hooks can map them to
+    # card params.
+    _RESERVED_PARAMS = {"date_range_start", "date_range_end", "platforms", "refresh"}
     filter_overrides: dict = {}
     if start_date or end_date:
         filter_overrides["date_range"] = {}
@@ -870,6 +936,26 @@ async def live_dashboard_data(slug: str, request: Request):
     for _qk, _qv in request.query_params.items():
         if _qk not in _RESERVED_PARAMS and _qv:
             filter_overrides[_qk] = _qv
+
+    # Compare mode: a second date range. ?compare=previous_period|previous_year|custom
+    # (custom uses ?compare_start=&compare_end=). Each card is then executed twice and
+    # merged. The compare params live in filter_overrides above, so the cache key folds
+    # them in automatically (compare views cache separately from non-compare views).
+    compare_mode = (request.query_params.get("compare") or "").strip()
+    compare_active = bool(compare_mode and start_date and end_date)
+    cmp_start = cmp_end = ""
+    if compare_active:
+        if compare_mode == "custom":
+            cmp_start = _resolve_relative_date(request.query_params.get("compare_start") or "")
+            cmp_end = _resolve_relative_date(request.query_params.get("compare_end") or "")
+            compare_active = bool(cmp_start and cmp_end)
+        else:
+            from app.dashboards.compare import previous_range
+
+            try:
+                cmp_start, cmp_end = previous_range(start_date, end_date, compare_mode)
+            except ValueError:
+                compare_active = False
 
     try:
         async with app_state.db_session_factory() as db:
@@ -899,6 +985,39 @@ async def live_dashboard_data(slug: str, request: Request):
         if platforms_allowed:
             cards = [c for c in cards if (c.platform or "").lower() in platforms_allowed]
 
+        is_owner = uid is not None and str(dash.user_id) == uid
+
+        # Typed dashboard-level filters (the six widget types). Keyed by filter key.
+        # Cards consume them via their per-card filter_hooks. Date filters stay on
+        # the apply_overrides path; typed dimension/metric filters are routed through
+        # the per-platform translation layer (so they become real query syntax).
+        dash_filter_specs = {f["key"]: f for f in (getattr(dash, "filters", None) or []) if f.get("key")}
+        typed_keys = set(dash_filter_specs)
+        # Values handed to apply_overrides exclude typed keys (translate() owns them),
+        # but keep date_range and any legacy keys not declared as typed filters.
+        overrides_for_apply = {
+            k: v for k, v in filter_overrides.items() if k == "date_range" or k not in typed_keys
+        }
+
+        # ── Serve from cache unless this is an explicit Refresh ────────────
+        # Keyed by slug + viewer-role + dashboard version + filters, so a plain
+        # page reload returns instantly without re-querying upstream APIs.
+        cache_ttl = int(getattr(dash, "cache_ttl_seconds", None) or _DASH_DATA_CACHE_TTL_S)
+        cache_key = _dashdata_cache_key(
+            slug,
+            is_owner,
+            len(cards),
+            str(getattr(dash, "updated_at", "") or ""),
+            filter_overrides,
+            platforms_allowed,
+            _cards_signature(cards),
+        )
+        if not force_refresh:
+            cached_body = await _dashdata_cache_get(cache_key)
+            if cached_body is not None:
+                cached_body["cached"] = True
+                return JSONResponse(cached_body)
+
         # Build a synthetic MCP context for the dashboard owner so the tool
         # registry can resolve connections without an active MCP session.
         from app.main import mcp_server
@@ -906,99 +1025,118 @@ async def live_dashboard_data(slug: str, request: Request):
         refresh_ctx = await build_refresh_context(str(dash.id))
         tm = mcp_server._tool_manager if mcp_server else None
 
-        is_owner = uid is not None and str(dash.user_id) == uid
         _sem = asyncio.Semaphore(_LIVE_CARD_CONCURRENCY)
 
-        async def _exec_card(c) -> dict:
-            """Refresh a single card. Always returns a renderable payload —
-            never raises — falling back to the cached snapshot on any error or
-            timeout so one bad card can't blank the dashboard."""
+        async def _run_card_once(c, ov_for_apply) -> tuple[dict, bool, dict | None]:
+            """Execute one card for a single date range (``ov_for_apply`` carries the
+            date_range + legacy overrides). Returns (snap, is_live, live_error).
+            Never raises — falls back to the cached snapshot on any failure."""
             spec = c.query_params or {}
             tool_name = spec.get("tool") or c.tool_name
             platform = spec.get("platform") or c.platform or "unknown"
             action = spec.get("action")
 
-            snap: dict = {}
-            is_live = False
-            live_error = None
-
             if not tool_name or tm is None:
-                snap = c.result_cache or {}
-                if not isinstance(snap, dict):
-                    snap = {"card_type": "UNKNOWN", "raw": snap}
-                live_error = {"error_type": "no_tool", "message": "Card has no registered tool."}
-            else:
-                try:
-                    legacy = getattr(tm, "_legacy_tools", {})
-                    tool = legacy.get(tool_name) or tm._tools.get(tool_name)
-                    if tool is None:
-                        raise ValueError(f"Tool '{tool_name}' not registered")
+                snap = c.result_cache if isinstance(c.result_cache, dict) else {}
+                return snap, False, {"error_type": "no_tool", "message": "Card has no registered tool."}
 
-                    # Merge date overrides (respecting the date_locked flag)
-                    card_date_locked = _as_bool(spec.get("date_locked"))
-                    merged_spec = apply_overrides(spec, filter_overrides if not card_date_locked else None)
-                    # Params are stored flattened in query_params — exclude spec metadata keys.
-                    # NOTE: "platform" is intentionally NOT excluded — it is a required named
-                    # parameter for analytics_read, marketing_read, etc.
-                    _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
-                    call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
-                    if action is not None:
-                        call_args["action"] = action
-                    # warehouse_query needs 'engine' (= platform) and uses 'query' not 'sql'
-                    if tool_name == "warehouse_query":
-                        call_args.setdefault("engine", platform)
-                        if "sql" in call_args and "query" not in call_args:
-                            call_args["query"] = call_args.pop("sql")
-                        # Substitute {placeholder} tokens in the SQL template. Targeted
-                        # str.replace (not format_map) so other curly-brace patterns in the
-                        # SQL don't raise KeyError and silently swallow all substitutions.
-                        if "query" in call_args:
-                            q = call_args["query"]
-                            for _k, _v in call_args.items():
-                                if _k == "query" or not isinstance(_v, str):
-                                    continue
-                                resolved = _resolve_relative_date(_v)
-                                q = q.replace("{" + _k + "}", resolved)
-                            call_args["query"] = q
+            try:
+                legacy = getattr(tm, "_legacy_tools", {})
+                tool = legacy.get(tool_name) or tm._tools.get(tool_name)
+                if tool is None:
+                    raise ValueError(f"Tool '{tool_name}' not registered")
 
-                    async with _sem:
-                        raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_LIVE_CARD_TIMEOUT_S)
-                    if not isinstance(raw_result, dict):
-                        raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
+                # Merge date + legacy overrides (respecting the date_locked flag).
+                # Typed filters are excluded here and applied via translate() below.
+                card_date_locked = _as_bool(spec.get("date_locked"))
+                merged_spec = apply_overrides(spec, ov_for_apply if not card_date_locked else None)
+                # Params are stored flattened in query_params — exclude spec metadata keys.
+                # NOTE: "platform" is intentionally NOT excluded — it is a required named
+                # parameter for analytics_read, marketing_read, etc.
+                _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
+                call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
+                if action is not None:
+                    call_args["action"] = action
+                # warehouse_query needs 'engine' (= platform) and uses 'query' not 'sql'
+                is_warehouse = tool_name == "warehouse_query"
+                if is_warehouse:
+                    call_args.setdefault("engine", platform)
+                    if "sql" in call_args and "query" not in call_args:
+                        call_args["query"] = call_args.pop("sql")
 
-                    if raw_result.get("card_type") == "ERROR" or raw_result.get("error"):
-                        snap = c.result_cache or raw_result
-                        if not isinstance(snap, dict):
-                            snap = {"card_type": "UNKNOWN", "raw": snap}
-                        is_live = False
-                        live_error = {
+                # Apply typed dashboard filters (GA4 dimension/metric_filter,
+                # warehouse {placeholder} substitution, marketing params). Runs
+                # before the generic date substitution so typed SQL tokens get
+                # properly quoted/escaped values rather than a raw card default.
+                if not card_date_locked and dash_filter_specs:
+                    apply_card_filters(
+                        spec.get("filter_hooks"),
+                        dash_filter_specs,
+                        filter_overrides,
+                        "warehouse" if is_warehouse else platform,
+                        call_args,
+                    )
+
+                # Substitute remaining {placeholder} tokens in the SQL template
+                # (date ranges, card-param defaults). Targeted str.replace (not
+                # format_map) so other curly-brace patterns in the SQL don't raise
+                # KeyError and silently swallow all substitutions.
+                if is_warehouse and "query" in call_args:
+                    q = call_args["query"]
+                    for _k, _v in call_args.items():
+                        if _k == "query" or not isinstance(_v, str):
+                            continue
+                        resolved = _resolve_relative_date(_v)
+                        q = q.replace("{" + _k + "}", resolved)
+                    call_args["query"] = q
+
+                async with _sem:
+                    raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_LIVE_CARD_TIMEOUT_S)
+                if not isinstance(raw_result, dict):
+                    raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
+
+                if raw_result.get("card_type") == "ERROR" or raw_result.get("error"):
+                    snap = c.result_cache if isinstance(c.result_cache, dict) else raw_result
+                    return (
+                        snap,
+                        False,
+                        {
                             "error_type": raw_result.get("error_type", "tool_error"),
                             "message": raw_result.get("message", str(raw_result.get("error", ""))),
-                        }
-                    else:
-                        snap = _normalize_snap(raw_result, c.chart_type)
-                        is_live = True
-                except TimeoutError:
-                    logger.warning(
-                        "live_dashboard_data: card %s timed out after %ss", c.id, _LIVE_CARD_TIMEOUT_S
+                        },
                     )
-                    snap = c.result_cache or {}
-                    if not isinstance(snap, dict):
-                        snap = {"card_type": "UNKNOWN", "raw": snap}
-                    is_live = False
-                    live_error = {
+                return _normalize_snap(raw_result, c.chart_type, c.chart_config), True, None
+            except TimeoutError:
+                logger.warning("live_dashboard_data: card %s timed out after %ss", c.id, _LIVE_CARD_TIMEOUT_S)
+                snap = c.result_cache if isinstance(c.result_cache, dict) else {}
+                return (
+                    snap,
+                    False,
+                    {
                         "error_type": "timeout",
                         "message": f"Query exceeded {_LIVE_CARD_TIMEOUT_S}s; showing last cached result.",
-                    }
-                except Exception as tool_exc:
-                    logger.warning(
-                        "live_dashboard_data: tool dispatch failed for card %s: %s", c.id, tool_exc
-                    )
-                    snap = c.result_cache or {}
-                    if not isinstance(snap, dict):
-                        snap = {"card_type": "UNKNOWN", "raw": snap}
-                    is_live = False
-                    live_error = {"error_type": "dispatch_error", "message": str(tool_exc)[:300]}
+                    },
+                )
+            except Exception as tool_exc:
+                logger.warning("live_dashboard_data: tool dispatch failed for card %s: %s", c.id, tool_exc)
+                snap = c.result_cache if isinstance(c.result_cache, dict) else {}
+                return snap, False, {"error_type": "dispatch_error", "message": str(tool_exc)[:300]}
+
+        async def _exec_card(c) -> dict:
+            """Refresh a single card (twice when compare is on) into a payload.
+            Never raises — one bad card can't blank the dashboard."""
+            platform = (c.query_params or {}).get("platform") or c.platform or "unknown"
+            snap, is_live, live_error = await _run_card_once(c, overrides_for_apply)
+
+            # Compare mode: re-execute for the comparison range and merge.
+            if compare_active and is_live and not _as_bool((c.query_params or {}).get("date_locked")):
+                from app.dashboards.compare import merge_compare
+
+                cmp_ov = dict(overrides_for_apply)
+                cmp_ov["date_range"] = {"start": cmp_start, "end": cmp_end}
+                prev_snap, prev_live, _prev_err = await _run_card_once(c, cmp_ov)
+                if prev_live:
+                    snap = merge_compare(snap, prev_snap, c.chart_type)
 
             snap["chart_type"] = c.chart_type
             snap["chart_config"] = c.chart_config or {}
@@ -1029,33 +1167,42 @@ async def live_dashboard_data(slug: str, request: Request):
             status_code=500,
         )
 
-    return JSONResponse(
-        {
-            "dashboard": {
-                "title": dash.title,
-                "slug": slug,
-                "card_count": len(payload_cards),
-            },
-            "cards": payload_cards,
-            "filters": {
-                "start": start_date,
-                "end": end_date,
-                "platforms": sorted(platforms_allowed) if platforms_allowed else [],
-            },
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-        }
-    )
+    body = {
+        "dashboard": {
+            "title": dash.title,
+            "slug": slug,
+            "card_count": len(payload_cards),
+        },
+        "cards": payload_cards,
+        "filters": {
+            "start": start_date,
+            "end": end_date,
+            "platforms": sorted(platforms_allowed) if platforms_allowed else [],
+        },
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "cached": False,
+    }
+    # Compare mode: surface the biggest movers as a one-line insight banner.
+    if compare_active:
+        from app.dashboards.insights import biggest_movers
+
+        movers = biggest_movers(payload_cards)
+        if movers:
+            body["insights"] = movers
+        body["compare"] = {"start": cmp_start, "end": cmp_end, "mode": compare_mode}
+    # Store for subsequent reloads (also repopulates after an explicit Refresh).
+    await _dashdata_cache_set(cache_key, body, cache_ttl)
+    return JSONResponse(body)
 
 
 # ---------------------------------------------------------------------------
 # Share PDF — on-demand PDF export of a live dashboard
 # ---------------------------------------------------------------------------
 #
-# No data is persisted: we hydrate the
-# dashboard in memory, render a print-only HTML template, pipe it through
-# WeasyPrint, and stream the bytes straight to the caller. Available to any
-# viewer who can see the dashboard (public dashboards → anyone; private →
-# owner only). Not plan-gated.
+# No data is persisted: a headless Chromium renders the live dashboard view
+# (charts included) to PDF and we stream the bytes straight to the caller.
+# Available to any viewer who can see the dashboard (public dashboards →
+# anyone; private → owner only). Not plan-gated.
 
 
 @router.get("/saved-dashboards/{slug}/pdf")
@@ -1063,17 +1210,20 @@ async def live_dashboard_pdf(slug: str, request: Request):
     """Generate and stream a PDF of the given dashboard.
 
     Query params:
-      start     — ISO date (YYYY-MM-DD) — lower bound
-      end       — ISO date (YYYY-MM-DD) — upper bound
-      platforms — comma-separated list (e.g. "ga4,meta") — filter cards
+      start / date_range_start — ISO date (YYYY-MM-DD) — lower bound
+      end   / date_range_end   — ISO date (YYYY-MM-DD) — upper bound
 
-    Returns a 200 with application/pdf bytes, 404 if not visible, or 500
-    if rendering fails (usually: WeasyPrint shared libs missing).
+    Returns a 200 with application/pdf bytes, 404 if not visible, 503 if the
+    renderer is unavailable (Chromium missing), or 500 if rendering fails.
     """
     uid = get_uid_from_request(request)
-    start_date = request.query_params.get("start") or ""
-    end_date = request.query_params.get("end") or ""
-    platforms_filter = request.query_params.get("platforms") or ""
+    # The Share PDF button reuses the live view's buildParams(), which emits
+    # date_range_start/date_range_end; accept those as well as the short
+    # start/end form so the export honours the selected range.
+    qp = request.query_params
+    start_date = qp.get("start") or qp.get("date_range_start") or ""
+    end_date = qp.get("end") or qp.get("date_range_end") or ""
+    platforms_filter = qp.get("platforms") or ""
     platforms_allowed = [p.strip().lower() for p in platforms_filter.split(",") if p.strip()]
 
     filter_params: dict = {}
@@ -1104,9 +1254,9 @@ async def live_dashboard_pdf(slug: str, request: Request):
                 cookies=dict(request.cookies),
             )
         except RuntimeError as exc:
-            # WeasyPrint missing / shared-lib dlopen failure. Surface a
-            # structured error so the frontend can show a toast rather than
-            # dumping a stack trace.
+            # Renderer unavailable (Chromium missing) or the render failed.
+            # Surface a structured error so the frontend can show a toast
+            # rather than dumping a stack trace.
             logger.error("PDF render failed (runtime): %s", exc)
             return JSONResponse(
                 {"error": "pdf_unavailable", "message": str(exc)},

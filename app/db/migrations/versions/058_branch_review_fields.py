@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "056_branch_review_fields"
-down_revision = "055_drop_sdr_tables"
+revision = "058_branch_review_fields"
+down_revision = "057_drop_sdr_tables"
 branch_labels = None
 depends_on = None
 

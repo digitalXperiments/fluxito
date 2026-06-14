@@ -13,8 +13,8 @@ Revises: 054_tracking_plan_schema
 
 from alembic import op
 
-revision = "055_drop_sdr_tables"
-down_revision = "054_tracking_plan_schema"
+revision = "057_drop_sdr_tables"
+down_revision = "056_tracking_plan_schema"
 branch_labels = None
 depends_on = None
 

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Home — Fluxito{% endblock %}
 {% set active = 'home' %}
+{% import "partials/rate_limit_cards.html" as rlcards %}
 
 {% block main %}
 <main class="app-main home-main">
@@ -124,6 +125,24 @@
       </div>
     </div>
   </div>
+
+  {# ── API limits (connected tools) ── #}
+  {% if rate_limits_connected %}
+  {% set rlns = namespace(slug=None) %}
+  {% for p in nav_projects %}{% if p.id == active_project_id %}{% set rlns.slug = p.slug %}{% endif %}{% endfor %}
+  {{ rlcards.rl_assets() }}
+  <div class="section-head home-section-head rl-home-head">
+    <div>
+      <div class="label">API limits</div>
+      <h2>How fast your tools <em class="serif-italic">burn quota.</em></h2>
+    </div>
+    {% if rlns.slug %}<a href="/project/{{ rlns.slug }}/settings#limits" class="btn sm">View all limits →</a>{% endif %}
+  </div>
+  <div class="rl-list">
+    {% for c in rate_limits_connected %}{{ rlcards.rl_card(c) }}{% endfor %}
+  </div>
+  <p class="rl-home-foot">Usage is the upstream calls Fluxito made for you in the last {{ rate_limits_usage_days | default(30) }} days; cached responses aren't counted. Limits checked {{ rate_limits_reviewed }}.</p>
+  {% endif %}
 
   {# ── Your workspace (quickstart tiles) ── #}
   <div class="section-head home-section-head">
@@ -315,6 +334,14 @@
   min-height: 76px;
   padding: 15px var(--home-card-pad-x);
 }
+
+/* API limits — section header + footnote; cards/modal come from the shared
+   partials/rate_limit_cards.html partial (same as Project Settings). */
+.rl-home-head {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+}
+.rl-home-head .btn { flex-shrink: 0; }
+.rl-home-foot { margin: 12px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 
 /* Workspace tiles */
 .workspace-grid {

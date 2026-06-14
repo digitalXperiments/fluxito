@@ -57,6 +57,13 @@ ul, ol { list-style: none; }
   --info:       #2F5BF4;
   --info-soft:  #DBEAFE;
 
+  /* Data-viz — Looker Clean (categorical sequence + semantic deltas + gridlines).
+     Same order is used by the chart JS palette so a category is one color everywhere. */
+  --dv-c1: #4285F4;  --dv-c2: #34A853;  --dv-c3: #FBBC04;  --dv-c4: #EA4335;
+  --dv-c5: #A142F4;  --dv-c6: #24C1E0;  --dv-c7: #FF6D01;
+  --dv-up: #188038;  --dv-down: #D93025;  --dv-neutral: #5F6368;
+  --dv-grid: #ECEFF1;  --dv-border: #E0E0E0;
+
   /* Shadow */
   --shadow-xs: 0 1px 2px rgba(0,0,0,.04);
   --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.03);
@@ -103,6 +110,11 @@ html[data-theme="dark"] {
   --danger-soft:rgba(248, 113, 113, .12);
   --info:       #60a5fa;
   --info-soft:  rgba(96, 165, 250, .12);
+  /* Data-viz — brighter categorical for dark surfaces + dimmer gridlines */
+  --dv-c1: #8ab4f8;  --dv-c2: #81c995;  --dv-c3: #fdd663;  --dv-c4: #f28b82;
+  --dv-c5: #c58af9;  --dv-c6: #78d9ec;  --dv-c7: #fcad70;
+  --dv-up: #81c995;  --dv-down: #f28b82;  --dv-neutral: #9aa0a6;
+  --dv-grid: #2A2A30;  --dv-border: #3F3F46;
   --shadow-xs: 0 1px 2px rgba(0,0,0,.4);
   --shadow-sm: 0 1px 3px rgba(0,0,0,.5);
   --shadow-md: 0 4px 12px rgba(0,0,0,.5);
@@ -1449,7 +1461,7 @@ tr:hover td { background: var(--surface-2); }
 /* Compact styling for KPI tiles: tighten padding, hide type badge, accent bar */
 .data-card.kpi-tile { position: relative; overflow: hidden; }
 .data-card.kpi-tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, var(--brand, #6c8cff), var(--brand-2, #31d0aa)); opacity: .9; }
-.data-card.kpi-tile .card-header { padding: 12px 14px 4px; flex-wrap: nowrap; gap: 8px; }
+.data-card.kpi-tile .card-header { padding: 16px 16px 10px; flex-wrap: nowrap; gap: 8px; }
 .data-card.kpi-tile .card-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); min-width: 0; flex: 1 1 auto; gap: 6px; }
 .data-card.kpi-tile .card-title > span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto; cursor: help; }
 .data-card.kpi-tile .card-title .type-badge { display: none; }
@@ -1457,7 +1469,7 @@ tr:hover td { background: var(--surface-2); }
 /* Replace verbose "Live" badge with a small green dot */
 .data-card.kpi-tile .badge { font-size: 0 !important; padding: 0 !important; background: transparent !important; border: none !important; box-shadow: none !important; gap: 0 !important; min-height: 0 !important; flex: 0 0 auto; }
 .data-card.kpi-tile .badge .live-pulse { width: 8px !important; height: 8px !important; }
-.data-card.kpi-tile .card-body { padding: 0 14px 14px; }
+.data-card.kpi-tile .card-body { padding: 4px 16px 16px; }
 .data-card.kpi-tile .big-metric { padding: 4px 0 6px !important; text-align: left !important; }
 .data-card.kpi-tile .big-metric .metric-value { font-size: 30px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .data-card.kpi-tile .big-metric .metric-label { display: none; }
@@ -3862,6 +3874,13 @@ section.muted   { background: var(--bg-2); }
   margin: 0 auto;
   padding: 32px var(--gutter) 80px;
 }
+/* Public (logged-out) share views render the fixed landing nav (var(--nav-h)
+   tall, out of flow). Without an offset the header tucks underneath it — the
+   back-link and page title slide behind the bar. Clear it. The logged-in
+   sidebar layout has no top nav, so the base padding above is enough. */
+body:not(.has-sidebar) .app-main {
+  padding-top: calc(var(--nav-h) + 32px);
+}
 
 /* Page header — sits at top of every app page */
 .page-head {
@@ -5377,6 +5396,8 @@ html[data-theme="dark"] {
   background: var(--surface, #fff);
   border-bottom: 1px solid var(--border, #e5e7eb);
   padding: 8px 24px;
+  /* Breathing room between the filter row and the first row of cards. */
+  margin-bottom: 24px;
   display: flex;
   align-items: center;
   gap: 8px;

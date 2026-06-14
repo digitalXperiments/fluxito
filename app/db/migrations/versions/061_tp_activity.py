@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "059_tp_activity"
-down_revision = "058_property_list_and_bundles"
+revision = "061_tp_activity"
+down_revision = "060_property_list_and_bundles"
 branch_labels = None
 depends_on = None
 

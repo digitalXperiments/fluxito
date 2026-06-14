@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 
-revision = "054_tracking_plan_schema"
-down_revision = "053_dashboard_filter_presets"
+revision = "056_tracking_plan_schema"
+down_revision = "055_dashboard_cache_ttl"
 branch_labels = None
 depends_on = None
 

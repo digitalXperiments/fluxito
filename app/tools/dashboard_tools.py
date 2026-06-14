@@ -191,6 +191,53 @@ def _validate_filter_presets(presets: list) -> list[dict]:
     return out
 
 
+# GA4/analytics dimension API-names worth offering as a dropdown filter, mapped to
+# a human label. Used by _suggest_filters when the caller omits `filters`.
+_SUGGESTABLE_DIMS = {
+    "country": "Country",
+    "city": "City",
+    "region": "Region",
+    "deviceCategory": "Device",
+    "browser": "Browser",
+    "operatingSystem": "OS",
+    "language": "Language",
+    "sessionDefaultChannelGroup": "Channel",
+    "sessionSource": "Source",
+    "sessionMedium": "Medium",
+    "sessionCampaignName": "Campaign",
+    "newVsReturning": "User type",
+    "landingPage": "Landing page",
+    "pagePath": "Page",
+}
+
+
+def _suggest_filters(validated_cards: list[dict]) -> list[dict]:
+    """Infer dropdown filter suggestions from the cards' dimensions.
+
+    Date presets + a custom range are always rendered by the filter bar, so this
+    only suggests dimension dropdowns. Returns normalized single_select specs the
+    assistant can present to the user, then pass back (wired with filter_hooks) on
+    a follow-up deploy. Pure — no DB or connector calls.
+    """
+    seen: dict[str, dict] = {}
+    for c in validated_cards:
+        params = c.get("params") or {}
+        dims = params.get("dimensions")
+        if not isinstance(dims, list):
+            continue
+        for d in dims:
+            if d in _SUGGESTABLE_DIMS and d not in seen:
+                seen[d] = {
+                    "key": d,
+                    "label": _SUGGESTABLE_DIMS[d],
+                    "type": "single_select",
+                    "options": {"source": "static", "values": [""]},
+                    "default": "",
+                    "ui": {},
+                }
+    return list(seen.values())
+
+
 def _validate_card_specs(cards: list | None) -> list[dict]:
     """Validate the ``cards`` list passed to dashboard_deploy_batch.
 
@@ -369,6 +416,7 @@ def register_dashboard_tools(mcp_server):
         dashboard_id: str | None = None,
         query_token_required: bool = False,
         filter_presets: list[dict] | None = None,
+        filters: list[dict] | None = None,
     ) -> dict:
         """Deploy a complete dashboard in a single call. PRIMARY tool for LLM dashboard creation.
 
@@ -478,11 +526,30 @@ def register_dashboard_tools(mcp_server):
           These chips are shown alongside the built-in Last 7/30/90 day presets.
           Omit or pass null to keep built-in presets only.
 
+        filters: optional dashboard-level filter widgets (the six types). Each entry:
+          {"key": str, "label": str,
+           "type": "single_select"|"multi_select"|"search"|"number_range"|
+                   "toggle"|"date_range",
+           "options": {"source": "static", "values": [...]}      # selects only
+                      | {"source": "warehouse", "card": "<key>", "column": "..."},
+           "toggle": {"applies": {"<dimension>": "<value>"}},     # toggle only
+           "default": ...}
+          Each filter must also be WIRED on every card it affects via that card's
+          filter_hooks, mapping the filter key to a target:
+            GA4:       {"country": "dimension_filter.country"}    (exact/in-list)
+            warehouse: {"channel": "channel"}  with `... IN ({channel})` in the SQL
+                       (multi_select), `ILIKE {q}` (search), `{x_min}/{x_max}` (range)
+          Default date presets + a custom start/end range are ALWAYS shown — you do
+          not declare a date_range filter for that. When `filters` is omitted, the
+          response includes `suggested_filters` inferred from the cards' dimensions;
+          confirm them with the user, then redeploy with `filters` + filter_hooks.
+
         Returns:
           dashboard_id (str): UUID of dashboard
           url (str): live dashboard URL
           slug (str): share slug
           card_ids (dict): mapping of card key to card UUID
+          suggested_filters (list, optional): inferred dropdowns when no filters set
         """
         import secrets as _secrets
 
@@ -504,6 +571,15 @@ def register_dashboard_tools(mcp_server):
             validated_cards = _validate_card_specs(cards)
         except ValueError as exc:
             return {"error": True, "message": str(exc)}
+
+        # Validate dashboard-level filters (the six widget types). None => leave
+        # existing filters untouched on update / empty on create, and suggest some.
+        from app.dashboards.filter_specs import FilterSpecError, validate_filters
+
+        try:
+            validated_filters = validate_filters(filters) if filters is not None else None
+        except FilterSpecError as exc:
+            return {"error": True, "error_type": "invalid_filters", "message": str(exc)}
 
         u = _user()
         if not u:
@@ -540,6 +616,8 @@ def register_dashboard_tools(mcp_server):
                     dash.description = (description or "")[:MAX_DESC_LEN] or None
                 if filter_presets is not None:
                     dash.filter_presets = _validate_filter_presets(filter_presets)
+                if validated_filters is not None:
+                    dash.filters = validated_filters
             else:
                 token = _secrets.token_urlsafe(32) if query_token_required else None
                 dash = Dashboard(
@@ -553,6 +631,7 @@ def register_dashboard_tools(mcp_server):
                     is_public=True,
                     query_scopes=[],
                     filter_presets=_validate_filter_presets(filter_presets or []),
+                    filters=validated_filters or [],
                     query_token=token,
                     query_token_required=query_token_required,
                 )
@@ -625,12 +704,27 @@ def register_dashboard_tools(mcp_server):
 
         base = settings.APP_BASE_URL
         live_url = f"{base}/live-dashboards/{dash.share_slug}"
-        return {
+        resp = {
             "dashboard_id": str(dash.id),
             "url": live_url,
             "slug": dash.share_slug,
             "card_ids": card_ids,
         }
+        # When the caller didn't specify filters, suggest dimension dropdowns
+        # inferred from the cards so the assistant can offer them to the user and
+        # redeploy with `filters` (+ matching per-card filter_hooks). Date presets
+        # and a custom start/end range are always present in the UI regardless.
+        if filters is None:
+            suggestions = _suggest_filters(validated_cards)
+            if suggestions:
+                resp["suggested_filters"] = suggestions
+                resp["filter_hint"] = (
+                    "No filters were set. Suggested dropdowns inferred from the cards' "
+                    "dimensions are in 'suggested_filters'. Confirm with the user which to "
+                    "keep, then redeploy passing `filters` plus a matching `filter_hooks` "
+                    'on each consuming card (e.g. {"country": "dimension_filter.country"}).'
+                )
+        return resp
 
     # -------------------------------------------------------------------------
     # dashboard_manage_scopes
