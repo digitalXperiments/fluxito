@@ -1,370 +1,526 @@
 // app/static/js/tracking_plan/views/properties.js
-// Property library & editor (spec §5.4): list by kind + search; bespoke editor
-// with constraints, nesting, "used by N events", delete-in-use warning, drawer.
-import { getState, subscribe, select, setView, reload } from "tp/state";
-import { doAction } from "tp/api";
-import { h, mount } from "tp/render";
-import { mountDrawer } from "tp/comments";
-import { typeBadge } from "tp/util/format";
-import { isValidRegex, buildConstraints, usedByEvents } from "tp/util/constraints";
-import { persist } from "tp/util/persist";
+// Property library + editor, redesigned to the approved mockup
+// (/tmp/tp_redesign_mockup.html) with the EXPLICIT BUFFERED-SAVE model.
+//
+// Master: refined list grouped by property kind, mono names, searchable.
+// Detail: .tp-ed-head with the SAVE CLUSTER, then .tp-card sections —
+//   • Type & flags   (name, kind, data_type, is_list / is_pii toggles)
+//   • Constraints    (allowed values / min / max / regex + live regex-valid hint)
+//   • Nested members (object / array children)
+//   • Used by N events (event chips → navigate)
+//
+// BUFFERED SAVE (no autosave — nothing persists until "Save changes"):
+//   On select, snapshot `server` and `draft = clone(editable fields)`. Render
+//   from draft; every edit mutates draft ONLY and re-renders. dirty = !deepEqual.
+//   Discard → draft = clone(server). Save → commitProperty() (one update_property
+//   with assembled constraints) → reload → re-snapshot. The regex-valid gate
+//   disables Save while the regex is invalid. Nested member add/remove stay
+//   immediate sub-edits (structural, on the library) — the editable FIELDS buffer.
+
+import { h, mountAll } from 'tp/render';
+import * as state from 'tp/state';
+import * as api from 'tp/api';
+import { mountDrawer } from 'tp/comments';
+import { persist } from 'tp/util/persist';
+import { clone, deepEqual, editorHead } from 'tp/util/editor';
+import { allProps, typeBadge } from 'tp/util/format';
+import { isValidRegex, buildConstraints, usedByEvents } from 'tp/util/constraints';
 
 const KINDS = [
-  ["event", "Event"],
-  ["user", "User"],
-  ["group", "Group"],
-  ["system", "System"],
+  ['event', 'Event'],
+  ['user', 'User'],
+  ['group', 'Group'],
+  ['system', 'System'],
 ];
-const DATA_TYPES = ["string", "int", "float", "boolean", "object", "array"];
+const DATA_TYPES = ['string', 'int', 'float', 'boolean', 'object', 'array'];
 
-function allProps(plan) {
-  const p = plan.properties;
-  return [...p.event, ...p.user, ...p.group, ...p.system];
+// data_type → badge color (mono badges, mockup palette). enum-like → sky.
+function typeBadgeClass(dt) {
+  if (dt === 'object' || dt === 'array') return 'tp-badge amber';
+  if (dt === 'boolean') return 'tp-badge sky';
+  return 'tp-badge ty';
 }
 
-// Single comments drawer instance for this view; torn down on navigation.
-let _drawer = null;
+// The editable slice we snapshot/diff for buffered save.
+function draftOf(p) {
+  return clone({
+    name: p.name || '',
+    kind: p.kind || 'event',
+    data_type: p.data_type || 'string',
+    is_list: !!p.is_list,
+    is_pii: !!p.is_pii,
+    description: p.description || '',
+    constraints: p.constraints || null,
+  });
+}
 
 export function mountView(container) {
-  let search = "";
+  const layout = h('div', { class: 'tp-master-detail' });
+  const master = h('div', { class: 'tp-master' });
+  const detail = h('div', { class: 'tp-detail', id: 'tp-prop-detail' });
+  layout.appendChild(master);
+  layout.appendChild(detail);
+  mountAll(container, [layout]);
 
-  // Declare render BEFORE subscribe to avoid TDZ — render is hoisted as a
-  // function expression assigned to const, so we must declare it here first,
-  // then pass it to subscribe below.
-  const render = () => {
-    const st = getState();
-    if (!st.plan) return;
-    const root = h("div", { class: "tp-pane is-active" });
-    root.appendChild(masterPanel(st, search, (q) => { search = q; render(); }));
-    root.appendChild(detailPanel(st));
-    mount(container, root);
-  };
+  let search = '';
+  let drawer = null;
+  let drawerEntityId = null;
 
-  // subscribe AFTER render is defined — no TDZ risk
-  const unsub = subscribe(render);
-  render();
-  return () => {
-    unsub();
-    if (_drawer) {
-      _drawer.destroy();
-      _drawer = null;
+  // Buffered-save working state for the currently selected property.
+  let server = null; // last server snapshot (editable slice)
+  let draft = null; // live draft (editable slice) — editor renders from this
+  let saving = false;
+
+  const unsub = state.subscribe(() => { renderList(); renderDetail(); });
+  renderList();
+  renderDetail();
+
+  function plan() { return state.getState().plan; }
+  function dirty() { return !!server && !deepEqual(draft, server); }
+  function syncDirty() { state.setDirty(dirty()); }
+
+  // ---- MASTER -------------------------------------------------------------
+  function renderList() {
+    const head = h('div', { class: 'tp-master-head' },
+      h('div', { class: 'tp-search' },
+        h('input', {
+          class: 'input', placeholder: 'Search properties', value: search,
+          onInput: (e) => { search = e.target.value; renderListBody(listBody); },
+        })),
+      h('button', { class: 'btn btn-primary btn-sm btn-block', onClick: newProperty }, '+ New property'));
+    const listBody = h('div', { class: 'tp-master-list' });
+    renderListBody(listBody);
+    mountAll(master, [head, listBody]);
+  }
+
+  function renderListBody(listBody) {
+    if (!plan()) { mountAll(listBody, [h('div', { class: 'tp-row-empty' }, 'Loading…')]); return; }
+    const sel = state.getState().selection;
+    const q = search.trim().toLowerCase();
+    const nodes = [];
+    let any = false;
+    KINDS.forEach(([k, label]) => {
+      let items = (plan().properties && plan().properties[k]) || [];
+      // Only top-level library props in the master; nested members live in their
+      // parent's editor card.
+      items = items.filter((p) => !p.parent_property_id);
+      items = items.slice().sort((a, b) => a.name.localeCompare(b.name));
+      if (q) items = items.filter((p) => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q));
+      if (!items.length) return;
+      any = true;
+      nodes.push(h('div', { class: 'tp-grp' }, `${label} properties`));
+      items.forEach((p) => {
+        nodes.push(h('div', {
+          class: 'tp-ev' + (sel.type === 'property' && sel.id === p.id ? ' is-active' : ''),
+          onClick: () => selectProperty(p.id),
+        },
+          h('span', { class: 'tp-sd' + (p.is_pii ? ' amber' : ' grey') }),
+          h('div', { class: 'tp-ev-main' },
+            h('div', { class: 'tp-ev-name' }, p.name),
+            h('div', { class: 'tp-ev-sub' }, p.description || '—')),
+          h('span', { class: 'tp-ev-meta' }, typeBadge(p.data_type, p.is_list))));
+      });
+    });
+    if (!any) nodes.push(h('div', { class: 'tp-row-empty' }, q ? 'No matches' : 'No properties yet'));
+    mountAll(listBody, nodes);
+  }
+
+  function selectProperty(id) {
+    if (dirty() && !confirm('Discard unsaved changes?')) return;
+    state.setDirty(false);
+    server = null; draft = null; saving = false;
+    state.select('property', id);
+  }
+
+  async function newProperty() {
+    if (dirty() && !confirm('Discard unsaved changes?')) return;
+    try {
+      const r = await persist('Property created', () =>
+        api.doAction('create_property', { name: 'new_property', data_type: 'string', kind: 'event' }, state.getState().branch));
+      await state.reload();
+      server = null; draft = null;
+      state.setDirty(false);
+      state.select('property', r.id);
+      setTimeout(() => { const n = detail.querySelector('#pd-name'); if (n) { n.focus(); n.select(); } }, 0);
+    } catch (err) { /* persist already surfaced the error banner */ }
+  }
+
+  // ---- DETAIL / EDITOR ----------------------------------------------------
+  function currentProp() {
+    const sel = state.getState().selection;
+    if (sel.type !== 'property') return null;
+    return allProps(plan() || {}).find((x) => x.id === sel.id) || null;
+  }
+
+  function renderDetail() {
+    if (!plan()) { mountAll(detail, [h('div', { class: 'tp-empty' }, 'Loading…')]); return; }
+    const p = currentProp();
+    if (!p) {
+      if (drawer) { drawer.destroy(); drawer = null; drawerEntityId = null; }
+      server = null; draft = null;
+      mountAll(detail, [h('div', { class: 'tp-empty' }, 'Select a property to edit its type & constraints, or create one.')]);
+      return;
     }
-  };
-}
+    // (Re)snapshot when the selected property changes (or first render of it).
+    if (!server || !draft || drawerEntityId !== p.id) {
+      server = draftOf(p);
+      draft = clone(server);
+      saving = false;
+    }
+    paint(p);
 
-function masterPanel(st, search, onSearch) {
-  const m = h("div", { class: "tp-master" });
-  const head = h("div", { class: "tp-master-head" });
-  const box = h("div", { class: "tp-search" });
-  box.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>`;
-  const inp = h("input", { class: "input", placeholder: "Search properties", value: search });
-  inp.oninput = (e) => onSearch(e.target.value);
-  box.appendChild(inp);
-  head.appendChild(box);
-
-  const add = h("button", { class: "btn btn-primary btn-sm btn-block" }, "+ New property");
-  add.onclick = async () => {
-    await persist("Property created", () =>
-      doAction("create_property", { name: "new_property", data_type: "string", kind: "event" }, st.branch)
-    );
-    await reload();
-    const fresh = getState().plan.properties.event.find((p) => p.name === "new_property");
-    if (fresh) select("property", fresh.id);
-  };
-  head.appendChild(add);
-  m.appendChild(head);
-
-  const list = h("div", { class: "tp-master-list" });
-  const sel = st.selection && st.selection.id;
-  let any = false;
-  KINDS.forEach(([k, label]) => {
-    let items = st.plan.properties[k] || [];
-    if (search) items = items.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
-    if (!items.length) return;
-    any = true;
-    list.appendChild(h("div", { class: "tp-cat-label" }, `${label} properties`));
-    items.forEach((p) => {
-      const row = h("div", { class: "tp-row" + (sel === p.id ? " is-active" : "") });
-      const main = h("div", { class: "tp-row-main" });
-      main.appendChild(h("div", { class: "tp-name" }, p.name));
-      main.appendChild(h("div", { class: "tp-row-sub" }, p.description || "—"));
-      row.appendChild(main);
-      row.appendChild(h("div", { class: "tp-row-meta" }, p.data_type + (p.is_list ? "[]" : "")));
-      row.onclick = () => select("property", p.id);
-      list.appendChild(row);
-    });
-  });
-  if (!any) list.appendChild(h("div", { class: "tp-row-empty" }, "No properties"));
-  m.appendChild(list);
-  return m;
-}
-
-function detailPanel(st) {
-  const d = h("div", { class: "tp-detail" });
-  const p = st.selection && st.selection.type === "property"
-    ? allProps(st.plan).find((x) => x.id === st.selection.id)
-    : null;
-  if (!p) {
-    const empty = h("div", { class: "tp-empty" });
-    empty.appendChild(h("div", {}, "Select a property to edit its type & constraints."));
-    d.appendChild(empty);
-    return d;
+    // Recreate the Comments drawer only when the selected property changes, so an
+    // open panel survives field edits (which re-render the detail).
+    if (drawerEntityId !== p.id) {
+      if (drawer) { drawer.destroy(); drawer = null; }
+      drawer = mountDrawer(document.querySelector('.tp-workspace') || document.body,
+        { entityType: 'property', entityId: p.id, branch: state.getState().branch });
+      drawerEntityId = p.id;
+    }
   }
-  const c = p.constraints || {};
-  const inner = h("div", { class: "tp-detail-inner" });
 
-  // header
-  const head = h("div", { class: "tp-d-head" });
-  const title = h("div", { class: "tp-d-title" });
-  const nameInp = h("input", { class: "input tp-titlefield", id: "pd-name", value: p.name });
-  title.appendChild(nameInp);
-  head.appendChild(title);
-  const acts = h("div", { class: "tp-d-actions" });
-  const drawerBtn = h("button", { class: "btn btn-ghost btn-sm" }, "💬 Comments");
-  const delBtn = h("button", { class: "btn btn-danger btn-sm" }, "Delete");
-  const saveBtn = h("button", { class: "btn btn-primary btn-sm" }, "Save");
-  acts.appendChild(drawerBtn);
-  acts.appendChild(delBtn);
-  acts.appendChild(saveBtn);
-  head.appendChild(acts);
-  inner.appendChild(head);
-
-  // core fields
-  const core = h("div", { class: "tp-section" });
-  const grid = h("div", { class: "tp-fieldgrid" });
-  grid.appendChild(field("Kind", selectEl("pd-kind", KINDS.map(([k]) => k), p.kind)));
-  grid.appendChild(field("Data type", selectEl("pd-type", DATA_TYPES, p.data_type)));
-  grid.appendChild(checkField("List / array", "pd-list", "values are a list", p.is_list));
-  grid.appendChild(checkField("PII", "pd-pii", "contains personal data", p.is_pii));
-  const desc = h("textarea", { class: "textarea", id: "pd-desc" }, p.description || "");
-  grid.appendChild(field("Description", desc, true));
-  core.appendChild(grid);
-  inner.appendChild(core);
-
-  // constraint editor
-  const cons = h("div", { class: "tp-section" });
-  cons.appendChild(h("h3", {}, "Constraints"));
-  const cwrap = h("div", { class: "tp-constraints" });
-  const enumInp = h("input", {
-    id: "pd-enum",
-    class: "input tp-mono-input",
-    value: (c.allowed_values || []).join(", "),
-  });
-  cwrap.appendChild(field("Allowed values (enum) — comma separated", enumInp, true));
-  cwrap.appendChild(field("Min", h("input", { class: "input", id: "pd-min", type: "number", value: c.min ?? "" })));
-  cwrap.appendChild(field("Max", h("input", { class: "input", id: "pd-max", type: "number", value: c.max ?? "" })));
-  const regexInp = h("input", { id: "pd-regex", class: "input tp-mono-input", value: c.regex || "" });
-  const regexHint = h("span", { class: "tp-regex-hint" }, "");
-  const regexField = field("Regex / format", regexInp, true);
-  regexField.appendChild(regexHint);
-  const checkRegex = () => {
-    const val = regexInp.value;
-    const ok = isValidRegex(val);
-    regexHint.textContent = val.trim() ? (ok ? "✓ valid regex" : "✗ invalid regex") : "";
-    regexHint.className = "tp-regex-hint " + (ok ? "is-ok" : "is-bad");
-    saveBtn.disabled = !!val.trim() && !ok;
-  };
-  regexInp.oninput = checkRegex;
-  checkRegex();
-  cwrap.appendChild(regexField);
-  cons.appendChild(cwrap);
-  inner.appendChild(cons);
-
-  // nested members (object/array parents)
-  inner.appendChild(membersSection(st, p));
-
-  // used-by reverse refs
-  inner.appendChild(usedBySection(st, p));
-
-  // wiring
-  saveBtn.onclick = async () => {
-    const cons2 = buildConstraints({
-      enumRaw: enumInp.value,
-      min: inner.querySelector("#pd-min").value,
-      max: inner.querySelector("#pd-max").value,
-      regex: regexInp.value,
-    });
-    await persist("Saved", () =>
-      doAction("update_property", {
-        property_id: p.id,
-        name: nameInp.value.trim(),
-        kind: inner.querySelector("#pd-kind").value,
-        data_type: inner.querySelector("#pd-type").value,
-        is_list: inner.querySelector("#pd-list").checked,
-        is_pii: inner.querySelector("#pd-pii").checked,
-        description: desc.value || null,
-        constraints: cons2,
-      }, st.branch)
-    );
-    await reload();
-  };
-  delBtn.onclick = () => confirmDelete(st, p);
-  drawerBtn.onclick = () => {
-    if (_drawer) _drawer.destroy();
-    _drawer = mountDrawer(document.body, { entityType: "property", entityId: p.id, branch: st.branch });
-    _drawer.open();
-  };
-
-  d.appendChild(inner);
-  return d;
-}
-
-function membersSection(st, parent) {
-  const sec = h("div", { class: "tp-section" });
-  sec.appendChild(h("h3", {}, "Nested members"));
-  const isContainer = parent.data_type === "object" || parent.data_type === "array";
-  if (!isContainer) {
-    sec.appendChild(
-      h("div", { class: "tp-muted", style: "font-size:13px" }, "Set data type to object or array to add members.")
-    );
-    return sec;
+  // Re-render the editor body FROM draft (no resnapshot). Called after each edit.
+  function repaint() {
+    const p = currentProp();
+    if (p) paint(p);
   }
-  const children = allProps(st.plan).filter((x) => x.parent_property_id === parent.id);
-  const table = h("table", { class: "tp-itable" });
-  table.innerHTML = `<thead><tr><th>Name</th><th>Type</th><th></th></tr></thead>`;
-  const tbody = h("tbody", {});
-  if (!children.length) {
-    tbody.innerHTML = `<tr><td colspan="3" class="tp-muted" style="padding:14px">No members yet.</td></tr>`;
-  } else {
-    children.forEach((child) => {
-      const tr = h("tr", {});
-      tr.appendChild(h("td", { class: "tp-pname" }, child.name));
-      tr.appendChild(h("td", {}, h("span", { class: "tp-typebadge" }, child.data_type)));
-      const td = h("td", { class: "tp-cell-act" });
-      const rm = h("button", { class: "btn btn-ghost btn-sm" }, "Remove");
-      rm.onclick = async () => {
-        await persist("Member removed", () =>
-          doAction("delete_property", { property_id: child.id }, st.branch)
-        );
-        await reload();
-      };
-      td.appendChild(rm);
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-    });
-  }
-  table.appendChild(tbody);
-  sec.appendChild(table);
 
-  const addRow = h("div", { class: "tp-inline-add" });
-  const nm = h("input", { class: "input", placeholder: "member name", style: "width:150px" });
-  const ty = selectEl("", DATA_TYPES, "string");
-  const btn = h("button", { class: "btn btn-secondary btn-sm" }, "Add member");
-  btn.onclick = async () => {
+  function paint(p) {
+    const regexValid = isValidRegex((draft.constraints && draft.constraints.regex) || '');
+    const inner = h('div', { class: 'tp-detail-inner' });
+    inner.appendChild(header(p, regexValid));
+    inner.appendChild(typeFlagsCard(p));
+    inner.appendChild(constraintsCard(p));
+    inner.appendChild(membersCard(p));
+    inner.appendChild(usedByCard(p));
+    mountAll(detail, [inner]);
+    syncDirty();
+  }
+
+  // ---- editor header: kicker + mono name + chips + Comments/Delete + save ----
+  function header(p, regexValid) {
+    const kindLabel = (KINDS.find(([k]) => k === draft.kind) || [null, draft.kind])[1];
+    const chips = [
+      h('span', { class: 'tp-chip accent' }, kindLabel),
+      h('span', { class: typeBadgeClass(draft.data_type) }, typeBadge(draft.data_type, draft.is_list)),
+      draft.is_pii ? h('span', { class: 'tp-badge amber' }, 'PII') : null,
+    ];
+    const cmtBtn = h('button', { class: 'btn btn-ghost btn-sm', onClick: () => drawer && drawer.open() }, '💬 Comments');
+    const delBtn = h('button', { class: 'btn btn-danger btn-sm', onClick: () => confirmDelete(p) }, 'Delete');
+
+    const head = editorHead({
+      kicker: 'Property',
+      name: draft.name || p.name,
+      chips,
+      actions: [cmtBtn, delBtn],
+      dirty: dirty(),
+      saving,
+      // Save gates on regex validity: drop the handler AND disable the button so
+      // an invalid regex can never persist.
+      onSave: regexValid ? () => doSave(p) : undefined,
+      onDiscard: () => { draft = clone(server); repaint(); },
+    });
+    if (!regexValid) {
+      const sb = head.querySelector('.tp-savecluster .btn-primary');
+      if (sb) { sb.disabled = true; sb.title = 'Fix the invalid regex to save'; }
+    }
+    return head;
+  }
+
+  // ---- card: Type & flags ----
+  function typeFlagsCard(p) {
+    const nameInp = h('input', {
+      class: 'input mono', id: 'pd-name', value: draft.name,
+      onInput: (e) => { draft.name = e.target.value; syncDirty(); rePaintHeaderName(); },
+    });
+
+    const kindSel = h('select', {
+      class: 'select', onChange: (e) => { draft.kind = e.target.value; repaint(); },
+    }, ...KINDS.map(([k, label]) => h('option', { value: k, selected: draft.kind === k }, label)));
+
+    const typeSel = h('select', {
+      class: 'select', onChange: (e) => { draft.data_type = e.target.value; repaint(); },
+    }, ...DATA_TYPES.map((t) => h('option', { value: t, selected: draft.data_type === t }, t)));
+
+    const listToggle = toggleRow('List / array', 'Values are a list', draft.is_list,
+      () => { draft.is_list = !draft.is_list; repaint(); });
+    const piiToggle = toggleRow('PII', 'Contains personal data', draft.is_pii,
+      () => { draft.is_pii = !draft.is_pii; repaint(); });
+
+    const desc = h('textarea', { class: 'textarea', id: 'pd-desc', placeholder: 'What does this property capture?' });
+    desc.value = draft.description || '';
+    desc.addEventListener('input', () => { draft.description = desc.value; syncDirty(); });
+
+    return card('Type & flags', null,
+      h('div', { class: 'tp-card-b' },
+        h('div', { class: 'tp-field tp-col-2', style: { marginBottom: '16px' } },
+          h('label', { class: 'tp-lbl' }, 'Name'), nameInp),
+        h('div', { class: 'tp-grid2' },
+          field('Kind', kindSel),
+          field('Data type', typeSel),
+          listToggle,
+          piiToggle),
+        h('div', { class: 'tp-field tp-col-2', style: { marginTop: '16px' } },
+          h('label', { class: 'tp-lbl' }, 'Description'), desc)));
+  }
+
+  // Live-update just the header mono name while typing, without a full repaint
+  // (so the name input keeps focus/caret).
+  function rePaintHeaderName() {
+    const n = detail.querySelector('.tp-ed-name');
+    if (n) n.textContent = draft.name || '';
+    // keep the dirty cluster in step
+    const head = detail.querySelector('.tp-ed-head');
+    if (head) {
+      const fresh = header(currentProp(), isValidRegex((draft.constraints && draft.constraints.regex) || ''));
+      head.replaceWith(fresh);
+    }
+  }
+
+  // ---- card: Constraints (live regex hint, applies vs draft.constraints) ----
+  function constraintsCard(p) {
+    const c = draft.constraints || {};
+    const numeric = draft.data_type === 'int' || draft.data_type === 'float';
+
+    const enumInp = h('input', {
+      class: 'input mono', id: 'pd-enum', placeholder: 'USD, EUR, GBP',
+      value: (c.allowed_values || []).join(', '),
+    });
+    const minInp = h('input', { class: 'input', id: 'pd-min', type: 'number', value: c.min ?? '', placeholder: 'min' });
+    const maxInp = h('input', { class: 'input', id: 'pd-max', type: 'number', value: c.max ?? '', placeholder: 'max' });
+    const regexInp = h('input', { class: 'input mono', id: 'pd-regex', placeholder: '^[A-Z]{3}$', value: c.regex || '' });
+    const regexHint = h('span', { class: 'tp-regex-hint' });
+
+    const recompute = () => {
+      const next = buildConstraints({
+        enumRaw: enumInp.value,
+        min: minInp.value,
+        max: maxInp.value,
+        regex: regexInp.value,
+      });
+      draft.constraints = next;
+      syncDirty();
+    };
+    const refreshRegexHint = () => {
+      const val = regexInp.value;
+      const ok = isValidRegex(val);
+      regexHint.textContent = val.trim() ? (ok ? '✓ valid regex' : '✗ invalid regex') : '';
+      regexHint.className = 'tp-regex-hint ' + (ok ? 'is-ok' : 'is-bad');
+      // Toggle the Save button enabled state without a full repaint.
+      const sb = detail.querySelector('.tp-ed-head .tp-savecluster .btn-primary');
+      if (sb) {
+        if (val.trim() && !ok) { sb.disabled = true; sb.title = 'Fix the invalid regex to save'; }
+        else if (dirty()) { sb.disabled = !!saving; sb.removeAttribute('title'); }
+      }
+    };
+
+    [enumInp, minInp, maxInp].forEach((el) => el.addEventListener('input', recompute));
+    regexInp.addEventListener('input', () => { recompute(); refreshRegexHint(); });
+    refreshRegexHint();
+
+    const regexField = h('div', { class: 'tp-field tp-col-2' },
+      h('label', { class: 'tp-lbl' }, 'Regex / format'), regexInp, regexHint);
+
+    const body = h('div', { class: 'tp-card-b' },
+      h('div', { class: 'tp-grid2' },
+        h('div', { class: 'tp-field tp-col-2' },
+          h('label', { class: 'tp-lbl' }, 'Allowed values (enum) — comma separated'), enumInp),
+        field(numeric ? 'Min' : 'Min length', minInp),
+        field(numeric ? 'Max' : 'Max length', maxInp),
+        regexField));
+    return card('Constraints', null, body);
+  }
+
+  // ---- card: Nested members (immediate structural sub-edits) ----
+  function membersCard(p) {
+    const isContainer = draft.data_type === 'object' || draft.data_type === 'array';
+    const children = allProps(plan()).filter((x) => x.parent_property_id === p.id);
+
+    if (!isContainer) {
+      return card('Nested members', null,
+        h('div', { class: 'tp-card-b' },
+          h('div', { class: 'tp-muted', style: { fontSize: '13px' } },
+            'Set the data type to object or array to add members.')));
+    }
+
+    const tbody = h('tbody');
+    if (!children.length) {
+      tbody.appendChild(h('tr', {}, h('td', { class: 'tp-muted', colspan: '3', style: { padding: '14px' } }, 'No members yet.')));
+    } else {
+      children.forEach((child) => {
+        tbody.appendChild(h('tr', {},
+          h('td', { class: 'tp-pn' }, child.name),
+          h('td', {}, h('span', { class: typeBadgeClass(child.data_type) }, typeBadge(child.data_type, child.is_list))),
+          h('td', { class: 'tp-cell-act' },
+            h('button', { class: 'btn btn-ghost btn-sm', onClick: () => removeMember(child) }, 'Remove'))));
+      });
+    }
+
+    const nm = h('input', { class: 'input mono', placeholder: 'member name', style: { width: '160px' } });
+    const ty = h('select', { class: 'select' }, ...DATA_TYPES.map((t) => h('option', { value: t }, t)));
+    const addBtn = h('button', { class: 'btn btn-secondary btn-sm', onClick: () => addMember(p, nm, ty) }, 'Add member');
+
+    const note = dirty()
+      ? h('div', { class: 'tp-muted', style: { fontSize: '11.5px', marginTop: '8px' } },
+        'Member changes save immediately; field edits above stay buffered until you click Save.')
+      : null;
+
+    const body = h('div', { class: 'tp-card-b' },
+      h('table', { class: 'tp-itable' },
+        h('thead', {}, h('tr', {}, h('th', {}, 'Name'), h('th', { style: { width: '120px' } }, 'Type'), h('th', { style: { width: '90px' } }))),
+        tbody),
+      h('div', { class: 'tp-inline-add', style: { marginTop: '12px' } }, nm, ty, addBtn),
+      note);
+    return card('Nested members', children.length ? String(children.length) : null, body);
+  }
+
+  async function addMember(parent, nm, ty) {
     const name = nm.value.trim();
     if (!name) return;
-    await persist("Member added", () =>
-      doAction("create_property", {
-        name,
-        data_type: ty.value,
-        kind: parent.kind,
-        parent_property_id: parent.id,
-      }, st.branch)
-    );
-    await reload();
-  };
-  addRow.appendChild(nm);
-  addRow.appendChild(ty);
-  addRow.appendChild(btn);
-  sec.appendChild(addRow);
-  return sec;
-}
-
-function usedBySection(st, p) {
-  const sec = h("div", { class: "tp-section" });
-  const events = usedByEvents(st.plan, p);
-  sec.appendChild(h("h3", {}, `Used by ${events.length} event${events.length === 1 ? "" : "s"}`));
-  if (!events.length) {
-    sec.appendChild(h("div", { class: "tp-muted", style: "font-size:13px" }, "Not attached to any event."));
-    return sec;
+    try {
+      await persist('Member added', () =>
+        api.doAction('create_property', {
+          name, data_type: ty.value, kind: draft.kind || parent.kind, parent_property_id: parent.id,
+        }, state.getState().branch));
+      await state.reload();
+      repaint();
+    } catch (err) { /* persist already surfaced the error banner */ }
   }
-  const wrap = h("div", { class: "tp-usedby" });
-  events.forEach((e) => {
-    const chip = h("button", { class: "tp-usedby-chip" }, e.name);
-    chip.onclick = () => {
-      setView("events");
-      select("event", e.id);
-    };
-    wrap.appendChild(chip);
-  });
-  sec.appendChild(wrap);
-  return sec;
-}
 
-function confirmDelete(st, p) {
-  const events = usedByEvents(st.plan, p);
-  const overlay = h("div", { class: "modal-backdrop is-open" });
-  const modal = h("div", { class: "modal" });
-
-  const header = h("div", { class: "modal-header" });
-  header.appendChild(h("div", { class: "modal-title" }, `Delete property "${p.name}"?`));
-  modal.appendChild(header);
-
-  const body = h("div", { class: "modal-body" });
-  if (events.length) {
-    body.appendChild(
-      h(
-        "div",
-        { class: "tp-warn" },
-        `In use by ${events.length} event${events.length === 1 ? "" : "s"}: ${events
-          .map((e) => e.name)
-          .join(", ")}. Deleting also removes those attachments.`
-      )
-    );
-  } else {
-    body.appendChild(h("div", { class: "tp-muted", style: "font-size:13px" }, "This property is not attached to any event."));
+  async function removeMember(child) {
+    try {
+      await persist('Member removed', () =>
+        api.doAction('delete_property', { property_id: child.id }, state.getState().branch));
+      await state.reload();
+      repaint();
+    } catch (err) { /* persist already surfaced the error banner */ }
   }
-  modal.appendChild(body);
 
-  const footer = h("div", { class: "modal-footer" });
-  const cancel = h("button", { class: "btn btn-ghost" }, "Cancel");
-  const del = h("button", { class: "btn btn-danger" }, "Delete");
-  cancel.onclick = () => overlay.remove();
-  del.onclick = async () => {
-    overlay.remove();
-    await persist("Property deleted", () =>
-      doAction("delete_property", { property_id: p.id }, st.branch)
-    );
-    select("property", null);
-    await reload();
-  };
-  footer.appendChild(cancel);
-  footer.appendChild(del);
-  modal.appendChild(footer);
+  // ---- card: Used by N events ----
+  function usedByCard(p) {
+    const events = usedByEvents(plan(), p);
+    if (!events.length) {
+      return card('Used by 0 events', null,
+        h('div', { class: 'tp-card-b' },
+          h('div', { class: 'tp-muted', style: { fontSize: '13px' } }, 'Not attached to any event.')));
+    }
+    const wrap = h('div', { class: 'tp-usedby' });
+    events.forEach((e) => {
+      wrap.appendChild(h('button', {
+        class: 'tp-usedby-chip',
+        onClick: () => {
+          if (dirty() && !confirm('Discard unsaved changes?')) return;
+          state.setDirty(false);
+          state.setView('events');
+          state.select('event', e.id);
+        },
+      }, e.name));
+    });
+    return card(`Used by ${events.length} event${events.length === 1 ? '' : 's'}`, null,
+      h('div', { class: 'tp-card-b' }, wrap));
+  }
 
-  overlay.appendChild(modal);
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-  document.body.appendChild(overlay);
+  // ---- commit (buffered save): make server match draft ----
+  async function doSave(p) {
+    if (saving) return;
+    if (!isValidRegex((draft.constraints && draft.constraints.regex) || '')) return;
+    saving = true;
+    repaint();
+    try {
+      await persist('Saved', () => commitProperty(p));
+      await state.reload();
+      const fresh = currentProp();
+      server = draftOf(fresh || p);
+      draft = clone(server);
+      saving = false;
+      state.setDirty(false);
+      repaint();
+    } catch (err) {
+      saving = false;
+      repaint(); // keep the draft; banner already shown by persist
+    }
+  }
+
+  // One idempotent update_property carrying the assembled constraints. We rebuild
+  // constraints from draft via buildConstraints so the persisted shape matches the
+  // service contract (allowed_values/min/max/regex, or null when empty).
+  function commitProperty(p) {
+    const c = draft.constraints || {};
+    const constraints = buildConstraints({
+      enumRaw: (c.allowed_values || []).join(', '),
+      min: c.min ?? '',
+      max: c.max ?? '',
+      regex: c.regex || '',
+    });
+    return api.doAction('update_property', {
+      property_id: p.id,
+      name: (draft.name || '').trim(),
+      kind: draft.kind,
+      data_type: draft.data_type,
+      is_list: !!draft.is_list,
+      is_pii: !!draft.is_pii,
+      description: draft.description ? draft.description : null,
+      constraints,
+    }, state.getState().branch);
+  }
+
+  // ---- delete (canonical .modal-backdrop confirm, lists dependent events) ----
+  function confirmDelete(p) {
+    const events = usedByEvents(plan(), p);
+    const overlay = h('div', { class: 'modal-backdrop is-open' });
+    const body = events.length
+      ? h('div', { class: 'tp-warn' },
+        `In use by ${events.length} event${events.length === 1 ? '' : 's'}: ${events.map((e) => e.name).join(', ')}. `
+        + 'Deleting also removes those attachments.')
+      : h('div', { class: 'tp-muted', style: { fontSize: '13px' } }, 'This property is not attached to any event.');
+
+    const cancel = h('button', { class: 'btn btn-ghost', onClick: () => overlay.remove() }, 'Cancel');
+    const del = h('button', {
+      class: 'btn btn-danger',
+      onClick: async () => {
+        overlay.remove();
+        try {
+          await persist('Property deleted', () => api.doAction('delete_property', { property_id: p.id }, state.getState().branch));
+          server = null; draft = null;
+          state.setDirty(false);
+          state.select('property', null);
+          await state.reload();
+        } catch (err) { /* persist already surfaced the error banner */ }
+      },
+    }, 'Delete');
+
+    const modal = h('div', { class: 'modal' },
+      h('div', { class: 'modal-header' }, h('div', { class: 'modal-title' }, `Delete property "${p.name}"?`)),
+      h('div', { class: 'modal-body' }, body),
+      h('div', { class: 'modal-footer' }, cancel, del));
+    overlay.appendChild(modal);
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
+  }
+
+  return () => { unsub(); if (drawer) drawer.destroy(); };
 }
 
-// ---- small DOM helpers (local) ----
-function field(label, control, full) {
-  const f = h("div", { class: "tp-field" + (full ? " tp-col-2" : "") });
-  f.appendChild(h("label", { class: "label" }, label));
-  f.appendChild(control);
-  return f;
+// ---- small DOM helpers --------------------------------------------------
+function card(title, count, ...bodyNodes) {
+  const headChildren = [h('h3', {}, title)];
+  if (count) headChildren.push(h('span', { class: 'tp-ct' }, count));
+  return h('div', { class: 'tp-card' },
+    h('div', { class: 'tp-card-h' }, ...headChildren),
+    ...bodyNodes);
 }
 
-function checkField(label, id, text, checked) {
-  const f = h("div", { class: "tp-field" });
-  f.appendChild(h("label", { class: "label" }, label));
-  const wrap = h("label", { class: "tp-checkline" });
-  const cb = h("input", { type: "checkbox", id });
-  if (checked) cb.checked = true;
-  wrap.appendChild(cb);
-  wrap.appendChild(document.createTextNode(" " + text));
-  f.appendChild(wrap);
-  return f;
+function field(label, control) {
+  return h('div', { class: 'tp-field' }, h('label', { class: 'tp-lbl' }, label), control);
 }
 
-function selectEl(id, opts, selected) {
-  // Always pass an attrs object as 2nd arg to h() — never spread opts directly
-  // (the first spread item would land in the attrs slot and be silently dropped).
-  const s = h("select", id ? { class: "select", id } : { class: "select" });
-  opts.forEach((o) => {
-    const op = h("option", { value: o }, o);
-    if (o === selected) op.selected = true;
-    s.appendChild(op);
-  });
-  return s;
+// A labeled mockup-style toggle switch (.tp-toggle) inside a .tp-field.
+function toggleRow(label, sub, on, onToggle) {
+  const sw = h('div', { class: 'tp-toggle' + (on ? ' on' : ''), role: 'switch', 'aria-checked': on ? 'true' : 'false' });
+  sw.addEventListener('click', onToggle);
+  return h('div', { class: 'tp-field' },
+    h('label', { class: 'tp-lbl' }, label),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+      sw,
+      h('span', { class: 'tp-muted', style: { fontSize: '12px' } }, sub)));
 }
