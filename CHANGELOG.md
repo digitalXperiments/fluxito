@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Public dashboard preset filter bar.** Shared dashboards now show the owner-configured
+  date-range preset chips above the card grid. Clicking a preset re-fetches live card data
+  for that date range (15 s timeout, 4 concurrent cards, 1-hour Redis cache) and re-renders
+  the grid — so recipients can explore different time windows without needing dashboard
+  access. Falls back to each card's cached snapshot on individual card failure. The frozen
+  default view (no preset selected) is completely unchanged.
+
 ### Fixed
 - **Scorecards no longer show "No data" when served from cache or on card error/timeout.**
   Fallback and frozen-cache paths now run the same snapshot normalisation as the live path,
