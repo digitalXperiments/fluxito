@@ -4,6 +4,7 @@
 import { getState, subscribe, reload } from "tp/state";
 import { doAction } from "tp/api";
 import { h, mount } from "tp/render";
+import { persist } from "tp/util/persist";
 
 const SWATCHES = ["#4A90E2", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
 
@@ -32,7 +33,9 @@ export function mountView(container) {
     const a = h("div", { class: "tp-d-actions" });
     const create = h("button", { class: "btn btn-primary btn-sm" }, "+ New category");
     create.onclick = async () => {
-      await doAction("create_category", { name: "New category", color: SWATCHES[0] }, st.branch);
+      await persist("Category created", () =>
+        doAction("create_category", { name: "New category", color: SWATCHES[0] }, st.branch)
+      );
       await reload();
     };
     a.appendChild(create);
@@ -63,7 +66,7 @@ function categoryRow(c, count, branch) {
   const row = h("div", { class: "tp-cat-row" });
   const dot = h("span", { class: "tp-cat-dot", style: `background:${c.color || "var(--text-subtle)"}` });
   row.appendChild(dot);
-  const nameInp = h("input", { class: "tp-cat-name", value: c.name });
+  const nameInp = h("input", { class: "input tp-cat-name", value: c.name });
   row.appendChild(nameInp);
 
   // color picker — swatch buttons, not innerHTML (bug pattern #4 safe)
@@ -75,7 +78,9 @@ function categoryRow(c, count, branch) {
       title: col,
     });
     sw.onclick = async () => {
-      await doAction("update_category", { category_id: c.id, color: col }, branch);
+      await persist("Category recolored", () =>
+        doAction("update_category", { category_id: c.id, color: col }, branch)
+      );
       await reload();
     };
     picker.appendChild(sw);
@@ -88,7 +93,9 @@ function categoryRow(c, count, branch) {
   save.onclick = async () => {
     const name = nameInp.value.trim();
     if (!name || name === c.name) return;
-    await doAction("update_category", { category_id: c.id, name }, branch);
+    await persist("Category renamed", () =>
+      doAction("update_category", { category_id: c.id, name }, branch)
+    );
     await reload();
   };
   row.appendChild(save);
@@ -100,31 +107,41 @@ function categoryRow(c, count, branch) {
 }
 
 function confirmDeleteCategory(c, count, branch) {
-  const overlay = h("div", { class: "tp-modal-overlay" });
-  const modal = h("div", { class: "tp-modal" });
+  const overlay = h("div", { class: "modal-backdrop is-open" });
+  const modal = h("div", { class: "modal" });
+
+  const header = h("div", { class: "modal-header" });
   // Use h() for user-controlled text — no innerHTML (bug pattern #4)
-  modal.appendChild(h("h3", {}, `Delete category "${c.name}"?`));
+  header.appendChild(h("div", { class: "modal-title" }, `Delete category "${c.name}"?`));
+  modal.appendChild(header);
+
   if (count) {
-    modal.appendChild(
+    const body = h("div", { class: "modal-body" });
+    body.appendChild(
       h(
         "div",
         { class: "tp-warn" },
         `${count} event${count === 1 ? "" : "s"} will be uncategorized (category cleared). The events are not deleted.`
       )
     );
+    modal.appendChild(body);
   }
-  const actions = h("div", { class: "tp-modal-actions" });
+
+  const footer = h("div", { class: "modal-footer" });
   const cancel = h("button", { class: "btn btn-ghost btn-sm" }, "Cancel");
   const delBtn = h("button", { class: "btn btn-danger btn-sm" }, "Delete");
   cancel.onclick = () => overlay.remove();
   delBtn.onclick = async () => {
     overlay.remove();
-    await doAction("delete_category", { category_id: c.id }, branch);
+    await persist("Category deleted", () =>
+      doAction("delete_category", { category_id: c.id }, branch)
+    );
     await reload();
   };
-  actions.appendChild(cancel);
-  actions.appendChild(delBtn);
-  modal.appendChild(actions);
+  footer.appendChild(cancel);
+  footer.appendChild(delBtn);
+  modal.appendChild(footer);
+
   overlay.appendChild(modal);
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   document.body.appendChild(overlay);

@@ -4,6 +4,7 @@
 import { getState, subscribe, select, reload } from 'tp/state';
 import { doAction } from 'tp/api';
 import { h, mount } from 'tp/render';
+import { persist } from 'tp/util/persist';
 
 export function mountView(container) {
   // Declare render BEFORE subscribe (avoids TDZ on first notification).
@@ -26,7 +27,9 @@ function masterPane(st) {
   const head = h('div', { class: 'tp-master-head' });
   const add = h('button', { class: 'btn btn-primary btn-sm btn-block' }, '+ New bundle');
   add.onclick = async () => {
-    const r = await doAction('create_bundle', { name: 'New bundle' }, st.branch);
+    const r = await persist('Bundle created', () =>
+      doAction('create_bundle', { name: 'New bundle' }, st.branch),
+    );
     await reload();
     if (r && r.id) select('bundle', r.id);
   };
@@ -68,18 +71,22 @@ function detailPane(st) {
   // ── Header: name input + Save/Delete ──────────────────────────────────
   const head = h('div', { class: 'tp-d-head' });
   const title = h('div', { class: 'tp-d-title' });
-  const nameInp = h('input', { class: 'tp-titlefield', value: b.name });
+  const nameInp = h('input', { class: 'input tp-titlefield', value: b.name });
   title.appendChild(nameInp);
   head.appendChild(title);
   const acts = h('div', { class: 'tp-d-actions' });
   const save = h('button', { class: 'btn btn-primary btn-sm' }, 'Save');
   const del = h('button', { class: 'btn btn-ghost btn-sm' }, 'Delete');
   save.onclick = async () => {
-    await doAction('update_bundle', { bundle_id: b.id, name: nameInp.value.trim() }, st.branch);
+    await persist('Bundle updated', () =>
+      doAction('update_bundle', { bundle_id: b.id, name: nameInp.value.trim() }, st.branch),
+    );
     await reload();
   };
   del.onclick = async () => {
-    await doAction('delete_bundle', { bundle_id: b.id }, st.branch);
+    await persist('Bundle deleted', () =>
+      doAction('delete_bundle', { bundle_id: b.id }, st.branch),
+    );
     select('bundle', null);
     await reload();
   };
@@ -101,7 +108,7 @@ function detailPane(st) {
   const candidates = (st.plan.properties.event || []).filter((p) => !inBundle.has(p.id));
   const addBar = h('div', { class: 'tp-inline-add' });
   // attrs object {} as second arg — avoids dropped-first-option bug
-  const propSel = h('select', {});
+  const propSel = h('select', { class: 'select' });
   propSel.appendChild(h('option', { value: '' }, 'add a library property…'));
   candidates.forEach((p) =>
     propSel.appendChild(h('option', { value: p.id }, `${p.name} · ${p.data_type}`)),
@@ -109,10 +116,12 @@ function detailPane(st) {
   const addBtn = h('button', { class: 'btn btn-secondary btn-sm' }, 'Add');
   addBtn.onclick = async () => {
     if (!propSel.value) return;
-    await doAction(
-      'add_property_to_bundle',
-      { bundle_id: b.id, property_id: propSel.value, sort_order: b.properties.length },
-      st.branch,
+    await persist('Property added', () =>
+      doAction(
+        'add_property_to_bundle',
+        { bundle_id: b.id, property_id: propSel.value, sort_order: b.properties.length },
+        st.branch,
+      ),
     );
     await reload();
   };
@@ -126,7 +135,7 @@ function detailPane(st) {
   attachSec.appendChild(h('h3', {}, 'Attach to event'));
   const aBar = h('div', { class: 'tp-inline-add' });
   // attrs object {} as second arg — avoids dropped-first-option bug
-  const evSel = h('select', {});
+  const evSel = h('select', { class: 'select' });
   evSel.appendChild(h('option', { value: '' }, 'choose an event…'));
   (st.plan.events || []).forEach((e) =>
     evSel.appendChild(h('option', { value: e.id }, e.name)),
@@ -134,10 +143,12 @@ function detailPane(st) {
   const aBtn = h('button', { class: 'btn btn-secondary btn-sm' }, 'Attach bundle');
   aBtn.onclick = async () => {
     if (!evSel.value) return;
-    await doAction(
-      'attach_bundle_to_event',
-      { event_id: evSel.value, bundle_id: b.id },
-      st.branch,
+    await persist('Bundle attached', () =>
+      doAction(
+        'attach_bundle_to_event',
+        { event_id: evSel.value, bundle_id: b.id },
+        st.branch,
+      ),
     );
     await reload();
   };
@@ -161,10 +172,12 @@ function bundleRow(bundle, p, idx, ordered, branch) {
   const reqWrap = h('label', { class: 'tp-checkline' });
   const req = h('input', { type: 'checkbox', checked: !!p.required });
   req.onchange = async () => {
-    await doAction(
-      'add_property_to_bundle',
-      { bundle_id: bundle.id, property_id: p.property_id, required: req.checked, sort_order: p.sort_order },
-      branch,
+    await persist('Saved', () =>
+      doAction(
+        'add_property_to_bundle',
+        { bundle_id: bundle.id, property_id: p.property_id, required: req.checked, sort_order: p.sort_order },
+        branch,
+      ),
     );
     await reload();
   };
@@ -174,10 +187,12 @@ function bundleRow(bundle, p, idx, ordered, branch) {
 
   const rm = h('button', { class: 'btn btn-ghost btn-sm' }, 'Remove');
   rm.onclick = async () => {
-    await doAction(
-      'remove_property_from_bundle',
-      { bundle_id: bundle.id, property_id: p.property_id },
-      branch,
+    await persist('Property removed', () =>
+      doAction(
+        'remove_property_from_bundle',
+        { bundle_id: bundle.id, property_id: p.property_id },
+        branch,
+      ),
     );
     await reload();
   };
@@ -202,13 +217,16 @@ function bundleRow(bundle, p, idx, ordered, branch) {
     next.splice(to, 0, moved);
     // Re-upsert each row with its new sort_order
     // (add_property_to_bundle is an idempotent upsert).
-    for (let i = 0; i < next.length; i++) {
-      await doAction(
-        'add_property_to_bundle',
-        { bundle_id: bundle.id, property_id: next[i].property_id, required: next[i].required, sort_order: i },
-        branch,
-      );
-    }
+    // Whole drag gesture = one persist() → single toast + one saving→saved cycle.
+    await persist('Property reordered', async () => {
+      for (let i = 0; i < next.length; i++) {
+        await doAction(
+          'add_property_to_bundle',
+          { bundle_id: bundle.id, property_id: next[i].property_id, required: next[i].required, sort_order: i },
+          branch,
+        );
+      }
+    });
     await reload();
   };
 
