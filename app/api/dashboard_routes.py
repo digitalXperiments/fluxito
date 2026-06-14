@@ -450,9 +450,7 @@ async def public_dashboard_json(slug: str, request: Request):
                         call_args["query"] = q
 
                 async with _sem:
-                    raw_result = await asyncio.wait_for(
-                        tool.run(call_args), timeout=_PUBLIC_CARD_TIMEOUT_S
-                    )
+                    raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_PUBLIC_CARD_TIMEOUT_S)
                 if not isinstance(raw_result, dict):
                     raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
 
@@ -1084,7 +1082,17 @@ async def live_dashboard_data(slug: str, request: Request):
     # explicitly. Any other query param (e.g. ?country=US&device=mobile) is
     # forwarded as a flat dimension override so filter_hooks can map them to
     # card params.
-    _RESERVED_PARAMS = {"date_range_start", "date_range_end", "platforms", "refresh", "compare", "compare_start", "compare_end", "token", "query_token"}
+    _RESERVED_PARAMS = {
+        "date_range_start",
+        "date_range_end",
+        "platforms",
+        "refresh",
+        "compare",
+        "compare_start",
+        "compare_end",
+        "token",
+        "query_token",
+    }
     filter_overrides: dict = {}
     if start_date or end_date:
         filter_overrides["date_range"] = {}
@@ -1275,7 +1283,9 @@ async def live_dashboard_data(slug: str, request: Request):
 
                 if raw_result.get("card_type") == "ERROR" or raw_result.get("error"):
                     raw_cache = c.result_cache if isinstance(c.result_cache, dict) else raw_result
-                    snap = _normalize_snap(raw_cache, c.chart_type, c.chart_config) if raw_cache else raw_cache
+                    snap = (
+                        _normalize_snap(raw_cache, c.chart_type, c.chart_config) if raw_cache else raw_cache
+                    )
                     return (
                         snap,
                         False,
