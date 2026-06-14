@@ -5,8 +5,8 @@
 import { h, mountAll } from 'tp/render';
 import * as state from 'tp/state';
 import * as api from 'tp/api';
-import { banner } from 'tp/shell';
 import { mountDrawer } from 'tp/comments';
+import { persist } from 'tp/util/persist';
 import {
   eventStatus, eventProps, propByName, sourceByName, destByName, catByName, typeBadge,
 } from 'tp/util/format';
@@ -32,7 +32,7 @@ export function mountView(container) {
   function renderList() {
     const head = h('div', { class: 'tp-master-head' },
       h('div', { class: 'tp-search' },
-        h('input', { placeholder: 'Search events', value: search,
+        h('input', { class: 'input', placeholder: 'Search events', value: search,
           onInput: (e) => { search = e.target.value; renderListBody(listBody); } })),
       h('button', { class: 'btn btn-primary btn-sm btn-block', onClick: newEvent }, '+ New event'));
     const listBody = h('div', { class: 'tp-master-list' });
@@ -77,11 +77,11 @@ export function mountView(container) {
 
   async function newEvent() {
     try {
-      const r = await api.doAction('create_event', { name: 'New event' }, state.getState().branch);
+      const r = await persist('Event created', () => api.doAction('create_event', { name: 'New event' }, state.getState().branch));
       await state.reload();              // <-- structural bug fix: list refreshes from server
       state.select('event', r.id);       // open straight into the editor
       setTimeout(() => { const n = detail.querySelector('#ed-name'); if (n) { n.focus(); n.select(); } }, 0);
-    } catch (e) { banner(e.message, 'err'); }
+    } catch (e) { /* persist already surfaced the error banner */ }
   }
 
   function renderDetail() {
@@ -112,17 +112,17 @@ export function mountView(container) {
 
   // ---- header: inline name, category, trigger badge, tags, comments, ⋯ ----
   function headerSection(e) {
-    const name = h('input', { class: 'tp-titlefield', id: 'ed-name', value: e.name,
+    const name = h('input', { class: 'input tp-titlefield', id: 'ed-name', value: e.name,
       onChange: () => save(e, { name: name.value.trim() }) });
-    const cat = h('select', { onChange: () => save(e, { category_id: catByName(plan(), cat.value) }) },
+    const cat = h('select', { class: 'select', onChange: () => save(e, { category_id: catByName(plan(), cat.value) }) },
       h('option', { value: '' }, '(no category)'),
       ...(plan().categories || []).map((c) => h('option', { value: c.name, selected: e.category === c.name }, c.name)));
-    const trigger = h('input', { class: 'tp-mono-input', value: e.trigger_type || '', placeholder: 'click / pageview / …',
+    const trigger = h('input', { class: 'input tp-mono-input', value: e.trigger_type || '', placeholder: 'click / pageview / …',
       onChange: (ev) => save(e, { trigger_type: ev.target.value || null }) });
 
     const tagsWrap = h('div', { class: 'tp-tags' });
     let tags = (e.tags || []).slice();
-    const tagInput = h('input', { placeholder: 'add tag…',
+    const tagInput = h('input', { class: 'input', placeholder: 'add tag…',
       onKeydown: (ev) => { if (ev.key === 'Enter' && tagInput.value.trim()) { tags.push(tagInput.value.trim()); tagInput.value = ''; renderTags(); save(e, { tags }); } } });
     function renderTags() {
       mountAll(tagsWrap, [
@@ -134,7 +134,7 @@ export function mountView(container) {
     renderTags();
 
     const commentsBtn = h('button', { class: 'btn btn-ghost btn-sm', onClick: () => drawer && drawer.open() }, '💬 Comments');
-    const moreBtn = h('button', { class: 'btn btn-ghost btn-sm', onClick: () => delEvent(e) }, 'Delete');
+    const moreBtn = h('button', { class: 'btn btn-danger btn-sm', onClick: () => delEvent(e) }, 'Delete');
 
     return h('div', { class: 'tp-d-head' },
       h('div', { class: 'tp-d-title' }, name),
@@ -144,16 +144,16 @@ export function mountView(container) {
 
   // ---- description (autosave-on-blur) + meta grid ----
   function metaSection(e) {
-    const desc = h('textarea', { id: 'ed-desc', placeholder: 'Description — when does this fire?',
+    const desc = h('textarea', { class: 'textarea', id: 'ed-desc', placeholder: 'Description — when does this fire?',
       onInput: () => state.setDirty(true), onBlur: () => save(e, { description: desc.value || null }) });
     desc.value = e.description || '';
     const field = (label, key, val, mono) => {
-      const inp = h('input', { class: mono ? 'tp-mono-input' : '', value: val || '',
+      const inp = h('input', { class: mono ? 'input tp-mono-input' : 'input', value: val || '',
         onBlur: () => save(e, { [key]: inp.value || null }), onInput: () => state.setDirty(true) });
-      return h('div', { class: 'tp-field' }, h('label', {}, label), inp);
+      return h('div', { class: 'tp-field' }, h('label', { class: 'label' }, label), inp);
     };
     return h('div', { class: 'tp-section' },
-      h('div', { class: 'tp-field tp-col-2' }, h('label', {}, 'Description'), desc),
+      h('div', { class: 'tp-field tp-col-2' }, h('label', { class: 'label' }, 'Description'), desc),
       h('div', { class: 'tp-fieldgrid' },
         field('Display name', 'display_name', e.display_name),
         field('Purpose / KPI', 'purpose', e.purpose),
@@ -171,9 +171,9 @@ export function mountView(container) {
     e.properties.forEach((p, idx) => {
       const reqBox = h('input', { type: 'checkbox', checked: p.required,
         onChange: () => attach(e, p, idx, { required: reqBox.checked }) });
-      const exInput = h('input', { class: 'tp-cell-input', value: p.example || '', placeholder: 'example',
+      const exInput = h('input', { class: 'input tp-cell-input', value: p.example || '', placeholder: 'example',
         onChange: () => attach(e, p, idx, { example: exInput.value || null }) });
-      const ovInput = h('input', { class: 'tp-cell-input', value: p.override_description || '', placeholder: 'override description',
+      const ovInput = h('input', { class: 'input tp-cell-input', value: p.override_description || '', placeholder: 'override description',
         onChange: () => attach(e, p, idx, { override_description: ovInput.value || null }) });
       const row = h('tr', { class: 'tp-prow', draggable: 'true', dataset: { name: p.name } },
         h('td', { class: 'tp-drag' }, '⋮⋮'),
@@ -210,23 +210,25 @@ export function mountView(container) {
       arr.splice(arr.indexOf(from), 1);
       arr.splice(arr.indexOf(to), 0, from);
       try {
-        for (let i = 0; i < arr.length; i++) {
-          const cur = e.properties.find((p) => p.name === arr[i]);
-          const lib = propByName(plan(), arr[i]);
-          if (!lib) continue;
-          await api.doAction('attach_property', {
-            event_id: e.id, property_id: lib.id, sort_order: i,
-            required: cur.required, example: cur.example, override_description: cur.override_description,
-          }, state.getState().branch);
-        }
+        await persist('Properties reordered', async () => {
+          for (let i = 0; i < arr.length; i++) {
+            const cur = e.properties.find((p) => p.name === arr[i]);
+            const lib = propByName(plan(), arr[i]);
+            if (!lib) continue;
+            await api.doAction('attach_property', {
+              event_id: e.id, property_id: lib.id, sort_order: i,
+              required: cur.required, example: cur.example, override_description: cur.override_description,
+            }, state.getState().branch);
+          }
+        });
         await state.reload();
-      } catch (err) { banner(err.message, 'err'); }
+      } catch (err) { /* persist already surfaced the error banner */ }
     });
   }
 
   function addPropertyCombobox(e) {
     const lib = eventProps(plan()).filter((p) => !e.properties.some((ep) => ep.name === p.name));
-    const input = h('input', { class: 'tp-combo-input', placeholder: 'Add property — search library or type a new name' });
+    const input = h('input', { class: 'input tp-combo-input', placeholder: 'Add property — search library or type a new name' });
     const pop = h('div', { class: 'tp-combo-pop', style: { display: 'none' } });
     const wrap = h('div', { class: 'tp-combo' }, input, pop);
     input.addEventListener('input', () => {
@@ -246,31 +248,33 @@ export function mountView(container) {
 
   async function attachExisting(e, libProp) {
     try {
-      await api.doAction('attach_property', { event_id: e.id, property_id: libProp.id, sort_order: e.properties.length }, state.getState().branch);
+      await persist('Property added', () => api.doAction('attach_property', { event_id: e.id, property_id: libProp.id, sort_order: e.properties.length }, state.getState().branch));
       await state.reload();
-    } catch (err) { banner(err.message, 'err'); }
+    } catch (err) { /* persist already surfaced the error banner */ }
   }
   async function createAndAttach(e, name) {
     try {
-      const cp = await api.doAction('create_property', { name, data_type: 'string', kind: 'event' }, state.getState().branch);
-      await api.doAction('attach_property', { event_id: e.id, property_id: cp.id, sort_order: e.properties.length }, state.getState().branch);
+      await persist('Property added', async () => {
+        const cp = await api.doAction('create_property', { name, data_type: 'string', kind: 'event' }, state.getState().branch);
+        await api.doAction('attach_property', { event_id: e.id, property_id: cp.id, sort_order: e.properties.length }, state.getState().branch);
+      });
       await state.reload();
-    } catch (err) { banner(err.message, 'err'); }
+    } catch (err) { /* persist already surfaced the error banner */ }
   }
   async function attach(e, p, idx, patch) {
     const lib = propByName(plan(), p.name); if (!lib) return;
     try {
-      await api.doAction('attach_property', {
+      await persist('Saved', () => api.doAction('attach_property', {
         event_id: e.id, property_id: lib.id, sort_order: idx,
         required: p.required, example: p.example, override_description: p.override_description, ...patch,
-      }, state.getState().branch);
+      }, state.getState().branch));
       await state.reload();
-    } catch (err) { banner(err.message, 'err'); }
+    } catch (err) { /* persist already surfaced the error banner */ }
   }
   async function detach(e, p) {
     const lib = propByName(plan(), p.name); if (!lib) return;
-    try { await api.doAction('detach_property', { event_id: e.id, property_id: lib.id }, state.getState().branch); await state.reload(); }
-    catch (err) { banner(err.message, 'err'); }
+    try { await persist('Property removed', () => api.doAction('detach_property', { event_id: e.id, property_id: lib.id }, state.getState().branch)); await state.reload(); }
+    catch (err) { /* persist already surfaced the error banner */ }
   }
 
   // ---- Tracked on: per-source status chips ----
@@ -285,7 +289,7 @@ export function mountView(container) {
     (plan().sources || []).forEach((s) => {
       const on = s.name in cur;
       const box = h('input', { type: 'checkbox', checked: on });
-      const sel = h('select', {}, ...['planned', 'implemented', 'verified', 'deprecated'].map((x) => h('option', { selected: cur[s.name] === x }, x)));
+      const sel = h('select', { class: 'select' }, ...['planned', 'implemented', 'verified', 'deprecated'].map((x) => h('option', { selected: cur[s.name] === x }, x)));
       wrap.appendChild(h('label', { class: 'tp-src-toggle' + (on ? ' is-on' : ''), dataset: { sid: s.id } }, box, h('span', { class: 'tp-src-name' }, s.name), sel));
     });
     const saveBtn = h('button', { class: 'btn btn-secondary btn-sm', style: { marginTop: '10px' },
@@ -293,8 +297,8 @@ export function mountView(container) {
         const sources = [...wrap.querySelectorAll('.tp-src-toggle')]
           .filter((l) => l.querySelector('input').checked)
           .map((l) => ({ source_id: l.dataset.sid, implementation_status: l.querySelector('select').value }));
-        try { await api.doAction('set_event_sources', { event_id: e.id, sources }, state.getState().branch); await state.reload(); }
-        catch (err) { banner(err.message, 'err'); }
+        try { await persist('Sources updated', () => api.doAction('set_event_sources', { event_id: e.id, sources }, state.getState().branch)); await state.reload(); }
+        catch (err) { /* persist already surfaced the error banner */ }
       } }, 'Update sources');
     sec.appendChild(wrap); sec.appendChild(saveBtn);
     return sec;
@@ -309,31 +313,31 @@ export function mountView(container) {
         h('td', { class: 'tp-pname' }, dd.destination),
         h('td', { class: 'tp-mono' }, dd.dest_event_name || e.name),
         h('td', { class: 'tp-cell-act' }, h('button', { class: 'btn btn-ghost btn-sm',
-          onClick: async () => { const d = destByName(plan(), dd.destination); if (d) { try { await api.doAction('remove_event_destination', { event_id: e.id, destination_id: d.id }, state.getState().branch); await state.reload(); } catch (err) { banner(err.message, 'err'); } } } }, 'Remove'))));
+          onClick: async () => { const d = destByName(plan(), dd.destination); if (d) { try { await persist('Destination removed', () => api.doAction('remove_event_destination', { event_id: e.id, destination_id: d.id }, state.getState().branch)); await state.reload(); } catch (err) { /* persist already surfaced the error banner */ } } } }, 'Remove'))));
     });
     if (!(e.destinations || []).length) tbody.appendChild(h('tr', {}, h('td', { class: 'tp-muted', colspan: '3', style: { padding: '14px' } }, 'Not mapped to any destination.')));
     sec.appendChild(h('table', { class: 'tp-itable' }, h('thead', {}, h('tr', {}, h('th', {}, 'Destination'), h('th', {}, 'Maps to'), h('th', {}))), tbody));
     if ((plan().destinations || []).length) {
-      const sel = h('select', {}, ...(plan().destinations || []).map((d) => h('option', { value: d.id }, d.name)));
-      const nameIn = h('input', { class: 'tp-mono-input', placeholder: 'dest event name (optional)' });
+      const sel = h('select', { class: 'select' }, ...(plan().destinations || []).map((d) => h('option', { value: d.id }, d.name)));
+      const nameIn = h('input', { class: 'input tp-mono-input', placeholder: 'dest event name (optional)' });
       sec.appendChild(h('div', { class: 'tp-inline-add' }, sel, nameIn,
         h('button', { class: 'btn btn-secondary btn-sm',
-          onClick: async () => { try { await api.doAction('set_event_destination', { event_id: e.id, destination_id: sel.value, dest_event_name: nameIn.value || null }, state.getState().branch); await state.reload(); } catch (err) { banner(err.message, 'err'); } } }, 'Map')));
+          onClick: async () => { try { await persist('Destination updated', () => api.doAction('set_event_destination', { event_id: e.id, destination_id: sel.value, dest_event_name: nameIn.value || null }, state.getState().branch)); await state.reload(); } catch (err) { /* persist already surfaced the error banner */ } } }, 'Map')));
     }
     return sec;
   }
 
   async function save(e, patch) {
     try {
-      await api.doAction('update_event', { event_id: e.id, ...patch }, state.getState().branch);
+      await persist('Saved', () => api.doAction('update_event', { event_id: e.id, ...patch }, state.getState().branch));
       state.setDirty(false);
       await state.reload();
-    } catch (err) { banner(err.message, 'err'); }
+    } catch (err) { /* persist already surfaced the error banner */ }
   }
   async function delEvent(e) {
     if (!confirm(`Delete event "${e.name}"?`)) return;
-    try { await api.doAction('delete_event', { event_id: e.id }, state.getState().branch); state.select(null, null); await state.reload(); }
-    catch (err) { banner(err.message, 'err'); }
+    try { await persist('Event deleted', () => api.doAction('delete_event', { event_id: e.id }, state.getState().branch)); state.select(null, null); await state.reload(); }
+    catch (err) { /* persist already surfaced the error banner */ }
   }
 
   return () => { unsub(); if (drawer) drawer.destroy(); };
