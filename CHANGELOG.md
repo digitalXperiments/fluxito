@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Scorecards no longer show "No data" when served from cache or on card error/timeout.**
+  Fallback and frozen-cache paths now run the same snapshot normalisation as the live path,
+  so GA4 results are correctly reshaped into a `metrics` array before rendering.
+- **Dashboard share links now restore the correct date range.** The server used to read
+  `?start`/`?end` while the client emitted `?date_range_start`/`?date_range_end`; both
+  forms are now accepted. Active date-range chips are also synced to the restored range on
+  page load so the UI reflects what's actually applied.
+- **`date_locked` cards now only lock the date range, not all filters.** Dimension filters
+  (country, device type, etc.) were previously also blocked on date-locked cards; they now
+  pass through correctly.
+- **Dimension filter selects with static options now include an "All" option** so users can
+  reset a pre-populated select back to no filter.
+- **Filter preset chips no longer silently corrupt date ranges containing commas.**
+  Dates are stored in separate `data-range-start`/`data-range-end` attributes instead of a
+  single comma-delimited `data-range` attribute.
+- **Dimension filter options lazy-load before the initial card load** to avoid a race where
+  user interaction during the concurrent fetch overwrote freshly-loaded cards with stale data.
+- **`query_token_required` is now enforced on the live `/data` endpoint.** Previously only
+  the batch endpoint checked the token; unauthenticated callers could bypass it on public
+  dashboards with token-gating enabled.
+- **`compare=` and other unknown URL params no longer fragment the Redis cache key.** These
+  params are now classified as reserved and excluded from the override dict used for cache
+  key computation.
+- **Chart resize works on every window resize, not just the first.** The ECharts resize
+  listener was registered with `{once: true}` and removed itself after firing once; replaced
+  with a stable debounced handler.
+- **Concurrent `mountCharts` calls no longer render stale card data.** The retry-on-ECharts-
+  load mechanism previously captured the first call's arguments; it now always uses the most
+  recent arguments.
+- **Date auto-detection no longer false-positives on dimension values starting with month
+  names** (e.g. "market", "margin", "march_promo") or on 4-digit store/product codes
+  outside the 1970–2100 year range.
+- **GA4 date dimension columns (`yearMonth`, `dateHour`, `nthDay`, etc.) are no longer
+  selected as the metric value in scorecard fallback mode**, which previously rendered
+  garbage compact numbers like "202.4K".
+- **Percentage and rate columns in tables are formatted correctly.** Python inferred
+  `unit=percent` for columns matching `percent`/`pct` but the JS table renderer's rate
+  check didn't match those patterns; both now agree.
+- **`autoWide` card layout works for GA4 cards.** The heuristic previously checked the raw
+  `card_type` string (`TABLE`, `METRIC`) but GA4 cards carry prefixed types (`GA4_TABLE`,
+  `GA4_METRIC`); it now checks the resolved chart type so GA4 tables and scorecards are
+  correctly widened.
+- **The PDF/SSR scorecard path now shows formatted values** (`1.2M`, `37%`, `4m 33s`)
+  rather than the raw number, matching the live JS renderer.
+- **Delta pills use a single consistent set of CSS class names.** The JS emitted `pos`/
+  `neg`/`neu` while `app.css` defined `.positive`/`.negative`/`.neutral`; classes are now
+  aligned and the duplicate inline `<style>` block is removed.
+- **Dead sparkline CSS removed from `app.css`.** The sparkline renders SVG `<rect>` elements
+  but `app.css` had flex/span rules from an earlier bar-chart implementation that were never
+  applied.
+- **Pie chart `data-chart-option` attribute removed.** `mountCharts` never read this
+  attribute; the dead escaped-JSON was removed from the DOM.
+- **Dual-axis threshold corrected to 5× scale divergence** (was 2×, causing premature
+  axis splits; the existing `scalesDivergent()` helper already used 5× but was not called).
+- **Hub loading overlay now has a 9-second fallback timeout** so a cancelled navigation no
+  longer leaves the hub permanently obscured.
+- **Non-owner "older format" message replaced** with "Data temporarily unavailable" when a
+  card has no cached result, which accurately describes the situation.
+
 ### Added
 - **Tracking Plan — a relational, Avo-style data-governance workspace** that replaces the
   markdown Solution Design Reference (SDR). The plan is now a structured database rather than a
