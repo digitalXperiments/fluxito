@@ -63,7 +63,7 @@ export function mountDrawer(container, { entityType, entityId, branch }) {
       doAndRefresh('resolve_comment', { comment_id: c.id, resolved: !c.resolved })));
     if (c.author_id === myId() || isAdmin()) {
       acts.appendChild(actBtn('Edit', () => startEdit(c)));
-      acts.appendChild(actBtn('Delete', () => doAndRefresh('delete_comment', { comment_id: c.id })));
+      acts.appendChild(actBtn('Delete', () => doAndRefresh('delete_comment', { comment_id: c.id }), 'danger'));
     }
     return h('div', {
       class: 'tp-comment' + (reply ? ' tp-reply' : '') + (c.resolved ? ' is-resolved' : ''),
@@ -72,7 +72,8 @@ export function mountDrawer(container, { entityType, entityId, branch }) {
       h('div', { class: 'tp-comment-main' }, meta, bodyEl, acts),
     );
   }
-  const actBtn = (label, fn) => h('button', { onClick: fn }, label);
+  const actBtn = (label, fn, kind = 'ghost') =>
+    h('button', { class: `btn btn-${kind} btn-sm`, onClick: fn }, label);
 
   function commentsBody() {
     const list = h('div', { class: 'tp-comments' });
@@ -90,7 +91,7 @@ export function mountDrawer(container, { entityType, entityId, branch }) {
   // --- composer with @mention autocomplete ---
   function composer(parentId, initialText) {
     const ta = h('textarea', {
-      class: 'tp-cbody',
+      class: 'textarea',
       placeholder: parentId ? 'Reply… type @ to mention' : 'Add a comment… type @ to mention',
     });
     if (initialText) ta.value = initialText;

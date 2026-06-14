@@ -145,7 +145,7 @@ async function doMerge(branch) {
     const r = await api.doAction("merge_branch", { branch_id: branch.id, changelog: note }, branch.name);
     showBanner("Merged → published " + (r.version_number || "") + ".", "ok");
     state.setBranch(BASE_BRANCH);
-    state.setView("events");
+    state.setView("overview");
     await state.reload();
   } catch (e) {
     showBanner((e.errorType || "error") + ": " + e.message, "err");
