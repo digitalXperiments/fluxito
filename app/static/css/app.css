@@ -209,6 +209,183 @@ body {
   scrollbar-width: none;
 }
 
+/* ── Collapsible sidebar ──────────────────────────────────────────────── */
+.sidebar-collapse-btn {
+  margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  border: none; background: transparent; color: var(--muted, #71717A);
+  border-radius: 6px; cursor: pointer; flex-shrink: 0;
+}
+.sidebar-collapse-btn:hover { background: var(--line, #E6E6E8); color: var(--ink, #0B0B0E); }
+
+@media (min-width: 769px) {
+  html.sidebar-collapsed .sidebar { width: 56px; }
+  html.sidebar-collapsed .has-sidebar .main,
+  html.sidebar-collapsed .has-sidebar .site-footer { margin-left: 56px; }
+
+  /* icon-only: hide text via font-size:0; SVGs keep their explicit px size */
+  html.sidebar-collapsed .sidebar-item { justify-content: center; gap: 0; font-size: 0; padding-left: 0; padding-right: 0; }
+  html.sidebar-collapsed .sidebar-group { align-items: center; }
+  html.sidebar-collapsed .sidebar-group-label,
+  html.sidebar-collapsed .sidebar-project-info,
+  html.sidebar-collapsed .sidebar-user-info,
+  html.sidebar-collapsed .sidebar-user-chevron,
+  html.sidebar-collapsed .version-chip,
+  html.sidebar-collapsed .beta-pill,
+  html.sidebar-collapsed .wordmark em,
+  html.sidebar-collapsed .wordmark span:not(.dot) { display: none; }
+  html.sidebar-collapsed .sidebar-header { justify-content: center; gap: 4px; padding: 14px 4px; }
+  html.sidebar-collapsed .sidebar-project-btn { justify-content: center; }
+  html.sidebar-collapsed .sidebar-project-btn > svg:last-child { display: none; }
+  /* point the chevrons the other way when collapsed */
+  html.sidebar-collapsed .sidebar-collapse-btn { transform: rotate(180deg); }
+
+  /* flyouts must keep a real width even though they anchor to the 56px rail */
+  html.sidebar-collapsed .sidebar-user-menu,
+  html.sidebar-collapsed .sidebar-project-menu { min-width: 220px; }
+
+  /* hover tooltip for the icon-only items (labels are font-size:0 when collapsed) */
+  html.sidebar-collapsed .sidebar-item { position: relative; }
+  html.sidebar-collapsed .sidebar-item::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--bg, #fff);
+    background: var(--ink, #0B0B0E);
+    padding: 6px 9px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px -2px rgba(11, 11, 14, .25);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 80;
+    transition: opacity .12s;
+  }
+  html.sidebar-collapsed .sidebar-item:hover::after { opacity: 1; }
+
+  /* let the tooltip escape the rail's overflow clipping (collapsed rail is short) */
+  html.sidebar-collapsed .sidebar,
+  html.sidebar-collapsed .sidebar-nav { overflow: visible; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Collapsed rail (56px), refined. Goals: the brand mark stays visible at the
+   top; icons sit in clean centered tiles; the active item is a solid filled
+   square (brand-aware --accent) instead of a thin ring; the project switcher
+   and profile lose their floating bordered boxes; and the coloured group
+   tint-blocks (clutter at 56px) become quiet hairline separators.
+   ════════════════════════════════════════════════════════════════════════ */
+.sidebar-logo-mark { display: none; }
+
+@media (min-width: 769px) {
+  /* Header: stack the always-on brand mark above the expand control */
+  html.sidebar-collapsed .sidebar-header {
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 0 12px;
+  }
+  html.sidebar-collapsed .wordmark { display: none; }
+  html.sidebar-collapsed .sidebar-logo-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: var(--bg);
+    font-family: var(--mono, 'JetBrains Mono', ui-monospace, monospace);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    flex-shrink: 0;
+    box-shadow: 0 1px 2px rgba(11, 11, 14, .14);
+    transition: transform .12s ease;
+  }
+  html.sidebar-collapsed .sidebar-logo-mark:hover { transform: translateY(-1px); }
+  html.sidebar-collapsed .sidebar-logo-mark img {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    display: block;
+  }
+  html.sidebar-collapsed .sidebar-collapse-btn { margin: 0; }
+
+  /* Project switcher → borderless centered tile */
+  html.sidebar-collapsed .sidebar-project { padding: 8px 0 4px; }
+  html.sidebar-collapsed .sidebar-project-btn {
+    width: auto;
+    margin: 0 auto;
+    padding: 3px;
+    background: transparent;
+    border-color: transparent;
+  }
+  html.sidebar-collapsed .sidebar-project-btn:hover { background: transparent; }
+  html.sidebar-collapsed .sidebar-project-icon {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 8px !important;
+  }
+
+  /* Nav → centered 40px icon tiles */
+  html.sidebar-collapsed .sidebar-nav { gap: 2px; padding: 8px 0 12px; align-items: center; }
+  html.sidebar-collapsed .sidebar-item {
+    width: 40px !important;
+    height: 40px;
+    min-height: 40px;
+    margin: 1px auto;
+    padding: 0;
+    border-radius: 10px;
+  }
+  html.sidebar-collapsed .sidebar-item.is-active {
+    background: var(--accent);
+    color: var(--bg);
+    box-shadow: none;
+  }
+  html.sidebar-collapsed .sidebar-item.is-active svg { opacity: 1; }
+
+  /* Groups → drop the coloured tint + left border; separate clusters with a hairline.
+     !important beats the higher-specificity html[data-theme="dark"] .sidebar-group[data-accent]
+     tint rules, which would otherwise keep painting the blocks in dark mode. */
+  html.sidebar-collapsed .sidebar-group {
+    width: calc(100% - 16px);
+    margin: 6px 8px 0;
+    padding: 7px 0 0;
+    background: transparent !important;
+    border-left: 0 !important;
+    border-radius: 0;
+    border-top: 1px solid var(--line, #E6E6E8);
+    gap: 2px;
+  }
+
+  /* Bottom → centered, borderless notifications + profile */
+  html.sidebar-collapsed .sidebar-bottom { padding: 10px 0; gap: 4px; align-items: center; }
+  html.sidebar-collapsed .sidebar-user-btn {
+    width: auto;
+    margin: 0 auto;
+    padding: 3px;
+    background: transparent;
+    border-color: transparent;
+    justify-content: center;
+  }
+  html.sidebar-collapsed .sidebar-user-btn:hover { background: transparent; }
+  html.sidebar-collapsed .sidebar-user-avatar {
+    width: 32px;
+    height: 32px;
+    transition: box-shadow .12s ease;
+  }
+  html.sidebar-collapsed .sidebar-user-btn:hover .sidebar-user-avatar {
+    box-shadow: 0 0 0 3px var(--line, #E6E6E8);
+  }
+  html.sidebar-collapsed #notifDot { left: auto !important; right: 9px !important; top: 7px !important; }
+}
+
 .sidebar::-webkit-scrollbar {
   display: none;
 }

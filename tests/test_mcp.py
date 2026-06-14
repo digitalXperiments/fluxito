@@ -235,16 +235,14 @@ async def test_unknown_action_returns_structured_error(tool_manager):
     result = await tracking_plan(action="bogus", params={})
     assert result.get("error") is True
     assert result.get("error_type") == "unknown_action"
-    assert set(result.get("available_actions", [])) == {
-        "capture_intake",
-        "diagnose",
-        "generate",
-        "get_intake",
-        "list_sources",
-        "refine",
-        "refresh_sources",
-        "save",
-    }
+    # available_actions lists every routed structured v2 action (the old
+    # markdown actions were retired in the tracking-plan cutover).
+    available = set(result.get("available_actions", []))
+    assert {"create_event", "publish"} <= available, "v2 actions not advertised"
+
+    from app.tools.unified import TRACKING_PLAN_ROUTES
+
+    assert available == set(TRACKING_PLAN_ROUTES.keys())
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -714,10 +714,10 @@ def register_all_tools(mcp_server):
 
     register_bing_webmaster_tools(mcp_server)
 
-    # ── Solution Design Reference (SDR) ────────────────────────────────────
-    from app.tools.sdr_tools import register_sdr_tools
+    # ── Structured Tracking Plan (v2) ───────────────────────────────────────
+    from app.tools.tracking_plan_tools import register_tracking_plan_tools
 
-    register_sdr_tools(mcp_server)
+    register_tracking_plan_tools(mcp_server)
 
     # ── Tag Rule Book (20-platform connector-independent rule engine) ─────────
     from app.tools.tag_rulebook_tools import register_tag_rulebook_tools

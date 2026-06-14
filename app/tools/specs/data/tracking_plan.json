@@ -1,405 +1,1484 @@
 [
   {
     "tool": "tracking_plan",
-    "action": "capture_intake",
-    "summary": "Validates the 6 required intake answers and, if sdr_id is given, persists them to that SDR (SDR.intake_answers + SDRIntake history). With no sdr_id it just validates and returns a reusable snapshot.",
-    "group": "",
+    "action": "get_plan",
+    "summary": "Return the FULL nested tracking plan for the active project's main branch (events with attached properties/sources/destinations, property library, sources, destinations, routing, mappings, metrics). This can be large — for a cheap first read use get_overview, then get_plan/get_event when you need full detail. Pass summary=true for counts only.",
     "params": [
       {
-        "name": "intake_answers",
-        "type": "object",
-        "required": true,
-        "example": {
-          "business_model": "...",
-          "primary_kpis": "...",
-          "conversion_definition": "...",
-          "key_journeys": "...",
-          "privacy_consent": "...",
-          "ownership_complexity": "..."
-        },
-        "doc": "Dict of the 6 required intake keys (+ optional anything_else). All 6 required keys must be present & non-blank or error_type='incomplete_intake'. Signature default is None, so it is effectively required despite being typed Optional."
-      },
-      {
-        "name": "sdr_id",
-        "type": "string",
+        "name": "summary",
+        "type": "boolean",
         "required": false,
-        "example": "uuid",
-        "doc": "If provided, persists the validated intake to that SDR (must belong to active project). If omitted, only validates and returns the snapshot."
+        "example": false,
+        "doc": "If true, return counts instead of the full plan."
       }
     ],
-    "returns": "no sdr_id: { status:'captured', intake{intake_version,answered_at,answers}, instructions_for_claude } | with sdr_id: { sdr_id, status:'captured', intake, instructions_for_claude } | incomplete: { error, error_type:'incomplete_intake', missing_required_keys[], questions[], instructions_for_claude }",
-    "reversible": true
+    "mutates": false,
+    "returns": "{ plan, branch, categories[], events[], properties{event[],user[],group[],system[]}, sources[], destinations[], metrics[] } | { plan, counts }"
   },
   {
     "tool": "tracking_plan",
-    "action": "diagnose",
-    "summary": "Re-scans connected sources and returns a cross-referenced diagnosis (findings + readiness) without writing. sdr_id optional \u2014 if given, pulls that SDR's intake + current event names to enrich the diagnosis.",
-    "group": "",
-    "params": [
-      {
-        "name": "sdr_id",
-        "type": "string",
-        "required": false,
-        "example": "uuid",
-        "doc": "Optional. When provided, the SDR's persisted intake_answers and current event names feed the diagnosis. Must belong to the active project or access_denied."
-      },
-      {
-        "name": "connector_filter",
-        "type": "array",
-        "required": false,
-        "item_type": "string",
-        "example": [
-          "ga4",
-          "gtm"
-        ],
-        "doc": "Array of source-name strings to limit the scan; same alias normalization as generate (ads -> google_ads). Omit to scan all."
-      }
-    ],
-    "platforms": [
-      "ga4",
-      "gtm",
-      "google_ads"
-    ],
-    "returns": "{ sdr_id, status: 'diagnosis_ready', connected_sources, findings[{type,severity,summary,evidence,affected_events,recommendation,fix_location}], readiness{critical_findings_unresolved,events_volume_proven,primary_conversion_proven,unfilled_roles[]}, instructions_for_claude } | {error,error_type,message}"
+    "action": "get_overview",
+    "summary": "Concise, reasoning-ready summary of the plan for the active branch — the cheap first read. Returns counts, per-category event counts, lightweight event/source/destination rows, and a health snapshot (validation findings by severity + is_publishable) WITHOUT the full nested payload. Reach for get_plan or get_event only when you need full detail.",
+    "params": [],
+    "mutates": false,
+    "returns": "{ plan{name}, branch{name,is_main}, counts{events,event_properties,user_properties,sources,destinations,metrics,categories,bundles}, categories[{name,event_count}], events[{name,category,property_count,source_count,destination_count}], sources[{name,platform_type,destination_count}], destinations[{name,platform}], health{findings_by_severity{warning,info},is_publishable} }"
   },
   {
     "tool": "tracking_plan",
-    "action": "generate",
-    "summary": "Gathers SDR source data: with no intake_answers returns the 6 intake questions; with answers it scans connected sources and returns structured facts, findings, readiness, a parse-valid markdown_skeleton and a synthesis playbook. Writes NOTHING.",
-    "group": "",
+    "action": "get_event",
+    "summary": "Return a single event with its attached properties and destination mappings. Look up by name or event_id.",
     "params": [
-      {
-        "name": "intake_answers",
-        "type": "object",
-        "required": false,
-        "example": {
-          "business_model": "B2B SaaS selling compliance automation to mid-market finance teams, freemium + usage-based",
-          "primary_kpis": "demo->paid conversion, time-to-value, feature adoption depth",
-          "conversion_definition": "qualified demo request w/ corp email + company size > 20",
-          "key_journeys": "free trial -> activation -> paid; content view -> demo request",
-          "privacy_consent": "OneTrust CMP, marketing tags consent-gated, GDPR+CCPA",
-          "ownership_complexity": "analytics eng owns taxonomy, marketing ops owns destinations, server-side fires revenue events",
-          "anything_else": "two brands share one GA4 property"
-        },
-        "doc": "Dict of the 6 REQUIRED intake keys (business_model, primary_kpis, conversion_definition, key_journeys, privacy_consent, ownership_complexity) plus optional anything_else. Omit entirely to receive the questions. If present but any required key missing/blank -> incomplete_intake error (unless phase='scan')."
-      },
-      {
-        "name": "project_id",
-        "type": "string",
-        "required": false,
-        "example": "uuid",
-        "doc": "Target project; defaults to active project. Pass to be race-free when set_active_project is called in the same parallel batch."
-      },
       {
         "name": "name",
         "type": "string",
         "required": false,
-        "example": "Acme SDR",
-        "doc": "SDR name; defaults to '<project_name> SDR'."
+        "example": "purchase",
+        "doc": "Event name to look up. Provide name or event_id."
+      },
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "Event UUID to look up. Provide event_id or name."
+      }
+    ],
+    "mutates": false,
+    "returns": "{ id, name, display_name, description, category_id, tags, trigger_type, trigger_config, purpose, properties[], destinations[] } | { error, error_type:'not_found', message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "validate",
+    "summary": "Validate the working draft and return a findings report (missing required properties, duplicate names, unrouted events, etc.). Read-only.",
+    "params": [],
+    "mutates": false,
+    "returns": "{ findings[{ severity, code, message, entity_type, entity_id }] }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_event",
+    "summary": "Create an event on the working draft (main branch). Validated against the schema.",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "purchase",
+        "doc": "Unique event name on the branch."
+      },
+      {
+        "name": "display_name",
+        "type": "string",
+        "required": false,
+        "doc": "Human-friendly label."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "category_id",
+        "type": "string",
+        "required": false,
+        "doc": "UUID of an existing category."
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "item_type": "string",
+        "required": false
+      },
+      {
+        "name": "trigger_type",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "trigger_config",
+        "type": "object",
+        "required": false
+      },
+      {
+        "name": "purpose",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "owner_business",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "owner_technical",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "consent_required",
+        "type": "boolean",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_event_with_properties",
+    "summary": "Create an event AND attach its properties in one atomic call. Takes every create_event field plus a `properties` list. For each property: if property_id is given it is attached; otherwise an existing event-kind library property with that name is reused (find-or-create), creating it from data_type/is_pii/is_list when absent. Saves the get-then-attach round-trips of create_event + N attach_property calls.",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "purchase",
+        "doc": "Unique event name on the branch."
+      },
+      {
+        "name": "display_name",
+        "type": "string",
+        "required": false,
+        "doc": "Human-friendly label."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "category_id",
+        "type": "string",
+        "required": false,
+        "doc": "UUID of an existing category."
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "item_type": "string",
+        "required": false
+      },
+      {
+        "name": "trigger_type",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "trigger_config",
+        "type": "object",
+        "required": false
+      },
+      {
+        "name": "purpose",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "owner_business",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "owner_technical",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "consent_required",
+        "type": "boolean",
+        "required": false
+      },
+      {
+        "name": "properties",
+        "type": "array",
+        "required": false,
+        "example": [
+          {
+            "name": "value",
+            "data_type": "float",
+            "required": true,
+            "example": "9.99"
+          }
+        ],
+        "doc": "Properties to attach. Each item: { name, data_type?, required?, example?, is_pii?, is_list?, property_id? }. With property_id, that library property is attached; otherwise an event-kind property is found-by-name or created (data_type defaults to 'string')."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name, attached:[{ name, property_id, created }], skipped:[...] } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "update_event",
+    "summary": "Update fields on an existing event. Only supplied fields are changed.",
+    "params": [
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the event to update."
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "category_id",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "item_type": "string",
+        "required": false
+      },
+      {
+        "name": "trigger_type",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "trigger_config",
+        "type": "object",
+        "required": false
+      },
+      {
+        "name": "purpose",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "owner_business",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "owner_technical",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "consent_required",
+        "type": "boolean",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_event",
+    "summary": "Delete an event from the working draft. Also removes all property attachments and destination mappings for that event.",
+    "params": [
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the event to delete."
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, deleted } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "set_event_sources",
+    "summary": "Replace the full set of source links for an event (idempotent). Pass an empty sources array to clear all links.",
+    "params": [
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the event."
       },
       {
         "name": "sources",
         "type": "array",
-        "required": false,
-        "item_type": "string",
+        "required": true,
         "example": [
-          "ga4",
-          "gtm",
-          "google_ads"
-        ],
-        "doc": "Array of source-name strings. Aliases normalized: 'ads'/'googleads' -> 'google_ads'. If provided, OVERRIDES the sources_ga4/sources_gtm/sources_ads booleans entirely."
-      },
-      {
-        "name": "sources_ga4",
-        "type": "boolean",
-        "required": false,
-        "example": true,
-        "doc": "Include GA4 in scan. Only consulted when `sources` is not provided."
-      },
-      {
-        "name": "sources_gtm",
-        "type": "boolean",
-        "required": false,
-        "example": true,
-        "doc": "Include GTM in scan. Only consulted when `sources` is not provided."
-      },
-      {
-        "name": "sources_ads",
-        "type": "boolean",
-        "required": false,
-        "example": true,
-        "doc": "Include Google Ads in scan. Only consulted when `sources` is not provided."
-      },
-      {
-        "name": "business_type_hint",
-        "type": "string",
-        "required": false,
-        "enum": [
-          "ecommerce",
-          "saas",
-          "lead_gen",
-          "media",
-          "app",
-          "marketplace"
-        ],
-        "example": "saas",
-        "doc": "Industry overlay for template events. If omitted, inferred from intake then from scanned events."
-      },
-      {
-        "name": "phase",
-        "type": "string",
-        "required": false,
-        "enum": [
-          "auto",
-          "interview",
-          "scan"
-        ],
-        "example": "auto",
-        "doc": "Lowercased. phase='scan' bypasses BOTH the awaiting_intake gate AND the incomplete_intake validation, letting a scan run with zero/partial intake. 'interview' is accepted but behaves like 'auto' (only 'scan' is special-cased)."
-      },
-      {
-        "name": "regenerate",
-        "type": "boolean",
-        "required": false,
-        "example": false,
-        "doc": "Echoed back as regenerate_requested. NOTE: generate never writes, so this flag has no effect on persisted state in v2 (overwrite semantics live in save)."
-      }
-    ],
-    "platforms": [
-      "ga4",
-      "gtm",
-      "google_ads"
-    ],
-    "returns": "awaiting_intake: { status, intake_version, questions[6+1], message, instructions_for_claude, next_action } | incomplete_intake error: { error, error_type, missing_required_keys[], questions, instructions_for_claude } | data_gathered: { sdr_id (existing or null), status, name, intake{intake_version,answered_at,answers}, connected_sources, scans, industry_template{business_type,events[],rationale}, scan_summary, findings[{type,severity,summary,evidence,affected_events,recommendation,fix_location}], readiness{critical_findings_unresolved,events_volume_proven,primary_conversion_proven,unfilled_roles[]}, reproducibility, regenerate_requested, markdown_skeleton, instructions_for_claude }"
-  },
-  {
-    "tool": "tracking_plan",
-    "action": "get_intake",
-    "summary": "Re-surfaces the persisted intake answers for an SDR plus the full SDRIntake history. Read-only.",
-    "group": "",
-    "params": [
-      {
-        "name": "sdr_id",
-        "type": "string",
-        "required": true,
-        "example": "uuid",
-        "doc": "The SDR whose intake to fetch. Required positional. Must belong to the active project."
-      }
-    ],
-    "returns": "{ sdr_id, status:'intake_found', intake{intake_version,answers}, history[], instructions_for_claude } | { sdr_id, status:'no_intake', instructions_for_claude } | {error,error_type,message}"
-  },
-  {
-    "tool": "tracking_plan",
-    "action": "list_sources",
-    "summary": "Reports supported sources, currently-scannable sources, connected-but-unsupported sources, and (if sdr_id given) the last-scanned set + timestamp. Read-only.",
-    "group": "",
-    "params": [
-      {
-        "name": "sdr_id",
-        "type": "string",
-        "required": false,
-        "example": "uuid",
-        "doc": "Optional. If given, adds last_scan_sources + last_full_source_scan_at from that SDR (must belong to active project)."
-      }
-    ],
-    "platforms": [
-      "ga4",
-      "gtm",
-      "google_ads"
-    ],
-    "returns": "{ sdr_id, supported_sources[ga4,gtm,google_ads], available_now[], connected_but_unsupported[], last_scan_sources[], last_full_source_scan_at|null, instructions_for_claude } | {error,error_type,message}"
-  },
-  {
-    "tool": "tracking_plan",
-    "action": "refine",
-    "summary": "DISPATCHER-LEVEL refine: routes to refine_sdr, whose OWN `action` kwarg (inside params) drives a 10-state refinement state machine. The dispatcher-level action must be 'refine'; the real behavior is selected by params.action (default 'resume'). sdr_id is required for every sub-action.",
-    "group": "",
-    "params": [
-      {
-        "name": "sdr_id",
-        "type": "string",
-        "required": true,
-        "example": "uuid",
-        "doc": "The SDR to refine. Required positional for ALL sub-actions. Must belong to the active project (access_denied otherwise)."
-      },
-      {
-        "name": "action",
-        "type": "string",
-        "required": false,
-        "enum": [
-          "resume",
-          "goto_section",
-          "submit_answer",
-          "accept_proposed",
-          "reject_proposed",
-          "skip_section",
-          "show_status",
-          "apply_source_delta",
-          "finalize",
-          "start_new_draft"
-        ],
-        "example": "resume",
-        "doc": "INTERNAL state-machine action living inside params. THIS IS NOT the dispatcher action. Invalid value -> error_type='invalid_action'. See the refine:<subaction> records for the params each one needs."
-      },
-      {
-        "name": "section",
-        "type": "string",
-        "required": false,
-        "example": "event_catalog.purchase",
-        "doc": "Required only for goto_section. Allows the 9 SECTION_ORDER values plus event_catalog.<event_name> sub-sections."
-      },
-      {
-        "name": "user_input",
-        "type": "string",
-        "required": false,
-        "example": "Add a refund event",
-        "doc": "Required only for submit_answer (natural-language user response)."
-      },
-      {
-        "name": "source_delta",
-        "type": "object",
-        "required": false,
-        "example": {
-          "deltas": {
-            "proposals": []
+          {
+            "source_id": "uuid",
+            "implementation_status": "implemented"
           }
-        },
-        "doc": "Required only for apply_source_delta \u2014 the refresh_sources payload (or its `deltas`)."
-      },
-      {
-        "name": "changelog_note",
-        "type": "string",
-        "required": false,
-        "example": "Added refund flow [major]",
-        "doc": "Required for finalize when a prior version exists (>1.0). Contains '[major]' to force a major version bump."
+        ],
+        "doc": "Array of { source_id, implementation_status } objects. implementation_status: planned | implemented | deprecated."
       }
     ],
-    "returns": "Varies per sub-action; common envelope: { sdr_id, current_section, progress{...}, status_after_call, can_finalize, can_skip, proposed_changes|null, instructions_for_claude, user_options[] } | {error,error_type,message}. See refine:<subaction> records."
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, event_id, source_count } | { error, error_type, message }"
   },
   {
     "tool": "tracking_plan",
-    "action": "refresh_sources",
-    "summary": "Re-scans connectors for an existing SDR and returns structured deltas (added/missing events, destination & parameter changes, ready-to-stage proposals) plus before/after source fingerprints. Writes nothing.",
-    "group": "",
+    "action": "set_event_destination",
+    "summary": "Create or update the mapping between an event and a destination (upsert). Controls the event name sent to the destination, property mappings, and enabled state.",
     "params": [
       {
-        "name": "sdr_id",
+        "name": "event_id",
         "type": "string",
         "required": true,
         "example": "uuid",
-        "doc": "The SDR to diff against. Must belong to the active project."
+        "doc": "UUID of the event."
       },
       {
-        "name": "connector_filter",
-        "type": "array",
-        "required": false,
-        "item_type": "string",
-        "example": [
-          "ga4"
-        ],
-        "doc": "Limit the re-scan to these sources; alias-normalized (ads -> google_ads)."
-      },
-      {
-        "name": "reuse_intake",
-        "type": "boolean",
-        "required": false,
-        "example": true,
-        "doc": "If True and the SDR has stored intake answers, returns them in `intake`; else intake is null."
-      }
-    ],
-    "platforms": [
-      "ga4",
-      "gtm",
-      "google_ads"
-    ],
-    "returns": "{ sdr_id, status:'delta_ready', reuse_intake, intake|null, connected_sources, scans, deltas{added_events[],removed_or_missing_from_scan[],destination_changes[],parameter_changes[],proposals[]}, reproducibility{previous_source_fingerprint,current_source_fingerprint,scan_timestamp}, instructions_for_claude } | {error,error_type,message}"
-  },
-  {
-    "tool": "tracking_plan",
-    "action": "save",
-    "summary": "Persists Claude-authored SDR markdown. Validates against the markdown contract (round-trip parse) before any DB write; errors block unless force=true. Creates the SDR if none exists for the project, else OVERWRITES the existing project SDR's markdown and bumps draft_version.",
-    "group": "",
-    "params": [
-      {
-        "name": "markdown",
+        "name": "destination_id",
         "type": "string",
         "required": true,
-        "example": "# Acme SDR\\n## Event Catalog\\n### `purchase`\\n...",
-        "doc": "The full SDR document. Required and must be non-blank, else error_type='invalid_markdown'. Must contain a parseable Event Catalog (>=1 event) or validation fails."
+        "example": "uuid",
+        "doc": "UUID of the destination."
       },
       {
-        "name": "intake_snapshot",
+        "name": "dest_event_name",
+        "type": "string",
+        "required": false,
+        "example": "Purchase",
+        "doc": "Event name as it should appear in the destination (e.g. GA4 event name). Defaults to the plan event name."
+      },
+      {
+        "name": "property_mappings",
         "type": "object",
         "required": false,
         "example": {
-          "intake_version": "v1",
-          "answers": {}
+          "value": "revenue"
         },
-        "doc": "The `intake` object returned by generate. Normalized (accepts answers or intake_answers key). Persisted to SDR.intake_answers + SDRIntake history if present."
+        "doc": "Dict mapping plan property names to destination parameter names."
       },
       {
-        "name": "source_snapshot",
+        "name": "enabled",
+        "type": "boolean",
+        "required": false,
+        "example": true
+      },
+      {
+        "name": "notes",
+        "type": "string",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "remove_event_destination",
+    "summary": "Remove the mapping between an event and a destination.",
+    "params": [
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "destination_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, removed: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_property",
+    "summary": "Create a reusable library property (event/user/group/system). Enum constraints go in constraints.allowed_values (non-empty list).",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "currency"
+      },
+      {
+        "name": "data_type",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "string",
+          "int",
+          "float",
+          "boolean",
+          "object",
+          "array"
+        ]
+      },
+      {
+        "name": "kind",
+        "type": "string",
+        "required": false,
+        "enum": [
+          "event",
+          "user",
+          "group",
+          "system"
+        ],
+        "example": "event"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "constraints",
         "type": "object",
         "required": false,
-        "example": {},
-        "doc": "The `scans` object from generate. If not None it is stored as SDR.last_source_scan and used to compute the returned readiness."
+        "doc": "{ allowed_values?: [...], regex?, min?, max?, format? }"
+      },
+      {
+        "name": "is_pii",
+        "type": "boolean",
+        "required": false
+      },
+      {
+        "name": "is_list",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "True when the value is an array of data_type (Avo list property)."
+      },
+      {
+        "name": "parent_property_id",
+        "type": "string",
+        "required": false,
+        "doc": "Parent UUID for object/array members."
+      }
+    ],
+    "mutates": true,
+    "returns": "{ ok: true, id, name, kind } | { error, ... }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "update_property",
+    "summary": "Update fields on an existing library property. Only supplied fields are changed.",
+    "params": [
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the property to update."
       },
       {
         "name": "name",
         "type": "string",
-        "required": false,
-        "example": "Acme SDR",
-        "doc": "SDR name; defaults to existing name on update or '<project_name> SDR' on create."
+        "required": false
       },
       {
-        "name": "sdr_id",
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "data_type",
         "type": "string",
         "required": false,
-        "example": "uuid",
-        "doc": "Update a specific existing draft. If omitted, the tool finds the (single) SDR for the project and overwrites it, or creates one."
+        "enum": [
+          "string",
+          "int",
+          "float",
+          "boolean",
+          "object",
+          "array"
+        ]
       },
       {
-        "name": "source_snapshot_id",
+        "name": "constraints",
+        "type": "object",
+        "required": false
+      },
+      {
+        "name": "is_pii",
+        "type": "boolean",
+        "required": false
+      },
+      {
+        "name": "is_list",
+        "type": "boolean",
+        "required": false,
+        "doc": "True when the value is an array of data_type (Avo list property)."
+      },
+      {
+        "name": "parent_property_id",
+        "type": "string",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_property",
+    "summary": "Delete a library property. Also removes all event attachments for this property.",
+    "params": [
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, deleted } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "attach_property",
+    "summary": "Attach a library property to an event (create the event-property link). If the link already exists it is updated.",
+    "params": [
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "required",
+        "type": "boolean",
+        "required": false,
+        "example": true
+      },
+      {
+        "name": "example",
         "type": "string",
         "required": false,
-        "example": "uuid",
-        "doc": "Opaque id echoed back as source_snapshot_id; not used for any lookup."
+        "example": "USD"
       },
       {
-        "name": "create_initial_refinement_state",
+        "name": "override_description",
+        "type": "string",
+        "required": false,
+        "doc": "Override the library description for this event context only."
+      },
+      {
+        "name": "sort_order",
+        "type": "integer",
+        "required": false,
+        "example": 0
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "detach_property",
+    "summary": "Remove a property attachment from an event. Does not delete the property from the library.",
+    "params": [
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, detached: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_bundle",
+    "summary": "Create a reusable property bundle — a named group of properties that can be added to events together. Bundles are template-copy: attaching to an event copies its properties (editing the bundle later does not retroactively update events).",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "Ecommerce Item",
+        "doc": "Unique bundle name on the branch."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false,
+        "doc": "Human-readable description of what the bundle groups."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "update_bundle",
+    "summary": "Update the name or description of an existing property bundle. Only supplied fields are changed.",
+    "params": [
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the bundle to update."
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_bundle",
+    "summary": "Delete a property bundle. Removes the bundle and its property links (events that previously had the bundle attached keep their copied properties).",
+    "params": [
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, deleted } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "add_property_to_bundle",
+    "summary": "Add a library property to a bundle (idempotent upsert of the link). The property and bundle must be on the same branch.",
+    "params": [
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "required",
         "type": "boolean",
         "required": false,
         "example": true,
-        "doc": "Seed refinement state + mark sections complete from the parsed markdown so refine can resume immediately."
+        "doc": "Whether this property is required when the bundle is attached to an event."
       },
       {
-        "name": "force",
-        "type": "boolean",
+        "name": "sort_order",
+        "type": "integer",
         "required": false,
-        "example": false,
-        "doc": "Override structural validation errors and persist anyway. Use only intentionally \u2014 bypasses the round-trip contract gate."
-      },
-      {
-        "name": "source_xlsx_base64",
-        "type": "string",
-        "required": false,
-        "example": "UEsDBBQ...",
-        "doc": "Base64 of a source .xlsx so users can download the original. Hard limit 2 MB (2*1024*1024 bytes) of DECODED bytes; must be valid base64 AND a valid openpyxl-loadable workbook. On any failure it is silently skipped (logged as a warning) \u2014 the save still succeeds without the file."
-      },
-      {
-        "name": "source_filename",
-        "type": "string",
-        "required": false,
-        "example": "events.xlsx",
-        "doc": "Filename for the stored xlsx, truncated to 255 chars; defaults to 'source.xlsx'."
+        "example": 0
       }
     ],
-    "platforms": [
-      "ga4",
-      "gtm",
-      "google_ads"
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "remove_property_from_bundle",
+    "summary": "Remove a property from a bundle. Does not delete the property from the library.",
+    "params": [
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
     ],
-    "returns": "validation_failed (errors & !force): { error, error_type:'validation_failed', validation{errors[],warnings[]}, instructions_for_claude } | success: { sdr_id, status:'draft_saved', draft_version, source_snapshot_id, source_snapshot_saved, sections_completed[], sections_remaining[], readiness|null, validation{errors[],warnings[]}, summary{events,todo_count,gaps,intake_version}, recommended_next_action, instructions_for_claude }",
-    "reversible": false
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, removed: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "attach_bundle_to_event",
+    "summary": "Attach all properties in a bundle to an event at once (template-copy: each property becomes an event-property link carrying the bundle link's required flag). Idempotent — properties already attached are skipped.",
+    "params": [
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "bundle_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, event_id, property_count } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_category",
+    "summary": "Create an event category for grouping events in the tracking plan.",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "Commerce"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "color",
+        "type": "string",
+        "required": false,
+        "example": "#4A90E2",
+        "doc": "Hex color for UI display."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "update_category",
+    "summary": "Update fields on an existing category.",
+    "params": [
+      {
+        "name": "category_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "color",
+        "type": "string",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_category",
+    "summary": "Delete a category. Events assigned to this category will have their category_id cleared.",
+    "params": [
+      {
+        "name": "category_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, deleted } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_source",
+    "summary": "Add a tracking source (SDK, server, app) to the plan.",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "iOS App"
+      },
+      {
+        "name": "platform_type",
+        "type": "string",
+        "required": false,
+        "example": "ios",
+        "doc": "Platform type slug (e.g. ios, android, web, server, warehouse)."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "connector_ref",
+        "type": "string",
+        "required": false,
+        "doc": "Optional reference to a connected source integration."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "update_source",
+    "summary": "Update fields on an existing source.",
+    "params": [
+      {
+        "name": "source_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "platform_type",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "connector_ref",
+        "type": "string",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_source",
+    "summary": "Delete a source from the plan. Also removes source-destination connections and event-source links.",
+    "params": [
+      {
+        "name": "source_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, deleted } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_destination",
+    "summary": "Add a downstream destination (analytics tool, warehouse, CDP) to the plan.",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "GA4 Production"
+      },
+      {
+        "name": "platform",
+        "type": "string",
+        "required": false,
+        "example": "ga4",
+        "doc": "Platform slug (e.g. ga4, amplitude, segment, bigquery, mixpanel)."
+      },
+      {
+        "name": "platform_account_id",
+        "type": "string",
+        "required": false,
+        "doc": "Platform-specific account/property ID."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": false,
+        "doc": "Platform-specific configuration dict."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "update_destination",
+    "summary": "Update fields on an existing destination.",
+    "params": [
+      {
+        "name": "destination_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "platform",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "platform_account_id",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_destination",
+    "summary": "Delete a destination from the plan. Also removes source-destination connections and event-destination mappings.",
+    "params": [
+      {
+        "name": "destination_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, deleted } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "connect_source_destination",
+    "summary": "Create a routing link between a source and a destination (events from this source flow to this destination).",
+    "params": [
+      {
+        "name": "source_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "destination_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "disconnect_source_destination",
+    "summary": "Remove a routing link between a source and a destination.",
+    "params": [
+      {
+        "name": "source_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "destination_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, disconnected: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_metric",
+    "summary": "Create a success metric tied to an event and/or property in the tracking plan.",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "Purchase Revenue"
+      },
+      {
+        "name": "type",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "count",
+          "sum",
+          "average",
+          "conversion",
+          "retention"
+        ],
+        "example": "sum"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "UUID of the event this metric is based on."
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "UUID of the property to aggregate (required for sum/average types)."
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "doc": "Filter conditions applied before aggregation."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "update_metric",
+    "summary": "Update fields on an existing metric.",
+    "params": [
+      {
+        "name": "metric_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "type",
+        "type": "string",
+        "required": false,
+        "enum": [
+          "count",
+          "sum",
+          "average",
+          "conversion",
+          "retention"
+        ]
+      },
+      {
+        "name": "event_id",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_metric",
+    "summary": "Delete a metric from the plan.",
+    "params": [
+      {
+        "name": "metric_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, deleted } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "publish",
+    "summary": "Publish the working draft as an immutable version snapshot. Requires project admin (owner/admin) \u2014 this is the human approval gate.",
+    "params": [
+      {
+        "name": "changelog",
+        "type": "string",
+        "required": false,
+        "doc": "Human-readable summary of this version."
+      }
+    ],
+    "mutates": true,
+    "scope": "admin",
+    "returns": "{ ok: true, version_id, version_number } | { error: permission_denied }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "export_markdown",
+    "summary": "Render the current working draft as a Markdown document (human-readable tracking plan). Returns the markdown string in the `content` field.",
+    "params": [],
+    "mutates": false,
+    "returns": "{ ok: true, format: 'markdown', content: string }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "create_branch",
+    "summary": "Create a new feature branch as a copy-on-write fork of an existing branch (default: main). All content is deep-copied with new ids so the branches are fully independent.",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "example": "feature/add-checkout-events",
+        "doc": "Unique branch name on the plan."
+      },
+      {
+        "name": "from",
+        "type": "string",
+        "required": false,
+        "example": "main",
+        "doc": "Branch id or name to fork from. Defaults to main."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false,
+        "doc": "Human-readable description of the branch purpose."
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, id, name } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "list_branches",
+    "summary": "List all branches for the active plan. Main branch appears first.",
+    "params": [],
+    "mutates": false,
+    "returns": "{ branches: [{ id, name, is_main, status, review_status, description, base_branch_id, created_at, merged_at }] }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "get_branch",
+    "summary": "Get details for a single branch by id.",
+    "params": [
+      {
+        "name": "branch_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the branch."
+      }
+    ],
+    "mutates": false,
+    "returns": "{ id, name, is_main, status, review_status, description, base_branch_id, created_at, merged_at } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "diff",
+    "summary": "Structural diff of a head branch against a base branch (default base: main). Reports added, removed, and changed entities across events, properties, sources, destinations, metrics, and categories.",
+    "params": [
+      {
+        "name": "head",
+        "type": "string",
+        "required": true,
+        "example": "uuid or branch-name",
+        "doc": "Head branch id or name to compare."
+      },
+      {
+        "name": "base",
+        "type": "string",
+        "required": false,
+        "example": "main",
+        "doc": "Base branch id or name. Defaults to main."
+      }
+    ],
+    "mutates": false,
+    "returns": "{ events, properties, sources, destinations, metrics, categories: { added[], removed[], changed[] }, summary: { added, removed, changed } }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "merge_branch",
+    "summary": "Merge a feature branch into main (last-writer-wins). Requires project admin (owner/admin). Publishes a new version after merging.",
+    "params": [
+      {
+        "name": "branch_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the branch to merge into main."
+      },
+      {
+        "name": "changelog",
+        "type": "string",
+        "required": false,
+        "doc": "Human-readable changelog entry for the published version."
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "scope": "admin",
+    "returns": "{ ok: true, merged_branch, version_number } | { error: permission_denied }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "set_review_status",
+    "summary": "Set the review status of a feature branch (draft, ready_for_review, changes_requested, approved). Cannot be applied to the main branch.",
+    "params": [
+      {
+        "name": "branch_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      },
+      {
+        "name": "review_status",
+        "type": "string",
+        "required": true,
+        "enum": ["draft", "ready_for_review", "changes_requested", "approved"],
+        "example": "ready_for_review"
+      },
+      {
+        "name": "reviewer_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "UUID of the user performing the review."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, review_status } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "abandon_branch",
+    "summary": "Mark a feature branch as abandoned. Cannot be applied to the main branch.",
+    "params": [
+      {
+        "name": "branch_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid"
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "add_comment",
+    "summary": "Post a comment (or threaded reply) on a tracking-plan entity. Comments are branch-scoped — they live on the branch where they were posted.",
+    "params": [
+      {
+        "name": "entity_type",
+        "type": "string",
+        "required": true,
+        "enum": ["event", "property", "source", "destination", "metric", "category", "plan", "branch"],
+        "example": "event",
+        "doc": "Kind of entity the comment is attached to."
+      },
+      {
+        "name": "entity_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the entity being commented on."
+      },
+      {
+        "name": "body",
+        "type": "string",
+        "required": true,
+        "example": "This event is missing the currency property.",
+        "doc": "Comment text. Must be non-blank."
+      },
+      {
+        "name": "parent_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "UUID of the parent comment to reply to (for threaded comments)."
+      },
+      {
+        "name": "mentions",
+        "type": "array",
+        "item_type": "string",
+        "required": false,
+        "example": ["uuid"],
+        "doc": "List of user UUIDs mentioned in this comment."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "list_comments",
+    "summary": "List comments on the current branch, optionally filtered to a specific entity. Results are ordered by created_at ascending.",
+    "params": [
+      {
+        "name": "entity_type",
+        "type": "string",
+        "required": false,
+        "enum": ["event", "property", "source", "destination", "metric", "category", "plan", "branch"],
+        "example": "event",
+        "doc": "Filter to comments on this entity type only."
+      },
+      {
+        "name": "entity_id",
+        "type": "string",
+        "required": false,
+        "example": "uuid",
+        "doc": "Filter to comments on this specific entity UUID."
+      }
+    ],
+    "mutates": false,
+    "returns": "{ comments: [{ id, branch_id, entity_type, entity_id, parent_id, author_id, body, mentions, resolved, created_at, updated_at }] }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "resolve_comment",
+    "summary": "Mark a comment as resolved (or unresolved). Defaults to resolved=true.",
+    "params": [
+      {
+        "name": "comment_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the comment to resolve."
+      },
+      {
+        "name": "resolved",
+        "type": "boolean",
+        "required": false,
+        "example": true,
+        "doc": "Set to false to un-resolve a comment. Defaults to true."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "edit_comment",
+    "summary": "Replace the body text of an existing comment.",
+    "params": [
+      {
+        "name": "comment_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the comment to edit."
+      },
+      {
+        "name": "body",
+        "type": "string",
+        "required": true,
+        "example": "Updated comment text.",
+        "doc": "New body text. Must be non-blank."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "delete_comment",
+    "summary": "Delete a comment. Replies (children) are cascade-deleted automatically.",
+    "params": [
+      {
+        "name": "comment_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the comment to delete."
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true } | { error, error_type, message }"
   }
 ]

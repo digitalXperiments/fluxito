@@ -40,8 +40,38 @@ DOMAIN_TOOLS: dict[str, dict[str, set[str]]] = {
     "tracking_plan": {"read": {"tracking_plan"}, "write": {"tracking_plan"}},
 }
 
-_TRACKING_PLAN_WRITE_ACTIONS = {"save", "refine"}
-_TRACKING_PLAN_READ_ACTIONS = {"generate", "diagnose", "get", "list"}
+# tracking_plan v2 actions: reads need tracking_plan:read, everything else
+# (mutations + publish + exports treated conservatively) needs tracking_plan:write.
+# Any action NOT in the read set falls through to write in _tracking_plan_level.
+_TRACKING_PLAN_READ_ACTIONS = {"get_plan", "get_event", "validate", "export_markdown"}
+_TRACKING_PLAN_WRITE_ACTIONS = {
+    "create_event",
+    "update_event",
+    "delete_event",
+    "set_event_sources",
+    "set_event_destination",
+    "remove_event_destination",
+    "create_property",
+    "update_property",
+    "delete_property",
+    "attach_property",
+    "detach_property",
+    "create_category",
+    "update_category",
+    "delete_category",
+    "create_source",
+    "update_source",
+    "delete_source",
+    "create_destination",
+    "update_destination",
+    "delete_destination",
+    "connect_source_destination",
+    "disconnect_source_destination",
+    "create_metric",
+    "update_metric",
+    "delete_metric",
+    "publish",
+}
 
 # Analysis-domain tools whose level depends on the action (like tracking_plan).
 # Covers the direct tools AND their run_audit twins. Any action NOT listed as a

@@ -4,8 +4,6 @@
 import pytest
 
 import app.app_state as app_state
-import app.models.access_request  # register models for FK resolution
-import app.models.sdr  # noqa: F401 — register models for FK resolution
 
 
 @pytest.fixture

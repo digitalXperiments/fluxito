@@ -29,6 +29,7 @@
         : mode;
       document.documentElement.setAttribute('data-theme', resolved);
       document.documentElement.setAttribute('data-theme-mode', mode);
+      try { if (localStorage.getItem('fx-sidebar-collapsed') === '1') document.documentElement.classList.add('sidebar-collapsed'); } catch(e) {}
     })();
   </script>
   {% if brand().accent %}
@@ -99,6 +100,8 @@
   <aside class="sidebar">
     {# ── Header: wordmark ── #}
     <div class="sidebar-header">
+      {# Compact brand mark — shown only when the rail is collapsed (logo always visible) #}
+      <a href="/home" class="sidebar-logo-mark" aria-label="{{ brand().name }} home" title="{{ brand().name }}">{% if brand().logo_url %}<img src="{{ brand().logo_url }}" alt="{{ brand().name }}">{% elif brand().name == 'Fluxito' %}f{% else %}{{ brand().name[0] | upper }}{% endif %}</a>
       <a href="/home" class="wordmark">
         {{ wordmark() }}
       </a>
@@ -106,6 +109,9 @@
       <span class="version-chip" id="version-chip" data-current="{{ app_version }}" title="Version {{ app_version }}">
         v{{ app_version }}{% if user and user.is_superadmin %}<span class="update-dot" id="update-dot" hidden></span>{% endif %}
       </span>
+      <button type="button" id="sidebarCollapse" class="sidebar-collapse-btn" aria-label="Collapse sidebar" title="Collapse sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+      </button>
     </div>
 
     {# ── Project switcher (same data, compact form) ── #}
@@ -166,9 +172,9 @@
       <div class="sidebar-group" data-accent="amber">
         <span class="sidebar-group-label">Knowledge</span>
         {% if perms.full or perms.tools.get('tracking_plan') %}
-        <a href="/solution-design" class="sidebar-item {% if active=='sdr' %}is-active{% endif %}">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
-          Solution Design
+        <a href="/tracking-plan" class="sidebar-item {% if active=='tracking_plan' %}is-active{% endif %}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+          Tracking Plan
         </a>
         {% endif %}
         {% if perms.full or perms.tools.get('knowledge') %}
@@ -516,8 +522,17 @@
         var br = btn.getBoundingClientRect();
         var gap = 4;
         menu.style.position = 'fixed';
-        menu.style.left = br.left + 'px';
-        menu.style.width = br.width + 'px';
+        var collapsed = document.documentElement.classList.contains('sidebar-collapsed') && window.matchMedia('(min-width: 769px)').matches;
+        if (collapsed) {
+          var rail = group.closest('.sidebar');
+          var railRight = rail ? rail.getBoundingClientRect().right : br.right;
+          var w = 240;
+          menu.style.left = Math.min(railRight + gap, window.innerWidth - w - 8) + 'px';
+          menu.style.width = w + 'px';
+        } else {
+          menu.style.left = br.left + 'px';
+          menu.style.width = br.width + 'px';
+        }
         if (group.classList.contains('sidebar-user')) {
           // Opens upwards from near bottom of sidebar
           menu.style.top = 'auto';

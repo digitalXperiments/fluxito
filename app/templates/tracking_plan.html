@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Tracking Plan — Fluxito{% endblock %}
+{% set active = 'tracking_plan' %}
+
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/tracking_plan.css?v={{ asset_hash('css/tracking_plan.css') }}"/>
+<script>
+  // First Tracking Plan visit only: collapse the global app sidebar once (Plan 1).
+  (function () {
+    try {
+      if (localStorage.getItem('fx-tp-autocollapsed') === null) {
+        localStorage.setItem('fx-tp-autocollapsed', '1');
+        localStorage.setItem('fx-sidebar-collapsed', '1');
+        document.documentElement.classList.add('sidebar-collapsed');
+      }
+    } catch (e) {}
+  })();
+</script>
+{% set tp_modules = [
+  'index', 'api', 'state', 'render', 'shell', 'comments',
+  'util/diff', 'util/mentions', 'util/format',
+  'util/constraints', 'util/routing', 'util/metricPreview',
+  'util/review_gating', 'util/snapshot_diff', 'util/persist', 'util/editor',
+  'views/overview',
+  'views/events', 'views/properties', 'views/categories', 'views/bundles',
+  'views/sources', 'views/metrics', 'views/review', 'views/versions',
+  'views/router', 'views/_changelist'
+] %}
+<script type="importmap">
+{ "imports": {
+  "tp/": "/static/js/tracking_plan/"{% for m in tp_modules %},
+  "tp/{{ m }}": "/static/js/tracking_plan/{{ m }}.js?v={{ asset_hash('js/tracking_plan/' ~ m ~ '.js') }}"{% endfor %}
+}}
+</script>
+{% endblock %}
+
+{% block main %}
+<div class="tp-shell">
+  <div id="tp-banner" class="tp-banner" style="display:none"></div>
+  <div class="tp"
+       id="tp-app"
+       data-pid="{{ project_id }}"
+       data-uid="{{ user.id if user else '' }}"
+       data-admin="{{ 'true' if user and (user.is_superadmin or (user.permissions and user.permissions.full)) else 'false' }}">
+    <div class="tp-empty">Loading tracking plan…</div>
+  </div>
+</div>
+<script type="module" src="/static/js/tracking_plan/index.js?v={{ asset_hash('js/tracking_plan/index.js') }}"></script>
+{% endblock %}

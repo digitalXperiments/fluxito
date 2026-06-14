@@ -418,9 +418,9 @@ from app.api.knowledge_routes import router as knowledge_router
 from app.api.notification_routes import router as notification_router
 from app.api.project_routes import router as project_router
 from app.api.scheduled_report_routes import router as scheduled_report_router
-from app.api.sdr_routes import router as sdr_router
 from app.api.setup_routes import router as setup_router
 from app.api.template_routes import router as template_router
+from app.api.tracking_plan_routes import router as tracking_plan_router
 from app.api.update_routes import router as update_router
 from app.auth.mcp_oauth_server import router as oauth_router
 
@@ -439,7 +439,7 @@ app.include_router(connector_metadata_router)
 app.include_router(audit_router)
 app.include_router(auditing_platform_router)
 app.include_router(project_router)
-app.include_router(sdr_router)
+app.include_router(tracking_plan_router)
 app.include_router(scheduled_report_router)
 app.include_router(admin_router)
 app.include_router(access_request_router)

@@ -4,7 +4,7 @@
 import pytest
 
 import app.app_state as app_state
-import app.models.sdr  # noqa: F401  (ensures model metadata loaded)
+import app.models  # noqa: F401  (ensures model metadata loaded)
 
 
 @pytest.fixture

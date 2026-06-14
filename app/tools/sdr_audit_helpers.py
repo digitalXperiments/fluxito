@@ -1,9 +1,9 @@
 """
-SDR ↔ Audit integration helpers.
+Audit consumer adapter — maps the published structured tracking-plan
+snapshot into the legacy expected-event shape used by the audit tools.
 
-Provides functions for audit tools to consume the SDR as the authoritative
-"expected state" when validating live implementations. If no approved SDR
-exists, audits fall back to their original heuristic behavior.
+Public functions keep their signatures so analytics_tools / tagmanager_tools
+are unaffected.
 
 Usage in any audit tool:
     from app.tools.sdr_audit_helpers import get_sdr_expected_events
@@ -20,70 +20,82 @@ Usage in any audit tool:
 from __future__ import annotations
 
 import logging
-import uuid
+from typing import Any
 
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-
-import app.app_state as state
-from app.models.sdr import SDR, SDRVersion
+import app.app_state as app_state
+from app.services.tracking_plan.publish import latest_snapshot_for_project
 
 logger = logging.getLogger(__name__)
 
+_STATUS_RANK = {"deprecated": 0, "planned": 1, "implemented": 2, "verified": 3}
 
-async def get_sdr_expected_events(project_id: uuid.UUID | str) -> dict | None:
+
+def _rollup_status(sources: list[dict]) -> str:
+    """Collapse per-source statuses into one event status (highest wins)."""
+    if not sources:
+        return "planned"
+    statuses = [s.get("implementation_status", "planned") for s in sources]
+    return max(statuses, key=lambda s: _STATUS_RANK.get(s, 1))
+
+
+def _snapshot_event_to_legacy(ev: dict, dest_platform_by_name: dict[str, str]) -> dict:
+    """Map a snapshot event dict into the legacy expected-event shape."""
+    return {
+        "name": ev["name"],
+        "status": _rollup_status(ev.get("sources", [])),
+        "purpose": ev.get("purpose"),
+        "trigger_type": ev.get("trigger_type"),
+        "trigger_config": ev.get("trigger_config"),
+        "parameters": [
+            {
+                "name": p["name"],
+                "type": p.get("data_type"),
+                "required": p.get("required", False),
+                "source": None,
+                "example": p.get("example"),
+                "validation_rule": None,
+            }
+            for p in ev.get("properties", [])
+        ],
+        "destinations": [
+            {
+                "platform": dest_platform_by_name.get(d["destination"], d["destination"]),
+                "platform_account_id": None,
+                "dest_event_name": d.get("dest_event_name"),
+                "mapping": d.get("property_mappings"),
+            }
+            for d in ev.get("destinations", [])
+        ],
+    }
+
+
+async def get_sdr_expected_events(project_id: Any) -> dict | None:
     """
     Load the approved SDR events for a project.
 
     Returns a dict with:
-      - ``sdr_version``: version number string (e.g. "1.2")
-      - ``sdr_id``: UUID string
+      - ``sdr_version``: version number string (e.g. "1.0")
+      - ``sdr_id``: UUID string of the plan
       - ``events``: list of event dicts with parameters and destinations
       - ``event_index``: dict mapping event_name → event dict (for fast lookup)
 
-    Returns None if no SDR or no approved version exists.
+    Returns None if no published tracking plan exists.
     """
-    if isinstance(project_id, str):
-        try:
-            project_id = uuid.UUID(project_id)
-        except ValueError:
-            return None
-
-    try:
-        async with state.db_session_factory() as db:
-            result = await db.execute(
-                select(SDR)
-                .options(selectinload(SDR.events))
-                .where(
-                    SDR.project_id == project_id,
-                    SDR.current_version_id.is_not(None),
-                )
-            )
-            sdr = result.scalar_one_or_none()
-            if not sdr:
-                return None
-
-            # Get version info
-            ver_result = await db.execute(select(SDRVersion).where(SDRVersion.id == sdr.current_version_id))
-            version = ver_result.scalar_one_or_none()
-            if not version:
-                return None
-
-            events = [e.to_dict() for e in (sdr.events or [])]
-            event_index = {e["name"]: e for e in events}
-
-            return {
-                "sdr_version": version.version_number,
-                "sdr_id": str(sdr.id),
-                "events": events,
-                "event_index": event_index,
-            }
-    except Exception:
-        logger.debug("Failed to load SDR for audit", exc_info=True)
+    async with app_state.db_session_factory() as db:
+        snapshot = await latest_snapshot_for_project(db, project_id)
+    if snapshot is None:
         return None
+    dest_platform_by_name = {d["name"]: d["platform"] for d in snapshot.get("destinations", [])}
+    events = [_snapshot_event_to_legacy(ev, dest_platform_by_name) for ev in snapshot.get("events", [])]
+    return {
+        "sdr_version": snapshot.get("__version__", ""),
+        "sdr_id": snapshot.get("plan", {}).get("id"),
+        "events": events,
+        "event_index": {e["name"]: e for e in events},
+    }
 
 
-async def get_sdr_expected_for_event(project_id: uuid.UUID | str, event_name: str) -> dict | None:
+async def get_sdr_expected_for_event(project_id: Any, event_name: str) -> dict | None:
     """
     Get expected configuration for a specific event from the SDR.
 

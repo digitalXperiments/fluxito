@@ -367,3 +367,33 @@
     init();
   }
 })();
+
+/* ── Collapsible sidebar: toggle, persist, and label tooltips ─────────── */
+(function () {
+  var btn = document.getElementById('sidebarCollapse');
+  if (!btn) return;
+  var root = document.documentElement;
+
+  // In collapsed mode the labels are hidden; expose them as native tooltips.
+  function syncTitles() {
+    document.querySelectorAll('.sidebar-item').forEach(function (el) {
+      var t = (el.textContent || '').trim();
+      if (!t) return;
+      if (!el.getAttribute('title')) el.setAttribute('title', t);
+      if (!el.getAttribute('data-label')) el.setAttribute('data-label', t);
+    });
+  }
+  syncTitles();
+
+  function label(collapsed) {
+    btn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+    btn.setAttribute('title', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+  }
+  label(root.classList.contains('sidebar-collapsed'));
+
+  btn.addEventListener('click', function () {
+    var collapsed = root.classList.toggle('sidebar-collapsed');
+    try { localStorage.setItem('fx-sidebar-collapsed', collapsed ? '1' : '0'); } catch (e) {}
+    label(collapsed);
+  });
+})();

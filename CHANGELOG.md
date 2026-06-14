@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Tracking Plan — a relational, Avo-style data-governance workspace** that replaces the
+  markdown Solution Design Reference (SDR). The plan is now a structured database rather than a
+  generated document: first-class **events**, a reusable project-level **property library**
+  (events attach library properties with per-event overrides), **sources** and **destinations**
+  with source→destination routing and per event×destination mapping rules, **categories**,
+  reusable property **bundles**, and **event metrics**. Properties carry rich constraints (enum,
+  min/max, regex, PII and list flags, and nested object members). The whole plan is editable in a
+  redesigned, professional master–detail UI built around an **explicit Save** model — edits are
+  buffered locally and nothing persists until you click Save, with Discard to revert — alongside a
+  Comments/Activity drawer with @mentions, branch-scoped editing with a request-review / approve /
+  merge-and-publish workflow, and an immutable version history with snapshot diffing.
+- **`tracking_plan` MCP tool** so an AI can author and validate the plan directly: one meta-tool
+  with validated CRUD across events, properties, sources, destinations, routing, categories,
+  bundles, metrics, branches, validation and publishing — plus convenience actions `get_overview`
+  and `create_event_with_properties`.
+- **Structured Markdown and Excel exports** of the tracking plan, generated on demand. The
+  markdown that was previously the source of truth is now just one of these export artifacts.
+
+### Changed
+- **Audit and Live Tag Test now read the published tracking-plan snapshot** instead of parsing the
+  markdown SDR. Analytics, tag-manager and live-tag-test behaviour is unchanged — the same
+  information now comes from the structured plan.
+
+### Removed
+- **The markdown Solution Design Reference (SDR).** Its parser, MCP actions, templates, Excel
+  export, routes, data model and the "Solution Design" navigation entry are gone, replaced by the
+  relational Tracking Plan and its exports. A database migration drops the legacy `sdr_*` tables;
+  it is one-way, so apply it only once the new code is live.
+
+## [1.1.11] — 2026-06-14
+
+### Added
 - **Revamped dashboard filters — five new filter types.** The filter bar now supports
   multi-select dropdowns (with removable chips), free-text search, numeric min/max
   ranges, on/off toggles, and a custom start/end date range, alongside the existing
@@ -30,6 +62,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`dashboard_deploy_batch` now accepts a `filters` spec** and, when you omit it,
   suggests sensible dropdowns inferred from the cards' dimensions to confirm before
   deploying.
+
+### Changed
+- **Dashboards now cache live data for 24 hours (was 1 hour) and show when it was last
+  pulled.** A freshness banner reads "Cached data from <timestamp> — refreshes daily"
+  with a Refresh-now link; the TTL is configurable per dashboard. Each filter and compare
+  combination caches independently.
+- **Professional "Looker Clean" chart restyle.** A consistent Google-data-viz colour
+  palette (the same category is the same colour across every card), hairline gridlines,
+  compact number formatting (48.2K / 1.3M), a tidy legend, and softer bars.
+
+## [1.1.10] — 2026-06-14
+
+### Added
 - **API rate limits and real usage for every connector.** A new **API Limits** tab in
   Project Settings and an **API limits** section on the Home page list, for each connected
   tool, its published rate limit (from the provider's official docs, with a "reviewed" date)
@@ -46,24 +91,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Limit figures are point-in-time — a `python -m app.connectors.rate_limits_drift` helper
   flags entries that are due for re-verification.
 
+## [1.1.9] — 2026-06-13
+
 ### Changed
-- **Dashboards now cache live data for 24 hours (was 1 hour) and show when it was last
-  pulled.** A freshness banner reads "Cached data from <timestamp> — refreshes daily"
-  with a Refresh-now link; the TTL is configurable per dashboard. Each filter and compare
-  combination caches independently.
-- **Professional "Looker Clean" chart restyle.** A consistent Google-data-viz colour
-  palette (the same category is the same colour across every card), hairline gridlines,
-  compact number formatting (48.2K / 1.3M), a tidy legend, and softer bars.
 - **Share PDF now looks like the live dashboard — charts and all.** Exports (and the
   scheduled email/Slack report PDFs) are now rendered by a real headless browser that
   loads the actual dashboard, so they include the styled scorecards, the line/bar/pie
   charts, and the data tables you see on screen. Previously the PDF was a stripped-down
   text-and-grid report because the old renderer had no way to draw the JavaScript charts.
-- **Live dashboards cache their data on load, so reopening one no longer re-queries the
-  analytics APIs every time.** The first open (or pressing Refresh) pulls from the upstream
-  sources and caches the result; reloads then serve from that cache for up to an hour.
-  Refresh always forces a fresh query and repopulates the cache, and "last refreshed" now
-  reflects when the data was actually pulled.
 - **Roomier dashboard layout.** Added breathing room between the date-range filter bar
   and the first row of cards so the view no longer feels cramped.
 
@@ -74,6 +109,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   proper space below the fixed nav.
 - **Share PDF ignored the date range you picked.** The export now reflects the selected
   range (e.g. "2024 Full Year") instead of always falling back to the default window.
+
+## [1.1.8] — 2026-06-12
+
+### Changed
+- **Share PDF now matches the dashboard you see on screen.** The export used to render a
+  separate, plainer server-side layout (stacked value boxes, no charts) that looked nothing
+  like the live view. It now captures the dashboard exactly as rendered — colored scorecard
+  tiles, charts, the current light/dark theme, and the active date range and filters — and
+  lays it across multi-page A4. (Scheduled email/Slack report PDFs are unchanged.)
+- **Live dashboards cache their data on load, so reopening one no longer re-queries the
+  analytics APIs every time.** The first open (or pressing Refresh) pulls from the upstream
+  sources and caches the result; reloads then serve from that cache for up to an hour.
+  Refresh always forces a fresh query and repopulates the cache, and "last refreshed" now
+  reflects when the data was actually pulled.
+
+### Fixed
 - **Dashboard scorecards no longer sit jammed against the top edge of their card.**
   Single-metric KPI tiles had almost no breathing room above the title; they now have
   balanced top padding and a clear gap before the metric, in both light and dark mode.
@@ -393,7 +444,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Platform-admin panel and the `admin_role` user column.
 - Fly.io-specific deployment configuration.
 
-[Unreleased]: https://github.com/digitalXperiments/fluxito/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/digitalXperiments/fluxito/compare/v1.1.11...HEAD
+[1.1.11]: https://github.com/digitalXperiments/fluxito/compare/v1.1.10...v1.1.11
+[1.1.10]: https://github.com/digitalXperiments/fluxito/compare/v1.1.9...v1.1.10
+[1.1.9]: https://github.com/digitalXperiments/fluxito/compare/v1.1.8...v1.1.9
+[1.1.8]: https://github.com/digitalXperiments/fluxito/compare/v1.1.7...v1.1.8
+[1.1.7]: https://github.com/digitalXperiments/fluxito/compare/v1.1.6...v1.1.7
+[1.1.6]: https://github.com/digitalXperiments/fluxito/compare/v1.1.4...v1.1.6
+[1.1.4]: https://github.com/digitalXperiments/fluxito/compare/v1.1.1...v1.1.4
+[1.1.1]: https://github.com/digitalXperiments/fluxito/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/digitalXperiments/fluxito/compare/v1.0.9...v1.1.0
+[1.0.9]: https://github.com/digitalXperiments/fluxito/compare/v1.0.7...v1.0.9
+[1.0.7]: https://github.com/digitalXperiments/fluxito/compare/v1.0.6...v1.0.7
+[1.0.6]: https://github.com/digitalXperiments/fluxito/compare/v1.0.5...v1.0.6
+[1.0.5]: https://github.com/digitalXperiments/fluxito/compare/v1.0.4...v1.0.5
+[1.0.4]: https://github.com/digitalXperiments/fluxito/compare/v1.0.3...v1.0.4
+[1.0.3]: https://github.com/digitalXperiments/fluxito/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/digitalXperiments/fluxito/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/digitalXperiments/fluxito/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/digitalXperiments/fluxito/releases/tag/v1.0.0
