@@ -74,6 +74,48 @@
     font-size: 12px; color: var(--muted); font-family: var(--mono); letter-spacing: 0.02em;
   }
   .pv-footnote a { color: var(--ink); }
+
+  .pv-preset-bar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-m);
+    margin-bottom: 22px;
+  }
+  .pv-preset-label {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted); font-family: var(--mono);
+    margin-right: 4px;
+  }
+  .pv-preset-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: var(--r-m);
+    border: 1px solid var(--line); background: var(--bg);
+    font-size: 12px; color: var(--ink-soft);
+    cursor: pointer; user-select: none;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+    font-family: var(--mono); letter-spacing: 0.02em;
+  }
+  .pv-preset-chip:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); }
+  .pv-preset-chip.is-active {
+    background: var(--ink); border-color: var(--ink); color: var(--bg);
+  }
+  .pv-preset-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+  .pv-preset-loading {
+    font-size: 11px; color: var(--muted); font-family: var(--mono);
+    display: none; align-items: center; gap: 6px;
+  }
+  .pv-preset-loading.is-visible { display: inline-flex; }
+  .pv-preset-spinner {
+    display: inline-block; width: 11px; height: 11px;
+    border: 2px solid var(--line); border-top-color: var(--ink);
+    border-radius: 50%; animation: pv-spin 0.7s linear infinite;
+  }
+  @keyframes pv-spin { to { transform: rotate(360deg); } }
+  .pv-preset-error {
+    font-size: 11.5px; color: var(--danger, #dc2626);
+    font-family: var(--mono); display: none;
+  }
+  .pv-preset-error.is-visible { display: block; margin-top: 6px; }
 </style>
 {% endblock %}
 
@@ -103,6 +145,25 @@
     <div class="pv-insights-label">★ AI Insights</div>
     <div class="pv-insights-body">{{ dash.insights }}</div>
   </div>
+  {% endif %}
+
+  {% if filter_presets %}
+  <!-- Read-only preset chip bar — lets visitors switch date ranges and re-fetch live data -->
+  <div class="pv-preset-bar" id="presetBar">
+    <span class="pv-preset-label">&#128197; Date</span>
+    {% for p in filter_presets %}
+    <button
+      class="pv-preset-chip"
+      type="button"
+      data-range-start="{{ p.start }}"
+      data-range-end="{{ p.end }}"
+    >{{ p.label }}</button>
+    {% endfor %}
+    <span class="pv-preset-loading" id="presetLoading">
+      <span class="pv-preset-spinner"></span>Loading&hellip;
+    </span>
+  </div>
+  <div class="pv-preset-error" id="presetError"></div>
   {% endif %}
 
   <!-- Read-only info bar — populated from card metadata after data loads -->
@@ -173,6 +234,78 @@
       mountCharts(cards);
     }
     if (window.__dismissPageLoader) window.__dismissPageLoader();
+  }
+
+  // ── Preset chip bar ───────────────────────────────────────────────────
+  var presetBar = document.getElementById('presetBar');
+  var presetLoading = document.getElementById('presetLoading');
+  var presetError = document.getElementById('presetError');
+
+  function setChipsDisabled(disabled) {
+    if (!presetBar) return;
+    presetBar.querySelectorAll('.pv-preset-chip').forEach(function(c) {
+      c.disabled = disabled;
+    });
+  }
+
+  function showPresetLoading(on) {
+    if (presetLoading) presetLoading.classList.toggle('is-visible', on);
+  }
+
+  function showPresetError(msg) {
+    if (!presetError) return;
+    if (msg) {
+      presetError.textContent = msg;
+      presetError.classList.add('is-visible');
+    } else {
+      presetError.textContent = '';
+      presetError.classList.remove('is-visible');
+    }
+  }
+
+  if (presetBar) {
+    presetBar.querySelectorAll('.pv-preset-chip').forEach(function(chip) {
+      chip.addEventListener('click', function() {
+        var start = chip.dataset.rangeStart;
+        var end = chip.dataset.rangeEnd;
+        if (!start || !end) return;
+
+        // Update active chip state
+        presetBar.querySelectorAll('.pv-preset-chip').forEach(function(c) {
+          c.classList.remove('is-active');
+        });
+        chip.classList.add('is-active');
+
+        showPresetError(null);
+        setChipsDisabled(true);
+        showPresetLoading(true);
+        showSkeleton();
+
+        var url = '/api/d/' + encodeURIComponent(SLUG) +
+          '?date_range_start=' + encodeURIComponent(start) +
+          '&date_range_end=' + encodeURIComponent(end);
+
+        fetch(url, { credentials: 'same-origin' })
+          .then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function(data) {
+            renderAll(data.cards || []);
+          })
+          .catch(function(e) {
+            // Restore grid to its previous state on error
+            showPresetError('Could not load data for this date range. Please try again.');
+            grid.innerHTML = '<div class="audit-empty" style="grid-column:1/-1;"><h3>Failed to load</h3><p>' + esc(e.message || '') + '</p></div>';
+            if (window.__dismissPageLoader) window.__dismissPageLoader();
+          })
+          .then(function() {
+            // Always re-enable chips and hide spinner
+            setChipsDisabled(false);
+            showPresetLoading(false);
+          });
+      });
+    });
   }
 
   async function fetchAndRender() {

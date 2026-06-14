@@ -297,15 +297,28 @@ async def public_dashboard(slug: str, request: Request):
             "slug": slug,
             "is_owner": is_owner,
             "user": user_view,
+            "filter_presets": dash.filter_presets or [],
         },
     )
 
 
 @router.get("/api/d/{slug}")
 async def public_dashboard_json(slug: str, request: Request):
-    """Frozen dashboard data as JSON — returns cached results, no live hydration.
-    Public dashboards open to all; private ones owner-only."""
+    """Dashboard data as JSON for the public share view.
+
+    Without date params: returns frozen cached results (no live hydration).
+    With date_range_start + date_range_end: re-executes cards live using the
+    dashboard's query_scopes so visitors can switch between owner-configured
+    date presets without full auth.
+
+    Public dashboards open to all; private ones owner-only.
+    """
+    from app.dashboards.filter_hooks import apply_overrides
+
     uid = get_uid_from_request(request)
+    start_date = _resolve_relative_date(request.query_params.get("date_range_start") or "")
+    end_date = _resolve_relative_date(request.query_params.get("date_range_end") or "")
+    wants_live = bool(start_date and end_date)
 
     async with app_state.db_session_factory() as db:
         result = await db.execute(select(Dashboard).where(Dashboard.share_slug == slug))
@@ -322,32 +335,176 @@ async def public_dashboard_json(slug: str, request: Request):
         )
         cards = list(cards_result.scalars().all())
 
-    # Return cards in the same shape the frontend renderCard() expects
-    payload_cards = []
-    for c in cards:
-        snap = c.result_cache or {}
-        payload_cards.append(
+    # ── Frozen cache path (no date params) ──────────────────────────────────
+    if not wants_live:
+        payload_cards = []
+        for c in cards:
+            raw_snap = c.result_cache or {}
+            snap = _normalize_snap(raw_snap, c.chart_type, c.chart_config) if raw_snap else raw_snap
+            payload_cards.append(
+                {
+                    "id": str(c.id),
+                    "title": c.title,
+                    "platform": c.platform or "",
+                    "card_type": snap.get("card_type", "UNKNOWN"),
+                    "is_live": False,
+                    "refreshed_at": c.refreshed_at.isoformat() if c.refreshed_at else None,
+                    "snap": snap,
+                }
+            )
+        return JSONResponse(
             {
-                "id": str(c.id),
-                "title": c.title,
-                "platform": c.platform or "",
-                "card_type": snap.get("card_type", "UNKNOWN"),
-                "is_live": False,
-                "refreshed_at": c.refreshed_at.isoformat() if c.refreshed_at else None,
-                "snap": snap,
+                "dashboard": {
+                    "title": dash.title,
+                    "slug": dash.share_slug,
+                    "card_count": len(payload_cards),
+                },
+                "cards": payload_cards,
             }
         )
 
-    return JSONResponse(
-        {
-            "dashboard": {
-                "title": dash.title,
-                "slug": dash.share_slug,
-                "card_count": len(payload_cards),
-            },
-            "cards": payload_cards,
-        }
+    # ── Live re-query path (date_range_start + date_range_end provided) ─────
+    # Guardrails: lighter concurrency + shorter timeout than the authenticated
+    # live endpoint since public queries are expected to be simpler.
+    _PUBLIC_CARD_TIMEOUT_S = 15
+    _PUBLIC_CARD_CONCURRENCY = 4
+
+    filter_overrides: dict = {"date_range": {"start": start_date, "end": end_date}}
+
+    # Redis cache keyed by slug + start + end (1-hour TTL).
+    _pub_cache_key = _dashdata_cache_key(
+        slug,
+        False,  # not owner
+        len(cards),
+        str(getattr(dash, "updated_at", "") or ""),
+        filter_overrides,
+        set(),
+        _cards_signature(cards),
     )
+    cached = await _dashdata_cache_get(_pub_cache_key)
+    if cached is not None:
+        cached["cached"] = True
+        return JSONResponse(cached)
+
+    try:
+        from app.auth.mcp_session_manager import build_refresh_context
+        from app.main import mcp_server
+
+        refresh_ctx = await build_refresh_context(str(dash.id))
+        tm = mcp_server._tool_manager if mcp_server else None
+        _sem = asyncio.Semaphore(_PUBLIC_CARD_CONCURRENCY)
+
+        async def _run_public_card(c: DashboardCard) -> dict:
+            """Execute one card with the requested date override.
+            Falls back to result_cache on any failure."""
+            platform = (c.query_params or {}).get("platform") or c.platform or "unknown"
+            spec = c.query_params or {}
+            tool_name = spec.get("tool") or c.tool_name
+
+            def _fallback() -> dict:
+                raw = c.result_cache if isinstance(c.result_cache, dict) else {}
+                snap = _normalize_snap(raw, c.chart_type, c.chart_config) if raw else raw
+                return {
+                    "id": str(c.id),
+                    "title": c.title,
+                    "platform": platform,
+                    "card_type": snap.get("card_type", "UNKNOWN"),
+                    "is_live": False,
+                    "refreshed_at": c.refreshed_at.isoformat() if c.refreshed_at else None,
+                    "snap": snap,
+                }
+
+            if not tool_name or tm is None:
+                return _fallback()
+
+            try:
+                legacy = getattr(tm, "_legacy_tools", {})
+                tool = legacy.get(tool_name) or tm._tools.get(tool_name)
+                if tool is None:
+                    return _fallback()
+
+                # Respect date_locked cards — don't override their range.
+                card_date_locked = _as_bool(spec.get("date_locked"))
+                if card_date_locked:
+                    merged_spec = spec
+                else:
+                    merged_spec = apply_overrides(spec, filter_overrides)
+
+                _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
+                call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
+                action = spec.get("action")
+                if action is not None:
+                    call_args["action"] = action
+                is_warehouse = tool_name == "warehouse_query"
+                if is_warehouse:
+                    call_args.setdefault("engine", platform)
+                    if "sql" in call_args and "query" not in call_args:
+                        call_args["query"] = call_args.pop("sql")
+                    if "query" in call_args:
+                        q = call_args["query"]
+                        for _k, _v in call_args.items():
+                            if _k == "query" or not isinstance(_v, str):
+                                continue
+                            resolved = _resolve_relative_date(_v)
+                            q = q.replace("{" + _k + "}", resolved)
+                        call_args["query"] = q
+
+                async with _sem:
+                    raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_PUBLIC_CARD_TIMEOUT_S)
+                if not isinstance(raw_result, dict):
+                    raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
+
+                if raw_result.get("card_type") == "ERROR" or raw_result.get("error"):
+                    return _fallback()
+
+                snap = _normalize_snap(raw_result, c.chart_type, c.chart_config)
+                return {
+                    "id": str(c.id),
+                    "title": c.title,
+                    "platform": platform,
+                    "card_type": snap.get("card_type", "UNKNOWN"),
+                    "is_live": True,
+                    "refreshed_at": c.refreshed_at.isoformat() if c.refreshed_at else None,
+                    "snap": snap,
+                }
+            except Exception:
+                return _fallback()
+
+        async with refresh_ctx:
+            payload_cards = list(await asyncio.gather(*[_run_public_card(c) for c in cards]))
+
+    except Exception as exc:
+        logger.exception("public_dashboard_json live re-query failed for slug=%s", slug)
+        # Fall back to frozen cache for every card.
+        payload_cards = []
+        for c in cards:
+            raw_snap = c.result_cache or {}
+            snap = _normalize_snap(raw_snap, c.chart_type, c.chart_config) if raw_snap else raw_snap
+            payload_cards.append(
+                {
+                    "id": str(c.id),
+                    "title": c.title,
+                    "platform": c.platform or "",
+                    "card_type": snap.get("card_type", "UNKNOWN"),
+                    "is_live": False,
+                    "refreshed_at": c.refreshed_at.isoformat() if c.refreshed_at else None,
+                    "snap": snap,
+                }
+            )
+
+    body: dict = {
+        "dashboard": {
+            "title": dash.title,
+            "slug": dash.share_slug,
+            "card_count": len(payload_cards),
+        },
+        "cards": payload_cards,
+        "filters": {"start": start_date, "end": end_date},
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "cached": False,
+    }
+    await _dashdata_cache_set(_pub_cache_key, body, 3600)
+    return JSONResponse(body)
 
 
 # ---------------------------------------------------------------------------
@@ -781,8 +938,8 @@ async def live_dashboard_page(page_slug: str, request: Request):
     user sees a loading screen instead of a blank browser tab while BigQuery
     queries execute."""
     uid = get_uid_from_request(request)
-    start_date = request.query_params.get("start") or ""
-    end_date = request.query_params.get("end") or ""
+    start_date = request.query_params.get("date_range_start") or request.query_params.get("start") or ""
+    end_date = request.query_params.get("date_range_end") or request.query_params.get("end") or ""
 
     async with app_state.db_session_factory() as db:
         result = await db.execute(select(Dashboard).where(Dashboard.share_slug == page_slug))
@@ -925,7 +1082,17 @@ async def live_dashboard_data(slug: str, request: Request):
     # explicitly. Any other query param (e.g. ?country=US&device=mobile) is
     # forwarded as a flat dimension override so filter_hooks can map them to
     # card params.
-    _RESERVED_PARAMS = {"date_range_start", "date_range_end", "platforms", "refresh"}
+    _RESERVED_PARAMS = {
+        "date_range_start",
+        "date_range_end",
+        "platforms",
+        "refresh",
+        "compare",
+        "compare_start",
+        "compare_end",
+        "token",
+        "query_token",
+    }
     filter_overrides: dict = {}
     if start_date or end_date:
         filter_overrides["date_range"] = {}
@@ -965,6 +1132,7 @@ async def live_dashboard_data(slug: str, request: Request):
                 return JSONResponse({"error": "Not found"}, status_code=404)
             # Public dashboards refresh for anyone (shareable by design). Private
             # dashboards require the owner to still be an active project member.
+            owner_access = False
             if not dash.is_public:
                 user_uuid = safe_uuid(uid) if uid else None
                 if (
@@ -973,6 +1141,18 @@ async def live_dashboard_data(slug: str, request: Request):
                     or not await _user_in_project(db, dash.project_id, user_uuid)
                 ):
                     return JSONResponse({"error": "Not found"}, status_code=404)
+                owner_access = True
+            else:
+                user_uuid = safe_uuid(uid) if uid else None
+                if user_uuid is not None and str(dash.user_id) == uid:
+                    owner_access = True
+
+            # query_token_required: public dashboards that require a token must
+            # receive it via ?token= or ?query_token= (non-owners only).
+            if dash.query_token_required and not owner_access:
+                provided_token = request.query_params.get("token") or request.query_params.get("query_token")
+                if not provided_token or provided_token != dash.query_token:
+                    return JSONResponse({"error": "Unauthorized"}, status_code=403)
 
             cards_result = await db.execute(
                 select(DashboardCard)
@@ -1037,7 +1217,8 @@ async def live_dashboard_data(slug: str, request: Request):
             action = spec.get("action")
 
             if not tool_name or tm is None:
-                snap = c.result_cache if isinstance(c.result_cache, dict) else {}
+                raw_cache = c.result_cache if isinstance(c.result_cache, dict) else {}
+                snap = _normalize_snap(raw_cache, c.chart_type, c.chart_config) if raw_cache else raw_cache
                 return snap, False, {"error_type": "no_tool", "message": "Card has no registered tool."}
 
             try:
@@ -1049,7 +1230,12 @@ async def live_dashboard_data(slug: str, request: Request):
                 # Merge date + legacy overrides (respecting the date_locked flag).
                 # Typed filters are excluded here and applied via translate() below.
                 card_date_locked = _as_bool(spec.get("date_locked"))
-                merged_spec = apply_overrides(spec, ov_for_apply if not card_date_locked else None)
+                if card_date_locked:
+                    # Strip only date-related keys; non-date dimension filters pass through.
+                    safe_overrides = {k: v for k, v in ov_for_apply.items() if "date" not in k.lower()}
+                    merged_spec = apply_overrides(spec, safe_overrides)
+                else:
+                    merged_spec = apply_overrides(spec, ov_for_apply)
                 # Params are stored flattened in query_params — exclude spec metadata keys.
                 # NOTE: "platform" is intentionally NOT excluded — it is a required named
                 # parameter for analytics_read, marketing_read, etc.
@@ -1096,7 +1282,10 @@ async def live_dashboard_data(slug: str, request: Request):
                     raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
 
                 if raw_result.get("card_type") == "ERROR" or raw_result.get("error"):
-                    snap = c.result_cache if isinstance(c.result_cache, dict) else raw_result
+                    raw_cache = c.result_cache if isinstance(c.result_cache, dict) else raw_result
+                    snap = (
+                        _normalize_snap(raw_cache, c.chart_type, c.chart_config) if raw_cache else raw_cache
+                    )
                     return (
                         snap,
                         False,
@@ -1108,7 +1297,8 @@ async def live_dashboard_data(slug: str, request: Request):
                 return _normalize_snap(raw_result, c.chart_type, c.chart_config), True, None
             except TimeoutError:
                 logger.warning("live_dashboard_data: card %s timed out after %ss", c.id, _LIVE_CARD_TIMEOUT_S)
-                snap = c.result_cache if isinstance(c.result_cache, dict) else {}
+                raw_cache = c.result_cache if isinstance(c.result_cache, dict) else {}
+                snap = _normalize_snap(raw_cache, c.chart_type, c.chart_config) if raw_cache else raw_cache
                 return (
                     snap,
                     False,
@@ -1119,7 +1309,8 @@ async def live_dashboard_data(slug: str, request: Request):
                 )
             except Exception as tool_exc:
                 logger.warning("live_dashboard_data: tool dispatch failed for card %s: %s", c.id, tool_exc)
-                snap = c.result_cache if isinstance(c.result_cache, dict) else {}
+                raw_cache = c.result_cache if isinstance(c.result_cache, dict) else {}
+                snap = _normalize_snap(raw_cache, c.chart_type, c.chart_config) if raw_cache else raw_cache
                 return snap, False, {"error_type": "dispatch_error", "message": str(tool_exc)[:300]}
 
         async def _exec_card(c) -> dict:

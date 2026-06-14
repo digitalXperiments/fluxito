@@ -53,6 +53,7 @@
   {% if f.type == 'single_select' %}
     <select class="lv-dim-select" data-dim-key="{{ f.key }}" data-ftype="single_select">
       {% if f.options and f.options.values %}
+        <option value="">All</option>
         {% for opt in f.options.values %}
         <option value="{{ opt }}">{{ opt if opt else 'All' }}</option>
         {% endfor %}

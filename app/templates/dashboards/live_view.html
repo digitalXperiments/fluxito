@@ -290,15 +290,15 @@
 
   <div class="dash-filter-bar" id="filterBar">
     <span class="dash-filter-label">Date range</span>
-    <button class="dash-filter-chip active" data-range="30daysAgo,today">Last 30 days</button>
-    <button class="dash-filter-chip" data-range="7daysAgo,today">Last 7 days</button>
-    <button class="dash-filter-chip" data-range="90daysAgo,today">Last 90 days</button>
-    <button class="dash-filter-chip" data-range="2024-01-01,2024-12-31">Year 2024</button>
-    <button class="dash-filter-chip" data-range="2025-01-01,2025-12-31">Year 2025</button>
+    <button class="dash-filter-chip active" data-range-start="30daysAgo" data-range-end="today">Last 30 days</button>
+    <button class="dash-filter-chip" data-range-start="7daysAgo" data-range-end="today">Last 7 days</button>
+    <button class="dash-filter-chip" data-range-start="90daysAgo" data-range-end="today">Last 90 days</button>
+    <button class="dash-filter-chip" data-range-start="2024-01-01" data-range-end="2024-12-31">Year 2024</button>
+    <button class="dash-filter-chip" data-range-start="2025-01-01" data-range-end="2025-12-31">Year 2025</button>
     {% if filter_presets %}
     <span class="lv-divider"></span>
     {% for p in filter_presets %}
-    <button class="dash-filter-chip" data-range="{{ p.start }},{{ p.end }}">{{ p.label }}</button>
+    <button class="dash-filter-chip" data-range-start="{{ p.start }}" data-range-end="{{ p.end }}">{{ p.label }}</button>
     {% endfor %}
     {% endif %}
     <span class="lv-divider"></span>
@@ -420,6 +420,13 @@
     if (qs.get('compare')) {
       compareState = {mode: qs.get('compare'), start: qs.get('compare_start') || '', end: qs.get('compare_end') || ''};
     }
+    // Sync chip active state to the seeded activeRange (D3: chip UI must reflect URL/dashMeta range).
+    filterBar.querySelectorAll('.dash-filter-chip[data-range-start]').forEach(function(c) { c.classList.remove('active'); });
+    filterBar.querySelectorAll('.dash-filter-chip[data-range-start]').forEach(function(c) {
+      if (c.dataset.rangeStart === activeRange.start && c.dataset.rangeEnd === activeRange.end) {
+        c.classList.add('active');
+      }
+    });
     filterBar.querySelectorAll('[data-dim-key][data-ftype]').forEach(function(el) {
       const key = el.dataset.dimKey, ftype = el.dataset.ftype;
       if (ftype === 'single_select' || ftype === 'search') {
@@ -483,12 +490,11 @@
 
   if (filterBar) {
     // ── Date range chips ─────────────────────────────────────────────────
-    filterBar.querySelectorAll('.dash-filter-chip[data-range]').forEach(function(chip) {
+    filterBar.querySelectorAll('.dash-filter-chip[data-range-start]').forEach(function(chip) {
       chip.addEventListener('click', function() {
-        filterBar.querySelectorAll('.dash-filter-chip[data-range]').forEach(function(c) { c.classList.remove('active'); });
+        filterBar.querySelectorAll('.dash-filter-chip[data-range-start]').forEach(function(c) { c.classList.remove('active'); });
         chip.classList.add('active');
-        const parts = chip.dataset.range.split(',');
-        activeRange = {start: parts[0], end: parts[1]};
+        activeRange = {start: chip.dataset.rangeStart, end: chip.dataset.rangeEnd};
         onFilterChange();
       });
     });
@@ -557,16 +563,24 @@
       onFilterChange();
     });
 
-    // Lazy-populate any single-selects that have no options yet (warehouse dims)
-    (function fetchMissingFilterOptions() {
-      const emptySelects = Array.from(filterBar.querySelectorAll('.lv-dim-select[data-ftype=single_select]')).filter(
-        function(s) { return s.options.length <= 1; }
-      );
-      if (!emptySelects.length) return;
-      fetch('/api/dashboard-query/' + SLUG + '/filter-options', {credentials: 'same-origin'})
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(opts) {
-          if (!opts) return;
+  }
+
+  // Lazy-populate any single-selects that have no options yet (warehouse dims).
+  // Returns a Promise that resolves when options are fetched (or immediately if
+  // there are no empty selects). Disables the selects during the fetch to
+  // prevent user interaction that could race with the initial loadCards call (D4).
+  function fetchMissingFilterOptions() {
+    if (!filterBar) return Promise.resolve();
+    const emptySelects = Array.from(filterBar.querySelectorAll('.lv-dim-select[data-ftype=single_select]')).filter(
+      function(s) { return s.options.length <= 1; }
+    );
+    if (!emptySelects.length) return Promise.resolve();
+    // Disable selects while fetching to prevent race conditions (D4).
+    emptySelects.forEach(function(s) { s.disabled = true; });
+    return fetch('/api/dashboard-query/' + SLUG + '/filter-options', {credentials: 'same-origin'})
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(opts) {
+        if (opts) {
           emptySelects.forEach(function(sel) {
             const vals = opts[sel.dataset.dimKey];
             if (!vals || !vals.length) return;
@@ -577,9 +591,13 @@
               sel.appendChild(opt);
             });
           });
-        })
-        .catch(function() {});
-    })();
+        }
+      })
+      .catch(function() {})
+      .then(function() {
+        // Re-enable selects regardless of success/failure.
+        emptySelects.forEach(function(s) { s.disabled = false; });
+      });
   }
 
   // ── Ticker ─────────────────────────────────────────────────────────────
@@ -802,9 +820,12 @@
     btnSchedules.addEventListener('click', () => window.Scheds.open());
   }
 
-  // Load card data asynchronously on page init
+  // Load card data asynchronously on page init.
+  // Fetch filter options first (if any lazy selects exist), then load cards —
+  // this prevents the D4 race where a user interaction on a freshly-populated
+  // select fires a third request while the initial loadCards is still in-flight.
   showSkeleton();
-  loadCards();
+  fetchMissingFilterOptions().then(function() { loadCards(); });
 
 })();
 </script>

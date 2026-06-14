@@ -5372,20 +5372,10 @@ html[data-theme="dark"] {
 .sc-delta.negative { color: #dc2626; }
 .sc-delta.neutral  { color: var(--text-secondary, #6b7280); }
 .sc-sparkline {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
   height: 22px;
   margin-top: 8px;
   opacity: 0.75;
-}
-.sc-sparkline span {
-  flex: 1;
-  border-radius: 2px 2px 0 0;
-  background: var(--sc-accent, var(--pp-blue-accent));
-}
-.sc-sparkline span.current {
-  background: var(--sc-border, var(--pp-blue-border));
+  width: 100%;
 }
 
 /* Per-scheme modifiers (set via inline style="--sc-border: var(--pp-green-border); ...") */
