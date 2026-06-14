@@ -26,14 +26,19 @@
     if (s === null || s === undefined) return false;
     s = String(s).trim();
     if (!s) return false;
-    // ISO-ish: 2024-01-05, 2024-01, 2024, 2024-Q1, FY24-Q1, FY24Q1
-    if (/^\d{4}(-\d{1,2}(-\d{1,2})?)?$/.test(s)) return true;
+    // ISO-ish: 2024-01-05, 2024-01, 2024 (year range 1970–2100), 2024-Q1, FY24-Q1, FY24Q1
+    if (/^\d{4}(-\d{1,2}(-\d{1,2})?)?$/.test(s)) {
+      // Plain 4-digit string: must be a plausible year (1970–2100)
+      if (/^\d{4}$/.test(s)) { var y4 = parseInt(s, 10); return y4 >= 1970 && y4 <= 2100; }
+      return true;
+    }
     if (/^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(s)) return true;
     if (/^(FY)?\d{2,4}[\- ]?Q[1-4]$/i.test(s)) return true;
     if (/^Q[1-4][\- ]?\d{2,4}$/i.test(s)) return true;
     if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(s)) return true;
-    // Month names
-    if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(s)) return true;
+    // Month names — must be followed by a digit, whitespace, comma, dash, slash, or end-of-string
+    // to avoid false positives on words like "market", "margin", "march_promo".
+    if (/^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)(\s|-|\/|,|\d|$)/i.test(s)) return true;
     // YYYYMM compact integer (e.g. 202401) — GA4 yearMonth
     if (/^\d{6}$/.test(s)) {
       var ym = parseInt(s.slice(4,6), 10);
@@ -216,17 +221,15 @@
     allSeries.sort(function(a,b){ return maxAbs(b.data) - maxAbs(a.data); });
 
     // Step 3: Assign to axes. The first series always goes on left axis.
-    // Every subsequent series: if its scale is within 2x of the left axis max,
-    // stays on left. Else goes on right axis (one right axis max). If a third
+    // Every subsequent series: if its scale does NOT diverge from the left axis
+    // by more than 5× (per scalesDivergent), it stays on left.
+    // Else goes on right axis (one right axis max). If a third
     // series would need a third axis, drop it with a tooltip warning.
     var leftSeries = [allSeries[0]];
     var rightSeries = [];
-    var leftMax = maxAbs(allSeries[0].data);
     for (var i=1; i<allSeries.length && leftSeries.length + rightSeries.length < 3; i++){
       var s = allSeries[i];
-      var sMax = maxAbs(s.data);
-      var ratioLeft = Math.max(leftMax/(sMax||1e-9), sMax/(leftMax||1e-9));
-      if (ratioLeft <= 2) {
+      if (!scalesDivergent(allSeries[0].data, s.data)) {
         leftSeries.push(s);
       } else if (!rightSeries.length) {
         rightSeries.push(s);
@@ -597,11 +600,17 @@
     Object.values(_instances).forEach(function(c){ try { c.dispose(); } catch(e){} });
     _instances = {};
     if (typeof echarts === 'undefined') {
-      if (!F.mountCharts._retry) {
-        F.mountCharts._retry = true;
+      // Store the latest args so the poll always uses the most-recent call.
+      F.mountCharts._pending = {cards: cards, gridEl: gridEl};
+      if (!F.mountCharts._pollActive) {
+        F.mountCharts._pollActive = true;
         var wait = function(){
-          if (typeof echarts !== 'undefined') { F.mountCharts._retry = false; F.mountCharts(cards, gridEl); }
-          else { setTimeout(wait, 50); }
+          if (typeof echarts !== 'undefined') {
+            F.mountCharts._pollActive = false;
+            var p = F.mountCharts._pending;
+            F.mountCharts._pending = null;
+            F.mountCharts(p.cards, p.gridEl);
+          } else { setTimeout(wait, 50); }
         };
         setTimeout(wait, 50);
       }
@@ -675,9 +684,16 @@
       });
     });
 
-    window.addEventListener('resize', function(){
-      Object.values(_instances).forEach(function(c){ try { c.resize(); } catch(e){} });
-    }, {once: true});
+    if (!F._resizeListenerRegistered) {
+      F._resizeListenerRegistered = true;
+      var _resizeTimer = null;
+      window.addEventListener('resize', function(){
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(function(){
+          Object.values(_instances).forEach(function(c){ try { c.resize(); } catch(e){} });
+        }, 150);
+      });
+    }
   };
 
   // Back-compat alias for older templates that call the bare mountCharts().
