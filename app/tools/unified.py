@@ -301,6 +301,16 @@ TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
     "edit_comment": ("tracking_plan_v2", "edit_comment"),
     "list_comments": ("tracking_plan_v2", "list_comments"),
     "resolve_comment": ("tracking_plan_v2", "resolve_comment"),
+    # --- Reconcile ---
+    "reconcile_preview": ("tracking_plan_v2", "reconcile_preview"),
+    "reconcile_apply": ("tracking_plan_v2", "reconcile_apply"),
+    # --- Validation rules ---
+    "list_rules": ("tracking_plan_v2", "list_rules"),
+    "update_rule": ("tracking_plan_v2", "update_rule"),
+    "set_rule_enabled": ("tracking_plan_v2", "set_rule_enabled"),
+    # --- Coverage / dashboard linkage ---
+    "run_coverage_audit": ("tracking_plan_v2", "run_coverage_audit"),
+    "list_dashboard_cards": ("tracking_plan_v2", "list_dashboard_cards"),
 }
 
 # automation_read / automation_write — renames of automation_browse /

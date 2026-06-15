@@ -21,6 +21,7 @@ const NAV = [
   ['categories', 'Categories'],
   ['sources', 'Sources & Destinations'],
   ['metrics', 'Metrics'],
+  ['issues', 'Issues'],
 ];
 
 // view key → breadcrumb label + the plan collection holding its entities (for
@@ -35,6 +36,7 @@ const VIEW_META = {
   metrics: { label: 'Metrics', coll: 'metrics' },
   review: { label: 'Branch review' },
   versions: { label: 'Versions' },
+  issues: { label: 'Issues' },
 };
 
 // Views that use the master-detail drill-down on mobile. `sources` is listed
@@ -232,8 +234,14 @@ function exportMenu(base, qs) {
 async function validate() {
   try {
     const r = await api.validate(state.getState().branch);
+    const errs = (r.findings || []).filter((f) => f.severity === 'error').length;
     const warns = (r.findings || []).filter((f) => f.severity === 'warning').length;
-    banner(`${(r.findings || []).length} findings · ${warns} warnings · ${r.is_publishable ? 'publishable' : 'resolve warnings first'}`, warns ? 'warn' : 'ok');
+    banner(
+      `${(r.findings || []).length} findings · ${errs} errors · ${warns} warnings · ${r.is_publishable ? 'publishable' : 'resolve errors first'}`,
+      errs ? 'err' : (warns ? 'warn' : 'ok'),
+    );
+    if (!guardNav()) return;
+    state.setView('issues');
   } catch (e) { banner(e.message, 'err'); }
 }
 async function publish() {

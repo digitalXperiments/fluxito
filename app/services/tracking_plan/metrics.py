@@ -11,7 +11,7 @@ from app.models.tracking_plan import METRIC_TYPES, TPBranch, TPEvent, TPMetric, 
 from .common import apply_fields, get_or_raise
 from .exceptions import ConflictError, ValidationError
 
-_METRIC_FIELDS = {"name", "description", "type", "event_id", "property_id", "filters"}
+_METRIC_FIELDS = {"name", "description", "type", "event_id", "property_id", "filters", "dashboard_card_id"}
 
 
 async def _metric_name_taken(session, branch_id, name, *, exclude_id=None) -> bool:

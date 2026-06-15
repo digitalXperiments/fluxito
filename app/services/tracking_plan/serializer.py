@@ -246,6 +246,7 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
                 "event": next((e.name for e in events if e.id == m.event_id), None),
                 "property": prop_by_id[m.property_id].name if m.property_id in prop_by_id else None,
                 "filters": m.filters,
+                "dashboard_card_id": str(m.dashboard_card_id) if m.dashboard_card_id else None,
             }
             for m in sorted(metrics, key=lambda x: x.name)
         ],

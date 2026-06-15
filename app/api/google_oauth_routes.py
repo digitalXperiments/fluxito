@@ -511,6 +511,38 @@ async def home(request: Request):
 
     user_view = await _load_user_view(user_ctx)
 
+    # ── Tracking-plan health (read-only: last-published snapshot) ───────────
+    # We use latest_snapshot_for_project() rather than get_or_create_plan() +
+    # validate_plan() so that (a) no side-effect write happens on a GET and
+    # (b) it is cheap — one plan lookup + one version row.  If no snapshot
+    # exists yet the values default to zero/None and the card still renders.
+    tp_event_count: int = 0
+    tp_open_issues: int = 0
+    tp_coverage_pct: int | None = None
+    try:
+        if active_pid_uuid:
+            from app.services.tracking_plan import latest_snapshot_for_project
+
+            db_session2 = app_state.db_session_factory()
+            async with db_session2 as db2:
+                snapshot = await latest_snapshot_for_project(db2, active_pid_uuid)
+            if snapshot:
+                events = snapshot.get("events", [])
+                tp_event_count = len(events)
+                # "Open issues" = structural gaps visible without running the
+                # full rule engine: events missing a source or destination are
+                # warning-level findings the plan owner must address.
+                tp_open_issues = sum(
+                    1 for ev in events if not ev.get("sources") or not ev.get("destinations")
+                )
+                # Coverage % = events that have both a source and a destination
+                # (i.e. are fully wired up) / total events.
+                if tp_event_count > 0:
+                    measured = sum(1 for ev in events if ev.get("sources") and ev.get("destinations"))
+                    tp_coverage_pct = round(100 * measured / tp_event_count)
+    except Exception:
+        pass
+
     # Ensure active project cookie is set
     active_pid = await ensure_active_project(request, user_ctx.user_id)
 
@@ -525,6 +557,9 @@ async def home(request: Request):
             "rate_limits_available": rate_limits.to_view(rl_available),
             "rate_limits_reviewed": rate_limits.REVIEWED,
             "rate_limits_usage_days": 30,
+            "tp_event_count": tp_event_count,
+            "tp_open_issues": tp_open_issues,
+            "tp_coverage_pct": tp_coverage_pct,
         },
     )
 

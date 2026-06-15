@@ -84,6 +84,15 @@
       <div class="val mono">{{ automations_count | default(0) }}</div>
       <div class="meta"><a href="/automations">Manage →</a></div>
     </div>
+    <div class="kpi">
+      <span class="label">Tracking Plan</span>
+      <div class="val mono">{{ tp_event_count | default(0) }} events</div>
+      <div class="meta">
+        {{ tp_open_issues | default(0) }} open ·
+        {% if tp_coverage_pct is not none %}{{ tp_coverage_pct }}% covered{% else %}—{% endif %}
+        · <a href="/tracking-plan">Open →</a>
+      </div>
+    </div>
   </div>
 
   {# ── Add to AI + What's next ── #}

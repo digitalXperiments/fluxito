@@ -358,6 +358,10 @@
 .tp-titlefield:hover { background: var(--tp-surface-3); }
 .tp-titlefield:focus { background: var(--tp-surface); border-color: var(--tp-accent-border); outline: none; box-shadow: 0 0 0 3px var(--tp-accent-soft); }
 .tp-d-title { flex: 1; min-width: 0; }
+/* Phase A: inline event-name validation hint under the editable title */
+.tp-namehint { font-size: 11px; line-height: 1.3; margin-top: 4px; min-height: 14px; }
+.tp-namehint.is-warn { color: var(--tp-amber); }
+.tp-namehint.is-err  { color: var(--tp-red); }
 
 .tp-ed-chips { display: flex; gap: 6px; align-items: center; }
 .tp-ed-actions, .tp-d-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -442,6 +446,9 @@
 .tp-badge.sky   { background: var(--tp-sky-soft);   color: var(--tp-sky); }
 /* semantic status pills (review / impl) reuse .tp-badge color names */
 .tp-badge.accent { background: var(--tp-accent-soft); color: var(--tp-accent); }
+/* dashboard-card link status badges */
+.tp-badge-linked   { background: var(--tp-green-soft); color: var(--tp-green); }
+.tp-badge-unlinked { background: var(--tp-amber-soft); color: var(--tp-amber); }
 
 /* legacy type-badge → align to .tp-badge.ty */
 .tp-typebadge {
@@ -1065,4 +1072,86 @@
   .tp-review-changes { padding: 14px 16px; border-right: none; }
   .tp-ver-row { flex-direction: column; align-items: flex-start; gap: 10px; }
 
+  /* Issues view mobile */
+  .tp-issues-filters { flex-direction: column; }
+  .tp-issue-row { flex-wrap: wrap; gap: 8px; }
+  .tp-rule-row { flex-wrap: wrap; gap: 10px; }
+  .tp-rule-sev-sel { width: 100%; }
+
 }
+
+/* ============================================================================
+   Issues view + Rules sub-tab
+   ========================================================================== */
+.tp-issues-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+/* Sub-tab bar */
+.tp-issues-subtabs {
+  display: flex; align-items: center; gap: 4px; padding: 12px 18px;
+  border-bottom: 1px solid var(--tp-border); background: var(--tp-surface); flex: none;
+}
+.tp-issues-subtab {
+  border: none; background: transparent; font: inherit; font-size: 13px; font-weight: 500;
+  padding: 7px 14px; border-radius: var(--tp-r-sm); cursor: pointer;
+  color: var(--tp-text-2); transition: all .15s;
+}
+.tp-issues-subtab:hover { color: var(--tp-text); background: var(--tp-surface-3); }
+.tp-issues-subtab.is-active {
+  background: var(--tp-surface-3); color: var(--tp-text); box-shadow: var(--tp-sh-xs);
+}
+.tp-issues-refresh { margin-left: auto; font-size: 12.5px; }
+
+/* Tab content wrapper */
+.tp-issues-tab { flex: 1; overflow-y: auto; padding: 0 0 60px; }
+
+/* Filter bar */
+.tp-issues-filters {
+  display: flex; align-items: center; gap: 10px; padding: 12px 18px;
+  border-bottom: 1px solid var(--tp-border); background: var(--tp-surface-2); flex-wrap: wrap;
+}
+.tp-issues-filter-sel { width: auto; min-width: 140px; height: 30px; padding: 0 28px 0 9px; font-size: 12.5px; }
+
+/* Finding groups */
+.tp-issues-list { padding: 16px 18px; display: flex; flex-direction: column; gap: 20px; }
+.tp-issues-group { display: flex; flex-direction: column; gap: 6px; }
+.tp-issues-group-head {
+  display: flex; align-items: center; gap: 10px; padding: 4px 0 6px;
+  border-bottom: 1px solid var(--tp-border); margin-bottom: 2px;
+}
+.tp-issues-group-count { font-size: 12px; color: var(--tp-text-3); }
+
+/* Individual finding row */
+.tp-issue-row {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+  border: 1px solid var(--tp-border); border-radius: var(--tp-r); background: var(--tp-surface);
+  transition: border-color .1s, background .1s;
+}
+.tp-issue-row-link { cursor: pointer; }
+.tp-issue-row-link:hover { background: var(--tp-surface-2); border-color: var(--tp-border-strong); }
+.tp-issue-body { flex: 1; min-width: 0; }
+.tp-issue-msg { font-size: 13px; color: var(--tp-text); line-height: 1.5; }
+.tp-issue-rule { font-size: 11.5px; color: var(--tp-text-3); margin-top: 2px; }
+.tp-issue-fix {
+  font-size: 11.5px; color: var(--tp-green); margin-top: 3px;
+  font-family: var(--tp-mono);
+}
+.tp-issue-link-arrow { font-size: 13px; align-self: center; flex: none; }
+
+/* Rules list */
+.tp-rules-list { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.tp-rule-row {
+  display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+  border: 1px solid var(--tp-border); border-radius: var(--tp-r-lg); background: var(--tp-surface);
+  transition: opacity .15s;
+}
+.tp-rule-disabled { opacity: .55; }
+.tp-rule-meta { flex: 1; min-width: 0; }
+.tp-rule-label { font-size: 13px; font-weight: 550; color: var(--tp-text); }
+.tp-rule-type { font-family: var(--tp-mono); font-size: 11px; margin-top: 1px; }
+.tp-rule-config {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.tp-rule-config-label { font-size: 11.5px; white-space: nowrap; }
+.tp-rule-config-sel { width: auto; min-width: 100px; height: 30px; padding: 0 28px 0 9px; font-size: 12.5px; }
+.tp-rule-config-inp { width: 180px; height: 30px; padding: 0 9px; font-size: 12.5px; font-family: var(--tp-mono); }
+.tp-rule-sev-sel { width: auto; min-width: 90px; height: 30px; padding: 0 28px 0 9px; font-size: 12.5px; margin-left: auto; flex: none; }

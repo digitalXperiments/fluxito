@@ -36,6 +36,7 @@ from .common import coerce_uuid
 from .exceptions import ConflictError, NotFoundError, ValidationError
 from .publish import publish_branch
 from .serializer import plan_to_dict
+from .validation import validate_plan
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +298,7 @@ async def _copy_branch_contents(
                 event_id=event_map.get(metric.event_id) if metric.event_id else None,
                 property_id=prop_map.get(metric.property_id) if metric.property_id else None,
                 filters=metric.filters,
+                dashboard_card_id=metric.dashboard_card_id,
             )
         )
 
@@ -468,6 +470,13 @@ async def merge_branch(
         raise ValidationError("cannot merge the main branch into itself")
     if branch.status != "active":
         raise ValidationError(f"only active branches can be merged (status={branch.status!r})")
+
+    report = await validate_plan(session, plan, branch)
+    blocking = [f for f in report["findings"] if f.get("severity") == "error"]
+    if blocking:
+        raise ValidationError(
+            f"Cannot merge branch '{branch.name}': {len(blocking)} blocking (error-severity) issue(s) must be resolved first."
+        )
 
     main = await get_main_branch(session, plan)
     await _clear_branch_contents(session, main.id)

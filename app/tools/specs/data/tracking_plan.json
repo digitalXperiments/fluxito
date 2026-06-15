@@ -49,10 +49,34 @@
   {
     "tool": "tracking_plan",
     "action": "validate",
-    "summary": "Validate the working draft and return a findings report (missing required properties, duplicate names, unrouted events, etc.). Read-only.",
+    "summary": "Validate the working draft and return a findings report (rule-based checks: casing, regex, required properties, type consistency, PII flagging, plus structural checks). Read-only. is_publishable is true when there are no error-severity findings.",
     "params": [],
     "mutates": false,
-    "returns": "{ findings[{ severity, code, message, entity_type, entity_id }] }"
+    "returns": "{ findings[{ rule_id, severity, code, message, entity_type, entity_id, suggested_fix }], rules[{ id, rule_type, config, severity, enabled, scope_category_id }], counts{ error, warning, info }, is_publishable }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "run_coverage_audit",
+    "summary": "Run a tracking-plan coverage audit and persist the result as an AuditRun + AuditFindings. Calls validate_plan internally, maps findings to AuditFinding rows (TP 'error' → 'critical' severity for correct scoring), and computes a coverage score (100 minus weighted penalties: critical=10, warning=5, info=1). The saved run appears in /project/:slug/audits under the 'tracking_plan_coverage' domain.",
+    "params": [
+      {
+        "name": "branch",
+        "type": "string",
+        "required": false,
+        "example": "main",
+        "doc": "Branch id or name to audit. Defaults to main."
+      }
+    ],
+    "mutates": true,
+    "returns": "{ ok: true, audit_run_id, score, critical, warning, info, counts } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "list_dashboard_cards",
+    "summary": "Return all dashboard cards for the active project — a lightweight list for the metric-link picker. Each card includes its parent dashboard title and platform.",
+    "params": [],
+    "mutates": false,
+    "returns": "{ cards: [{ id, title, dashboard_title, platform }] }"
   },
   {
     "tool": "tracking_plan",
@@ -1480,5 +1504,119 @@
     "mutates": true,
     "reversible": false,
     "returns": "{ ok: true } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "list_rules",
+    "summary": "List all validation rules for the active plan. Lazily seeds the default rule set on first access if no rules exist yet. Rules are plan-scoped (not branch-scoped).",
+    "params": [],
+    "mutates": false,
+    "returns": "{ rules[{ id, rule_type, config, severity, enabled, scope_category_id }] }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "update_rule",
+    "summary": "Update the config and/or severity of a validation rule. Only supplied fields are changed. rule_id must belong to the active plan.",
+    "params": [
+      {
+        "name": "rule_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the validation rule to update."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": false,
+        "doc": "Rule-type-specific config dict (e.g. {casing:'snake_case'} for event_name_casing, {pattern:'...'} for event_name_regex, {property_name:'...',applies_to:'all'} for required_property, {patterns:[...]} for pii_must_be_flagged). Omit to leave unchanged."
+      },
+      {
+        "name": "severity",
+        "type": "string",
+        "required": false,
+        "enum": ["error", "warning", "info"],
+        "doc": "Override the rule severity. Omit to leave unchanged."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, rule_type } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "set_rule_enabled",
+    "summary": "Enable or disable a validation rule. Disabled rules are skipped during validate. Toggling live-updates the Issues view findings.",
+    "params": [
+      {
+        "name": "rule_id",
+        "type": "string",
+        "required": true,
+        "example": "uuid",
+        "doc": "UUID of the validation rule to toggle."
+      },
+      {
+        "name": "enabled",
+        "type": "boolean",
+        "required": true,
+        "example": true,
+        "doc": "True to enable the rule, false to disable it."
+      }
+    ],
+    "mutates": true,
+    "reversible": true,
+    "returns": "{ ok: true, id, enabled } | { error, error_type, message }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "reconcile_preview",
+    "summary": "Dry-run ingest of an externally-discovered event list (GA4 / GTM / Adobe / dataLayer). NORMALIZES each incoming event name to the plan's casing (default snake_case), fuzzy-dedups against existing events (e.g. 'Add To Cart' matches add_to_cart), and diffs into new / updated / unchanged / conflicts. WRITES NOTHING — deterministic and idempotent. Pair with reconcile_apply to commit the approved subset. Feed this the events you discovered via your own analytics connector MCPs; Fluxito does the normalization, dedup, and gap-diff.",
+    "params": [
+      {
+        "name": "events",
+        "type": "array",
+        "required": true,
+        "example": [{ "name": "Add To Cart", "category": "Commerce", "properties": [{ "name": "value", "data_type": "float", "required": true, "example": "9.99" }] }],
+        "doc": "Discovered events. Each item: { name, display_name?, description?, category?, trigger?, source?, properties?:[{ name, data_type?, required?, example?, is_pii?, is_list? }] }."
+      },
+      {
+        "name": "options",
+        "type": "object",
+        "required": false,
+        "example": { "normalize_casing": true, "casing": "snake_case", "match_strategy": "fuzzy" },
+        "doc": "{ normalize_casing?: bool (default true), casing?: snake_case|camelCase|Title (default snake_case), match_strategy?: exact|fuzzy (default fuzzy) }."
+      }
+    ],
+    "mutates": false,
+    "returns": "{ new[], updated[{name,event_id,changes}], unchanged[{name}], conflicts[{reason,...}], normalized_names{input:resolved}, summary{new,updated,unchanged,conflicts} }"
+  },
+  {
+    "tool": "tracking_plan",
+    "action": "reconcile_apply",
+    "summary": "Apply a reconcile_preview result: for each event, follow the caller's per-event decision (create | update | skip). Creates events with their properties (find-or-create event-kind properties), updates changed fields on matched events, and logs one activity row per applied event. Runs on the active/target branch and commits atomically. Events with no decision default to skip.",
+    "params": [
+      {
+        "name": "events",
+        "type": "array",
+        "required": true,
+        "doc": "The same normalized event objects from reconcile_preview (or your edited subset)."
+      },
+      {
+        "name": "decisions",
+        "type": "object",
+        "required": true,
+        "example": { "add_to_cart": "create", "purchase": "update", "page_view": "skip" },
+        "doc": "Map of normalized event name -> 'create' | 'update' | 'skip'. Missing entries default to 'skip'."
+      },
+      {
+        "name": "options",
+        "type": "object",
+        "required": false,
+        "doc": "Same options object as reconcile_preview (must match what was previewed: normalize_casing, casing, match_strategy)."
+      }
+    ],
+    "mutates": true,
+    "reversible": false,
+    "returns": "{ ok: true, created[{name,id}], updated[{name,id}], skipped[{name,reason}], errors[{name,error}] }"
   }
 ]

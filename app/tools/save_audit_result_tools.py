@@ -37,6 +37,7 @@ _VALID_AUDIT_TYPES = {
     "seo",
     "warehouse",
     "full_suite",
+    "tracking_plan_coverage",
 }
 
 # get_score_history window query. ``:days`` is multiplied by a fixed 1-day
@@ -103,7 +104,8 @@ def register_save_audit_result_tools(mcp_server) -> None:
             params:
               audit_type    REQUIRED — one of: tag_audit, live_tag_test,
                             data_quality, sdr_compliance, platform_health,
-                            seo, warehouse, full_suite
+                            seo, warehouse, full_suite,
+                            tracking_plan_coverage
               title         Human-readable title (e.g. "Tag Audit — shop.example.com")
               score         Overall score 0-100
               findings      List of finding dicts. Each finding should have:

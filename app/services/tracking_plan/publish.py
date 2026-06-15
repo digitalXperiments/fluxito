@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.tracking_plan import TPBranch, TPPlan, TPVersion
 
 from .common import coerce_uuid
+from .exceptions import ValidationError
 from .serializer import plan_to_dict
+from .validation import validate_plan
 
 
 def _next_version_number(latest: str | None) -> str:
@@ -27,7 +29,18 @@ def _next_version_number(latest: str | None) -> str:
 async def publish_branch(
     session: AsyncSession, plan: TPPlan, branch: TPBranch, *, user_id: Any, changelog: str | None = None
 ) -> TPVersion:
-    """Snapshot the branch into a new immutable version and point the plan at it."""
+    """Snapshot the branch into a new immutable version and point the plan at it.
+
+    Raises ValidationError if the branch has any error-severity findings (blocking
+    issues that must be resolved before the plan can be published).
+    """
+    report = await validate_plan(session, plan, branch)
+    blocking = [f for f in report["findings"] if f.get("severity") == "error"]
+    if blocking:
+        raise ValidationError(
+            f"Cannot publish: {len(blocking)} blocking (error-severity) issue(s) must be resolved first."
+        )
+
     latest = (
         (
             await session.execute(

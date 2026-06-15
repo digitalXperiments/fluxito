@@ -12,6 +12,7 @@ import * as sources from 'tp/views/sources';
 import * as metrics from 'tp/views/metrics';
 import * as review from 'tp/views/review';
 import * as versions from 'tp/views/versions';
+import * as issues from 'tp/views/issues';
 
 const VIEWS = {
   overview: overview.mountView,
@@ -23,6 +24,7 @@ const VIEWS = {
   metrics: metrics.mountView,
   review: review.mountView,
   versions: versions.mountView,
+  issues: issues.mountView,
 };
 
 export function mountActiveView(host) {

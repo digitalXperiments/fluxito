@@ -223,7 +223,7 @@ export function mountView(container) {
     if (dirty() && !confirm('Discard unsaved changes?')) return;
     state.setDirty(false);
     try {
-      const r = await api.doAction('create_event', { name: 'New event' }, state.getState().branch);
+      const r = await api.doAction('create_event', { name: 'new_event' }, state.getState().branch);
       await state.reload();
       state.select('event', r.id);
       setTimeout(() => { const n = detail.querySelector('#ed-name'); if (n) { n.focus(); n.select(); } }, 0);
@@ -264,11 +264,69 @@ export function mountView(container) {
   // After mutating the draft, recompute dirty and re-render just the detail.
   function touch() { syncDirty(); renderDetail(); }
 
+  // Phase A: inline event-name validation — non-empty, unique-per-branch (mirror server
+  // ConflictError), snake_case casing hint. WARN, never block typing.
+  const SNAKE_RE = /^[a-z][a-z0-9_]*$/;
+  function toSnake(s) {
+    return s
+      .trim()
+      .replace(/[\s-]+/g, '_')
+      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+      .replace(/[^a-zA-Z0-9_]/g, '')
+      .toLowerCase()
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '');
+  }
+  function nameIssue(name, selfId) {
+    const v = (name || '').trim();
+    if (!v) return { kind: 'err', msg: 'Name is required' };
+    const dup = (plan().events || []).some(
+      (x) => x.id !== selfId && (x.name || '').toLowerCase() === v.toLowerCase(),
+    );
+    if (dup) return { kind: 'err', msg: `An event named "${v}" already exists` };
+    if (!SNAKE_RE.test(v)) {
+      const sug = toSnake(v);
+      return sug && sug !== v
+        ? { kind: 'warn', msg: `Suggested: ${sug}` }
+        : { kind: 'warn', msg: 'Use snake_case (lowercase, underscores)' };
+    }
+    return null;
+  }
+  function refreshNameHint(el, name, selfId) {
+    const issue = nameIssue(name, selfId);
+    el.textContent = issue ? issue.msg : '';
+    el.className =
+      'tp-namehint' + (issue ? ' ' + (issue.kind === 'err' ? 'is-err' : 'is-warn') : '');
+  }
+
   // ---- sticky editor header: kicker + mono name + chips + actions + save cluster ----
   function editorHead(e) {
+    const nameInput = h('input', {
+      class: 'tp-titlefield',
+      id: 'ed-name',
+      spellcheck: 'false',
+      autocapitalize: 'off',
+      autocomplete: 'off',
+      value: draft.name,
+      placeholder: 'event_name',
+      onInput: (ev) => {
+        draft.name = ev.target.value;
+        syncDirty();
+        refreshSaveCluster();
+        refreshNameHint(nameHint, draft.name, e.id);
+      },
+      onChange: (ev) => {
+        draft.name = ev.target.value.trim();
+        ev.target.value = draft.name;
+        touch();
+      },
+    });
+    const nameHint = h('div', { class: 'tp-namehint' });
+    refreshNameHint(nameHint, draft.name, e.id);
     const idBlock = h('div', { class: 'tp-ed-id' },
       h('div', { class: 'tp-ed-kicker' }, 'Event'),
-      h('div', { class: 'tp-ed-name' }, draft.name || e.name));
+      nameInput,
+      nameHint);
 
     const chips = h('div', { class: 'tp-ed-chips' });
     if (draft.category) chips.appendChild(h('span', { class: 'tp-chip accent' }, draft.category));

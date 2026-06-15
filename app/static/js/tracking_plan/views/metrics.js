@@ -11,6 +11,12 @@
 // event/property NAME→id via the plan), reloads, and re-snapshots. Discard
 // restores the draft. Switching metric while dirty asks to confirm.
 //
+// Dashboard card link: each metric may be linked to a live dashboard card via
+// TPMetric.dashboard_card_id. The Definition card shows a picker that fetches
+// available cards via the list_dashboard_cards action and persists the selection
+// via update_metric(dashboard_card_id=...). An unlinked metric surfaces the
+// metric_not_measured warning from the validation engine.
+//
 // Hyperscript notes (render.js): h(tag, attrs, ...children); 2nd arg is a plain
 // attrs object. All user text via h() children / value attrs — no innerHTML.
 
@@ -48,6 +54,24 @@ export function mountView(container) {
   const metrics = () => (plan() && plan().metrics) || [];
   const selId = () => { const s = getState().selection; return s && s.id; };
 
+  // Dashboard card picker state: list loaded lazily once per mount.
+  let dashCards = null; // null = not yet fetched; [] = fetched (may be empty)
+  let dashCardsLoading = false;
+
+  async function ensureDashCards() {
+    if (dashCards !== null || dashCardsLoading) return;
+    dashCardsLoading = true;
+    try {
+      const r = await doAction("list_dashboard_cards", {}, getState().branch);
+      dashCards = r.cards || [];
+    } catch (e) {
+      dashCards = []; // treat failure as empty list; picker will show "None"
+    } finally {
+      dashCardsLoading = false;
+    }
+    renderDetail(); // re-render picker now that cards are available
+  }
+
   // Snapshot a fresh draft from the metric `m` (editable fields only).
   function snapshot(m) {
     server = {
@@ -57,6 +81,7 @@ export function mountView(container) {
       event: m.event || null,
       property: m.property || null,
       filters: { ...(m.filters || {}) },
+      dashboard_card_id: m.dashboard_card_id || null,
     };
     draft = clone(server);
     draftId = m.id;
@@ -128,6 +153,9 @@ export function mountView(container) {
           h("div", { class: "tp-row-sub" }, m.event || m.description || "—"),
         ),
         h("span", { class: "tp-badge ty" }, m.type),
+        m.dashboard_card_id
+          ? h("span", { class: "tp-badge tp-badge-linked", title: "Linked to dashboard card" }, "✓ linked")
+          : h("span", { class: "tp-badge tp-badge-unlinked", title: "Not linked to any dashboard card" }, "unlinked"),
       ),
     );
     mountAll(listBody, rows);
@@ -165,10 +193,14 @@ export function mountView(container) {
     // Snapshot a new draft only when the selected metric changes.
     if (draftId !== m.id) snapshot(m);
 
+    // Kick off card list fetch lazily so the picker can populate.
+    ensureDashCards();
+
     const inner = h("div", { class: "tp-detail-inner" });
     inner.appendChild(buildHead(m));
     inner.appendChild(buildPreviewCard());
     inner.appendChild(buildDefinitionCard());
+    inner.appendChild(buildDashboardLinkCard());
     inner.appendChild(buildFiltersCard());
     mountAll(detail, [inner]);
 
@@ -270,6 +302,65 @@ export function mountView(container) {
     return h("div", { class: "tp-card" }, h("div", { class: "tp-card-h" }, h("h3", {}, "Definition")), body);
   }
 
+  // dashboard card link section
+  function buildDashboardLinkCard() {
+    const body = h("div", { class: "tp-card-b" });
+
+    if (dashCards === null) {
+      // Still loading — show a placeholder row; renderDetail() will replace it.
+      body.appendChild(h("div", { class: "tp-muted", style: "font-size:12.5px" }, "Loading dashboard cards…"));
+    } else if (!dashCards.length) {
+      const msg = h("div", { class: "tp-muted", style: "font-size:12.5px" });
+      msg.appendChild(document.createTextNode("No dashboard cards found. "));
+      const link = h("a", { href: "/dashboards", target: "_blank" }, "Create a dashboard →");
+      msg.appendChild(link);
+      body.appendChild(msg);
+    } else {
+      // Build the picker: "(unlinked)" option + one option per card.
+      const sel = h("select", { class: "select" });
+      sel.appendChild(h("option", { value: "" }, "(not linked)"));
+      dashCards.forEach((c) => {
+        const label = c.dashboard_title ? `${c.dashboard_title} — ${c.title}` : c.title;
+        sel.appendChild(
+          h("option", { value: c.id, selected: draft.dashboard_card_id === c.id }, label),
+        );
+      });
+      sel.onchange = () => {
+        draft.dashboard_card_id = sel.value || null;
+        touched();
+      };
+      body.appendChild(field("Dashboard card", sel));
+
+      // Status line: show link badge or warning if unlinked.
+      if (draft.dashboard_card_id) {
+        const linked = dashCards.find((c) => c.id === draft.dashboard_card_id);
+        const label = linked
+          ? (linked.dashboard_title ? `${linked.dashboard_title} — ${linked.title}` : linked.title)
+          : draft.dashboard_card_id;
+        body.appendChild(
+          h("div", { class: "tp-muted", style: "font-size:12px;margin-top:4px" },
+            h("span", { class: "tp-badge tp-badge-linked" }, "✓ linked"),
+            ` ${label}`,
+          ),
+        );
+      } else {
+        body.appendChild(
+          h("div", { class: "tp-muted", style: "font-size:12px;margin-top:4px" },
+            h("span", { class: "tp-badge tp-badge-unlinked" }, "unlinked"),
+            " Link this metric to a live dashboard card to dismiss the metric_not_measured warning.",
+          ),
+        );
+      }
+    }
+
+    return h(
+      "div",
+      { class: "tp-card" },
+      h("div", { class: "tp-card-h" }, h("h3", {}, "Dashboard link")),
+      body,
+    );
+  }
+
   // filter builder card
   function buildFiltersCard() {
     const body = h("div", { class: "tp-card-b" });
@@ -358,6 +449,7 @@ export function mountView(container) {
             event_id: ev ? ev.id : null,
             property_id: pr ? pr.id : null,
             filters: Object.keys(cleanFilters).length ? cleanFilters : null,
+            dashboard_card_id: draft.dashboard_card_id || null,
           },
           getState().branch,
         ),

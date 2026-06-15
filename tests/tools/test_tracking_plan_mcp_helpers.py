@@ -83,11 +83,12 @@ async def test_get_overview_keys_and_counts(db_session_factory):
             }
         ]
 
-        # Health snapshot — event with no source/destination raises warnings,
-        # so it is not publishable.
+        # Health snapshot — event with no source/destination raises warnings.
+        # is_publishable is only False when there are *error*-severity findings;
+        # warnings do not block publishing.
         assert set(overview["health"]["findings_by_severity"].keys()) == {"warning", "info"}
         assert overview["health"]["findings_by_severity"]["warning"] >= 1
-        assert overview["health"]["is_publishable"] is False
+        assert overview["health"]["is_publishable"] is True
 
 
 @pytest.mark.anyio

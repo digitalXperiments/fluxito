@@ -52,6 +52,7 @@ from .properties import (
     update_property,
 )
 from .publish import latest_snapshot_for_project, publish_branch
+from .reconcile import diff_events, match_key, normalize_name
 from .routing import (
     connect_source_destination,
     create_destination,
@@ -62,6 +63,7 @@ from .routing import (
     update_destination,
     update_source,
 )
+from .rules import get_or_seed_rules, list_rules, rule_to_dict, set_rule_enabled, update_rule
 from .serializer import plan_to_dict
 from .taxonomy import create_category, delete_category, update_category
 from .validation import validate_plan
@@ -98,17 +100,22 @@ __all__ = [
     "delete_source",
     "detach_property",
     "diff_branches",
+    "diff_events",
     "disconnect_source_destination",
     "edit_comment",
     "get_branch",
     "get_main_branch",
     "get_or_create_plan",
+    "get_or_seed_rules",
     "latest_snapshot_for_project",
     "list_activity",
     "list_branches",
     "list_bundles",
     "list_comments",
+    "list_rules",
+    "match_key",
     "merge_branch",
+    "normalize_name",
     "plan_to_dict",
     "plan_to_markdown",
     "plan_to_xlsx",
@@ -117,15 +124,18 @@ __all__ = [
     "remove_event_destination",
     "remove_property_from_bundle",
     "resolve_comment",
+    "rule_to_dict",
     "set_event_destination",
     "set_event_sources",
     "set_review_status",
+    "set_rule_enabled",
     "update_bundle",
     "update_category",
     "update_destination",
     "update_event",
     "update_metric",
     "update_property",
+    "update_rule",
     "update_source",
     "validate_plan",
 ]

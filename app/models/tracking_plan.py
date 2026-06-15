@@ -37,6 +37,16 @@ PROPERTY_DATA_TYPES = ("string", "int", "float", "boolean", "object", "array")
 IMPL_STATUSES = ("planned", "implemented", "verified", "deprecated")
 METRIC_TYPES = ("count", "sum", "unique", "average", "ratio")
 COMMENT_ENTITY_TYPES = ("event", "property", "source", "destination", "metric", "category", "plan", "branch")
+VALIDATION_SEVERITIES = ("error", "warning", "info")
+RULE_TYPES = (
+    "event_name_casing",
+    "event_name_regex",
+    "event_requires_description",
+    "event_requires_owner",
+    "required_property",
+    "property_type_consistency",
+    "pii_must_be_flagged",
+)
 
 
 class TPPlan(Base):
@@ -359,6 +369,9 @@ class TPMetric(Base):
     property_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tp_properties.id", ondelete="SET NULL"), nullable=True
     )
+    dashboard_card_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("dashboard_cards.id", ondelete="SET NULL"), nullable=True
+    )
     filters: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -487,4 +500,42 @@ class TPActivity(Base):
     __table_args__ = (
         Index("ix_tp_activity_entity", "plan_id", "branch_id", "entity_type", "entity_id"),
         Index("ix_tp_activity_feed", "plan_id", "branch_id", "created_at"),
+    )
+
+
+class TPValidationRule(Base):
+    """A configurable validation rule for a plan. Evaluated by validate_plan().
+
+    Rules are plan-scoped (not branch-scoped): the same rule set applies to
+    whichever branch is being validated. ``scope_category_id`` optionally
+    restricts evaluation to events belonging to a specific category.
+    """
+
+    __tablename__ = "tp_validation_rule"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    rule_type: Mapped[str] = mapped_column(Text, nullable=False)
+    config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    severity: Mapped[str] = mapped_column(Text, nullable=False, server_default="warning")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    scope_category_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_categories.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "severity IN ('error', 'warning', 'info')",
+            name="ck_tp_validation_rule_severity",
+        ),
+        UniqueConstraint(
+            "plan_id",
+            "rule_type",
+            "scope_category_id",
+            name="uq_tp_validation_rule",
+        ),
+        Index("ix_tp_validation_rule_plan", "plan_id", "enabled"),
     )
