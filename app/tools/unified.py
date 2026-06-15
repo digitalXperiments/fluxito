@@ -245,7 +245,7 @@ KNOWLEDGE_ROUTES: dict[str, tuple[str, str | None]] = {
 
 # tracking_plan — structured tracking-plan dispatcher (v2).
 # Named "tracking_plan" because that is the industry-standard term for this
-# artifact (Amplitude / Avo / Segment all use it).
+# artifact (Amplitude / Segment all use it).
 TRACKING_PLAN_ROUTES: dict[str, tuple[str, str | None]] = {
     # --- Structured (v2) actions — Plan 1B ---
     "get_plan": ("tracking_plan_v2", "get_plan"),

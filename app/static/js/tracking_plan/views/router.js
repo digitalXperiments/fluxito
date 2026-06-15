@@ -9,7 +9,6 @@ import * as properties from 'tp/views/properties';
 import * as categories from 'tp/views/categories';
 import * as bundles from 'tp/views/bundles';
 import * as sources from 'tp/views/sources';
-import * as metrics from 'tp/views/metrics';
 import * as review from 'tp/views/review';
 import * as versions from 'tp/views/versions';
 import * as issues from 'tp/views/issues';
@@ -21,7 +20,6 @@ const VIEWS = {
   categories: categories.mountView,
   bundles: bundles.mountView,
   sources: sources.mountView,
-  metrics: metrics.mountView,
   review: review.mountView,
   versions: versions.mountView,
   issues: issues.mountView,

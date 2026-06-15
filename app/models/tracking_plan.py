@@ -1,7 +1,7 @@
 # app/models/tracking_plan.py
 """Tracking Plan (revamped SDR) relational models — the structured source of truth.
 
-A tracking plan is the Avo-style structured definition of a project's analytics:
+A tracking plan is the industry-standard structured definition of a project's analytics:
 events, a reusable property library, user properties, sources, destinations,
 source -> destination routing, per-event mapping rules, categories, and metrics.
 
@@ -33,9 +33,9 @@ from app.db.database import Base
 BRANCH_STATUSES = ("active", "merged", "abandoned")
 REVIEW_STATUSES = ("draft", "ready_for_review", "changes_requested", "approved")
 PROPERTY_KINDS = ("event", "user", "group", "system")
-PROPERTY_DATA_TYPES = ("string", "int", "float", "boolean", "object", "array")
+PROPERTY_DATA_TYPES = ("string", "integer", "float", "boolean", "object")
 IMPL_STATUSES = ("planned", "implemented", "verified", "deprecated")
-METRIC_TYPES = ("count", "sum", "unique", "average", "ratio")
+# NOTE: METRIC_TYPES removed in migration 064 — metrics no longer carry measurement columns.
 COMMENT_ENTITY_TYPES = ("event", "property", "source", "destination", "metric", "category", "plan", "branch")
 VALIDATION_SEVERITIES = ("error", "warning", "info")
 RULE_TYPES = (
@@ -209,11 +209,9 @@ class TPProperty(Base):
     data_type: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     constraints: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    parent_property_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tp_properties.id", ondelete="CASCADE"), nullable=True
-    )
     is_pii: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
-    # True when the value is an array of `data_type` (Avo "list" property).
+    # True when the value is an array of `data_type` (list property).
+    # "List of objects" = data_type='object', is_list=True.
     is_list: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -221,7 +219,7 @@ class TPProperty(Base):
         UniqueConstraint("branch_id", "kind", "name", name="uq_tp_property_name"),
         CheckConstraint("kind IN ('event', 'user', 'group', 'system')", name="ck_tp_property_kind"),
         CheckConstraint(
-            "data_type IN ('string', 'int', 'float', 'boolean', 'object', 'array')",
+            "data_type IN ('string', 'integer', 'float', 'boolean', 'object')",
             name="ck_tp_property_data_type",
         ),
     )
@@ -245,6 +243,31 @@ class TPEventProperty(Base):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     __table_args__ = (UniqueConstraint("event_id", "property_id", name="uq_tp_event_property"),)
+
+
+class TPPropertyMember(Base):
+    """Shared-reference link between an object property and its member properties (shared-pool nesting).
+
+    ``parent_property_id`` must be an ``object`` (or ``object + is_list=True``) property.
+    ``member_property_id`` is any library property referenced as a key of that object.
+    The same global property can be a member of multiple object properties across the plan.
+    """
+
+    __tablename__ = "tp_property_members"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    parent_property_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_properties.id", ondelete="CASCADE"), nullable=False
+    )
+    member_property_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_properties.id", ondelete="CASCADE"), nullable=False
+    )
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+    __table_args__ = (
+        UniqueConstraint("parent_property_id", "member_property_id", name="uq_tp_property_member"),
+    )
 
 
 class TPSource(Base):
@@ -349,7 +372,12 @@ class TPEventDestination(Base):
 
 
 class TPMetric(Base):
-    """An event-based metric — branch-scoped."""
+    """A named success metric linked to an event — branch-scoped.
+
+    Measurement columns (type, property_id, filters, dashboard_card_id) were
+    dropped in migration 064. Metrics are now lightweight intent markers:
+    name + description + event association. Measurement lives in the dashboard layer.
+    """
 
     __tablename__ = "tp_metrics"
 
@@ -362,23 +390,12 @@ class TPMetric(Base):
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    type: Mapped[str] = mapped_column(Text, nullable=False, server_default="count")
     event_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tp_events.id", ondelete="SET NULL"), nullable=True
     )
-    property_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tp_properties.id", ondelete="SET NULL"), nullable=True
-    )
-    dashboard_card_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("dashboard_cards.id", ondelete="SET NULL"), nullable=True
-    )
-    filters: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (
-        UniqueConstraint("branch_id", "name", name="uq_tp_metric_name"),
-        CheckConstraint("type IN ('count', 'sum', 'unique', 'average', 'ratio')", name="ck_tp_metric_type"),
-    )
+    __table_args__ = (UniqueConstraint("branch_id", "name", name="uq_tp_metric_name"),)
 
 
 class TPComment(Base):

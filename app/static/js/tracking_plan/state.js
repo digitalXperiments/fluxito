@@ -17,6 +17,7 @@ const _state = {
   branch: 'main',
   plan: null,
   branches: [],
+  vendors: null, // { destinations:[{slug,display_name,category,source}], source_platforms:[{slug,display_name}] }
   view: 'overview',
   selection: { type: null, id: null },
   dirty: false, // editor has unsaved draft changes — drives the nav guard only
@@ -72,15 +73,26 @@ export function beginSave() {}
 export function endSave() {}
 
 // Re-fetch the plan (+ branch list) for the current branch and publish it.
+// Also fetches the vendor catalog once (cached for the session).
 export async function reload() {
   const plan = await api.getPlan(_state.branch);
   _state.plan = plan;
-  try {
-    const lb = await api.branches();
-    _state.branches = lb.branches || [];
-  } catch (e) {
-    _state.branches = _state.branches.length ? _state.branches : [{ name: 'main', is_main: true }];
+  const fetches = [];
+  fetches.push(
+    api.branches()
+      .then((lb) => { _state.branches = lb.branches || []; })
+      .catch(() => {
+        if (!_state.branches.length) _state.branches = [{ name: 'main', is_main: true }];
+      }),
+  );
+  if (!_state.vendors) {
+    fetches.push(
+      api.vendors()
+        .then((v) => { _state.vendors = v; })
+        .catch(() => { /* catalog unavailable — views fall back to empty arrays */ }),
+    );
   }
+  await Promise.all(fetches);
   _notify();
   return plan;
 }

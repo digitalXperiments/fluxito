@@ -13,6 +13,7 @@ from app.models.tracking_plan import (
     TPEventSource,
     TPMetric,
     TPProperty,
+    TPPropertyMember,
     TPSource,
     TPSourceDestination,
 )
@@ -39,6 +40,7 @@ from app.services.tracking_plan import (
     set_review_status,
     update_event,
 )
+from app.services.tracking_plan.properties import add_member
 
 from .test_models import _make_project_and_user
 
@@ -50,9 +52,9 @@ async def _count(session, model, branch_id) -> int:
 
 async def _seed_main(session):
     """Build a fully-populated plan on main: category, event (in category),
-    a property with a parent property (object nesting), event<->property
+    object property with a linked member property (tp_property_members), event<->property
     attachment, source, destination, source->dest routing, event-source scope,
-    event-destination mapping, and a metric. Returns (plan, main)."""
+    event-destination mapping, and a metric. Returns (plan, main, user_id)."""
     project_id, user_id = await _make_project_and_user(session)
     plan = await get_or_create_plan(session, project_id=project_id, user_id=user_id)
     main = await get_main_branch(session, plan)
@@ -60,10 +62,11 @@ async def _seed_main(session):
     cat = await create_category(session, main, name="Commerce", description="shop")
     event = await create_event(session, main, name="purchase", category_id=cat.id, description="buy")
 
+    # Object nesting now uses the link table: create parent object prop, create
+    # member prop, then link them via add_member.
     parent = await create_property(session, main, name="cart", data_type="object")
-    child = await create_property(
-        session, main, name="cart.total", data_type="float", parent_property_id=parent.id
-    )
+    child = await create_property(session, main, name="cart.total", data_type="float")
+    await add_member(session, main, parent.id, child.id, required=False, sort_order=0)
     await attach_property(session, main, event.id, child.id, required=True, example="9.99", sort_order=1)
 
     source = await create_source(session, main, name="web", platform_type="browser")
@@ -81,9 +84,7 @@ async def _seed_main(session):
         property_mappings={"cart.total": "value"},
         notes="map total",
     )
-    await create_metric(
-        session, main, name="purchases", type="count", event_id=event.id, property_id=child.id
-    )
+    await create_metric(session, main, name="purchases", event_id=event.id)
     return plan, main, user_id
 
 
@@ -146,23 +147,43 @@ async def test_create_branch_deep_copies_all_entities(db_session_factory):
         assert ep.required is True
         assert ep.example == "9.99"
 
-        # parent_property_id remapped to the branch's parent, not main's.
+        # tp_property_members link was copied into the forked branch and remapped
+        # to branch-local ids (not main's parent id).
         branch_child = branch_props["cart.total"]
         branch_parent = branch_props["cart"]
-        assert branch_child.parent_property_id == branch_parent.id
         main_parent = (
             await session.execute(
                 select(TPProperty).where(TPProperty.branch_id == main.id, TPProperty.name == "cart")
             )
         ).scalar_one()
-        assert branch_child.parent_property_id != main_parent.id
 
-        # Metric's event/property resolve to the branch's copies.
+        # Branch member link points to the branch's parent (not main's parent).
+        branch_member_link = (
+            await session.execute(
+                select(TPPropertyMember).where(
+                    TPPropertyMember.parent_property_id == branch_parent.id,
+                    TPPropertyMember.member_property_id == branch_child.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert branch_member_link is not None, "tp_property_members link was not copied to the branch"
+
+        # Main's member link must NOT reference the branch's property ids.
+        main_member_link = (
+            await session.execute(
+                select(TPPropertyMember).where(
+                    TPPropertyMember.parent_property_id == main_parent.id,
+                    TPPropertyMember.member_property_id == branch_child.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert main_member_link is None, "branch member link should not reference main's parent"
+
+        # Metric's event resolves to the branch's copy (no property_id column anymore).
         branch_metric = (
             await session.execute(select(TPMetric).where(TPMetric.branch_id == branch.id))
         ).scalar_one()
         assert branch_metric.event_id == branch_event.id
-        assert branch_metric.property_id == branch_child.id
 
         # Routing copied (source->dest).
         branch_source = (

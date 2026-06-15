@@ -24,20 +24,54 @@ function sevClass(sev) {
   return "sky";
 }
 
-// ---- rule-type human labels -------------------------------------------------
+// ---- rule-type human labels + help text -------------------------------------
+//
+// Each entry: { label, help }. `help` is optional inline guidance shown beneath
+// the rule name in the Rules tab so users know what the control configures.
 
 const RULE_LABELS = {
-  event_name_casing: "Event name casing",
-  event_name_regex: "Event name pattern",
-  event_requires_description: "Event requires description",
-  event_requires_owner: "Event requires owner",
-  required_property: "Required property",
-  property_type_consistency: "Property type consistency",
-  pii_must_be_flagged: "PII must be flagged",
+  event_name_casing: {
+    label: "Event name casing",
+    help: "Enforce that all event names conform to a chosen casing style (snake_case, camelCase, or Title Case).",
+  },
+  event_name_regex: {
+    label: "Event name pattern",
+    help: "Require every event name to match a custom regular expression (e.g. ^[a-z][a-z0-9_]*$).",
+  },
+  event_name_components: {
+    label: "Structured naming convention",
+    help: "Define ordered name components (object, action, context…), allowed separators, and casing. The linter rebuilds the expected pattern from these settings.",
+  },
+  event_requires_description: {
+    label: "Event requires description",
+    help: "Flag any event that has no description — helps ensure plan documentation is complete.",
+  },
+  event_requires_owner: {
+    label: "Event requires owner",
+    help: "Flag events missing a business or technical owner assignment.",
+  },
+  required_property: {
+    label: "Required property",
+    help: "Require a named property to be present on every event (or only events in a specific category).",
+  },
+  property_type_consistency: {
+    label: "Property type consistency",
+    help: "Flag properties that share a name but appear with different data types across events.",
+  },
+  pii_must_be_flagged: {
+    label: "PII must be flagged",
+    help: "Scan property names and descriptions for PII-signalling patterns; require matching properties to have is_pii=true.",
+  },
 };
 
 function ruleLabel(ruleType) {
-  return RULE_LABELS[ruleType] || titleCase(ruleType);
+  const entry = RULE_LABELS[ruleType];
+  return entry ? entry.label : titleCase(ruleType);
+}
+
+function ruleHelp(ruleType) {
+  const entry = RULE_LABELS[ruleType];
+  return (entry && entry.help) || null;
 }
 
 // ---- mountView --------------------------------------------------------------
@@ -362,6 +396,12 @@ export function mountView(container) {
     return wrap;
   }
 
+  // buildRuleRow — wrapping flex layout:
+  //   Line 1: toggle + meta (label, kicker, help)
+  //   Line 2 (wraps): .tp-rule-controls cluster with all config fields + severity
+  //
+  // Each config field uses a light .tp-rule-field span (label + control inline),
+  // NOT the old nested .tp-rule-config-inside-.tp-rule-config pattern.
   function buildRuleRow(rule, plan) {
     const row = h("div", { class: "tp-rule-row" + (!rule.enabled ? " tp-rule-disabled" : "") });
 
@@ -373,45 +413,71 @@ export function mountView(container) {
       onClick: () => toggleRule(rule.id, !rule.enabled),
     });
 
-    // Rule label + type kicker
+    // Rule label + type kicker + optional help text — all on their own meta block
+    const help = ruleHelp(rule.rule_type);
     const meta = h(
       "div",
       { class: "tp-rule-meta" },
       h("div", { class: "tp-rule-label" }, ruleLabel(rule.rule_type)),
       h("div", { class: "tp-rule-type tp-muted" }, rule.rule_type),
+      help ? h("div", { class: "tp-rule-help tp-muted" }, help) : null,
     );
 
-    // Severity selector
+    // Controls cluster: config fields + severity selector, all wrapped together
+    // so they reflow as a unit at narrow widths.
+    const controls = h("div", { class: "tp-rule-controls" });
+
+    // Per-rule config fields (flat — no nesting)
+    const configFields = buildRuleConfigFields(rule, plan);
+    for (const field of configFields) {
+      controls.appendChild(field);
+    }
+
+    // Severity selector — always present per rule
     const sevSel = h("select", { class: "select tp-rule-sev-sel" });
     for (const s of ["error", "warning", "info"]) {
       sevSel.appendChild(h("option", { value: s, selected: rule.severity === s }, s));
     }
     sevSel.onchange = () => saveRule(rule.id, { severity: sevSel.value });
-
-    // Config controls
-    const configCtrl = buildRuleConfig(rule, plan);
+    controls.appendChild(ruleField("Severity", sevSel));
 
     row.appendChild(tog);
     row.appendChild(meta);
-    if (configCtrl) row.appendChild(configCtrl);
-    row.appendChild(sevSel);
+    row.appendChild(controls);
 
     return row;
   }
 
-  function buildRuleConfig(rule, plan) {
-    const cfg = rule.config || {};
+  // ruleField — lightweight label+control pair using .tp-rule-field span.
+  // Replaces the old wrapConfigField() which produced nested .tp-rule-config divs.
+  function ruleField(label, ctrl) {
+    return h(
+      "span",
+      { class: "tp-rule-field" },
+      h("span", { class: "tp-rule-field-label tp-muted" }, label),
+      ctrl,
+    );
+  }
 
+  // buildRuleConfigFields — returns an array of .tp-rule-field elements (flat).
+  // Each rule type produces its own set of fields; the caller appends them all
+  // into the single .tp-rule-controls cluster alongside the severity selector.
+  function buildRuleConfigFields(rule, plan) {
+    const cfg = rule.config || {};
+    const fields = [];
+
+    // ---- event_name_casing: casing style picker --------------------------------
     if (rule.rule_type === "event_name_casing") {
       const sel = h("select", { class: "select tp-rule-config-sel" });
       for (const c of ["snake_case", "camelCase", "Title"]) {
         sel.appendChild(h("option", { value: c, selected: (cfg.casing || "snake_case") === c }, c));
       }
       sel.onchange = () => saveRule(rule.id, { config: { casing: sel.value } });
-      return wrapConfigField("Casing", sel);
+      fields.push(ruleField("Casing", sel));
     }
 
-    if (rule.rule_type === "event_name_regex") {
+    // ---- event_name_regex: regex pattern input ---------------------------------
+    else if (rule.rule_type === "event_name_regex") {
       const inp = h("input", {
         class: "input tp-rule-config-inp",
         type: "text",
@@ -423,59 +489,225 @@ export function mountView(container) {
           saveRule(rule.id, { config: { pattern: inp.value } });
         }
       };
-      return wrapConfigField("Pattern", inp);
+      fields.push(ruleField("Pattern", inp));
     }
 
-    if (rule.rule_type === "required_property") {
+    // ---- event_name_components: structured naming rule -------------------------
+    // Backend config shape (see rules.py):
+    //   { components: ["object","action"], separators: ["_"], casing: "lower",
+    //     min_parts: 2, max_parts: null }
+    // "components" = ordered label slots for each name segment.
+    // "separators" = list of allowed separator strings (we expose as first item).
+    // "casing" = token casing (lower | upper | snake_case | camelCase | TitleCase | any).
+    else if (rule.rule_type === "event_name_components") {
+      const components = Array.isArray(cfg.components) ? [...cfg.components] : ["object", "action"];
+      // separators is a list; expose the first one in the UI as the chosen separator
+      const separators = Array.isArray(cfg.separators) ? cfg.separators : ["_"];
+      const casing = cfg.casing || "lower";
+
+      const saveComponents = () => saveRule(rule.id, {
+        config: { ...cfg, components: [...components], separators: [...separators], casing },
+      });
+
+      // Components editor: ordered tags with add/remove
+      const compWrap = h("div", { class: "tp-tag-list" });
+
+      const refreshCompTags = () => {
+        mountAll(compWrap, components.map((comp, idx) => {
+          const rm = h("button", { class: "tp-tag-rm", type: "button", title: "Remove" }, "×");
+          rm.onclick = () => {
+            components.splice(idx, 1);
+            refreshCompTags();
+            saveComponents();
+          };
+          return h("span", { class: "tp-tag" }, comp, rm);
+        }));
+      };
+      refreshCompTags();
+
+      const compInp = h("input", {
+        class: "input tp-rule-config-inp",
+        type: "text",
+        placeholder: "add component…",
+        style: "width:120px",
+      });
+      const commitCompInp = () => {
+        const val = compInp.value.trim();
+        if (val && !components.includes(val)) {
+          components.push(val);
+          refreshCompTags();
+          saveComponents();
+        }
+        compInp.value = "";
+      };
+      compInp.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commitCompInp(); }
+      };
+      compInp.onblur = () => { if (compInp.value.trim()) commitCompInp(); };
+
+      const compBlock = h("div", { class: "tp-tag-editor" }, compWrap, compInp);
+      fields.push(ruleField("Components", compBlock));
+
+      // Separator picker (sets separators[0] and keeps any extras)
+      const sepSel = h("select", { class: "select tp-rule-config-sel" });
+      for (const sep of ["_", "-", ".", "/", " ", ""]) {
+        const label = sep === "" ? "(none)" : sep === " " ? "(space)" : `"${sep}"`;
+        sepSel.appendChild(h("option", { value: sep, selected: (separators[0] || "_") === sep }, label));
+      }
+      sepSel.onchange = () => {
+        separators[0] = sepSel.value;
+        saveRule(rule.id, { config: { ...cfg, components: [...components], separators: [...separators], casing } });
+      };
+      fields.push(ruleField("Separator", sepSel));
+
+      // Casing picker — matches backend CASING_CHOICES
+      const casSel = h("select", { class: "select tp-rule-config-sel" });
+      for (const cas of ["lower", "upper", "snake_case", "camelCase", "TitleCase", "any"]) {
+        casSel.appendChild(h("option", { value: cas, selected: casing === cas }, cas));
+      }
+      casSel.onchange = () => saveRule(rule.id, {
+        config: { ...cfg, components: [...components], separators: [...separators], casing: casSel.value },
+      });
+      fields.push(ruleField("Casing", casSel));
+    }
+
+    // ---- required_property: property name + applies-to (all | category) -------
+    else if (rule.rule_type === "required_property") {
       const eventProps = (plan.properties && plan.properties.event) || [];
+      const categories = plan.categories || [];
+
       const propSel = h("select", { class: "select tp-rule-config-sel" });
       propSel.appendChild(h("option", { value: "" }, "(pick property)"));
       for (const p of eventProps) {
         propSel.appendChild(h("option", { value: p.name, selected: (cfg.property_name || "") === p.name }, p.name));
       }
+
       const applyToSel = h("select", { class: "select tp-rule-config-sel" });
-      for (const a of ["all", "category"]) {
-        applyToSel.appendChild(h("option", { value: a, selected: (cfg.applies_to || "all") === a }, a));
+      applyToSel.appendChild(h("option", { value: "all" }, "all events"));
+      applyToSel.appendChild(h("option", { value: "category", selected: (cfg.applies_to || "all") === "category" }, "category"));
+
+      // Category picker — only visible when applies_to === 'category'
+      const catSel = h("select", { class: "select tp-rule-config-sel" });
+      catSel.appendChild(h("option", { value: "" }, "(pick category)"));
+      for (const cat of categories) {
+        const catName = typeof cat === "string" ? cat : (cat.name || "");
+        catSel.appendChild(h("option", {
+          value: catName,
+          selected: catName === (cfg.scope_category || ""),
+        }, catName));
       }
-      const onSave = () => saveRule(rule.id, { config: { property_name: propSel.value, applies_to: applyToSel.value } });
+
+      const catFieldSpan = ruleField("Category", catSel);
+      catFieldSpan.style.display = (cfg.applies_to || "all") === "category" ? "" : "none";
+
+      const onSave = () => {
+        const appliesTo = applyToSel.value;
+        catFieldSpan.style.display = appliesTo === "category" ? "" : "none";
+        // scope_category_id is resolved server-side from the category name;
+        // we send scope_category_id by finding the matching category object.
+        const matchCat = categories.find((c) => {
+          const n = typeof c === "string" ? c : (c.name || "");
+          return n === catSel.value;
+        });
+        const scopeCatId = matchCat && typeof matchCat === "object" ? (matchCat.id || null) : null;
+        saveRule(rule.id, {
+          config: { property_name: propSel.value, applies_to: appliesTo, scope_category: catSel.value },
+          scope_category_id: scopeCatId,
+        });
+      };
       propSel.onchange = onSave;
       applyToSel.onchange = onSave;
-      return h("div", { class: "tp-rule-config" },
-        wrapConfigField("Property", propSel),
-        wrapConfigField("Applies to", applyToSel),
-      );
+      catSel.onchange = onSave;
+
+      fields.push(ruleField("Property", propSel));
+      fields.push(ruleField("Applies to", applyToSel));
+      fields.push(catFieldSpan);
     }
 
-    if (rule.rule_type === "event_requires_owner") {
+    // ---- event_requires_owner: business/technical checkboxes -------------------
+    else if (rule.rule_type === "event_requires_owner") {
       const bizChk = h("input", { type: "checkbox", checked: !!cfg.business });
       const techChk = h("input", { type: "checkbox", checked: !!cfg.technical });
       const onSave = () => saveRule(rule.id, { config: { business: bizChk.checked, technical: techChk.checked } });
       bizChk.onchange = onSave;
       techChk.onchange = onSave;
-      return h("div", { class: "tp-rule-config" },
-        h("label", { class: "tp-checkline" }, bizChk, "Business owner"),
-        h("label", { class: "tp-checkline" }, techChk, "Technical owner"),
-      );
+
+      const bizLabel = h("label", { class: "tp-checkline" }, bizChk, "Business");
+      const techLabel = h("label", { class: "tp-checkline" }, techChk, "Technical");
+      const chkWrap = h("span", { class: "tp-rule-chk-group" }, bizLabel, techLabel);
+      fields.push(ruleField("Require", chkWrap));
     }
 
-    // No configurable options for other types — return null
-    return null;
-  }
+    // ---- pii_must_be_flagged: PII pattern tag editor ---------------------------
+    // Backend config shape: { patterns: ["email", "ssn", "phone", ...] }
+    // The backend stores the list as config.patterns. Tags are substring/regex
+    // patterns; the linter requires is_pii=true on any property whose name or
+    // description matches a pattern.
+    else if (rule.rule_type === "pii_must_be_flagged") {
+      // cfg.patterns is the canonical server key (see rules.py DEFAULT_RULES)
+      const patterns = Array.isArray(cfg.patterns) ? [...cfg.patterns] : [];
 
-  function wrapConfigField(label, ctrl) {
-    return h("div", { class: "tp-rule-config" },
-      h("span", { class: "tp-rule-config-label tp-muted" }, label),
-      ctrl,
-    );
+      const tagList = h("div", { class: "tp-tag-list" });
+
+      const savePii = () => saveRule(rule.id, { config: { ...cfg, patterns: [...patterns] } });
+
+      const refreshTags = () => {
+        mountAll(tagList, patterns.map((pat, idx) => {
+          const rm = h("button", { class: "tp-tag-rm", type: "button", title: "Remove pattern" }, "×");
+          rm.onclick = () => {
+            patterns.splice(idx, 1);
+            refreshTags();
+            savePii();
+          };
+          return h("span", { class: "tp-tag" }, pat, rm);
+        }));
+      };
+      refreshTags();
+
+      const patInp = h("input", {
+        class: "input tp-rule-config-inp",
+        type: "text",
+        placeholder: "add pattern…",
+        style: "width:120px",
+      });
+      const commitPatInp = () => {
+        const val = patInp.value.trim();
+        if (val && !patterns.includes(val)) {
+          patterns.push(val);
+          refreshTags();
+          savePii();
+        }
+        patInp.value = "";
+      };
+      patInp.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === ",") {
+          e.preventDefault();
+          commitPatInp();
+        }
+      };
+      patInp.onblur = () => commitPatInp();
+
+      const tagEditor = h("div", { class: "tp-tag-editor" }, tagList, patInp);
+      fields.push(ruleField("PII patterns", tagEditor));
+    }
+
+    return fields;
   }
 
   // ---- persistence helpers ----------------------------------------------------
 
+  // saveRule sends update_rule with optional scope_category_id at the top level.
+  // patch may contain: { config?, severity?, scope_category_id? }
   async function saveRule(ruleId, patch) {
+    const { scope_category_id, ...rest } = patch;
+    const payload = { rule_id: ruleId, ...rest };
+    if (scope_category_id !== undefined) {
+      payload.scope_category_id = scope_category_id;
+    }
     try {
       await persist(
         "Rule updated",
-        () => doAction("update_rule", { rule_id: ruleId, ...patch }, getState().branch),
+        () => doAction("update_rule", payload, getState().branch),
       );
       await refresh();
     } catch (e) { /* persist surfaced the banner */ }

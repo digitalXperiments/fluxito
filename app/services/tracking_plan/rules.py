@@ -80,6 +80,36 @@ DEFAULT_RULES: list[dict] = [
         "severity": "warning",
         "enabled": True,
     },
+    {
+        # Structured naming rule: event names must be composed of an ordered
+        # list of named components, joined by an allowed separator, and each
+        # component must match the specified casing.
+        #
+        # Example: components=["object", "action"], separator="_",
+        # casing="snake_case" would accept "page_viewed" but reject
+        # "viewed_page" or "PageViewed".
+        #
+        # Config keys:
+        #   components  – ordered list of component label strings (e.g.
+        #                 ["object", "action"]).  Min 1 element.
+        #   separators  – list of allowed separator strings (default ["_"]).
+        #   casing      – casing each component token must match; one of
+        #                 snake_case | camelCase | TitleCase | lower | upper |
+        #                 any (default "lower").
+        #   min_parts   – minimum number of separator-split tokens required
+        #                 (defaults to len(components)).
+        #   max_parts   – maximum number of tokens (default None = no limit).
+        "rule_type": "event_name_components",
+        "config": {
+            "components": ["object", "action"],
+            "separators": ["_"],
+            "casing": "lower",
+            "min_parts": 2,
+            "max_parts": None,
+        },
+        "severity": "warning",
+        "enabled": False,
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -174,12 +204,21 @@ async def update_rule(
     config: dict | None = None,
     config_provided: bool = False,
     severity: str | None = None,
+    scope_category_id: Any | None = None,
+    scope_category_id_provided: bool = False,
 ) -> TPValidationRule:
-    """Patch config and/or severity on an existing rule.
+    """Patch config, severity, and/or scope_category_id on an existing rule.
 
     Pass ``config_provided=True`` together with ``config`` to explicitly set
     config (including to None).  When ``config_provided`` is False the config
     field is left unchanged.
+
+    Pass ``scope_category_id_provided=True`` together with
+    ``scope_category_id`` to set (or clear) the category scope.  When
+    ``scope_category_id_provided`` is False the field is left unchanged.
+
+    ``severity`` is validated against ``VALIDATION_SEVERITIES``; pass one of
+    ``'error'``, ``'warning'``, or ``'info'``.
     """
     rule = await _get_rule_for_plan(session, plan, rule_id)
 
@@ -190,6 +229,12 @@ async def update_rule(
 
     if config_provided:
         rule.config = config
+
+    if scope_category_id_provided:
+        if scope_category_id is not None:
+            rule.scope_category_id = coerce_uuid(scope_category_id)
+        else:
+            rule.scope_category_id = None
 
     await session.flush()
     return rule

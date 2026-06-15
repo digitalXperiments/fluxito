@@ -231,8 +231,21 @@ async def _dispatch(session, branch, ctx: _Ctx, action: str, params: dict) -> di
                 constraints=p.get("constraints"),
                 is_pii=bool(p.get("is_pii", False)),
                 is_list=bool(p.get("is_list", False)),
-                parent_property_id=p.get("parent_property_id"),
             )
+            # If a parent_property_id was supplied, link the new property as a
+            # member of that parent via the tp_property_members table (Option B).
+            parent_id = p.get("parent_property_id")
+            if parent_id is not None:
+                from app.models.tracking_plan import TPPropertyMember
+
+                member_link = TPPropertyMember(
+                    parent_property_id=uuid.UUID(str(parent_id)),
+                    member_property_id=pr.id,
+                    required=bool(p.get("required", False)),
+                    sort_order=int(p.get("sort_order", 0)),
+                )
+                session.add(member_link)
+                await session.flush()
             return _ok(id=str(pr.id), name=pr.name, kind=pr.kind)
         if action == "update_property":
             pr = await update_property(session, branch, p["property_id"], **_property_fields(p))
@@ -340,11 +353,8 @@ async def _dispatch(session, branch, ctx: _Ctx, action: str, params: dict) -> di
                 session,
                 branch,
                 name=p.get("name", ""),
-                type=p.get("type", "count"),
                 description=p.get("description"),
                 event_id=p.get("event_id"),
-                property_id=p.get("property_id"),
-                filters=p.get("filters"),
             )
             return _ok(id=str(m.id), name=m.name)
         if action == "update_metric":
@@ -1188,7 +1198,7 @@ def _event_dest_fields(p: dict) -> dict:
 def _property_fields(p: dict) -> dict:
     return _pick(
         p,
-        ("name", "description", "data_type", "constraints", "is_pii", "is_list", "parent_property_id"),
+        ("name", "description", "data_type", "constraints", "is_pii", "is_list"),
     )
 
 
@@ -1209,9 +1219,7 @@ def _dest_fields(p: dict) -> dict:
 
 
 def _metric_fields(p: dict) -> dict:
-    return _pick(
-        p, ("name", "description", "type", "event_id", "property_id", "filters", "dashboard_card_id")
-    )
+    return _pick(p, ("name", "description", "event_id"))
 
 
 async def _run_tracking_plan_v2(action: str, params: dict) -> dict:

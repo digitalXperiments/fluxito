@@ -76,7 +76,6 @@ function header(plan) {
     ["New event", "events"],
     ["New property", "properties"],
     ["New source", "sources"],
-    ["New metric", "metrics"],
   ].map(([label, view]) =>
     h(
       "button",
@@ -159,7 +158,7 @@ function kpiGrid(plan, findingsCard) {
     kpiCard("Properties", propCount(plan), "properties"),
     kpiCard("Sources", (plan.sources || []).length, "sources"),
     kpiCard("Destinations", (plan.destinations || []).length, "sources"),
-    kpiCard("Metrics", (plan.metrics || []).length, "metrics"),
+    kpiCard("Metrics", (plan.metrics || []).length, "events"),
     implCard,
     findingsCard,
   );

@@ -27,6 +27,7 @@ from app.models.tracking_plan import (
     TPMetric,
     TPPlan,
     TPProperty,
+    TPPropertyMember,
     TPSource,
     TPSourceDestination,
 )
@@ -115,13 +116,11 @@ async def _copy_branch_contents(
         await session.flush()
         cat_map[cat.id] = new_cat.id
 
-    # 2. Properties — first pass: copy all with parent_property_id=None.
+    # 2. Properties — pass 1: copy all properties (no self-FK; parent_property_id
+    #    no longer exists on TPProperty — nesting is now via tp_property_members).
     src_properties = await _scoped(TPProperty)
     prop_map: dict[uuid.UUID, uuid.UUID] = {}
-    src_parent_of: dict[uuid.UUID, uuid.UUID] = {}
     for prop in src_properties:
-        if prop.parent_property_id is not None:
-            src_parent_of[prop.id] = prop.parent_property_id
         new_prop = TPProperty(
             plan_id=plan_id,
             branch_id=dst_branch_id,
@@ -130,17 +129,37 @@ async def _copy_branch_contents(
             data_type=prop.data_type,
             description=prop.description,
             constraints=prop.constraints,
-            parent_property_id=None,
             is_pii=prop.is_pii,
+            is_list=prop.is_list,
         )
         session.add(new_prop)
         await session.flush()
         prop_map[prop.id] = new_prop.id
-    # Second pass: wire up parent_property_id on the new rows.
-    for old_id, old_parent in src_parent_of.items():
-        new_prop = await session.get(TPProperty, prop_map[old_id])
-        if new_prop is not None and old_parent in prop_map:
-            new_prop.parent_property_id = prop_map[old_parent]
+
+    # Pass 2: copy tp_property_members rows, remapping both parent_property_id
+    # and member_property_id through prop_map (old id → new id).
+    src_prop_ids = list(prop_map.keys())
+    if src_prop_ids:
+        member_rows = (
+            (
+                await session.execute(
+                    select(TPPropertyMember).where(TPPropertyMember.parent_property_id.in_(src_prop_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for member in member_rows:
+            if member.parent_property_id not in prop_map or member.member_property_id not in prop_map:
+                continue
+            session.add(
+                TPPropertyMember(
+                    parent_property_id=prop_map[member.parent_property_id],
+                    member_property_id=prop_map[member.member_property_id],
+                    required=member.required,
+                    sort_order=member.sort_order,
+                )
+            )
     await session.flush()
 
     # 3. Events (remap category_id)
@@ -286,7 +305,7 @@ async def _copy_branch_contents(
                 )
             )
 
-    # 9. Metrics (remap event_id + property_id)
+    # 9. Metrics (remap event_id; measurement columns dropped in migration 064)
     for metric in await _scoped(TPMetric):
         session.add(
             TPMetric(
@@ -294,11 +313,7 @@ async def _copy_branch_contents(
                 branch_id=dst_branch_id,
                 name=metric.name,
                 description=metric.description,
-                type=metric.type,
                 event_id=event_map.get(metric.event_id) if metric.event_id else None,
-                property_id=prop_map.get(metric.property_id) if metric.property_id else None,
-                filters=metric.filters,
-                dashboard_card_id=metric.dashboard_card_id,
             )
         )
 
@@ -366,7 +381,7 @@ async def set_review_status(
 # ---------------------------------------------------------------------------
 # Volatile/id-ish fields stripped before comparing content across branches, so
 # the inevitable cross-branch id differences don't surface as spurious changes.
-_VOLATILE_KEYS = {"id", "parent_property_id", "current_version_id", "branch", "plan"}
+_VOLATILE_KEYS = {"id", "current_version_id", "branch", "plan"}
 
 
 def _strip_ids(value: Any) -> Any:

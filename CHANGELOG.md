@@ -7,10 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Tracking plan: nested properties as a shared pool (best-in-class).** Object properties now own
+  **members** through a new `tp_property_members` link table (migration 064). Every member is a
+  first-class, reusable property — pick an existing one from the library or create a new one inline —
+  shared across every object that references it (edit once, reflected everywhere). Members nest
+  recursively (object-of-objects) with cycle and depth guards, and the serializer emits a full
+  `members` tree on both library properties and event-attached properties.
+- **Tracking plan: predefined Sources & Destinations vendors.** Destination platform is now chosen
+  from a category-grouped vendor catalog (`tracking_plan/vendors.py`) unioned from the connector
+  registry, the granular OAuth catalog, **and the tag-audit rule-book platforms** — so the tracking
+  plan stays aligned with the audit — plus a curated tail (Moengage, Braze, Klaviyo, RudderStack,
+  PostHog, …) and a **Custom…** escape hatch. Served via `GET …/tracking-plan/vendors`.
+- **Tracking plan: richer governance rules.** A structured **event-name-components** rule (ordered
+  components / separators / casing), an editable **PII patterns** list, **per-rule category scope**,
+  and a **severity** gate, all configurable from the Rules tab.
+
+### Changed
+- **Tracking plan: property data types simplified to match the reference model.** The type set is now
+  `string / integer / float / boolean / object`, with an orthogonal **List** toggle for arrays
+  (the redundant `array` type is gone; `int` is now `integer`). "List of X" is `X` + List; "list of
+  objects" is `object` + List.
+- **Tracking plan: Metrics repositioned.** The standalone Metrics tab is removed; metrics are now a
+  lightweight **Success metrics** panel inside the event detail (name + description, linked to the
+  event) — a design/intent marker, not a measurement engine.
+- **Tracking plan: event property picker reworked.** The add-property combobox opens on focus to
+  browse the full library, supports keyboard navigation, shows an "already added" state, and lets you
+  pick the data type inline when creating a new property.
+
+### Fixed
+- **Tracking plan: the event property dropdown was clipped and unusable.** The suggestion popover was
+  cut off by the card's `overflow:hidden` (and a mobile overflow rule), so the empty-state "add one
+  below" pointed at an invisible control. The popover now floats above the card.
+- **Tracking plan: the Rules tab controls overlapped their labels.** Rule rows never wrapped on
+  desktop and a nested-config layout doubled the width of the "applies to / pick property" controls.
+  Rows now wrap cleanly and the config layout is flattened.
+
+### Removed
+- **Tracking plan: metric measurement scaffolding.** Dropped `type`, `property_id`, `filters`, and
+  `dashboard_card_id` from `TPMetric` and removed the `metric_not_measured` finding (migration 064).
+  Metrics are intent markers tied to events, consistent with how leading tools treat in-plan metrics.
+
 ## [1.1.15] — 2026-06-15
 
 ### Added
-- **Tracking plan: validation rules engine + Issues screen.** A configurable, Avo-style rules
+- **Tracking plan: validation rules engine + Issues screen.** A configurable, industry-standard rules
   engine (`tp_validation_rule`, migration 062) with seeded defaults — name casing, name regex,
   required description/owner, required property, property type-consistency, and PII-must-be-flagged.
   A new **Issues** view groups findings by severity and deep-links to the offending event/property;
@@ -106,7 +147,7 @@ _These entries accumulated in Unreleased across 1.1.12–1.1.14 and shipped by v
   card has no cached result, which accurately describes the situation.
 
 ### Added
-- **Tracking Plan — a relational, Avo-style data-governance workspace** that replaces the
+- **Tracking Plan — a relational, industry-standard data-governance workspace** that replaces the
   markdown Solution Design Reference (SDR). The plan is now a structured database rather than a
   generated document: first-class **events**, a reusable project-level **property library**
   (events attach library properties with per-event overrides), **sources** and **destinations**
