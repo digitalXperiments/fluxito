@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.15] — 2026-06-15
+
+### Added
+- **Tracking plan: validation rules engine + Issues screen.** A configurable, Avo-style rules
+  engine (`tp_validation_rule`, migration 062) with seeded defaults — name casing, name regex,
+  required description/owner, required property, property type-consistency, and PII-must-be-flagged.
+  A new **Issues** view groups findings by severity and deep-links to the offending event/property;
+  a **Rules** sub-tab toggles each rule and sets its severity. The top-bar **Validate** button opens
+  the view. Exposed over MCP via `list_rules` / `update_rule` / `set_rule_enabled`, and `validate`
+  now returns rule-based findings. `is_publishable` is true only when there are no error-severity findings.
+- **Tracking plan: AI reconcile (`reconcile_preview` + `reconcile_apply`).** MCP agents can now ingest externally-discovered event lists (GA4, GTM, Adobe, dataLayer) and reconcile them against the tracking plan. `reconcile_preview` is a deterministic dry-run that normalizes event names to snake_case (or camelCase/Title), fuzzy-deduplicates against existing events, and returns new/updated/unchanged/conflicts with no writes. `reconcile_apply` applies per-event create/update/skip decisions using existing service primitives, logs one activity row per applied event, and commits atomically.
+- **Tracking plan integrations.** (1) A `tracking_plan_coverage` audit type plus a `run_coverage_audit`
+  MCP action that saves rule + coverage findings into the auditing platform (`/audits`). (2) A
+  **validation gate**: publishing or merging a branch is blocked when error-severity issues exist,
+  with the blocking count surfaced. (3) A **Tracking Plan health card** on the project Home (event
+  count · open issues · coverage %). (4) A light **metric→dashboard-card link** (`dashboard_card_id`
+  on `TPMetric`, migration 063) so defined metrics show whether they're wired to live data, with a
+  `metric_not_measured` finding for unmeasured metrics.
+
+### Fixed
+- **Tracking plan: the event name is now editable.** The event name in the editor header was
+  rendered as a read-only label, so events could not be renamed and the name of a brand-new event
+  could not be set. It is now an inline input bound to the buffered draft, with live empty/duplicate
+  validation and a casing hint; the master list and selection refresh after a rename. The
+  `+ New event` flow now focuses the name field.
+
+## [1.1.14] — 2026-06-14
+
+_These entries accumulated in Unreleased across 1.1.12–1.1.14 and shipped by v1.1.14 (2026-06-14); they were not promoted at the time and are consolidated here._
+
 ### Added
 - **Public dashboard preset filter bar.** Shared dashboards now show the owner-configured
   date-range preset chips above the card grid. Clicking a preset re-fetches live card data
