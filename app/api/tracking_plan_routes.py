@@ -6,6 +6,7 @@ route layer only resolves auth + the active project/branch and commits."""
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
@@ -27,10 +28,13 @@ from app.services.tracking_plan import (
     plan_to_dict,
     plan_to_markdown,
     plan_to_xlsx,
+    update_rule,
     validate_plan,
 )
 from app.services.tracking_plan import branches as _branches
-from app.services.tracking_plan.exceptions import NotFoundError, ValidationError
+from app.services.tracking_plan import properties as _properties
+from app.services.tracking_plan import vendors as _vendors
+from app.services.tracking_plan.exceptions import ConflictError, NotFoundError, ValidationError
 from app.templating import render
 from app.tools.tracking_plan_tools import _Ctx, _serialize_branch, resolve_branch, run_action
 
@@ -220,6 +224,21 @@ async def api_export_xlsx(
 
 
 # ----------------------------------------------------------------------------
+# Vendor catalog (read-only; no branch context needed)
+# ----------------------------------------------------------------------------
+@router.get("/api/projects/{project_id}/tracking-plan/vendors")
+async def api_get_vendors(project_id: str, request: Request):
+    """Return the unified vendor catalog: destinations + source platform kinds.
+
+    The catalog is assembled once from the three read-only registries in
+    ``app/services/tracking_plan/vendors.py`` and cached in-process; subsequent
+    calls are effectively free."""
+    _user_uuid, proj_id, _role = await _resolve(request)
+    _check_param_pid(project_id, proj_id)
+    return JSONResponse(_vendors.get_vendor_catalog())
+
+
+# ----------------------------------------------------------------------------
 # Branch convenience reads
 # ----------------------------------------------------------------------------
 @router.get("/api/projects/{project_id}/tracking-plan/branches")
@@ -343,6 +362,118 @@ async def api_list_members(project_id: str, request: Request):
 # ----------------------------------------------------------------------------
 # Writes — single action endpoint reusing run_action
 # ----------------------------------------------------------------------------
+
+# Actions handled locally in this route layer (not delegated to run_action).
+# These are either new actions added in this spec phase, or existing actions
+# that need additional parameters threaded through that run_action doesn't yet
+# forward.
+_ROUTE_OWNED_ACTIONS = frozenset(
+    {
+        "update_rule",
+        "add_member",
+        "remove_member",
+        "reorder_members",
+    }
+)
+
+
+def _route_ok(**kw: Any) -> dict:
+    return {"ok": True, **kw}
+
+
+def _route_err(error_type: str, message: str) -> dict:
+    return {"error": True, "error_type": error_type, "message": message}
+
+
+async def _handle_route_action(
+    db: Any,
+    branch: Any,
+    ctx: _Ctx,
+    action: str,
+    p: dict,
+) -> dict:
+    """Dispatch actions that are owned by this route layer.
+
+    Handles:
+    - ``update_rule``: extended to pass ``scope_category_id``, ``pii_patterns``,
+      and arbitrary naming-rule ``config`` through to ``rules.update_rule``.
+    - ``add_member`` / ``remove_member`` / ``reorder_members``: object-property
+      member link mutations backed by ``services/properties.py`` (B1).
+
+    Auth and branch resolution are already done by the caller; just call the
+    service and translate errors to the standard shape.
+    """
+    try:
+        # ---- update_rule (extended) ----------------------------------------
+        if action == "update_rule":
+            _sentinel = object()
+            config_val = p.get("config", _sentinel)
+            config_provided = config_val is not _sentinel
+
+            # pii_patterns is a shorthand: merge it into config so callers can
+            # write {"pii_patterns": [...]} without having to nest under "config".
+            pii_patterns = p.get("pii_patterns", _sentinel)
+            if pii_patterns is not _sentinel:
+                # Merge into whatever config was provided (or start fresh).
+                base_cfg: dict = config_val if config_provided and isinstance(config_val, dict) else {}
+                config_val = {**base_cfg, "patterns": pii_patterns}
+                config_provided = True
+
+            scope_provided = "scope_category_id" in p
+            r = await update_rule(
+                db,
+                ctx.plan,
+                p["rule_id"],
+                config=config_val if config_provided else None,
+                config_provided=config_provided,
+                severity=p.get("severity"),
+                scope_category_id=p.get("scope_category_id"),
+                scope_category_id_provided=scope_provided,
+            )
+            return _route_ok(id=str(r.id), rule_type=r.rule_type)
+
+        # ---- member link mutations -----------------------------------------
+        if action == "add_member":
+            link = await _properties.add_member(
+                db,
+                branch,
+                parent_id=p["parent_property_id"],
+                member_property_id=p["member_property_id"],
+                required=bool(p.get("required", False)),
+                sort_order=int(p.get("sort_order", 0)),
+            )
+            return _route_ok(id=str(link.id))
+
+        if action == "remove_member":
+            await _properties.remove_member(
+                db,
+                branch,
+                parent_id=p["parent_property_id"],
+                member_property_id=p["member_property_id"],
+            )
+            return _route_ok(removed=True)
+
+        if action == "reorder_members":
+            await _properties.reorder_members(
+                db,
+                branch,
+                parent_id=p["parent_property_id"],
+                ordered_member_ids=p["ordered_member_ids"],
+            )
+            return _route_ok(reordered=True)
+
+    except ValidationError as exc:
+        return _route_err("validation_failed", str(exc))
+    except ConflictError as exc:
+        return _route_err("conflict", str(exc))
+    except NotFoundError as exc:
+        return _route_err("not_found", str(exc))
+    except KeyError as exc:
+        return _route_err("missing_param", f"missing required param: {exc}")
+
+    return _route_err("unknown_action", f"unknown action '{action}'")
+
+
 @router.post("/api/projects/{project_id}/tracking-plan/action")
 async def api_action(project_id: str, payload: ActionPayload, request: Request):
     user_uuid, proj_id, role = await _resolve(request)
@@ -355,7 +486,10 @@ async def api_action(project_id: str, payload: ActionPayload, request: Request):
         plan = await get_or_create_plan(db, project_id=proj_id, user_id=user_uuid)
         branch = await resolve_branch(db, plan, branch_ref)
         ctx = _Ctx(role=role, user_id=str(user_uuid), project_id=str(proj_id), plan=plan)
-        result = await run_action(db, branch, ctx, payload.action, params)
+        if payload.action in _ROUTE_OWNED_ACTIONS:
+            result = await _handle_route_action(db, branch, ctx, payload.action, params)
+        else:
+            result = await run_action(db, branch, ctx, payload.action, params)
         if not result.get("error"):
             await db.commit()
         else:

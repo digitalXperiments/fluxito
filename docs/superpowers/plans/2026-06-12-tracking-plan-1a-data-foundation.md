@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the relational source-of-truth for the Avo-style tracking plan — 13 `tp_*` tables, their SQLAlchemy models, the alembic migration, and a shared service layer (CRUD + validation + `plan_to_dict` serializer) — all unit-tested. No MCP/UI/exports yet (those are Plans 1B–1D).
+**Goal:** Build the relational source-of-truth for the industry-standard tracking plan — 13 `tp_*` tables, their SQLAlchemy models, the alembic migration, and a shared service layer (CRUD + validation + `plan_to_dict` serializer) — all unit-tested. No MCP/UI/exports yet (those are Plans 1B–1D).
 
 **Architecture:** A single plan per project. Every content row is scoped to a `branch_id`; Phase 1 only uses the auto-created `main` branch. A `app/services/tracking_plan/` package is the **only** module that mutates `tp_*` tables; every later layer (MCP, HTTP/UI) will call it. One `plan_to_dict` serializer is the canonical read shape feeding everything downstream.
 
@@ -57,7 +57,7 @@
 # app/models/tracking_plan.py
 """Tracking Plan (revamped SDR) relational models — the structured source of truth.
 
-A tracking plan is the Avo-style structured definition of a project's analytics:
+A tracking plan is the industry-standard structured definition of a project's analytics:
 events, a reusable property library, user properties, sources, destinations,
 source -> destination routing, per-event mapping rules, categories, and metrics.
 

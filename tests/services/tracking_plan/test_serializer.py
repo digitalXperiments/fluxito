@@ -16,6 +16,7 @@ from app.services.tracking_plan import (
     set_event_sources,
 )
 from app.services.tracking_plan.bootstrap import get_main_branch, get_or_create_plan
+from app.services.tracking_plan.properties import add_member
 from tests.services.tracking_plan.test_models import _make_project_and_user
 
 
@@ -31,6 +32,12 @@ async def test_plan_to_dict_full_shape(db_session_factory):
         prop = await create_property(session, branch, name="value", data_type="float")
         await attach_property(session, branch, ev.id, prop.id, required=True, example="9.99")
         user_prop = await create_property(session, branch, name="plan_tier", data_type="string", kind="user")
+
+        # Create an object property with a member, to verify the members tree in the serializer.
+        obj_prop = await create_property(session, branch, name="cart", data_type="object")
+        member_prop = await create_property(session, branch, name="cart.total", data_type="float")
+        await add_member(session, branch, obj_prop.id, member_prop.id, required=True, sort_order=0)
+
         src = await create_source(session, branch, name="web", platform_type="web")
         dest = await create_destination(session, branch, name="GA4", platform="ga4")
         await connect_source_destination(session, branch, src.id, dest.id)
@@ -38,7 +45,8 @@ async def test_plan_to_dict_full_shape(db_session_factory):
             session, branch, ev.id, [{"source_id": src.id, "implementation_status": "implemented"}]
         )
         await set_event_destination(session, branch, ev.id, dest.id, dest_event_name="purchase")
-        await create_metric(session, branch, name="Revenue", type="sum", event_id=ev.id)
+        # Metrics now carry only name/description/event_id — no type/property/filters/dashboard_card_id.
+        await create_metric(session, branch, name="Revenue", event_id=ev.id)
 
         data = await plan_to_dict(session, plan, branch)
 
@@ -59,11 +67,35 @@ async def test_plan_to_dict_full_shape(db_session_factory):
         assert event["destinations"][0]["destination"] == "GA4"
         assert event["destinations"][0]["dest_event_name"] == "purchase"
 
-        assert [p["name"] for p in data["properties"]["event"]] == ["value"]
+        # Flat library buckets include ALL properties (members are still in the shared pool).
+        event_prop_names = {p["name"] for p in data["properties"]["event"]}
+        assert "value" in event_prop_names
+        assert "cart" in event_prop_names
+        assert "cart.total" in event_prop_names
+
         assert [p["name"] for p in data["properties"]["user"]] == ["plan_tier"]
         assert data["sources"][0]["destinations"] == ["GA4"]
         assert data["destinations"][0]["name"] == "GA4"
-        assert data["metrics"][0]["name"] == "Revenue"
+
+        # Metric dict must NOT contain type, property_id, filters, or dashboard_card_id.
+        metric_dict = data["metrics"][0]
+        assert metric_dict["name"] == "Revenue"
+        assert "type" not in metric_dict
+        assert "property_id" not in metric_dict
+        assert "filters" not in metric_dict
+        assert "dashboard_card_id" not in metric_dict
+
+        # Object property must carry a 'members' tree; no parent_property_id on any prop.
+        all_event_props = data["properties"]["event"]
+        cart_dict = next(p for p in all_event_props if p["name"] == "cart")
+        assert "parent_property_id" not in cart_dict
+        assert "members" in cart_dict
+        assert len(cart_dict["members"]) == 1
+        assert cart_dict["members"][0]["name"] == "cart.total"
+
+        # Scalar properties have no members (or empty list) and no parent_property_id.
+        value_dict = next(p for p in all_event_props if p["name"] == "value")
+        assert "parent_property_id" not in value_dict
 
 
 @pytest.mark.anyio

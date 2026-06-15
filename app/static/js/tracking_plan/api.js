@@ -33,6 +33,8 @@ export const version = (id) => getJSON(`/versions/${id}`);
 export const diff = (head, base) =>
   getJSON(`/diff?head=${encodeURIComponent(head)}` + (base ? `&base=${encodeURIComponent(base)}` : ''));
 
+export const vendors = () => getJSON('/vendors');
+
 export function listComments(entityType, entityId, branch) {
   const q = new URLSearchParams();
   if (entityType) q.set('entity_type', entityType);

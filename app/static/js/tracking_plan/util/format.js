@@ -8,6 +8,8 @@ export function initials(s) {
 }
 
 export function typeBadge(dataType, isList) {
+  // data_type is one of: string, integer, float, boolean, object.
+  // is_list is the orthogonal "list of X" modifier — renders as X[].
   return (dataType || 'string') + (isList ? '[]' : '');
 }
 

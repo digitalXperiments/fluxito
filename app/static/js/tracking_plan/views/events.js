@@ -1,5 +1,5 @@
 // app/static/js/tracking_plan/views/events.js
-// Redesigned Event editor (Avo-grade, mockup /tmp/tp_redesign_mockup.html) with the
+// Redesigned Event editor (best-in-class, mockup /tmp/tp_redesign_mockup.html) with the
 // EXPLICIT BUFFERED-SAVE model — nothing hits the API on edit; everything commits on Save.
 //
 // LAYOUT
@@ -36,6 +36,8 @@ import {
   eventStatus, typeBadge, propByName, sourceByName, destByName, catByName,
 } from 'tp/util/format';
 
+const DATA_TYPES = ['string', 'integer', 'float', 'boolean', 'object'];
+
 const IMPL_STATUSES = ['planned', 'implemented', 'verified', 'deprecated'];
 
 // Pick the editable slice of an event we buffer in the draft (scalars + collections).
@@ -69,16 +71,15 @@ function snapshotOf(e) {
   };
 }
 
-// Badge color class from data type (mockup: numbers→sky, boolean→amber, object/array→green).
+// Badge color class from data type (mockup: numbers→sky, boolean→amber, object→green).
 function badgeClass(dataType) {
   switch (dataType) {
-    case 'int':
+    case 'integer':
     case 'float':
       return 'sky';
     case 'boolean':
       return 'amber';
     case 'object':
-    case 'array':
       return 'green';
     default:
       return 'ty';
@@ -247,7 +248,8 @@ export function mountView(container) {
         detailsCard(e),
         propertiesCard(e),
         sourcesCard(e),
-        destinationsCard(e)),
+        destinationsCard(e),
+        metricsPanel(e)),
     ];
     mountAll(detail, nodes);
 
@@ -479,7 +481,7 @@ export function mountView(container) {
       onInput: (ev) => { p.override_description = ev.target.value; syncDirty(); refreshSaveCluster(); },
     });
 
-    const row = h('tr', { draggable: 'true', dataset: { name: p.name } },
+    const row = h('tr', { class: 'tp-prow', draggable: 'true', dataset: { name: p.name } },
       h('td', { class: 'tp-grip', title: 'Drag to reorder' }, '⠿'),
       h('td', {}, h('span', { class: 'tp-pn' }, p.name)),
       h('td', {}, h('span', { class: 'tp-badge ' + badgeClass(p.data_type) }, typeBadge(p.data_type, p.is_list))),
@@ -518,9 +520,16 @@ export function mountView(container) {
   }
 
   // Add-property combobox: search the event-property library or type a new name.
+  // Issue 2 fixes: open-on-focus, keyboard nav (↑/↓/Enter/Esc), "Already added"
+  // disabled row, inline type picker for new props, correct data_type on __new draft.
   function addPropertyCombo(e) {
     const inLib = (plan().properties && plan().properties.event) || [];
+    // available() = library props not yet attached to this event
     const available = () => inLib.filter((lp) => !draft.properties.some((dp) => dp.name === lp.name));
+
+    // New-prop type picker state (used when showing the Create row with inline type UI)
+    let newDt = 'string';
+    let newIsList = false;
 
     const input = h('input', {
       class: 'tp-combo-input',
@@ -529,6 +538,8 @@ export function mountView(container) {
     const pop = h('div', { class: 'tp-combo-pop', style: { display: 'none' } });
     const wrap = h('div', { class: 'tp-combo' }, plusIcon(), input, pop);
 
+    let activeIdx = -1; // keyboard-nav cursor index into rendered opts
+
     function addExisting(lp) {
       draft.properties.push({
         name: lp.name, data_type: lp.data_type, is_list: !!lp.is_list,
@@ -536,38 +547,151 @@ export function mountView(container) {
       });
       input.value = '';
       pop.style.display = 'none';
+      activeIdx = -1;
       touch();
     }
-    // A brand-new (typed) property: mark __new so commit creates it (string by default).
+
+    // A brand-new (typed) property: mark __new so commit creates it; carry data_type/is_list
+    // from the inline type picker so we don't hard-default to 'string'.
     function addNew(name) {
       draft.properties.push({
-        name, data_type: 'string', is_list: false,
+        name, data_type: newDt, is_list: newIsList,
         required: false, example: '', override_description: '', __new: true,
       });
       input.value = '';
       pop.style.display = 'none';
+      activeIdx = -1;
+      newDt = 'string';
+      newIsList = false;
       touch();
     }
 
-    input.addEventListener('input', () => {
+    // Rebuild the pop options list. Called on input, focus, and type-picker changes.
+    function refreshPop() {
       const q = input.value.trim().toLowerCase();
-      const hits = available().filter((lp) => lp.name.toLowerCase().includes(q)).slice(0, 8);
-      const opts = hits.map((lp) => h('div', {
-        class: 'tp-combo-opt', onMousedown: (ev) => { ev.preventDefault(); addExisting(lp); },
-      },
-        h('span', { class: 'tp-pn' }, lp.name),
-        h('span', { class: 'tp-badge ' + badgeClass(lp.data_type) }, typeBadge(lp.data_type, lp.is_list))));
-      const exact = inLib.some((lp) => lp.name.toLowerCase() === q)
-        || draft.properties.some((dp) => dp.name.toLowerCase() === q);
-      if (q && !exact) {
+      const all = available();
+      const hits = (q ? all.filter((lp) => lp.name.toLowerCase().includes(q)) : all).slice(0, 8);
+
+      const opts = [];
+
+      // For each library hit check if the typed name exactly matches an already-attached prop
+      hits.forEach((lp) => {
+        const alreadyAttached = draft.properties.some((dp) => dp.name.toLowerCase() === lp.name.toLowerCase());
+        if (alreadyAttached) {
+          // Shouldn't normally appear (available() filters), but guard anyway
+          opts.push(h('div', { class: 'tp-combo-opt tp-combo-disabled', style: { opacity: '0.5', cursor: 'default' } },
+            h('span', { class: 'tp-pn' }, lp.name),
+            h('span', { class: 'tp-muted' }, 'Already added')));
+        } else {
+          opts.push(h('div', {
+            class: 'tp-combo-opt',
+            onMousedown: (ev) => { ev.preventDefault(); addExisting(lp); },
+          },
+            h('span', { class: 'tp-pn' }, lp.name),
+            h('span', { class: 'tp-badge ' + badgeClass(lp.data_type) }, typeBadge(lp.data_type, lp.is_list))));
+        }
+      });
+
+      // Check if the typed name matches an already-attached prop (exact, case-insensitive)
+      const typedName = input.value.trim();
+      const typedLower = typedName.toLowerCase();
+      const attachedExact = draft.properties.some((dp) => dp.name.toLowerCase() === typedLower);
+      const libExact = inLib.some((lp) => lp.name.toLowerCase() === typedLower);
+
+      if (typedName && attachedExact) {
+        // The name is already attached — show a disabled "Already added" row
+        opts.push(h('div', { class: 'tp-combo-opt tp-combo-disabled', style: { opacity: '0.5', cursor: 'default' } },
+          h('span', { class: 'tp-pn' }, typedName),
+          h('span', { class: 'tp-muted' }, 'Already added')));
+      } else if (typedName && !libExact) {
+        // Not in the library at all → offer to create with an inline type picker
+        const dtSel = h('select', { class: 'tp-combo-type-sel' });
+        DATA_TYPES.forEach((dt) => {
+          dtSel.appendChild(h('option', { value: dt, selected: newDt === dt }, dt));
+        });
+        dtSel.addEventListener('mousedown', (ev) => ev.stopPropagation());
+        dtSel.addEventListener('change', () => { newDt = dtSel.value; refreshPop(); });
+
+        const listChk = h('input', { type: 'checkbox', title: 'List', checked: newIsList });
+        listChk.addEventListener('mousedown', (ev) => ev.stopPropagation());
+        listChk.addEventListener('change', () => { newIsList = listChk.checked; refreshPop(); });
+
         opts.push(h('div', {
-          class: 'tp-combo-opt tp-combo-new', onMousedown: (ev) => { ev.preventDefault(); addNew(input.value.trim()); },
-        }, `Create "${input.value.trim()}"`));
+          class: 'tp-combo-opt tp-combo-new',
+          onMousedown: (ev) => {
+            // Only fire addNew if click isn't on the type picker controls
+            if (ev.target === dtSel || dtSel.contains(ev.target)) return;
+            if (ev.target === listChk) return;
+            ev.preventDefault();
+            addNew(typedName);
+          },
+        },
+          h('span', {}, `Create "${typedName}"`),
+          h('span', { class: 'tp-combo-type-row' },
+            dtSel,
+            h('label', { class: 'tp-combo-list-lbl', title: 'List (is_list)' }, listChk, '[ ]'))));
       }
-      mountAll(pop, opts.length ? opts : [h('div', { class: 'tp-muted', style: { padding: '8px 10px' } }, 'No matches — type to create')]);
-      pop.style.display = (opts.length || q) ? 'block' : 'none';
+
+      if (!opts.length) {
+        mountAll(pop, [h('div', { class: 'tp-muted', style: { padding: '8px 10px' } }, 'No properties — type a name to create one')]);
+      } else {
+        mountAll(pop, opts);
+      }
+
+      // Reset active index when opts change
+      activeIdx = -1;
+      highlightActive();
+      pop.style.display = 'block';
+    }
+
+    function highlightActive() {
+      const items = pop.querySelectorAll('.tp-combo-opt:not(.tp-combo-disabled)');
+      items.forEach((el, i) => el.classList.toggle('is-active', i === activeIdx));
+    }
+
+    function closePop() {
+      pop.style.display = 'none';
+      activeIdx = -1;
+    }
+
+    input.addEventListener('focus', () => { refreshPop(); });
+    input.addEventListener('input', () => { newDt = 'string'; newIsList = false; refreshPop(); });
+    input.addEventListener('blur', () => setTimeout(() => { closePop(); }, 150));
+
+    input.addEventListener('keydown', (ev) => {
+      if (pop.style.display === 'none') return;
+      const items = Array.from(pop.querySelectorAll('.tp-combo-opt:not(.tp-combo-disabled)'));
+      if (ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        activeIdx = Math.min(activeIdx + 1, items.length - 1);
+        highlightActive();
+      } else if (ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        activeIdx = Math.max(activeIdx - 1, 0);
+        highlightActive();
+      } else if (ev.key === 'Enter') {
+        ev.preventDefault();
+        if (activeIdx >= 0 && items[activeIdx]) {
+          items[activeIdx].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        } else {
+          // Enter with no active selection: create if typed name is valid and not attached
+          const typedName = input.value.trim();
+          if (typedName && !draft.properties.some((dp) => dp.name.toLowerCase() === typedName.toLowerCase())) {
+            const libMatch = inLib.find((lp) => lp.name.toLowerCase() === typedName.toLowerCase());
+            if (libMatch) {
+              addExisting(libMatch);
+            } else {
+              addNew(typedName);
+            }
+          }
+        }
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault();
+        closePop();
+        input.blur();
+      }
     });
-    input.addEventListener('blur', () => setTimeout(() => { pop.style.display = 'none'; }, 150));
+
     return wrap;
   }
 
@@ -666,6 +790,156 @@ export function mountView(container) {
     return cardShell('Destinations', null, ha, body);
   }
 
+  // ---- Success metrics panel (Issue 4) ----
+  // Lists metrics linked to this event (event_id match), with inline create/edit/delete.
+  // Metrics are immediate actions (not part of the buffered save), so we manage their
+  // local state directly and re-render the panel in place on each change.
+  function metricsPanel(e) {
+    const eventMetrics = () => ((plan() && plan().metrics) || []).filter((m) => m.event_id === e.id);
+
+    // Local panel draft state: one metric being edited inline (or null for none).
+    let editingMetricId = null; // id of metric being edited, or '__new' for new
+    let metricDraft = null;     // { name, description } or null
+    let metricSaving = false;
+
+    const panelEl = h('div', { class: 'tp-card' });
+
+    function renderPanel() {
+      const metrics = eventMetrics();
+      const head = h('div', { class: 'tp-card-h' },
+        h('h3', {}, 'Success metrics'),
+        h('span', { class: 'tp-ct' }, String(metrics.length)),
+        h('div', { class: 'tp-card-ha' },
+          h('button', { class: 'btn btn-secondary btn-sm', onClick: startNewMetric }, '+ Add metric')));
+
+      const rows = [];
+      metrics.forEach((m) => {
+        if (editingMetricId === m.id) {
+          // Inline edit row
+          rows.push(buildMetricEditRow(m.id, false));
+        } else {
+          rows.push(buildMetricReadRow(m));
+        }
+      });
+
+      if (editingMetricId === '__new') {
+        rows.push(buildMetricEditRow('__new', true));
+      }
+
+      if (!rows.length && editingMetricId !== '__new') {
+        rows.push(h('div', { class: 'tp-muted', style: { padding: '10px 0' } }, 'No success metrics — click "+ Add metric" to add one.'));
+      }
+
+      const body = h('div', { class: 'tp-card-b' }, ...rows);
+      mountAll(panelEl, [head, body]);
+    }
+
+    function buildMetricReadRow(m) {
+      return h('div', { class: 'tp-metric-row' },
+        h('div', { class: 'tp-metric-info' },
+          h('span', { class: 'tp-pn' }, m.name),
+          m.description ? h('span', { class: 'tp-muted tp-metric-desc' }, ' — ' + m.description) : null),
+        h('div', { class: 'tp-metric-actions' },
+          h('button', { class: 'btn btn-ghost btn-sm', onClick: () => startEditMetric(m) }, 'Edit'),
+          h('button', { class: 'btn btn-ghost btn-sm', title: 'Delete metric',
+            onClick: () => doDeleteMetric(m) }, '✕')));
+    }
+
+    function buildMetricEditRow(metricId, isNew) {
+      const nameInp = h('input', {
+        class: 'input', placeholder: 'Metric name', value: metricDraft ? metricDraft.name : '',
+        style: { width: '180px' },
+      });
+      nameInp.addEventListener('input', () => { if (metricDraft) metricDraft.name = nameInp.value; });
+
+      const descInp = h('input', {
+        class: 'input', placeholder: 'Description (optional)', value: metricDraft ? metricDraft.description : '',
+      });
+      descInp.addEventListener('input', () => { if (metricDraft) metricDraft.description = descInp.value; });
+
+      const saveBtn = h('button', {
+        class: 'btn btn-primary btn-sm', disabled: metricSaving,
+        onClick: () => doSaveMetric(metricId, isNew),
+      }, metricSaving ? 'Saving…' : (isNew ? 'Add' : 'Save'));
+      const cancelBtn = h('button', {
+        class: 'btn btn-ghost btn-sm', disabled: metricSaving,
+        onClick: cancelMetricEdit,
+      }, 'Cancel');
+
+      return h('div', { class: 'tp-metric-edit-row' },
+        nameInp,
+        descInp,
+        saveBtn,
+        cancelBtn);
+    }
+
+    function startNewMetric() {
+      editingMetricId = '__new';
+      metricDraft = { name: '', description: '' };
+      renderPanel();
+    }
+
+    function startEditMetric(m) {
+      editingMetricId = m.id;
+      metricDraft = { name: m.name, description: m.description || '' };
+      renderPanel();
+    }
+
+    function cancelMetricEdit() {
+      editingMetricId = null;
+      metricDraft = null;
+      renderPanel();
+    }
+
+    async function doSaveMetric(metricId, isNew) {
+      if (!metricDraft || !metricDraft.name.trim()) {
+        if (window.__tpBanner) window.__tpBanner('Metric name is required', 'err');
+        return;
+      }
+      metricSaving = true;
+      renderPanel();
+      try {
+        const branch = state.getState().branch;
+        if (isNew) {
+          await api.doAction('create_metric', {
+            name: metricDraft.name.trim(),
+            description: metricDraft.description || null,
+            event_id: e.id,
+          }, branch);
+        } else {
+          await api.doAction('update_metric', {
+            metric_id: metricId,
+            name: metricDraft.name.trim(),
+            description: metricDraft.description || null,
+            event_id: e.id,
+          }, branch);
+        }
+        editingMetricId = null;
+        metricDraft = null;
+        metricSaving = false;
+        await state.reload();
+        // renderDetail() is called by the state subscriber after reload
+      } catch (err) {
+        metricSaving = false;
+        renderPanel();
+        if (window.__tpBanner) window.__tpBanner((err && err.message) || 'Could not save metric', 'err');
+      }
+    }
+
+    async function doDeleteMetric(m) {
+      if (!confirm(`Delete metric "${m.name}"?`)) return;
+      try {
+        await api.doAction('delete_metric', { metric_id: m.id }, state.getState().branch);
+        await state.reload();
+      } catch (err) {
+        if (window.__tpBanner) window.__tpBanner((err && err.message) || 'Could not delete metric', 'err');
+      }
+    }
+
+    renderPanel();
+    return panelEl;
+  }
+
   // ---- delete (immediate; not part of buffered save) ----
   async function delEvent(e) {
     if (!confirm(`Delete event "${e.name}"?`)) return;
@@ -734,13 +1008,13 @@ async function commitEvent(draft, server, id, branch) {
   // 2) properties — UPSERT each draft prop (create typed-new first), detach removed.
   for (let i = 0; i < draft.properties.length; i++) {
     const p = draft.properties[i];
+    // Re-check across ALL kinds (event/user/group/system) to avoid 409 on create.
     let lib = propByName(plan, p.name);
-    if (!lib || p.__new) {
-      if (!lib) {
-        const created = await api.doAction('create_property',
-          { name: p.name, data_type: p.data_type || 'string', kind: 'event' }, branch);
-        lib = { id: created.id };
-      }
+    if (!lib) {
+      // Not in the library at all — create it with the user-chosen type.
+      const created = await api.doAction('create_property',
+        { name: p.name, data_type: p.data_type || 'string', is_list: !!p.is_list, kind: 'event' }, branch);
+      lib = { id: created.id };
     }
     if (!lib || !lib.id) continue;
     await api.doAction('attach_property', {
