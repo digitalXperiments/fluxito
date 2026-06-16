@@ -63,14 +63,23 @@ def test_iframe_with_settings_frame_class_present():
 
 def test_base_html_body_class_has_embed_guard():
     source = BASE_TEMPLATE.read_text()
-    assert "request.query_params.get('embed')" in source
+    # Chrome is suppressed in embed mode via the `embed` context var (computed
+    # defensively in templating.render() so templates never touch
+    # request.query_params, which a minimal Request scope may lack).
+    assert "not embed" in source
 
 
 def test_base_html_sidebar_wrapped_in_embed_guard():
     source = BASE_TEMPLATE.read_text()
     # The embed guard must appear before the sidebar and the mobile topbar
-    guard_idx = source.index("{% if not request.query_params.get('embed') %}")
+    guard_idx = source.index("{% if not embed %}")
     sidebar_idx = source.index('<aside class="sidebar">')
     mobile_idx = source.index('<div class="mobile-topbar">')
     assert guard_idx < sidebar_idx
     assert guard_idx < mobile_idx
+
+
+def test_templating_computes_embed_flag():
+    # render() must inject an `embed` flag so base.html never reads request.query_params.
+    src = Path("app/templating.py").read_text()
+    assert '"embed"' in src and "query_params.get(" in src
