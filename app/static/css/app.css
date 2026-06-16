@@ -652,6 +652,32 @@ html[data-theme="dark"] .sidebar-group[data-accent="blue"]  .sidebar-group-label
 html[data-theme="dark"] .sidebar-group[data-accent="slate"] .sidebar-group-label { color: #CBD5E1; }
 html[data-theme="dark"] .sidebar-group[data-accent="purple"] .sidebar-group-label { color: #C4B5FD; }
 
+/* ── Sidebar clusters (2-cluster IA: Set up / Work) ── */
+.sidebar-cluster {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+.sidebar-cluster-label {
+  font-family: var(--mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted, #71717A);
+  padding: 4px 12px 3px;
+  user-select: none;
+}
+html.sidebar-collapsed .sidebar-cluster-label { display: none; }
+html.sidebar-collapsed .sidebar-cluster {
+  width: calc(100% - 16px);
+  margin: 6px 8px 0;
+  padding: 7px 0 0;
+  border-top: 1px solid var(--line, #E6E6E8);
+  gap: 2px;
+}
+
 .sidebar-spacer {
   display: none; /* no longer needed: bottom is flex-docked, nav scrolls internally */
 }
