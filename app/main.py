@@ -421,6 +421,7 @@ from app.api.scheduled_report_routes import router as scheduled_report_router
 from app.api.setup_routes import router as setup_router
 from app.api.template_routes import router as template_router
 from app.api.tracking_plan_routes import router as tracking_plan_router
+from app.api.ask_routes import router as ask_router
 from app.api.update_routes import router as update_router
 from app.auth.mcp_oauth_server import router as oauth_router
 
@@ -444,6 +445,7 @@ app.include_router(scheduled_report_router)
 app.include_router(admin_router)
 app.include_router(access_request_router)
 app.include_router(update_router)
+app.include_router(ask_router)
 
 from app.api import (
     apple_oauth_routes,
