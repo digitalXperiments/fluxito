@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tool dispatch inherits the caller's RBAC. Conversations persist per project/user
   (migration `064`: `conversations`, `chat_messages`, `ai_provider_keys`).
 
+### Changed
+- **Navigation: simplified sidebar.** The seven feature groups collapse into two short,
+  workflow-ordered clusters — **Set up** (Connections, Tracking Plan, Context) and **Work**
+  (Dashboards, Automations, Auditing) — plus Home, Ask Fluxito, Activity Log, Tutorials, and a
+  single **Settings** entry. Every permission gate is preserved exactly.
+- **One Settings destination.** Profile, project settings, install Integrations, System
+  settings, and the superadmin Admin console are unified into a single role-scoped
+  `/settings` with a left tab rail (Account · Project · Workspace · Platform) — you only
+  see the tabs your role allows. The existing pages are reused as embedded panels (no form
+  rewrites); the old paths (`/profile`, `/settings/integrations`, `/settings/system`,
+  `/admin`, `/project/{slug}/settings`) now redirect into the matching tab, so existing
+  links keep working.
+- **Context = KPI Library + Business Context.** Merged into one `/context` page with two
+  tabs; `/kpi-library` and `/business-context` redirect in.
+- **Dashboards = live dashboards + template gallery.** Merged into one `/dashboards` page
+  with "Your dashboards" and "Gallery · + New from template" views; `/live-dashboards` and
+  `/templates` redirect in.
+
 ## [1.1.15] — 2026-06-15
 
 ### Added
