@@ -6,6 +6,7 @@ from app.models.auditing import AuditFinding, AuditRun, LttTestPlan, TagCustomRu
 from app.models.automation import Automation, AutomationInstallation
 from app.models.bq_connection import BQConnection
 from app.models.connection import MCPClient, OAuthConnection
+from app.models.conversation import AIProviderKey, ChatMessage, Conversation
 from app.models.credential_connection import (
     AdobeConnection,
     AmplitudeConnection,
@@ -58,6 +59,7 @@ from app.models.user import User
 
 __all__ = [
     "KPI",
+    "AIProviderKey",
     "AccessRequest",
     "ActivityEvent",
     "AdobeConnection",
@@ -69,6 +71,8 @@ __all__ = [
     "AutomationInstallation",
     "BQConnection",
     "BusinessContext",
+    "ChatMessage",
+    "Conversation",
     "Dashboard",
     "DashboardCard",
     "GA4Property",
