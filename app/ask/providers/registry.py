@@ -13,26 +13,32 @@ _OPENAI_COMPAT: dict[str, dict[str, object]] = {
         "base_url": "https://api.openai.com/v1",
         "default_model": "gpt-4o",
         "send_usage": True,
+        # OpenAI's newer models (gpt-5/o-series) reject max_tokens.
+        "token_param": "max_completion_tokens",
     },
     "grok": {
         "base_url": "https://api.x.ai/v1",
         "default_model": "grok-2-latest",
         "send_usage": False,
+        "token_param": "max_tokens",
     },
     "mistral": {
         "base_url": "https://api.mistral.ai/v1",
         "default_model": "mistral-large-latest",
         "send_usage": False,
+        "token_param": "max_tokens",
     },
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "default_model": "gemini-2.5-flash",
         "send_usage": False,
+        "token_param": "max_tokens",
     },
     "lmstudio": {
         "base_url": "http://localhost:1234/v1",
         "default_model": "",
         "send_usage": False,
+        "token_param": "max_tokens",
     },
 }
 
@@ -59,6 +65,7 @@ def make_provider(name: str, api_key: str, base_url: str | None = None) -> Provi
             api_key,
             base_url=effective_base_url,
             send_usage=bool(cfg["send_usage"]),
+            token_param=str(cfg.get("token_param", "max_tokens")),
         )
     raise ValueError(f"Unsupported provider: {name!r}")
 

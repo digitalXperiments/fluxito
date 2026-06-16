@@ -42,11 +42,15 @@ class OpenAIProvider:
         base_url: str = _DEFAULT_BASE_URL,
         timeout: float = 120.0,
         send_usage: bool = True,
+        token_param: str = "max_tokens",  # noqa: S107 (param name, not a secret)
     ) -> None:
         self._api_key = api_key or ""
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
         self._send_usage = send_usage
+        # OpenAI's newer models (gpt-5/o-series) reject "max_tokens" and require
+        # "max_completion_tokens"; other OpenAI-compatible servers want "max_tokens".
+        self._token_param = token_param
 
     # ---- pure helpers ---------------------------------------------------
 
@@ -87,7 +91,7 @@ class OpenAIProvider:
 
         body: dict[str, Any] = {
             "model": model,
-            "max_tokens": max_tokens,
+            self._token_param: max_tokens,
             "messages": wire,
             "stream": True,
         }
