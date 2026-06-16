@@ -52,10 +52,13 @@ def _parse_uuid(value: str | None) -> uuid.UUID | None:
 
 @router.get("/ask")
 async def ask_page(request: Request):
-    uid = _require_user_id(request)
-    if not uid:
+    from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
+
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
         return RedirectResponse("/signin?next=/ask", status_code=302)
-    return render(request, "ask.html", {"page_title": "Ask Fluxito", "active": "ask"})
+    user_view = await _load_user_view(user_ctx)
+    return render(request, "ask.html", {"page_title": "Ask Fluxito", "active": "ask", "user": user_view})
 
 
 @router.get("/settings/ai")
@@ -63,8 +66,13 @@ async def ai_settings(request: Request):
     uid = _require_user_id(request)
     if not uid:
         return RedirectResponse("/signin?next=/settings/ai", status_code=302)
-    # The minimal v1 home for provider keys is the dialog on the /ask page.
-    return RedirectResponse("/ask#keys", status_code=302)
+    if not request.query_params.get("embed"):
+        return RedirectResponse("/settings?tab=ai", status_code=302)
+    from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
+
+    user_ctx = await _resolve_user_ctx(request)
+    user_view = await _load_user_view(user_ctx) if user_ctx else None
+    return render(request, "settings/ai.html", {"user": user_view})
 
 
 # ---- chat stream --------------------------------------------------------
