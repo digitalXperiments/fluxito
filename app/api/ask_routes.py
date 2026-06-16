@@ -34,7 +34,11 @@ def _require_user_id(request: Request) -> str | None:
 
 
 def _active_project_id(request: Request) -> str | None:
-    return getattr(request.state, "active_project_id", None)
+    # The active_project_id cookie is the source every /api route uses (nav
+    # middleware only populates request.state for page renders, not /api POSTs).
+    from app.api.project_routes import get_active_project_id
+
+    return get_active_project_id(request) or getattr(request.state, "active_project_id", None)
 
 
 def _parse_uuid(value: str | None) -> uuid.UUID | None:
@@ -83,7 +87,9 @@ async def ask_stream(request: Request):
     uid = _require_user_id(request)
     if not uid:
         return JSONResponse({"error": "auth"}, status_code=401)
-    project_id = _active_project_id(request)
+    from app.api.project_routes import ensure_active_project
+
+    project_id = await ensure_active_project(request, uid)
     if not project_id:
         return JSONResponse({"error": "No active project."}, status_code=400)
 
@@ -268,9 +274,15 @@ async def save_key(request: Request):
     uid = _require_user_id(request)
     if not uid:
         return JSONResponse({"error": "auth"}, status_code=401)
-    project_id = _active_project_id(request)
+    # Resolve (and if needed auto-select) the active project the robust way every
+    # other API route uses — not just request.state, which isn't set on /api POSTs.
+    from app.api.project_routes import ensure_active_project, set_active_project_cookie
+
+    project_id = await ensure_active_project(request, uid)
     if not project_id:
-        return JSONResponse({"error": "No active project."}, status_code=400)
+        return JSONResponse(
+            {"error": "No active project — create or select a project first."}, status_code=400
+        )
     body = await request.json()
     provider = body.get("provider")
     api_key = (body.get("api_key") or "").strip()
@@ -288,4 +300,6 @@ async def save_key(request: Request):
         default_model=default_model,
         base_url=base_url,
     )
-    return JSONResponse({"ok": True})
+    resp = JSONResponse({"ok": True})
+    set_active_project_cookie(resp, project_id)
+    return resp
