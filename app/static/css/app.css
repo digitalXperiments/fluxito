@@ -5492,3 +5492,17 @@ html[data-theme="dark"] .severity-badge.low  { background: #064e3b; color: #6ee7
     document.documentElement.setAttribute('data-theme', saved);
 */
 /* --- end real brand icons --- */
+
+/* ── Ask Fluxito docked panel seam (formalized in the shell revamp) ── */
+.ask-fluxito-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 380px;
+  background: var(--bg, #fff);
+  border-left: 1px solid var(--line, #e5e7eb);
+  box-shadow: -4px 0 16px rgba(0, 0, 0, .06);
+  z-index: 60;
+}
+.ask-fluxito-panel[hidden] { display: none; }

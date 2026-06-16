@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/ask.css?v={{ asset_hash('css/ask.css') }}"/>
+{% endblock %}
+{% block main %}
+<div class="ask-shell" id="ask-shell">
+  <aside class="ask-history">
+    <button class="ask-new" id="ask-new">+ New chat</button>
+    <ul class="ask-conv-list" id="ask-conv-list"></ul>
+  </aside>
+  <main class="ask-main">
+    <div class="ask-messages" id="ask-messages">
+      <div class="ask-empty" id="ask-empty">
+        <h2>Ask Fluxito</h2>
+        <p>Ask about your analytics, tracking plan, dashboards, or marketing data.</p>
+        <p class="ask-setup-hint" id="ask-setup-hint" hidden>
+          No AI provider key yet — <a href="/ask#keys" id="ask-open-keys">add one</a> to start.
+        </p>
+      </div>
+    </div>
+    <form class="ask-composer" id="ask-composer">
+      <textarea id="ask-input" rows="1" placeholder="Ask Fluxito…"></textarea>
+      <button type="submit" id="ask-send">Send</button>
+    </form>
+  </main>
+</div>
+
+<dialog class="ask-keys-dialog" id="ask-keys-dialog">
+  <form method="dialog" id="ask-keys-form">
+    <h3>AI provider key</h3>
+    <label>Provider
+      <select id="ask-key-provider">
+        <option value="anthropic">Anthropic (Claude)</option>
+        <option value="openai">OpenAI (GPT)</option>
+      </select>
+    </label>
+    <label>API key <input type="password" id="ask-key-value" autocomplete="off"></label>
+    <label>Default model (optional) <input type="text" id="ask-key-model" placeholder="leave blank for default"></label>
+    <menu>
+      <button value="cancel">Cancel</button>
+      <button value="save" id="ask-key-save">Save</button>
+    </menu>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/ask.js?v={{ asset_hash('js/ask.js') }}" defer></script>
+{% endblock %}
