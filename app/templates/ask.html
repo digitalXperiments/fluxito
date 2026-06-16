@@ -14,7 +14,7 @@
         <h2>Ask Fluxito</h2>
         <p>Ask about your analytics, tracking plan, dashboards, or marketing data.</p>
         <p class="ask-setup-hint" id="ask-setup-hint" hidden>
-          No AI provider key yet — <a href="/ask#keys" id="ask-open-keys">add one</a> to start.
+          No AI provider key yet — <a href="/settings?tab=ai">add one</a> to start.
         </p>
       </div>
     </div>
@@ -25,23 +25,6 @@
   </main>
 </div>
 
-<dialog class="ask-keys-dialog" id="ask-keys-dialog">
-  <form method="dialog" id="ask-keys-form">
-    <h3>AI provider key</h3>
-    <label>Provider
-      <select id="ask-key-provider">
-        <option value="anthropic">Anthropic (Claude)</option>
-        <option value="openai">OpenAI (GPT)</option>
-      </select>
-    </label>
-    <label>API key <input type="password" id="ask-key-value" autocomplete="off"></label>
-    <label>Default model (optional) <input type="text" id="ask-key-model" placeholder="leave blank for default"></label>
-    <menu>
-      <button value="cancel">Cancel</button>
-      <button value="save" id="ask-key-save">Save</button>
-    </menu>
-  </form>
-</dialog>
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/ask.js?v={{ asset_hash('js/ask.js') }}" defer></script>

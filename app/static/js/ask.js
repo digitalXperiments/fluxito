@@ -10,7 +10,6 @@
   var sendBtn = document.getElementById("ask-send");
   var convListEl = document.getElementById("ask-conv-list");
   var newBtn = document.getElementById("ask-new");
-  var keysDialog = document.getElementById("ask-keys-dialog");
 
   var conversationId = null;
 
@@ -85,31 +84,6 @@
     });
   }
 
-  function openKeysDialog() {
-    if (keysDialog && typeof keysDialog.showModal === "function") keysDialog.showModal();
-  }
-
-  var keysForm = document.getElementById("ask-keys-form");
-  if (keysForm) {
-    keysForm.addEventListener("submit", function (e) {
-      var action = e.submitter && e.submitter.value;
-      if (action !== "save") return;
-      var provider = document.getElementById("ask-key-provider").value;
-      var api_key = document.getElementById("ask-key-value").value;
-      var default_model = document.getElementById("ask-key-model").value || null;
-      fetch("/api/ask/keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
-        body: JSON.stringify({ provider: provider, api_key: api_key, default_model: default_model }),
-      }).then(function () { checkKeys(); });
-    });
-  }
-
-  var openKeysLink = document.getElementById("ask-open-keys");
-  if (openKeysLink) {
-    openKeysLink.addEventListener("click", function (e) { e.preventDefault(); openKeysDialog(); });
-  }
-
   if (newBtn) {
     newBtn.addEventListener("click", function () {
       conversationId = null;
@@ -139,7 +113,7 @@
         if (!resp.ok) {
           resp.json().catch(function () { return {}; }).then(function (j) {
             textNode.textContent = j.message || "Error: " + resp.status;
-            if (j.error === "no_key") openKeysDialog();
+            if (j.error === "no_key") window.location.href = "/settings?tab=ai";
             sendBtn.disabled = false;
           });
           return;
@@ -197,5 +171,4 @@
   // init
   loadConversations();
   checkKeys();
-  if (typeof location !== "undefined" && location.hash === "#keys") openKeysDialog();
 })();

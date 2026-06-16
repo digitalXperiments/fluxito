@@ -44,9 +44,9 @@ def test_platform_tab_gated_on_is_superadmin():
     assert "/admin?embed=1" in source
 
 
-def test_all_five_data_tab_values_present():
+def test_all_data_tab_values_present():
     source = INDEX_TEMPLATE.read_text()
-    for tab in ("account", "project", "integrations", "system", "platform"):
+    for tab in ("account", "ai", "project", "integrations", "system", "platform"):
         assert f'data-tab="{tab}"' in source, f"Missing data-tab={tab!r}"
 
 
@@ -83,3 +83,25 @@ def test_templating_computes_embed_flag():
     # render() must inject an `embed` flag so base.html never reads request.query_params.
     src = Path("app/templating.py").read_text()
     assert '"embed"' in src and "query_params.get(" in src
+
+
+# ---------------------------------------------------------------------------
+# AI keys tab
+# ---------------------------------------------------------------------------
+
+AI_TEMPLATE = Path("app/templates/settings/ai.html")
+
+
+def test_ai_tab_present_in_settings_rail():
+    source = INDEX_TEMPLATE.read_text()
+    assert 'data-tab="ai"' in source
+    assert "/settings/ai?embed=1" in source
+
+
+def test_ai_template_exists():
+    assert AI_TEMPLATE.exists(), "settings/ai.html must exist"
+
+
+def test_ai_template_references_api_ask_keys():
+    source = AI_TEMPLATE.read_text()
+    assert "/api/ask/keys" in source
