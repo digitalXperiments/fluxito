@@ -37,6 +37,16 @@ def _active_project_id(request: Request) -> str | None:
     return getattr(request.state, "active_project_id", None)
 
 
+def _parse_uuid(value: str | None) -> uuid.UUID | None:
+    """Parse a user-supplied UUID string; None if missing or malformed."""
+    if not value:
+        return None
+    try:
+        return uuid.UUID(value)
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 # ---- page ---------------------------------------------------------------
 
 
@@ -93,7 +103,8 @@ async def ask_stream(request: Request):
 
     # Resolve or create the conversation.
     if conv_id:
-        conv = await _service.get(uuid.UUID(conv_id))
+        conv_uuid = _parse_uuid(conv_id)
+        conv = await _service.get(conv_uuid) if conv_uuid else None
         if conv is None or str(conv.user_id) != uid:
             return JSONResponse({"error": "not_found"}, status_code=404)
     else:
@@ -196,7 +207,8 @@ async def get_conversation(request: Request, conversation_id: str):
     uid = _require_user_id(request)
     if not uid:
         return JSONResponse({"error": "auth"}, status_code=401)
-    conv = await _service.get(uuid.UUID(conversation_id))
+    conv_uuid = _parse_uuid(conversation_id)
+    conv = await _service.get(conv_uuid) if conv_uuid else None
     if conv is None or str(conv.user_id) != uid:
         return JSONResponse({"error": "not_found"}, status_code=404)
     history = await _service.load_history(conv.id)
@@ -220,7 +232,8 @@ async def archive_conversation(request: Request, conversation_id: str):
     uid = _require_user_id(request)
     if not uid:
         return JSONResponse({"error": "auth"}, status_code=401)
-    conv = await _service.get(uuid.UUID(conversation_id))
+    conv_uuid = _parse_uuid(conversation_id)
+    conv = await _service.get(conv_uuid) if conv_uuid else None
     if conv is None or str(conv.user_id) != uid:
         return JSONResponse({"error": "not_found"}, status_code=404)
     await _service.archive(conv.id)
