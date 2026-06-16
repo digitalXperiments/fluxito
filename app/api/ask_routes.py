@@ -116,6 +116,7 @@ async def ask_stream(request: Request):
     model = key.default_model or default_model_for(provider_name)
 
     # Resolve or create the conversation.
+    new_conv_title: str | None = None
     if conv_id:
         conv_uuid = _parse_uuid(conv_id)
         conv = await _service.get(conv_uuid) if conv_uuid else None
@@ -123,6 +124,10 @@ async def ask_stream(request: Request):
             return JSONResponse({"error": "not_found"}, status_code=404)
     else:
         conv = await _service.create(project_id=pid, user_id=uuid_user, provider=provider_name, model=model)
+        # Derive title from first user message (collapse whitespace, truncate to 60 chars).
+        raw = " ".join(user_text.split())
+        new_conv_title = raw[:60] + ("…" if len(raw) > 60 else "")
+        await _service.set_title(conv.id, new_conv_title)
 
     history = window_history(await _service.load_history(conv.id))
 
@@ -149,7 +154,11 @@ async def ask_stream(request: Request):
 
     async def event_stream():
         # First frame carries the conversation id so the client can persist it.
-        yield _sse_frame({"type": "conversation", "conversation_id": str(conv.id)})
+        # For new conversations, title is included so the sidebar can update immediately.
+        first_frame: dict = {"type": "conversation", "conversation_id": str(conv.id)}
+        if new_conv_title:
+            first_frame["title"] = new_conv_title
+        yield _sse_frame(first_frame)
         try:
             async for ev in harness.run(user_message):
                 yield _sse_frame(_event_to_payload(ev))
