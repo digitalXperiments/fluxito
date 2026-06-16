@@ -48,6 +48,15 @@ async def ask_page(request: Request):
     return render(request, "ask.html", {"page_title": "Ask Fluxito", "active_nav": "ask"})
 
 
+@router.get("/settings/ai")
+async def ai_settings(request: Request):
+    uid = _require_user_id(request)
+    if not uid:
+        return RedirectResponse("/signin?next=/settings/ai", status_code=302)
+    # The minimal v1 home for provider keys is the dialog on the /ask page.
+    return RedirectResponse("/ask#keys", status_code=302)
+
+
 # ---- chat stream --------------------------------------------------------
 
 

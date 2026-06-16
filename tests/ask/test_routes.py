@@ -12,3 +12,10 @@ def test_sse_frame_format():
     frame = _sse_frame({"type": "text_delta", "text": "hi"})
     assert frame.startswith("data: ") and frame.endswith("\n\n")
     assert '"text": "hi"' in frame
+
+
+def test_keys_settings_redirect_exists():
+    from app.api.ask_routes import router
+
+    paths = {r.path for r in router.routes}
+    assert "/settings/ai" in paths
