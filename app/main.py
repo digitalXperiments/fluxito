@@ -405,6 +405,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 from app.api.access_request_routes import router as access_request_router
 from app.api.admin_routes import router as admin_router
+from app.api.ask_routes import router as ask_router
 from app.api.audit_routes import router as audit_router
 from app.api.auditing_routes import router as auditing_platform_router
 from app.api.auth_routes import router as auth_router
@@ -421,7 +422,6 @@ from app.api.scheduled_report_routes import router as scheduled_report_router
 from app.api.setup_routes import router as setup_router
 from app.api.template_routes import router as template_router
 from app.api.tracking_plan_routes import router as tracking_plan_router
-from app.api.ask_routes import router as ask_router
 from app.api.update_routes import router as update_router
 from app.auth.mcp_oauth_server import router as oauth_router
 
