@@ -60,18 +60,13 @@
   var frame = document.getElementById('contextFrame');
   if (!frame || !tabs.length) return;
 
-  // Track which tabs have already had their src set (lazy loading).
-  var loaded = {};
-
   function activateTab(tabEl) {
     tabs.forEach(function (t) { t.classList.remove('is-active'); });
     tabEl.classList.add('is-active');
     var src = tabEl.getAttribute('data-src');
     var key = tabEl.getAttribute('data-tab');
-    if (!loaded[key]) {
-      frame.src = src;
-      loaded[key] = true;
-    }
+    // Always re-point the shared iframe (re-clicking a visited tab must reload it).
+    frame.src = src;
     // Update URL without reload so back/forward and bookmarks work.
     try {
       var url = new URL(window.location.href);
