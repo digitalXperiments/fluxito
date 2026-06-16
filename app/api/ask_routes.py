@@ -12,7 +12,15 @@ from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from app.ask.context import window_history
 from app.ask.harness import Harness, HarnessDeps
-from app.ask.keys import get_active_key, list_providers, store_key
+from app.ask.keys import (
+    delete_key,
+    get_active_key,
+    get_default_key,
+    list_keys,
+    list_providers,
+    set_default,
+    store_key,
+)
 from app.ask.prompts import build_system_prompt
 from app.ask.providers.base import LLMMessage, StreamEvent, TextBlock
 from app.ask.providers.registry import SUPPORTED_PROVIDERS, default_model_for, make_provider
@@ -109,8 +117,13 @@ async def ask_stream(request: Request):
             {"error": "no_key", "message": "Add an AI provider API key in settings first."},
             status_code=400,
         )
-    provider_name = body.get("provider") if body.get("provider") in available else available[0]
-    key = await get_active_key(project_id=pid, user_id=uuid_user, provider=provider_name)
+    explicit_provider = body.get("provider")
+    if explicit_provider and explicit_provider in available:
+        provider_name = explicit_provider
+        key = await get_active_key(project_id=pid, user_id=uuid_user, provider=provider_name)
+    else:
+        key = await get_default_key(project_id=pid, user_id=uuid_user)
+        provider_name = key.provider if key is not None else available[0]
     if key is None:
         return JSONResponse({"error": "no_key"}, status_code=400)
     model = key.default_model or default_model_for(provider_name)
@@ -273,9 +286,24 @@ async def get_keys(request: Request):
         return JSONResponse({"error": "auth"}, status_code=401)
     project_id = _active_project_id(request)
     if not project_id:
-        return JSONResponse({"providers": [], "supported": list(SUPPORTED_PROVIDERS)})
-    providers = await list_providers(project_id=uuid.UUID(project_id), user_id=uuid.UUID(uid))
-    return JSONResponse({"providers": providers, "supported": list(SUPPORTED_PROVIDERS)})
+        return JSONResponse({"providers": [], "keys": [], "supported": list(SUPPORTED_PROVIDERS)})
+    infos = await list_keys(project_id=uuid.UUID(project_id), user_id=uuid.UUID(uid))
+    providers = sorted({info.provider for info in infos})
+    return JSONResponse(
+        {
+            "providers": providers,
+            "keys": [
+                {
+                    "provider": info.provider,
+                    "default_model": info.default_model,
+                    "base_url": info.base_url,
+                    "is_default": info.is_default,
+                }
+                for info in infos
+            ],
+            "supported": list(SUPPORTED_PROVIDERS),
+        }
+    )
 
 
 @router.post("/api/ask/keys")
@@ -312,3 +340,88 @@ async def save_key(request: Request):
     resp = JSONResponse({"ok": True})
     set_active_project_cookie(resp, project_id)
     return resp
+
+
+@router.delete("/api/ask/keys/{provider}")
+async def remove_key(request: Request, provider: str):
+    uid = _require_user_id(request)
+    if not uid:
+        return JSONResponse({"error": "auth"}, status_code=401)
+    from app.api.project_routes import ensure_active_project
+
+    project_id = await ensure_active_project(request, uid)
+    if not project_id:
+        return JSONResponse({"error": "No active project."}, status_code=400)
+    if provider not in SUPPORTED_PROVIDERS:
+        return JSONResponse({"error": "Invalid provider."}, status_code=400)
+    await delete_key(project_id=uuid.UUID(project_id), user_id=uuid.UUID(uid), provider=provider)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/ask/keys/default")
+async def set_default_key(request: Request):
+    uid = _require_user_id(request)
+    if not uid:
+        return JSONResponse({"error": "auth"}, status_code=401)
+    from app.api.project_routes import ensure_active_project
+
+    project_id = await ensure_active_project(request, uid)
+    if not project_id:
+        return JSONResponse({"error": "No active project."}, status_code=400)
+    body = await request.json()
+    provider = body.get("provider")
+    if provider not in SUPPORTED_PROVIDERS:
+        return JSONResponse({"error": "Invalid provider."}, status_code=400)
+    await set_default(project_id=uuid.UUID(project_id), user_id=uuid.UUID(uid), provider=provider)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/ask/keys/test")
+async def test_key(request: Request):
+    import asyncio
+
+    uid = _require_user_id(request)
+    if not uid:
+        return JSONResponse({"error": "auth"}, status_code=401)
+    from app.api.project_routes import ensure_active_project
+
+    project_id = await ensure_active_project(request, uid)
+    if not project_id:
+        return JSONResponse({"error": "No active project."}, status_code=400)
+    body = await request.json()
+    provider = body.get("provider")
+    api_key = (body.get("api_key") or "").strip()
+    base_url = (body.get("base_url") or "").strip() or None
+    default_model = (body.get("default_model") or "").strip() or None
+    if provider not in SUPPORTED_PROVIDERS:
+        return JSONResponse({"ok": False, "error": "Invalid provider."})
+    key_required = provider != "lmstudio"
+    if key_required and not api_key:
+        return JSONResponse({"ok": False, "error": "API key is required."})
+    model = default_model or default_model_for(provider)
+    try:
+        provider_obj = make_provider(provider, api_key, base_url=base_url)
+        probe_messages = [LLMMessage(role="user", content=[TextBlock(text="hi")])]
+
+        async def _run_probe() -> bool:
+            async for ev in provider_obj.stream(
+                model=model,
+                system="ping",
+                messages=probe_messages,
+                tools=[],
+                max_tokens=8,
+            ):
+                ev_type = getattr(ev, "type", None)
+                if ev_type in ("text_delta", "tool_call_start", "message_done"):
+                    return True
+                if ev_type == "error":
+                    raise RuntimeError(getattr(ev, "error", "Provider error"))
+            return True
+
+        await asyncio.wait_for(_run_probe(), timeout=20.0)
+        return JSONResponse({"ok": True})
+    except TimeoutError:
+        return JSONResponse({"ok": False, "error": "Connection timed out after 20 seconds."})
+    except Exception as exc:
+        msg = str(exc)[:300]
+        return JSONResponse({"ok": False, "error": msg})
