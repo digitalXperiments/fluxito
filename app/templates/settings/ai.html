@@ -55,9 +55,10 @@
       {# Default model #}
       <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
         <span style="color:var(--text,#fafafa);">Default model <span style="color:var(--text-muted,#71717a);font-weight:400;">(optional)</span></span>
-        <input id="ai-editor-model" name="default_model" type="text" list="ai-model-suggestions"
-          class="f-input" placeholder="e.g. claude-opus-4-8" style="width:100%;box-sizing:border-box;" />
-        <datalist id="ai-model-suggestions"></datalist>
+        <select id="ai-editor-model-select" class="f-input" style="width:100%;box-sizing:border-box;"></select>
+        <input id="ai-editor-model-custom" name="default_model_custom" type="text"
+          class="f-input" placeholder="enter a custom model name"
+          style="width:100%;box-sizing:border-box;display:none;margin-top:0.4rem;" />
         <span id="ai-editor-model-hint" style="font-size:0.8rem;color:var(--text-muted,#71717a);"></span>
       </label>
 
@@ -303,9 +304,69 @@
   var keyToggle = document.getElementById("ai-key-toggle");
   var editorBaseurlRow = document.getElementById("ai-editor-baseurl-row");
   var editorBaseurl = document.getElementById("ai-editor-baseurl");
-  var editorModel = document.getElementById("ai-editor-model");
-  var modelSuggestions = document.getElementById("ai-model-suggestions");
+  var editorModelSelect = document.getElementById("ai-editor-model-select");
+  var editorModelCustom = document.getElementById("ai-editor-model-custom");
   var editorModelHint = document.getElementById("ai-editor-model-hint");
+  var MODEL_CUSTOM = "__custom__";
+
+  // Build the model dropdown for a provider: "Provider default", known models,
+  // then "Custom…" (which reveals the free-text input).
+  function populateModelField(meta, currentModel) {
+    var models = (meta && meta.models) || [];
+    editorModelSelect.innerHTML = "";
+    var defOpt = document.createElement("option");
+    defOpt.value = "";
+    defOpt.textContent = "Provider default";
+    editorModelSelect.appendChild(defOpt);
+    models.forEach(function (m) {
+      var o = document.createElement("option");
+      o.value = m;
+      o.textContent = m;
+      editorModelSelect.appendChild(o);
+    });
+    var customOpt = document.createElement("option");
+    customOpt.value = MODEL_CUSTOM;
+    customOpt.textContent = "Custom…";
+    editorModelSelect.appendChild(customOpt);
+
+    var cur = currentModel || "";
+    if (cur && models.indexOf(cur) === -1) {
+      editorModelSelect.value = MODEL_CUSTOM;
+      editorModelCustom.value = cur;
+      editorModelCustom.style.display = "block";
+    } else if (cur) {
+      editorModelSelect.value = cur;
+      editorModelCustom.value = "";
+      editorModelCustom.style.display = "none";
+    } else if (models.length === 0) {
+      // Providers with no known list (e.g. LM Studio) always take a custom name.
+      editorModelSelect.value = MODEL_CUSTOM;
+      editorModelCustom.value = "";
+      editorModelCustom.style.display = "block";
+    } else {
+      editorModelSelect.value = "";
+      editorModelCustom.value = "";
+      editorModelCustom.style.display = "none";
+    }
+    editorModelHint.textContent = (meta && meta.modelHint) || "";
+  }
+
+  function getModelValue() {
+    if (editorModelSelect.value === MODEL_CUSTOM) {
+      return (editorModelCustom.value || "").trim() || null;
+    }
+    return (editorModelSelect.value || "").trim() || null;
+  }
+
+  if (editorModelSelect) {
+    editorModelSelect.addEventListener("change", function () {
+      var isCustom = editorModelSelect.value === MODEL_CUSTOM;
+      editorModelCustom.style.display = isCustom ? "block" : "none";
+      if (isCustom) {
+        try { editorModelCustom.focus(); } catch (e) {}
+      }
+    });
+  }
   var testBtn = document.getElementById("ai-test-btn");
   var saveBtn = document.getElementById("ai-save-btn");
   var cancelBtn = document.getElementById("ai-cancel-btn");
@@ -515,16 +576,8 @@
       editorBaseurl.value = "";
     }
 
-    // Model field
-    editorModel.value = (info && info.default_model) ? info.default_model : "";
-    // Populate datalist
-    modelSuggestions.innerHTML = "";
-    (meta.models || []).forEach(function (m) {
-      var opt = document.createElement("option");
-      opt.value = m;
-      modelSuggestions.appendChild(opt);
-    });
-    editorModelHint.textContent = meta.modelHint || "";
+    // Model field (dropdown of known models + Custom…)
+    populateModelField(meta, info && info.default_model ? info.default_model : "");
 
     // Reset status
     setEditorStatus("", "");
@@ -563,7 +616,7 @@
       var provider = editorProvider.value;
       var api_key = (editorKey.value || "").trim();
       var base_url = (editorBaseurl.value || "").trim() || null;
-      var default_model = (editorModel.value || "").trim() || null;
+      var default_model = getModelValue();
       var isLocal = provider === "lmstudio";
 
       if (!isLocal && !api_key) {
@@ -639,7 +692,7 @@
         var provider = editorProvider.value;
         var api_key = (editorKey.value || "").trim();
         var base_url = (editorBaseurl.value || "").trim() || null;
-        var default_model = (editorModel.value || "").trim() || null;
+        var default_model = getModelValue();
 
         testBtn.disabled = true;
         setEditorStatus("Testing…", "var(--text-muted,#71717a)");
