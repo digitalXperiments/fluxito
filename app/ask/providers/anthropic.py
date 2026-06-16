@@ -89,7 +89,12 @@ class AnthropicProvider:
             "content-type": "application/json",
         }
 
-    def _iter_events(self, frames: Iterable[str], block_types: dict[int, str]) -> Iterator[StreamEvent]:
+    def _iter_events(
+        self,
+        frames: Iterable[str],
+        block_types: dict[int, str],
+        block_ids: dict[int, str],
+    ) -> Iterator[StreamEvent]:
         """Decode and dispatch a sequence of raw SSE frames."""
         for frame in frames:
             ename, data = _frame_parts(frame)
@@ -99,20 +104,25 @@ class AnthropicProvider:
                 evt = json.loads(data)
             except json.JSONDecodeError:
                 continue
-            yield from self._handle_event(ename, evt, block_types)
+            yield from self._handle_event(ename, evt, block_types, block_ids)
 
     def parse_sse(self, chunks: Iterable[str]) -> Iterator[StreamEvent]:
         """Parse an Anthropic SSE byte/str stream into normalized StreamEvents."""
         buf = ""
         block_types: dict[int, str] = {}
+        block_ids: dict[int, str] = {}
         for chunk in chunks:
             buf += chunk
             while "\n\n" in buf:
                 frame, buf = buf.split("\n\n", 1)
-                yield from self._iter_events([frame], block_types)
+                yield from self._iter_events([frame], block_types, block_ids)
 
     def _handle_event(
-        self, ename: str | None, evt: dict[str, Any], block_types: dict[int, str]
+        self,
+        ename: str | None,
+        evt: dict[str, Any],
+        block_types: dict[int, str],
+        block_ids: dict[int, str],
     ) -> Iterator[StreamEvent]:
         # Anthropic SSE: the event type is in the `event:` line, not the JSON payload.
         etype = ename or evt.get("type")
@@ -121,18 +131,26 @@ class AnthropicProvider:
             cb = evt.get("content_block", {})
             block_types[idx] = cb.get("type", "")
             if cb.get("type") == "tool_use":
-                yield StreamEvent(type="tool_call_start", tool_id=cb.get("id"), tool_name=cb.get("name"))
+                tool_id = cb.get("id")
+                if tool_id:
+                    block_ids[idx] = tool_id
+                yield StreamEvent(type="tool_call_start", tool_id=tool_id, tool_name=cb.get("name"))
         elif etype == "content_block_delta":
+            idx = evt.get("index", 0)
             delta = evt.get("delta", {})
             dt = delta.get("type")
             if dt == "text_delta":
                 yield StreamEvent(type="text_delta", text=delta.get("text", ""))
             elif dt == "input_json_delta":
-                yield StreamEvent(type="tool_args_delta", args_fragment=delta.get("partial_json", ""))
+                yield StreamEvent(
+                    type="tool_args_delta",
+                    tool_id=block_ids.get(idx),
+                    args_fragment=delta.get("partial_json", ""),
+                )
         elif etype == "content_block_stop":
             idx = evt["index"]
             if block_types.get(idx) == "tool_use":
-                yield StreamEvent(type="tool_call_end")
+                yield StreamEvent(type="tool_call_end", tool_id=block_ids.get(idx))
         elif etype == "message_delta":
             reason = (evt.get("delta") or {}).get("stop_reason")
             yield StreamEvent(
@@ -168,13 +186,14 @@ class AnthropicProvider:
             # via an explicit buffer so we can await network reads.
             buf = ""
             block_types: dict[int, str] = {}
+            block_ids: dict[int, str] = {}
             async for chunk in resp.aiter_text():
                 buf += chunk
                 frames: list[str] = []
                 while "\n\n" in buf:
                     frame, buf = buf.split("\n\n", 1)
                     frames.append(frame)
-                for out in self._iter_events(frames, block_types):
+                for out in self._iter_events(frames, block_types, block_ids):
                     yield out
 
 

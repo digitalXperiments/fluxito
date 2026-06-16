@@ -102,6 +102,7 @@ class OpenAIProvider:
     def _iter_frames(
         self,
         frames: Iterable[str],
+        index_to_id: dict[int, str],
         started: set[int],
         finish_box: list[str | None],
         usage_box: list[dict[str, Any] | None],
@@ -109,9 +110,12 @@ class OpenAIProvider:
         """Decode and dispatch a sequence of raw SSE data payloads.
 
         Yields StreamEvent objects normally.  When a ``[DONE]`` sentinel is
-        found, yields the string ``"[DONE]"`` so the caller can emit the
-        terminal ``message_done`` and stop iteration.
+        found, emits one ``tool_call_end`` per started tool call (in index
+        order) and then yields the string ``"[DONE]"`` so the caller can emit
+        the terminal ``message_done`` and stop iteration.
 
+        *index_to_id* — mutable map of tool-call index → id (populated as we
+          see tool-call deltas; id only present on the first delta per index).
         *started* — mutable set of tool-call indexes already announced.
         *finish_box* — single-element list used as a mutable cell for the
           latest ``finish_reason``.
@@ -122,6 +126,10 @@ class OpenAIProvider:
             if data is None:
                 continue
             if data == "[DONE]":
+                # Emit tool_call_end for each started tool call (in index order).
+                for idx in sorted(started):
+                    tool_id = index_to_id.get(idx)
+                    yield StreamEvent(type="tool_call_end", tool_id=tool_id)
                 yield "[DONE]"
                 return
             try:
@@ -141,19 +149,32 @@ class OpenAIProvider:
                     fn = tc.get("function", {})
                     if idx not in started:
                         started.add(idx)
+                        tool_id = tc.get("id")
+                        if tool_id:
+                            index_to_id[idx] = tool_id
                         yield StreamEvent(
                             type="tool_call_start",
-                            tool_id=tc.get("id"),
+                            tool_id=tool_id,
                             tool_name=fn.get("name"),
                         )
+                    else:
+                        # Capture id if it arrives on a later delta (shouldn't normally
+                        # happen with OpenAI, but be defensive).
+                        if tc.get("id") and idx not in index_to_id:
+                            index_to_id[idx] = tc["id"]
                     if fn.get("arguments"):
-                        yield StreamEvent(type="tool_args_delta", args_fragment=fn["arguments"])
+                        yield StreamEvent(
+                            type="tool_args_delta",
+                            tool_id=index_to_id.get(idx),
+                            args_fragment=fn["arguments"],
+                        )
 
     # ---- sync SSE parser (unit-tested) ----------------------------------
 
     def parse_sse(self, chunks: Iterable[str]) -> Iterator[StreamEvent]:
         """Parse an OpenAI SSE byte/str stream into normalized StreamEvents."""
         buf = ""
+        index_to_id: dict[int, str] = {}
         started: set[int] = set()
         finish_box: list[str | None] = [None]
         usage_box: list[dict[str, Any] | None] = [None]
@@ -162,7 +183,7 @@ class OpenAIProvider:
             buf += chunk
             while "\n\n" in buf:
                 frame, buf = buf.split("\n\n", 1)
-                for item in self._iter_frames([frame], started, finish_box, usage_box):
+                for item in self._iter_frames([frame], index_to_id, started, finish_box, usage_box):
                     if item == "[DONE]":
                         yield StreamEvent(
                             type="message_done",
@@ -173,6 +194,10 @@ class OpenAIProvider:
                     yield item  # type: ignore[misc]
 
         # Stream ended without an explicit [DONE].
+        # Still emit tool_call_end for any started tools.
+        for idx in sorted(started):
+            tool_id = index_to_id.get(idx)
+            yield StreamEvent(type="tool_call_end", tool_id=tool_id)
         yield StreamEvent(
             type="message_done",
             stop_reason=_FINISH_MAP.get(finish_box[0] or "", StopReason.END),
@@ -203,6 +228,7 @@ class OpenAIProvider:
                 yield StreamEvent(type="message_done", stop_reason=StopReason.ERROR)
                 return
             buf = ""
+            index_to_id: dict[int, str] = {}
             started: set[int] = set()
             finish_box: list[str | None] = [None]
             usage_box: list[dict[str, Any] | None] = [None]
@@ -213,7 +239,7 @@ class OpenAIProvider:
                     frame, buf = buf.split("\n\n", 1)
                     frames.append(frame)
                 done = False
-                for item in self._iter_frames(frames, started, finish_box, usage_box):
+                for item in self._iter_frames(frames, index_to_id, started, finish_box, usage_box):
                     if item == "[DONE]":
                         yield StreamEvent(
                             type="message_done",
@@ -225,6 +251,10 @@ class OpenAIProvider:
                     yield item  # type: ignore[misc]
                 if done:
                     return
+            # Stream ended without an explicit [DONE].
+            for idx in sorted(started):
+                tool_id = index_to_id.get(idx)
+                yield StreamEvent(type="tool_call_end", tool_id=tool_id)
             yield StreamEvent(
                 type="message_done",
                 stop_reason=_FINISH_MAP.get(finish_box[0] or "", StopReason.END),

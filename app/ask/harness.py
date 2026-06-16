@@ -64,9 +64,9 @@ class HarnessDeps:
 class _PendingTool:
     __slots__ = ("args", "id", "name")
 
-    def __init__(self) -> None:
-        self.id: str | None = None
-        self.name: str | None = None
+    def __init__(self, tool_id: str, tool_name: str) -> None:
+        self.id: str = tool_id
+        self.name: str = tool_name
         self.args: str = ""
 
 
@@ -86,8 +86,9 @@ class Harness:
         for _ in range(self._max_iter):
             assistant_blocks: list[Any] = []
             text_buf: list[str] = []
-            pending: list[_PendingTool] = []
-            cur: _PendingTool | None = None
+            # Order-preserving dict of pending tools keyed by tool id.
+            pending: dict[str, _PendingTool] = {}
+            order: list[str] = []
             stop: StopReason | None = None
             usage: dict | None = None
 
@@ -102,18 +103,21 @@ class Harness:
                     text_buf.append(ev.text or "")
                     yield ev
                 elif ev.type == "tool_call_start":
-                    cur = _PendingTool()
-                    cur.id = ev.tool_id
-                    cur.name = ev.tool_name
+                    tool_id = ev.tool_id or f"_auto_{len(order)}"
+                    pt = _PendingTool(tool_id=tool_id, tool_name=ev.tool_name or "")
+                    pending[tool_id] = pt
+                    order.append(tool_id)
                     yield ev
                 elif ev.type == "tool_args_delta":
-                    if cur is not None:
-                        cur.args += ev.args_fragment or ""
+                    # Route by tool_id if present; fall back to the most-recently-started tool.
+                    tid = ev.tool_id
+                    if tid and tid in pending:
+                        pending[tid].args += ev.args_fragment or ""
+                    elif order:
+                        pending[order[-1]].args += ev.args_fragment or ""
                     yield ev
                 elif ev.type == "tool_call_end":
-                    if cur is not None:
-                        pending.append(cur)
-                        cur = None
+                    # Informational only — pending is already populated at tool_call_start.
                     yield ev
                 elif ev.type == "error":
                     yield ev
@@ -124,23 +128,23 @@ class Harness:
             # Build + persist the assistant turn.
             if text_buf:
                 assistant_blocks.append(TextBlock(text="".join(text_buf)))
-            for pt in pending:
-                assistant_blocks.append(
-                    ToolUseBlock(id=pt.id or "", name=pt.name or "", input=_safe_json(pt.args))
-                )
+            for tid in order:
+                pt = pending[tid]
+                assistant_blocks.append(ToolUseBlock(id=pt.id, name=pt.name, input=_safe_json(pt.args)))
             if assistant_blocks:
                 assistant_msg = LLMMessage(role="assistant", content=assistant_blocks)
                 messages.append(assistant_msg)
                 await d.service.append(d.conversation_id, assistant_msg, token_usage=usage)
 
-            if stop == StopReason.TOOL_USE and pending:
+            if stop == StopReason.TOOL_USE and order:
                 # Execute all tool calls concurrently, preserving order.
+                parsed_args = [_safe_json(pending[tid].args) for tid in order]
                 results = await asyncio.gather(
-                    *[d.bridge.dispatch(pt.name or "", _safe_json(pt.args)) for pt in pending]
+                    *[d.bridge.dispatch(pending[tid].name, parsed_args[i]) for i, tid in enumerate(order)]
                 )
                 tool_blocks = [
-                    ToolResultBlock(tool_use_id=pt.id or "", content=content, is_error=is_err)
-                    for pt, (content, is_err) in zip(pending, results, strict=True)
+                    ToolResultBlock(tool_use_id=tid, content=content, is_error=is_err)
+                    for tid, (content, is_err) in zip(order, results, strict=True)
                 ]
                 tool_msg = LLMMessage(role="tool", content=tool_blocks)
                 messages.append(tool_msg)
