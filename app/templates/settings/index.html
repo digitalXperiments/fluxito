@@ -26,6 +26,10 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         Account
       </button>
+      <button type="button" class="settings-tab" data-tab="ai" data-src="/settings/ai?embed=1" aria-label="AI provider keys">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0-3 3 3 3 0 0 0 0 6 3 3 0 0 0 3 3v1a3 3 0 0 0 6 0v-1a3 3 0 0 0 3-3 3 3 0 0 0 0-6 3 3 0 0 0-3-3V5a3 3 0 0 0-3-3z"/></svg>
+        AI keys
+      </button>
     </div>
 
     {# Project — only when there is an active project #}
@@ -112,18 +116,12 @@
   var frame = document.getElementById('settingsFrame');
   if (!frame || !tabs.length) return;
 
-  // Track which tabs have already had their src set (lazy loading).
-  var loaded = {};
-
   function activateTab(tabEl) {
     tabs.forEach(function (t) { t.classList.remove('is-active'); });
     tabEl.classList.add('is-active');
     var src = tabEl.getAttribute('data-src');
     var key = tabEl.getAttribute('data-tab');
-    if (!loaded[key]) {
-      frame.src = src;
-      loaded[key] = true;
-    }
+    frame.src = src;
     // Update URL without reload so back/forward and bookmarks work.
     try {
       var url = new URL(window.location.href);
