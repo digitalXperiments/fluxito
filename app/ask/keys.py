@@ -17,6 +17,7 @@ class ProviderKey:
     provider: str
     api_key: str
     default_model: str | None
+    base_url: str | None = None
 
 
 async def store_key(
@@ -26,6 +27,7 @@ async def store_key(
     provider: str,
     api_key: str,
     default_model: str | None,
+    base_url: str | None = None,
 ) -> None:
     """Insert or replace the active key for (project, user, provider)."""
     async with app_state.db_session_factory() as db:
@@ -47,6 +49,7 @@ async def store_key(
                 provider=provider,
                 api_key_encrypted=encrypt_str(api_key),
                 default_model=default_model,
+                base_url=base_url or None,
                 is_active=True,
             )
         )
@@ -71,6 +74,7 @@ async def get_active_key(*, project_id: uuid.UUID, user_id: uuid.UUID, provider:
             provider=row.provider,
             api_key=decrypt_str(row.api_key_encrypted),
             default_model=row.default_model,
+            base_url=row.base_url,
         )
 
 

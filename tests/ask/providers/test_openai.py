@@ -9,6 +9,50 @@ from app.ask.providers.base import (
 from app.ask.providers.openai import OpenAIProvider
 
 
+def test_build_body_includes_stream_options_by_default():
+    """Default (send_usage=True) includes stream_options."""
+    p = OpenAIProvider(api_key="sk-test")
+    body = p.build_body(
+        model="gpt-4o",
+        system="SYS",
+        messages=[LLMMessage(role="user", content=[TextBlock(text="hi")])],
+        tools=[],
+        max_tokens=512,
+    )
+    assert "stream_options" in body
+    assert body["stream_options"] == {"include_usage": True}
+
+
+def test_build_body_omits_stream_options_when_send_usage_false():
+    """send_usage=False must not include stream_options (some servers reject it)."""
+    p = OpenAIProvider(api_key="sk-test", base_url="http://localhost:1234/v1", send_usage=False)
+    body = p.build_body(
+        model="llama3",
+        system="SYS",
+        messages=[LLMMessage(role="user", content=[TextBlock(text="hi")])],
+        tools=[],
+        max_tokens=512,
+    )
+    assert "stream_options" not in body
+
+
+def test_base_url_stored_and_trailing_slash_stripped():
+    p = OpenAIProvider(api_key="sk", base_url="http://localhost:1234/v1/")
+    assert p._base_url == "http://localhost:1234/v1"
+
+
+def test_empty_api_key_uses_placeholder_bearer():
+    p = OpenAIProvider(api_key="")
+    headers = p.build_headers()
+    assert headers["Authorization"] == "Bearer lm-studio"
+
+
+def test_nonempty_api_key_used_verbatim():
+    p = OpenAIProvider(api_key="sk-real")
+    headers = p.build_headers()
+    assert headers["Authorization"] == "Bearer sk-real"
+
+
 def test_build_body_maps_roles_and_tools():
     p = OpenAIProvider(api_key="sk-test")
     body = p.build_body(

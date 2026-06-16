@@ -1,4 +1,8 @@
-"""OpenAI Chat Completions adapter — raw httpx, no SDK."""
+"""OpenAI Chat Completions adapter — raw httpx, no SDK.
+
+Works with any OpenAI-compatible endpoint (OpenAI, xAI/Grok, Mistral, Google
+Gemini /openai, LM Studio, etc.) via a configurable base_url.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +22,7 @@ from app.ask.providers.base import (
     ToolUseBlock,
 )
 
-_API_URL = "https://api.openai.com/v1/chat/completions"
+_DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
 _FINISH_MAP = {
     "tool_calls": StopReason.TOOL_USE,
@@ -31,9 +35,18 @@ _FINISH_MAP = {
 class OpenAIProvider:
     name = "openai"
 
-    def __init__(self, api_key: str, *, timeout: float = 120.0) -> None:
-        self._api_key = api_key
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        base_url: str = _DEFAULT_BASE_URL,
+        timeout: float = 120.0,
+        send_usage: bool = True,
+    ) -> None:
+        self._api_key = api_key or ""
+        self._base_url = base_url.rstrip("/")
         self._timeout = timeout
+        self._send_usage = send_usage
 
     # ---- pure helpers ---------------------------------------------------
 
@@ -77,8 +90,9 @@ class OpenAIProvider:
             "max_tokens": max_tokens,
             "messages": wire,
             "stream": True,
-            "stream_options": {"include_usage": True},
         }
+        if self._send_usage:
+            body["stream_options"] = {"include_usage": True}
         if tools:
             body["tools"] = [
                 {
@@ -95,7 +109,10 @@ class OpenAIProvider:
         return body
 
     def build_headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._api_key}", "content-type": "application/json"}
+        # Some compatible servers (e.g. LM Studio) ignore the key but still
+        # require a well-formed Authorization header.
+        bearer = self._api_key if self._api_key else "lm-studio"
+        return {"Authorization": f"Bearer {bearer}", "content-type": "application/json"}
 
     # ---- shared per-frame decoder (used by both parse_sse and stream) ---
 
@@ -218,13 +235,14 @@ class OpenAIProvider:
         body = self.build_body(
             model=model, system=system, messages=messages, tools=tools, max_tokens=max_tokens
         )
+        url = f"{self._base_url}/chat/completions"
         async with (
             httpx.AsyncClient(timeout=self._timeout) as client,
-            client.stream("POST", _API_URL, headers=self.build_headers(), json=body) as resp,
+            client.stream("POST", url, headers=self.build_headers(), json=body) as resp,
         ):
             if resp.status_code >= 400:
                 detail = (await resp.aread()).decode("utf-8", "replace")
-                yield StreamEvent(type="error", error=f"openai {resp.status_code}: {detail}")
+                yield StreamEvent(type="error", error=f"openai-compat {resp.status_code}: {detail}")
                 yield StreamEvent(type="message_done", stop_reason=StopReason.ERROR)
                 return
             buf = ""

@@ -128,7 +128,7 @@ async def ask_stream(request: Request):
     role = getattr(request.state, "active_project_role", "member")
     system = build_system_prompt(project_name=project_name, connected=connected, role=role)
 
-    provider = make_provider(provider_name, key.api_key)
+    provider = make_provider(provider_name, key.api_key, base_url=key.base_url)
     deps = HarnessDeps(
         provider=provider,
         bridge=bridge,
@@ -274,7 +274,10 @@ async def save_key(request: Request):
     body = await request.json()
     provider = body.get("provider")
     api_key = (body.get("api_key") or "").strip()
-    if provider not in SUPPORTED_PROVIDERS or not api_key:
+    base_url = (body.get("base_url") or "").strip() or None
+    # LM Studio doesn't require a real API key; all others do.
+    key_required = provider != "lmstudio"
+    if provider not in SUPPORTED_PROVIDERS or (key_required and not api_key):
         return JSONResponse({"error": "Invalid provider or key."}, status_code=400)
     default_model = body.get("default_model") or default_model_for(provider)
     await store_key(
@@ -283,5 +286,6 @@ async def save_key(request: Request):
         provider=provider,
         api_key=api_key,
         default_model=default_model,
+        base_url=base_url,
     )
     return JSONResponse({"ok": True})

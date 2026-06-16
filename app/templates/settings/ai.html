@@ -31,15 +31,26 @@
         <select id="ai-key-provider" name="provider" class="f-input" style="max-width:320px;">
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="openai">OpenAI (GPT)</option>
+          <option value="grok">xAI (Grok)</option>
+          <option value="gemini">Google (Gemini)</option>
+          <option value="mistral">Mistral AI</option>
+          <option value="lmstudio">LM Studio (local)</option>
         </select>
       </label>
       <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
-        <span style="color:var(--ink);">API key</span>
-        <input id="ai-key-value" name="api_key" type="password" autocomplete="off" class="f-input" placeholder="sk-…" style="max-width:420px;" required />
+        <span style="color:var(--ink);">API key <span id="ai-key-label-hint" style="color:var(--muted,#888);font-weight:400;"></span></span>
+        <input id="ai-key-value" name="api_key" type="password" autocomplete="off" class="f-input" placeholder="sk-…" style="max-width:420px;" />
+      </label>
+      <label id="ai-base-url-row" style="display:none;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
+        <span style="color:var(--ink);">Base URL <span style="color:var(--muted,#888);font-weight:400;">(optional)</span></span>
+        <input id="ai-key-base-url" name="base_url" type="text" class="f-input"
+          placeholder="for LM Studio / self-hosted; leave blank for hosted providers"
+          style="max-width:420px;" />
+        <span style="font-size:0.8rem;color:var(--muted,#888);">Only needed for LM Studio or a custom OpenAI-compatible server. Default for LM Studio: <code>http://localhost:1234/v1</code></span>
       </label>
       <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
-        <span style="color:var(--ink);">Default model <span style="color:var(--muted,#888);font-weight:400;">(optional — leave blank for provider default)</span></span>
-        <input id="ai-key-model" name="default_model" type="text" class="f-input" placeholder="e.g. claude-3-5-sonnet-20241022" style="max-width:420px;" />
+        <span style="color:var(--ink);">Default model <span style="color:var(--muted,#888);font-weight:400;">(optional — overridable per provider; leave blank to use provider default)</span></span>
+        <input id="ai-key-model" name="default_model" type="text" class="f-input" placeholder="e.g. claude-opus-4-8" style="max-width:420px;" />
       </label>
       <div style="display:flex;align-items:center;gap:1rem;">
         <button type="submit" class="btn primary" id="ai-key-save">Save key</button>
@@ -62,7 +73,32 @@
   var providersList = document.getElementById("ai-providers-list");
   var keyForm = document.getElementById("ai-key-form");
   var keyInput = document.getElementById("ai-key-value");
+  var keyLabelHint = document.getElementById("ai-key-label-hint");
+  var baseUrlRow = document.getElementById("ai-base-url-row");
+  var baseUrlInput = document.getElementById("ai-key-base-url");
   var statusEl = document.getElementById("ai-key-status");
+  var providerSel = document.getElementById("ai-key-provider");
+
+  // Providers that accept a local/self-hosted base URL and don't require a key.
+  var LOCAL_PROVIDERS = ["lmstudio"];
+
+  function onProviderChange() {
+    var p = providerSel.value;
+    var isLocal = LOCAL_PROVIDERS.indexOf(p) !== -1;
+    baseUrlRow.style.display = isLocal ? "flex" : "none";
+    if (isLocal) {
+      keyInput.removeAttribute("required");
+      keyInput.placeholder = "optional for local providers";
+      keyLabelHint.textContent = "(optional for LM Studio)";
+    } else {
+      keyInput.setAttribute("required", "required");
+      keyInput.placeholder = "sk-…";
+      keyLabelHint.textContent = "";
+    }
+  }
+
+  providerSel.addEventListener("change", onProviderChange);
+  onProviderChange();
 
   function loadProviders() {
     fetch("/api/ask/keys").then(function (r) {
@@ -87,11 +123,13 @@
   if (keyForm) {
     keyForm.addEventListener("submit", function (e) {
       e.preventDefault();
-      var provider = document.getElementById("ai-key-provider").value;
+      var provider = providerSel.value;
       var api_key = (keyInput ? keyInput.value : "").trim();
+      var base_url = (baseUrlInput ? baseUrlInput.value : "").trim() || null;
       var default_model = (document.getElementById("ai-key-model").value || "").trim() || null;
+      var isLocal = LOCAL_PROVIDERS.indexOf(provider) !== -1;
 
-      if (!api_key) {
+      if (!isLocal && !api_key) {
         statusEl.textContent = "API key is required.";
         statusEl.style.color = "var(--red,#dc2626)";
         return;
@@ -108,13 +146,14 @@
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken()
         },
-        body: JSON.stringify({ provider: provider, api_key: api_key, default_model: default_model })
+        body: JSON.stringify({ provider: provider, api_key: api_key, base_url: base_url, default_model: default_model })
       }).then(function (r) {
         return r.json().then(function (data) { return { ok: r.ok, data: data }; });
       }).then(function (result) {
         saveBtn.disabled = false;
         if (result.ok) {
           if (keyInput) keyInput.value = "";
+          if (baseUrlInput) baseUrlInput.value = "";
           statusEl.textContent = "Saved.";
           statusEl.style.color = "var(--green,#16a34a)";
           loadProviders();
