@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Ask Fluxito — native AI assistant.** A ChatGPT-style assistant embedded in the app
+  (new `/ask` page + a docked-panel seam in the shell). Bring your own AI provider key
+  (Anthropic or OpenAI) — keys are stored encrypted per project and managed from the
+  assistant's setup dialog (linkable at `/settings/ai`). The harness is vendor-owned (raw
+  HTTP, no SDKs) behind a normalized provider interface: it reasons, asks a clarifying
+  question when a request is ambiguous, then calls the Fluxito MCP tools in a loop and
+  streams the answer back over SSE. Tool access is **read-only** in this release
+  (analytics/tag-manager/marketing/warehouse/SEO reads, dashboards, tracking-plan reads,
+  audits, and cross-connector analysis) — the assistant cannot modify anything. In-process
+  tool dispatch inherits the caller's RBAC. Conversations persist per project/user
+  (migration `064`: `conversations`, `chat_messages`, `ai_provider_keys`).
+
 ## [1.1.15] — 2026-06-15
 
 ### Added
