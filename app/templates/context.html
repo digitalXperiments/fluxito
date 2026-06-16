@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Context — {{ brand().name }}{% endblock %}
+{% set active = 'context' %}
+
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/settings.css?v={{ asset_hash('css/settings.css') }}"/>
+{% endblock %}
+
+{% block main %}
+<div class="settings-shell">
+
+  {# ── Left tab rail ── #}
+  <nav class="settings-rail" aria-label="Context sections">
+
+    <div class="settings-rail-group">
+      <div class="settings-rail-group-label">Context</div>
+      <button
+        type="button"
+        class="settings-tab"
+        data-tab="kpis"
+        data-src="/kpi-library?embed=1"
+        aria-label="KPI Library"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        KPIs
+      </button>
+      <button
+        type="button"
+        class="settings-tab"
+        data-tab="business"
+        data-src="/business-context?embed=1"
+        aria-label="Business context"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Business context
+      </button>
+    </div>
+
+  </nav>
+
+  {# ── Right iframe panel ── #}
+  <div class="settings-panel">
+    <iframe
+      id="contextFrame"
+      class="settings-frame"
+      src=""
+      title="Context panel"
+      allow="same-origin"
+    ></iframe>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var tabs = document.querySelectorAll('.settings-tab');
+  var frame = document.getElementById('contextFrame');
+  if (!frame || !tabs.length) return;
+
+  // Track which tabs have already had their src set (lazy loading).
+  var loaded = {};
+
+  function activateTab(tabEl) {
+    tabs.forEach(function (t) { t.classList.remove('is-active'); });
+    tabEl.classList.add('is-active');
+    var src = tabEl.getAttribute('data-src');
+    var key = tabEl.getAttribute('data-tab');
+    if (!loaded[key]) {
+      frame.src = src;
+      loaded[key] = true;
+    }
+    // Update URL without reload so back/forward and bookmarks work.
+    try {
+      var url = new URL(window.location.href);
+      url.searchParams.set('tab', key);
+      history.replaceState(null, '', url.toString());
+    } catch (e) {}
+  }
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      activateTab(tab);
+    });
+  });
+
+  // Pick the initial tab: URL hash #business → ?tab= param → first tab.
+  function getInitialTab() {
+    try {
+      // Hash takes priority: #business selects the business tab.
+      if (window.location.hash === '#business') {
+        for (var i = 0; i < tabs.length; i++) {
+          if (tabs[i].getAttribute('data-tab') === 'business') return tabs[i];
+        }
+      }
+      var param = new URL(window.location.href).searchParams.get('tab');
+      if (param) {
+        for (var j = 0; j < tabs.length; j++) {
+          if (tabs[j].getAttribute('data-tab') === param) return tabs[j];
+        }
+      }
+    } catch (e) {}
+    return tabs[0] || null;
+  }
+
+  var initial = getInitialTab();
+  if (initial) activateTab(initial);
+})();
+</script>
+{% endblock %}
