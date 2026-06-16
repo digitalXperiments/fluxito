@@ -89,6 +89,18 @@ class AnthropicProvider:
             "content-type": "application/json",
         }
 
+    def _iter_events(self, frames: Iterable[str], block_types: dict[int, str]) -> Iterator[StreamEvent]:
+        """Decode and dispatch a sequence of raw SSE frames."""
+        for frame in frames:
+            ename, data = _frame_parts(frame)
+            if data is None:
+                continue
+            try:
+                evt = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            yield from self._handle_event(ename, evt, block_types)
+
     def parse_sse(self, chunks: Iterable[str]) -> Iterator[StreamEvent]:
         """Parse an Anthropic SSE byte/str stream into normalized StreamEvents."""
         buf = ""
@@ -97,14 +109,7 @@ class AnthropicProvider:
             buf += chunk
             while "\n\n" in buf:
                 frame, buf = buf.split("\n\n", 1)
-                ename, data = _frame_parts(frame)
-                if data is None:
-                    continue
-                try:
-                    evt = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
-                yield from self._handle_event(ename, evt, block_types)
+                yield from self._iter_events([frame], block_types)
 
     def _handle_event(
         self, ename: str | None, evt: dict[str, Any], block_types: dict[int, str]
@@ -165,17 +170,12 @@ class AnthropicProvider:
             block_types: dict[int, str] = {}
             async for chunk in resp.aiter_text():
                 buf += chunk
+                frames: list[str] = []
                 while "\n\n" in buf:
                     frame, buf = buf.split("\n\n", 1)
-                    ename, data = _frame_parts(frame)
-                    if data is None:
-                        continue
-                    try:
-                        evt = json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-                    for out in self._handle_event(ename, evt, block_types):
-                        yield out
+                    frames.append(frame)
+                for out in self._iter_events(frames, block_types):
+                    yield out
 
 
 def _frame_parts(frame: str) -> tuple[str | None, str | None]:
