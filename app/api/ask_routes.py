@@ -45,7 +45,7 @@ async def ask_page(request: Request):
     uid = _require_user_id(request)
     if not uid:
         return RedirectResponse("/signin?next=/ask", status_code=302)
-    return render(request, "ask.html", {"page_title": "Ask Fluxito", "active_nav": "ask"})
+    return render(request, "ask.html", {"page_title": "Ask Fluxito", "active": "ask"})
 
 
 @router.get("/settings/ai")
