@@ -137,19 +137,6 @@ def _structural_findings(data: dict) -> list[dict]:
                 )
             )
 
-    for metric in data["metrics"]:
-        if not metric.get("dashboard_card_id"):
-            findings.append(
-                _finding(
-                    "warning",
-                    "metric_not_measured",
-                    f"Metric '{metric['name']}' is not linked to any dashboard card",
-                    entity_type="metric",
-                    entity_id=metric["id"],
-                    suggested_fix="Link this metric to a live dashboard card.",
-                )
-            )
-
     return findings
 
 
@@ -356,6 +343,114 @@ def _rule_pii_must_be_flagged(data: dict, rule: TPValidationRule) -> list[dict]:
     return findings
 
 
+def _rule_event_name_components(data: dict, rule: TPValidationRule) -> list[dict]:
+    """Validate that each event name is composed of the expected ordered
+    components, uses an allowed separator, and each token matches the required
+    casing.
+
+    Config keys (all optional with sensible defaults):
+      components  – ordered list of component labels; used only for the
+                    suggested-fix message, not for positional enforcement
+                    (names are free-form tokens). Defaults to [].
+      separators  – list of allowed separators; the first one is used in
+                    suggested-fix formatting. Defaults to ["_"].
+      casing      – one of snake_case | camelCase | TitleCase | lower | upper
+                    | any. Applied to each split token. Defaults to "lower".
+      min_parts   – minimum number of separator-split tokens. Defaults to
+                    len(components) if components provided, else 1.
+      max_parts   – maximum number of tokens; None means no upper limit.
+    """
+    config = rule.config or {}
+    components: list[str] = config.get("components", [])
+    separators: list[str] = config.get("separators", ["_"])
+    casing: str = config.get("casing", "lower")
+    min_parts: int = config.get("min_parts", len(components) if components else 1)
+    max_parts: int | None = config.get("max_parts", None)
+
+    if not separators:
+        separators = ["_"]
+
+    primary_sep = separators[0]
+    rid = str(rule.id)
+    findings = []
+
+    for ev in _scope_events(data, rule):
+        name: str = ev["name"]
+        ev_id: str = ev["id"]
+
+        # Check that the name uses only one of the allowed separators.  We pick
+        # whichever allowed separator splits into the most tokens (greedy match),
+        # or fall back to the primary separator for the error message.
+        best_sep = primary_sep
+        best_parts: list[str] = [name]
+        for sep in separators:
+            parts = name.split(sep)
+            if len(parts) > len(best_parts):
+                best_parts = parts
+                best_sep = sep
+
+        parts = best_parts
+        issues: list[str] = []
+
+        # --- Part count check ---
+        if len(parts) < min_parts:
+            issues.append(
+                f"expected at least {min_parts} component(s) separated by "
+                f"'{primary_sep}' (got {len(parts)})"
+            )
+        if max_parts is not None and len(parts) > max_parts:
+            issues.append(
+                f"expected at most {max_parts} component(s) separated by "
+                f"'{primary_sep}' (got {len(parts)})"
+            )
+
+        # --- Casing check on each token ---
+        bad_tokens: list[str] = []
+        for token in parts:
+            if not token:
+                # Empty token means a leading/trailing/double separator.
+                bad_tokens.append(repr(token))
+                continue
+            if (casing == "lower" and token != token.lower()) or (
+                casing == "upper" and token != token.upper()
+            ):
+                bad_tokens.append(token)
+            elif casing in ("snake_case", "camelCase", "TitleCase", "Title"):
+                if not matches_casing(token, casing):
+                    bad_tokens.append(token)
+            # casing == "any" → always passes
+
+        if bad_tokens:
+            issues.append(f"token(s) {bad_tokens} do not match required casing '{casing}'")
+
+        if issues:
+            # Build a suggested fix using the component labels as a template.
+            if components:
+                suggested = primary_sep.join(f"<{c}>" for c in components[:min_parts])
+                suggested_fix = (
+                    f"Name should follow: {suggested} "
+                    f"(e.g. '{primary_sep.join(c.lower() for c in components[:min_parts])}')"
+                )
+            else:
+                suggested_fix = (
+                    f"Name should use '{primary_sep}' as separator with "
+                    f"at least {min_parts} component(s) in '{casing}' casing"
+                )
+
+            findings.append(
+                _rule_finding(
+                    rid,
+                    rule.severity,
+                    "event",
+                    ev_id,
+                    f"Event '{name}' does not follow the naming convention: " + "; ".join(issues),
+                    suggested_fix=suggested_fix,
+                )
+            )
+
+    return findings
+
+
 _RULE_EVALUATORS = {
     "event_name_casing": _rule_event_name_casing,
     "event_name_regex": _rule_event_name_regex,
@@ -364,6 +459,7 @@ _RULE_EVALUATORS = {
     "required_property": _rule_required_property,
     "property_type_consistency": _rule_property_type_consistency,
     "pii_must_be_flagged": _rule_pii_must_be_flagged,
+    "event_name_components": _rule_event_name_components,
 }
 
 

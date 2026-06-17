@@ -20,7 +20,6 @@ const NAV = [
   ['bundles', 'Bundles'],
   ['categories', 'Categories'],
   ['sources', 'Sources & Destinations'],
-  ['metrics', 'Metrics'],
   ['issues', 'Issues'],
 ];
 
@@ -33,7 +32,6 @@ const VIEW_META = {
   bundles: { label: 'Bundles', coll: 'bundles' },
   categories: { label: 'Categories', coll: 'categories' },
   sources: { label: 'Sources & Destinations' },
-  metrics: { label: 'Metrics', coll: 'metrics' },
   review: { label: 'Branch review' },
   versions: { label: 'Versions' },
   issues: { label: 'Issues' },
@@ -41,7 +39,7 @@ const VIEW_META = {
 
 // Views that use the master-detail drill-down on mobile. `sources` is listed
 // for intent but never sets a selection, so it never triggers the class.
-const MD_VIEWS = new Set(['events', 'properties', 'categories', 'bundles', 'sources', 'metrics']);
+const MD_VIEWS = new Set(['events', 'properties', 'categories', 'bundles', 'sources']);
 const MOBILE_MQ = '(max-width: 768px)';
 
 export function mountShell(root) {

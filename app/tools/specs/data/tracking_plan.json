@@ -441,12 +441,12 @@
         "required": true,
         "enum": [
           "string",
-          "int",
+          "integer",
           "float",
           "boolean",
-          "object",
-          "array"
-        ]
+          "object"
+        ],
+        "doc": "Property value type. Use is_list=true for list/array values. 'object' with is_list=false is a single object; 'object' with is_list=true is a list of objects. Members (keys) of an object are linked via the add_member action."
       },
       {
         "name": "kind",
@@ -481,13 +481,7 @@
         "type": "boolean",
         "required": false,
         "example": true,
-        "doc": "True when the value is an array of data_type (Avo list property)."
-      },
-      {
-        "name": "parent_property_id",
-        "type": "string",
-        "required": false,
-        "doc": "Parent UUID for object/array members."
+        "doc": "True when the value is an array of data_type (list property). 'string' + is_list=true means list of strings; 'object' + is_list=true means list of objects."
       }
     ],
     "mutates": true,
@@ -521,11 +515,10 @@
         "required": false,
         "enum": [
           "string",
-          "int",
+          "integer",
           "float",
           "boolean",
-          "object",
-          "array"
+          "object"
         ]
       },
       {
@@ -542,12 +535,7 @@
         "name": "is_list",
         "type": "boolean",
         "required": false,
-        "doc": "True when the value is an array of data_type (Avo list property)."
-      },
-      {
-        "name": "parent_property_id",
-        "type": "string",
-        "required": false
+        "doc": "True when the value is an array of data_type (list property)."
       }
     ],
     "mutates": true,
@@ -1078,26 +1066,13 @@
   {
     "tool": "tracking_plan",
     "action": "create_metric",
-    "summary": "Create a success metric tied to an event and/or property in the tracking plan.",
+    "summary": "Create a named success metric linked to an event in the tracking plan. Metrics are intent markers (name + description + event link); measurement lives in the dashboard layer.",
     "params": [
       {
         "name": "name",
         "type": "string",
         "required": true,
         "example": "Purchase Revenue"
-      },
-      {
-        "name": "type",
-        "type": "string",
-        "required": true,
-        "enum": [
-          "count",
-          "sum",
-          "average",
-          "conversion",
-          "retention"
-        ],
-        "example": "sum"
       },
       {
         "name": "description",
@@ -1110,19 +1085,6 @@
         "required": false,
         "example": "uuid",
         "doc": "UUID of the event this metric is based on."
-      },
-      {
-        "name": "property_id",
-        "type": "string",
-        "required": false,
-        "example": "uuid",
-        "doc": "UUID of the property to aggregate (required for sum/average types)."
-      },
-      {
-        "name": "filters",
-        "type": "object",
-        "required": false,
-        "doc": "Filter conditions applied before aggregation."
       }
     ],
     "mutates": true,
@@ -1132,7 +1094,7 @@
   {
     "tool": "tracking_plan",
     "action": "update_metric",
-    "summary": "Update fields on an existing metric.",
+    "summary": "Update fields on an existing metric. Only supplied fields are changed.",
     "params": [
       {
         "name": "metric_id",
@@ -1151,30 +1113,8 @@
         "required": false
       },
       {
-        "name": "type",
-        "type": "string",
-        "required": false,
-        "enum": [
-          "count",
-          "sum",
-          "average",
-          "conversion",
-          "retention"
-        ]
-      },
-      {
         "name": "event_id",
         "type": "string",
-        "required": false
-      },
-      {
-        "name": "property_id",
-        "type": "string",
-        "required": false
-      },
-      {
-        "name": "filters",
-        "type": "object",
         "required": false
       }
     ],

@@ -2,7 +2,7 @@
 
 Adds:
 - ``tp_properties.is_list`` — flags a property whose value is an array of the
-  declared ``data_type`` (Avo "list" properties).
+  declared ``data_type`` (list properties).
 - ``tp_property_bundles`` — a named, reusable group of properties on a branch.
 - ``tp_bundle_properties`` — the M2M link between a bundle and its properties,
   carrying a per-link ``required`` flag and ``sort_order``.

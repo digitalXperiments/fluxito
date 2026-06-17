@@ -70,7 +70,9 @@ def plan_to_markdown(plan: dict) -> str:
         lines.append("## Metrics")
         lines.append("")
         for m in plan["metrics"]:
-            lines.append(f"- **{m['name']}** ({m['type']}) — {m.get('event') or 'n/a'}")
+            lines.append(f"- **{m['name']}** — {m.get('event') or 'n/a'}")
+            if m.get("description"):
+                lines.append(f"  {m['description']}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
@@ -123,9 +125,9 @@ def plan_to_xlsx(plan: dict) -> bytes:
         ws_src.append([s["name"], s.get("platform_type") or "", "; ".join(s["destinations"])])
 
     wm = wb.create_sheet("Metrics")
-    wm.append(["name", "type", "event", "description"])
+    wm.append(["name", "event", "description"])
     for m in plan["metrics"]:
-        wm.append([m["name"], m["type"], m.get("event") or "", m.get("description") or ""])
+        wm.append([m["name"], m.get("event") or "", m.get("description") or ""])
 
     buf = io.BytesIO()
     wb.save(buf)

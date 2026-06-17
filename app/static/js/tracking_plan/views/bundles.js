@@ -1,5 +1,5 @@
 // app/static/js/tracking_plan/views/bundles.js
-// Property bundles — refined master-detail (Avo-grade redesign).
+// Property bundles — refined master-detail (best-in-class redesign).
 // Master: searchable list of bundles with property count. Detail: a buffered
 // editor. Selecting a bundle snapshots draft={name, description, properties[]};
 // EVERY edit (name/desc, add/remove property, toggle required, drag-reorder)

@@ -7,7 +7,6 @@ from app.services.tracking_plan import (
     create_property,
     detach_property,
     plan_to_dict,
-    update_property,
 )
 from app.services.tracking_plan.bootstrap import get_main_branch, get_or_create_plan
 from app.services.tracking_plan.exceptions import ConflictError, NotFoundError, ValidationError
@@ -86,23 +85,27 @@ async def test_is_list_property_serializes_true(db_session_factory):
 async def test_numeric_min_greater_than_max_rejected(db_session_factory):
     async with db_session_factory() as session:
         branch = await _branch(session)
+        # 'int' is no longer a valid data_type; the canonical name is 'integer'.
         with pytest.raises(ValidationError):
             await create_property(
-                session, branch, name="qty", data_type="int", constraints={"min": 10, "max": 1}
+                session, branch, name="qty", data_type="integer", constraints={"min": 10, "max": 1}
             )
         # Valid min <= max is accepted.
         ok = await create_property(
-            session, branch, name="qty2", data_type="int", constraints={"min": 1, "max": 10}
+            session, branch, name="qty2", data_type="integer", constraints={"min": 1, "max": 10}
         )
         assert ok.constraints == {"min": 1, "max": 10}
 
 
 @pytest.mark.anyio
-async def test_update_property_rejects_offbranch_parent(db_session_factory):
+async def test_add_member_rejects_offbranch_member(db_session_factory):
+    """add_member with a member_property_id that does not exist on the branch raises NotFoundError."""
     import uuid
+
+    from app.services.tracking_plan.properties import add_member
 
     async with db_session_factory() as session:
         branch = await _branch(session)
-        prop = await create_property(session, branch, name="city", data_type="string")
+        obj_prop = await create_property(session, branch, name="address", data_type="object")
         with pytest.raises(NotFoundError):
-            await update_property(session, branch, prop.id, parent_property_id=uuid.uuid4())
+            await add_member(session, branch, obj_prop.id, uuid.uuid4())

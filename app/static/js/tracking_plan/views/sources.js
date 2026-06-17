@@ -23,7 +23,14 @@ import { routingLinks, isLinked } from "tp/util/routing";
 import { persist } from "tp/util/persist";
 import { clone, isDirty, saveCluster } from "tp/util/editor";
 
-const PLATFORM_TYPES = ["ios", "android", "web", "server", "warehouse"];
+// Fallback source platform kinds used when the vendor catalog is unavailable.
+const DEFAULT_SOURCE_PLATFORMS = [
+  { slug: "web", display_name: "Web" },
+  { slug: "ios", display_name: "iOS" },
+  { slug: "android", display_name: "Android" },
+  { slug: "server", display_name: "Server" },
+  { slug: "warehouse", display_name: "Warehouse" },
+];
 
 // transient (non-plan) UI state for the routing graph: pending source + hover.
 let pendingSourceId = null;
@@ -81,7 +88,7 @@ function headerSection(st, rerender) {
   const addDest = h("button", { class: "btn btn-primary btn-sm" }, "+ Add destination");
   addDest.onclick = async () => {
     await persist("Destination created", () =>
-      doAction("create_destination", { name: "New destination", platform: "ga4" }, getState().branch),
+      doAction("create_destination", { name: "New destination", platform: "" }, getState().branch),
     );
     await reload();
   };
@@ -179,11 +186,15 @@ function sourceCard(s, branch, rerender) {
   nameInp.oninput = () => { draft.name = nameInp.value; refreshCluster(); };
   grid.appendChild(field("Name", nameInp));
 
-  // platform type
+  // platform type — sourced from vendor catalog source_platforms, with fallback
+  const st = getState();
+  const srcPlatforms = (st.vendors && st.vendors.source_platforms && st.vendors.source_platforms.length)
+    ? st.vendors.source_platforms
+    : DEFAULT_SOURCE_PLATFORMS;
   const plSel = h("select", { class: "select" });
   plSel.appendChild(h("option", { value: "" }, "platform…"));
-  PLATFORM_TYPES.forEach((t) => {
-    const o = h("option", { value: t, selected: draft.platform_type === t }, t);
+  srcPlatforms.forEach((p) => {
+    const o = h("option", { value: p.slug, selected: draft.platform_type === p.slug }, p.display_name);
     plSel.appendChild(o);
   });
   plSel.onchange = () => { draft.platform_type = plSel.value; refreshCluster(); };
@@ -265,9 +276,7 @@ function destCard(dest, branch, rerender) {
   nameInp.oninput = () => { draft.name = nameInp.value; refreshCluster(); };
   grid.appendChild(field("Name", nameInp));
 
-  const plInp = h("input", { class: "input mono", value: draft.platform, placeholder: "ga4 / amplitude / …" });
-  plInp.oninput = () => { draft.platform = plInp.value; refreshCluster(); };
-  grid.appendChild(field("Platform", plInp));
+  grid.appendChild(platformField(draft, refreshCluster));
 
   const acctInp = h("input", { class: "input mono", value: draft.account_id, placeholder: "account id" });
   acctInp.oninput = () => { draft.account_id = acctInp.value; refreshCluster(); };
@@ -290,6 +299,71 @@ function destCard(dest, branch, rerender) {
 
 function field(label, control) {
   return h("div", { class: "tp-field" }, h("label", { class: "tp-lbl" }, label), control);
+}
+
+/**
+ * Build the destination platform field: a category-grouped <select> of catalog.destinations
+ * with a trailing "Custom…" option that reveals a text input for an arbitrary slug.
+ * Persists the chosen slug into draft.platform.
+ */
+function platformField(draft, refreshCluster) {
+  const st = getState();
+  const catalog = (st.vendors && st.vendors.destinations) ? st.vendors.destinations : [];
+
+  // Group destinations by category, preserving insertion order.
+  const groups = new Map(); // category → [{slug, display_name}]
+  catalog.forEach((d) => {
+    if (!groups.has(d.category)) groups.set(d.category, []);
+    groups.get(d.category).push(d);
+  });
+
+  const CUSTOM_VALUE = "__custom__";
+  // Determine the initial select value: if the current draft slug is in the catalog use it;
+  // otherwise use CUSTOM_VALUE (handles existing custom slugs and the empty-new case).
+  const isKnown = !!catalog.find((d) => d.slug === draft.platform);
+  const initialSelectValue = (draft.platform && !isKnown) ? CUSTOM_VALUE : (draft.platform || "");
+
+  // Build the grouped <select>.
+  const plSel = h("select", { class: "select" });
+  plSel.appendChild(h("option", { value: "" }, "platform…"));
+  groups.forEach((items, category) => {
+    const grp = h("optgroup", { label: category });
+    items.forEach((d) => {
+      const o = h("option", { value: d.slug, selected: draft.platform === d.slug }, d.display_name);
+      grp.appendChild(o);
+    });
+    plSel.appendChild(grp);
+  });
+  plSel.appendChild(h("option", { value: CUSTOM_VALUE, selected: initialSelectValue === CUSTOM_VALUE }, "Custom…"));
+
+  // Custom slug text input (hidden unless "Custom…" is selected).
+  const customInp = h("input", {
+    class: "input mono",
+    placeholder: "custom-slug",
+    value: (initialSelectValue === CUSTOM_VALUE) ? draft.platform : "",
+    style: (initialSelectValue === CUSTOM_VALUE) ? "margin-top:6px" : "display:none;margin-top:6px",
+  });
+
+  plSel.onchange = () => {
+    if (plSel.value === CUSTOM_VALUE) {
+      customInp.style.display = "";
+      customInp.style.marginTop = "6px";
+      draft.platform = customInp.value.trim();
+      customInp.focus();
+    } else {
+      customInp.style.display = "none";
+      draft.platform = plSel.value;
+    }
+    refreshCluster();
+  };
+
+  customInp.oninput = () => {
+    draft.platform = customInp.value.trim();
+    refreshCluster();
+  };
+
+  const wrapper = h("div", {}, plSel, customInp);
+  return field("Platform", wrapper);
 }
 
 // ── routing graph: clean card nodes + SVG connectors, click-to-connect ───────

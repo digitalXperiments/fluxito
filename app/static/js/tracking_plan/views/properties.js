@@ -3,11 +3,15 @@
 // (/tmp/tp_redesign_mockup.html) with the EXPLICIT BUFFERED-SAVE model.
 //
 // Master: refined list grouped by property kind, mono names, searchable.
+//         Shows the FULL shared pool — members appear here too (correct by design).
 // Detail: .tp-ed-head with the SAVE CLUSTER, then .tp-card sections —
-//   • Type & flags   (name, kind, data_type, is_list / is_pii toggles)
+//   • Type & flags   (name, kind, data_type, List toggle, is_pii toggle)
 //   • Constraints    (allowed values / min / max / regex + live regex-valid hint)
-//   • Nested members (object / array children)
+//   • Nested members (object props: recursive member tree + industry-standard combo)
 //   • Used by N events (event chips → navigate)
+//
+// DATA_TYPES: string / integer / float / boolean / object  (NO 'array' or 'int').
+// "List of X" is expressed as data_type=X, is_list=true via the List toggle.
 //
 // BUFFERED SAVE (no autosave — nothing persists until "Save changes"):
 //   On select, snapshot `server` and `draft = clone(editable fields)`. Render
@@ -16,6 +20,11 @@
 //   with assembled constraints) → reload → re-snapshot. The regex-valid gate
 //   disables Save while the regex is invalid. Nested member add/remove stay
 //   immediate sub-edits (structural, on the library) — the editable FIELDS buffer.
+//
+// MEMBER MUTATIONS (immediate, not buffered — structural changes to the library):
+//   add_member:     pick existing lib prop OR create new, then link via add_member action.
+//   remove_member:  remove_member action.
+//   reorder_members: drag rows within the member table → reorder_members action.
 
 import { h, mountAll } from 'tp/render';
 import * as state from 'tp/state';
@@ -32,11 +41,13 @@ const KINDS = [
   ['group', 'Group'],
   ['system', 'System'],
 ];
-const DATA_TYPES = ['string', 'int', 'float', 'boolean', 'object', 'array'];
 
-// data_type → badge color (mono badges, mockup palette). enum-like → sky.
+// Canonical data types: 5 base types, no 'array', no 'int'.
+const DATA_TYPES = ['string', 'integer', 'float', 'boolean', 'object'];
+
+// data_type → badge color (mono badges, mockup palette).
 function typeBadgeClass(dt) {
-  if (dt === 'object' || dt === 'array') return 'tp-badge amber';
+  if (dt === 'object') return 'tp-badge amber';
   if (dt === 'boolean') return 'tp-badge sky';
   return 'tp-badge ty';
 }
@@ -68,7 +79,7 @@ export function mountView(container) {
 
   // Buffered-save working state for the currently selected property.
   let server = null; // last server snapshot (editable slice)
-  let draft = null; // live draft (editable slice) — editor renders from this
+  let draft = null;  // live draft (editable slice) — editor renders from this
   let saving = false;
 
   // A pure setDirty() notification (same plan ref + same selection) must NOT
@@ -116,10 +127,9 @@ export function mountView(container) {
     const nodes = [];
     let any = false;
     KINDS.forEach(([k, label]) => {
+      // Show the FULL shared pool — do NOT filter out members (correct by design: all
+      // props including member props live in the flat library buckets).
       let items = (plan().properties && plan().properties[k]) || [];
-      // Only top-level library props in the master; nested members live in their
-      // parent's editor card.
-      items = items.filter((p) => !p.parent_property_id);
       items = items.slice().sort((a, b) => a.name.localeCompare(b.name));
       if (q) items = items.filter((p) => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q));
       if (!items.length) return;
@@ -255,10 +265,17 @@ export function mountView(container) {
     }, ...KINDS.map(([k, label]) => h('option', { value: k, selected: draft.kind === k }, label)));
 
     const typeSel = h('select', {
-      class: 'select', onChange: (e) => { draft.data_type = e.target.value; repaint(); },
+      class: 'select',
+      onChange: (e) => {
+        draft.data_type = e.target.value;
+        // When switching away from object, members become invalid — warn but still
+        // allow saving (backend will reject if members exist and we'd get a 409).
+        repaint();
+      },
     }, ...DATA_TYPES.map((t) => h('option', { value: t, selected: draft.data_type === t }, t)));
 
-    const listToggle = toggleRow('List / array', 'Values are a list', draft.is_list,
+    // "List" toggle — drives is_list independently of data_type.
+    const listToggle = toggleRow('List', 'Values are a list (data_type[])', draft.is_list,
       () => { draft.is_list = !draft.is_list; repaint(); });
     const piiToggle = toggleRow('PII', 'Contains personal data', draft.is_pii,
       () => { draft.is_pii = !draft.is_pii; repaint(); });
@@ -295,7 +312,8 @@ export function mountView(container) {
   // ---- card: Constraints (live regex hint, applies vs draft.constraints) ----
   function constraintsCard(p) {
     const c = draft.constraints || {};
-    const numeric = draft.data_type === 'int' || draft.data_type === 'float';
+    // integer and float support min/max range constraints.
+    const numeric = draft.data_type === 'integer' || draft.data_type === 'float';
 
     const enumInp = h('input', {
       class: 'input mono', id: 'pd-enum', placeholder: 'USD, EUR, GBP',
@@ -347,34 +365,34 @@ export function mountView(container) {
     return card('Constraints', null, body);
   }
 
-  // ---- card: Nested members (immediate structural sub-edits) ----
+  // ---- card: Nested members (industry-standard shared-pool — only for object props) ----
+  //
+  // Renders a recursive member tree from the serialized members:[...] array on the
+  // server property. Each member row shows name + type badge + Remove. Object-typed
+  // members expand their own nested members at the next depth level.
+  //
+  // Member mutations are IMMEDIATE (not buffered with field edits) — they persist
+  // structural changes to the library via doAction (add_member / remove_member /
+  // reorder_members) and then call state.reload() + repaint().
   function membersCard(p) {
-    const isContainer = draft.data_type === 'object' || draft.data_type === 'array';
-    const children = allProps(plan()).filter((x) => x.parent_property_id === p.id);
+    const isObject = draft.data_type === 'object';
 
-    if (!isContainer) {
+    if (!isObject) {
       return card('Nested members', null,
         h('div', { class: 'tp-card-b' },
           h('div', { class: 'tp-muted', style: { fontSize: '13px' } },
-            'Set the data type to object or array to add members.')));
+            'Set the data type to object to add members.')));
     }
 
-    const tbody = h('tbody');
-    if (!children.length) {
-      tbody.appendChild(h('tr', {}, h('td', { class: 'tp-muted', colspan: '3', style: { padding: '14px' } }, 'No members yet.')));
-    } else {
-      children.forEach((child) => {
-        tbody.appendChild(h('tr', {},
-          h('td', { class: 'tp-pn' }, child.name),
-          h('td', {}, h('span', { class: typeBadgeClass(child.data_type) }, typeBadge(child.data_type, child.is_list))),
-          h('td', { class: 'tp-cell-act' },
-            h('button', { class: 'btn btn-ghost btn-sm', onClick: () => removeMember(child) }, 'Remove'))));
-      });
-    }
+    // The serialized members[] tree lives on the server prop (not in draft —
+    // members are structural, not buffered-field edits).
+    const members = p.members || [];
+    const memberCount = countMembers(members);
 
-    const nm = h('input', { class: 'input mono', placeholder: 'member name', style: { width: '160px' } });
-    const ty = h('select', { class: 'select' }, ...DATA_TYPES.map((t) => h('option', { value: t }, t)));
-    const addBtn = h('button', { class: 'btn btn-secondary btn-sm', onClick: () => addMember(p, nm, ty) }, 'Add member');
+    const treeEl = h('div', { class: 'tp-members' });
+    renderMemberTree(treeEl, members, p, 0);
+
+    const combo = memberCombo(p);
 
     const note = dirty()
       ? h('div', { class: 'tp-muted', style: { fontSize: '11.5px', marginTop: '8px' } },
@@ -382,31 +400,260 @@ export function mountView(container) {
       : null;
 
     const body = h('div', { class: 'tp-card-b' },
-      h('table', { class: 'tp-itable' },
-        h('thead', {}, h('tr', {}, h('th', {}, 'Name'), h('th', { style: { width: '120px' } }, 'Type'), h('th', { style: { width: '90px' } }))),
-        tbody),
-      h('div', { class: 'tp-inline-add', style: { marginTop: '12px' } }, nm, ty, addBtn),
+      treeEl,
+      combo,
       note);
-    return card('Nested members', children.length ? String(children.length) : null, body);
+    return card('Nested members', memberCount ? String(memberCount) : null, body);
   }
 
-  async function addMember(parent, nm, ty) {
-    const name = nm.value.trim();
-    if (!name) return;
+  // Count members (direct children only, for the card badge).
+  function countMembers(members) {
+    return (members || []).length;
+  }
+
+  // Recursively render the members[] tree into `container`.
+  // depth is used to drive indentation via CSS var (--depth).
+  function renderMemberTree(container, members, parentProp, depth) {
+    if (!members || !members.length) {
+      if (depth === 0) {
+        container.appendChild(
+          h('div', { class: 'tp-member-row tp-muted', style: { fontSize: '13px', padding: '10px 0' } },
+            'No members yet.'));
+      }
+      return;
+    }
+
+    members.forEach((member, idx) => {
+      const rowEl = memberRow(member, parentProp, idx, members, depth);
+      container.appendChild(rowEl);
+
+      // Recursive expansion: if this member is itself an object, render its
+      // own members tree indented one level deeper.
+      if (member.data_type === 'object' && member.members && member.members.length) {
+        const subContainer = h('div', { class: 'tp-members' });
+        renderMemberTree(subContainer, member.members, member, depth + 1);
+        container.appendChild(subContainer);
+      }
+    });
+  }
+
+  // Build a single member row. The member object shape from the serializer is:
+  //   { member_property_id, name, data_type, is_list, required, sort_order, members:[...] }
+  function memberRow(member, parentProp, idx, siblings, depth) {
+    const indentPx = depth * 20;
+    const dragHandle = h('span', { class: 'tp-grip', title: 'Drag to reorder' }, '⠿');
+    const badge = h('span', { class: typeBadgeClass(member.data_type) },
+      typeBadge(member.data_type, member.is_list));
+    const reqToggle = h('div', {
+      class: 'tp-toggle' + (member.required ? ' on' : ''),
+      role: 'switch',
+      'aria-checked': member.required ? 'true' : 'false',
+      title: member.required ? 'Required' : 'Optional',
+    });
+
+    const removeBtn = h('button', {
+      class: 'btn btn-ghost btn-sm',
+      onClick: () => doRemoveMember(parentProp, member),
+    }, 'Remove');
+
+    const row = h('div', {
+      class: 'tp-member-row',
+      style: { '--depth': String(depth), paddingLeft: indentPx + 'px' },
+      draggable: 'true',
+      dataset: { memberPropertyId: member.member_property_id },
+    },
+      dragHandle,
+      h('span', { class: 'tp-pn', style: { flex: '1' } }, member.name),
+      badge,
+      reqToggle,
+      removeBtn);
+
+    // Drag-to-reorder within this sibling list.
+    wireMemberDrag(row, siblings, parentProp);
+    return row;
+  }
+
+  // Wire drag-and-drop reordering on a member row. On drop, call reorder_members.
+  function wireMemberDrag(row, siblings, parentProp) {
+    row.addEventListener('dragstart', (ev) => {
+      ev.dataTransfer.setData('text/plain', row.dataset.memberPropertyId);
+      row.classList.add('is-dragging');
+    });
+    row.addEventListener('dragend', () => row.classList.remove('is-dragging'));
+    row.addEventListener('dragover', (ev) => ev.preventDefault());
+    row.addEventListener('drop', async (ev) => {
+      ev.preventDefault();
+      const fromId = ev.dataTransfer.getData('text/plain');
+      const toId = row.dataset.memberPropertyId;
+      if (fromId === toId) return;
+      const fi = siblings.findIndex((m) => m.member_property_id === fromId);
+      const ti = siblings.findIndex((m) => m.member_property_id === toId);
+      if (fi < 0 || ti < 0) return;
+      const ordered = siblings.slice();
+      const [moved] = ordered.splice(fi, 1);
+      ordered.splice(ti, 0, moved);
+      const orderedIds = ordered.map((m) => m.member_property_id);
+      try {
+        await persist('Members reordered', () =>
+          api.doAction('reorder_members', {
+            parent_property_id: parentProp.id,
+            ordered_member_ids: orderedIds,
+          }, state.getState().branch));
+        await state.reload();
+        repaint();
+      } catch (err) { /* persist already surfaced the error banner */ }
+    });
+  }
+
+  // Remove a member link (remove_member action — the member prop stays in the library).
+  async function doRemoveMember(parentProp, member) {
     try {
-      await persist('Member added', () =>
-        api.doAction('create_property', {
-          name, data_type: ty.value, kind: draft.kind || parent.kind, parent_property_id: parent.id,
+      await persist('Member removed', () =>
+        api.doAction('remove_member', {
+          parent_property_id: parentProp.id,
+          member_property_id: member.member_property_id,
         }, state.getState().branch));
       await state.reload();
       repaint();
     } catch (err) { /* persist already surfaced the error banner */ }
   }
 
-  async function removeMember(child) {
+  // ---- industry-standard "Add member" combo ----------------------------------------
+  // Two paths:
+  //   (1) Pick an existing library property → add_member action.
+  //   (2) Type a new name (+ pick type + List toggle) → create_property then add_member.
+  //
+  // The combo popup is .tp-combo-pop (CSS owned by C6 — high z-index, no clip).
+  function memberCombo(parentProp) {
+    // All library props of the same kind that could be members (excluding those
+    // already linked and the parent itself to avoid self-reference).
+    const existingMemberIds = new Set((parentProp.members || []).map((m) => m.member_property_id));
+
+    function availableLibProps() {
+      const poolKind = parentProp.kind || 'event';
+      const pool = (plan() && plan().properties && plan().properties[poolKind]) || [];
+      return pool.filter((lp) => lp.id !== parentProp.id && !existingMemberIds.has(lp.id));
+    }
+
+    const input = h('input', {
+      class: 'tp-combo-input',
+      placeholder: 'Add member — search library or type a new name…',
+    });
+
+    // Inline "create new" controls: type selector + list toggle (shown only for new names).
+    const newTypeSel = h('select', { class: 'select', style: { width: '120px' } },
+      ...DATA_TYPES.map((t) => h('option', { value: t }, t)));
+    const newListLabel = h('label', {
+      class: 'tp-muted', style: { fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' },
+    });
+    const newListCheck = h('input', { type: 'checkbox' });
+    newListLabel.appendChild(newListCheck);
+    newListLabel.appendChild(document.createTextNode(' List'));
+
+    const newControls = h('div', {
+      class: 'tp-combo-new-controls',
+      style: { display: 'none', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px' },
+    }, newTypeSel, newListLabel,
+      h('button', {
+        class: 'btn btn-secondary btn-sm',
+        onClick: () => doCreateAndLink(parentProp, input, newTypeSel, newListCheck),
+      }, 'Create & add'));
+
+    const pop = h('div', { class: 'tp-combo-pop', style: { display: 'none' } });
+    const wrap = h('div', { class: 'tp-combo', style: { marginTop: '12px' } }, input, newControls, pop);
+
+    function hidePopup() { pop.style.display = 'none'; }
+    function showPopup() { pop.style.display = 'block'; }
+
+    function renderPopup(q) {
+      const lib = availableLibProps();
+      const hits = q
+        ? lib.filter((lp) => lp.name.toLowerCase().includes(q.toLowerCase()))
+        : lib;
+      const limited = hits.slice(0, 10);
+      const opts = limited.map((lp) => {
+        const alreadyLinked = existingMemberIds.has(lp.id);
+        return h('div', {
+          class: 'tp-combo-opt' + (alreadyLinked ? ' is-disabled' : ''),
+          onMousedown: alreadyLinked ? null : (ev) => { ev.preventDefault(); doLinkExisting(parentProp, lp); },
+        },
+          h('span', { class: 'tp-pn' }, lp.name),
+          h('span', { class: typeBadgeClass(lp.data_type) }, typeBadge(lp.data_type, lp.is_list)));
+      });
+
+      // Show "Create new" row if the typed name doesn't exactly match a lib prop.
+      const exactMatch = lib.some((lp) => lp.name.toLowerCase() === (q || '').toLowerCase());
+      const showCreate = q && !exactMatch;
+      if (showCreate) {
+        opts.push(h('div', {
+          class: 'tp-combo-opt tp-combo-new',
+          onMousedown: (ev) => {
+            ev.preventDefault();
+            // Show inline create controls below the input; hide the popup.
+            newControls.style.display = 'flex';
+            hidePopup();
+          },
+        }, `Create new "${q}"`));
+      }
+
+      if (!opts.length) {
+        mountAll(pop, [h('div', { class: 'tp-muted', style: { padding: '8px 10px' } },
+          q ? 'No matches' : 'No library properties to add')]);
+      } else {
+        mountAll(pop, opts);
+      }
+      showPopup();
+    }
+
+    input.addEventListener('focus', () => renderPopup(input.value.trim()));
+    input.addEventListener('input', () => {
+      const q = input.value.trim();
+      // Show inline controls only if user is explicitly entering a new name.
+      if (!q) { newControls.style.display = 'none'; }
+      renderPopup(q);
+    });
+    input.addEventListener('blur', () => setTimeout(() => { hidePopup(); }, 150));
+
+    return wrap;
+  }
+
+  // Link an existing library property as a member.
+  async function doLinkExisting(parentProp, libProp) {
+    const existingMemberIds = new Set((parentProp.members || []).map((m) => m.member_property_id));
+    if (existingMemberIds.has(libProp.id)) return; // already linked
+    const sortOrder = (parentProp.members || []).length;
     try {
-      await persist('Member removed', () =>
-        api.doAction('delete_property', { property_id: child.id }, state.getState().branch));
+      await persist('Member added', () =>
+        api.doAction('add_member', {
+          parent_property_id: parentProp.id,
+          member_property_id: libProp.id,
+          required: false,
+          sort_order: sortOrder,
+        }, state.getState().branch));
+      await state.reload();
+      repaint();
+    } catch (err) { /* persist already surfaced the error banner */ }
+  }
+
+  // Create a brand-new property (with chosen type + is_list) then link it as a member.
+  async function doCreateAndLink(parentProp, nameInput, typeSel, listCheck) {
+    const name = nameInput.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    const data_type = typeSel.value || 'string';
+    const is_list = listCheck.checked;
+    const kind = parentProp.kind || 'event';
+    const sortOrder = (parentProp.members || []).length;
+    try {
+      const created = await persist('Member created', () =>
+        api.doAction('create_property', { name, data_type, is_list, kind }, state.getState().branch));
+      await persist('Member added', () =>
+        api.doAction('add_member', {
+          parent_property_id: parentProp.id,
+          member_property_id: created.id,
+          required: false,
+          sort_order: sortOrder,
+        }, state.getState().branch));
+      nameInput.value = '';
       await state.reload();
       repaint();
     } catch (err) { /* persist already surfaced the error banner */ }

@@ -383,7 +383,19 @@
    ========================================================================== */
 .tp-card {
   background: var(--tp-surface); border: 1px solid var(--tp-border); border-radius: var(--tp-r-lg);
-  box-shadow: var(--tp-sh-xs); margin-bottom: 16px; overflow: hidden;
+  box-shadow: var(--tp-sh-xs); margin-bottom: 16px;
+  /* overflow:hidden removed — combo popups (.tp-combo-pop) must escape the card boundary.
+     Instead, round the inner header top corners and the last section bottom corners. */
+}
+/* Round top corners on the first child header so the card still looks clipped at top */
+.tp-card > .tp-card-h:first-child {
+  border-top-left-radius: calc(var(--tp-r-lg) - 1px);
+  border-top-right-radius: calc(var(--tp-r-lg) - 1px);
+}
+/* Round bottom corners on the last direct child so the card closes cleanly at the bottom */
+.tp-card > *:last-child {
+  border-bottom-left-radius: calc(var(--tp-r-lg) - 1px);
+  border-bottom-right-radius: calc(var(--tp-r-lg) - 1px);
 }
 .tp-card-h { display: flex; align-items: center; gap: 8px; padding: 13px 18px; border-bottom: 1px solid var(--tp-border); }
 .tp-card-h h3 { font-size: 12.5px; font-weight: 600; color: var(--tp-text); letter-spacing: 0; margin: 0; }
@@ -543,13 +555,27 @@
 .tp-combo svg { width: 14px; height: 14px; color: var(--tp-text-4); }
 .tp-combo-input { flex: 1; border: none; background: transparent; outline: none; font: inherit; font-size: 12.5px; color: var(--tp-text); }
 .tp-combo-pop {
-  position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; z-index: 20;
+  position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px;
+  /* z-index 200 — must float above card siblings, card borders, and any overflow:hidden
+     ancestor that was removed from .tp-card; high enough to clear sticky headers (z:5). */
+  z-index: 200;
   border: 1px solid var(--tp-border); border-radius: var(--tp-r); background: var(--tp-surface);
   box-shadow: var(--tp-sh-md); max-height: 280px; overflow-y: auto;
 }
 .tp-combo-opt { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; cursor: pointer; font-size: 13px; color: var(--tp-text); }
 .tp-combo-opt:hover { background: var(--tp-surface-2); }
+.tp-combo-opt.is-disabled { opacity: .5; cursor: default; pointer-events: none; }
 .tp-combo-new { color: var(--tp-accent); font-weight: 600; }
+
+/* ---------------------------------------------------------------------------
+   Table-scroll wrapper — use this div to get mobile horizontal scroll on data
+   tables instead of putting overflow-x:auto on .tp-card-b (which would re-clip
+   the absolutely-positioned .tp-combo-pop).
+   --------------------------------------------------------------------------- */
+.tp-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* legacy inline-add row */
 .tp-inline-add {
@@ -621,6 +647,101 @@
   border: 1px solid var(--tp-accent-border); background: var(--tp-accent-soft); color: var(--tp-accent); cursor: pointer;
 }
 .tp-usedby-chip:hover { background: var(--tp-accent-soft); border-color: var(--tp-accent); }
+
+/* ============================================================================
+   Object-property member tree (Issue 1 — recursive nesting)
+
+   Usage pattern (JS generates):
+     <div class="tp-members">
+       <div class="tp-member-row" style="--depth:0"> … </div>
+       <!-- for a member that is itself object-typed, nest another .tp-members: -->
+       <div class="tp-members tp-members-nested">
+         <div class="tp-member-row" style="--depth:1"> … </div>
+         <div class="tp-members tp-members-nested">
+           <div class="tp-member-row" style="--depth:2"> … </div>
+         </div>
+       </div>
+     </div>
+
+   Alternatively, JS may emit a single flat list and drive indentation purely
+   via the --depth CSS custom property on each row (no nesting of .tp-members
+   required — the padding-left calc works either way).
+   ========================================================================== */
+.tp-members {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--tp-border); border-radius: var(--tp-r); overflow: hidden;
+  margin-top: 10px;
+}
+/* Remove double-border when a nested .tp-members sits inside a .tp-member-row */
+.tp-member-row .tp-members {
+  border-left: none; border-right: none; border-bottom: none;
+  border-radius: 0; margin-top: 0; margin-left: 0;
+}
+.tp-member-row {
+  --depth: 0;
+  display: flex; align-items: center; gap: 10px;
+  /* Each nesting level indents 18px; depth-0 rows get a 10px left pad for alignment. */
+  padding: 8px 10px 8px calc(10px + var(--depth) * 18px);
+  border-bottom: 1px solid var(--tp-border);
+  background: var(--tp-surface); font-size: 12.5px;
+  transition: background .1s;
+}
+.tp-member-row:last-child { border-bottom: none; }
+.tp-member-row:hover { background: var(--tp-surface-2); }
+/* Connecting indent guide: a thin left border on the indented portion */
+.tp-member-row[style*="--depth:1"],
+.tp-member-row[style*="--depth:2"],
+.tp-member-row[style*="--depth:3"],
+.tp-member-row[style*="--depth:4"],
+.tp-member-row[style*="--depth:5"] {
+  /* The L-shaped guide is rendered via background-image on a pseudo-element
+     instead of a real border so it doesn't affect the box model. */
+  position: relative;
+}
+.tp-member-row[style*="--depth:1"]::before,
+.tp-member-row[style*="--depth:2"]::before,
+.tp-member-row[style*="--depth:3"]::before,
+.tp-member-row[style*="--depth:4"]::before,
+.tp-member-row[style*="--depth:5"]::before {
+  content: "";
+  position: absolute;
+  left: calc(10px + (var(--depth) - 1) * 18px + 8px);
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--tp-border-2);
+  pointer-events: none;
+}
+/* Member name — monospace like all property identifiers */
+.tp-member-name {
+  font-family: var(--tp-mono); font-size: 12.5px; font-weight: 500; color: var(--tp-text);
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Required badge next to the member name */
+.tp-member-req {
+  font-size: 10.5px; font-weight: 600; color: var(--tp-accent);
+  background: var(--tp-accent-soft); border-radius: var(--tp-r-full);
+  padding: 1px 6px; flex: none; white-space: nowrap;
+}
+/* Actions cluster (remove / reorder) at the far right of each member row */
+.tp-member-acts { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: none; }
+/* Expand toggle for object-typed members that have their own sub-members */
+.tp-member-expand {
+  width: 18px; height: 18px; border: none; background: none; cursor: pointer;
+  color: var(--tp-text-3); display: flex; align-items: center; justify-content: center;
+  border-radius: var(--tp-r-sm); transition: background .1s, color .1s; flex: none;
+}
+.tp-member-expand:hover { background: var(--tp-surface-3); color: var(--tp-text); }
+.tp-member-expand.is-open { color: var(--tp-accent); }
+/* Nested .tp-members container — hidden when its parent row is not expanded */
+.tp-members-nested { display: none; }
+.tp-member-row.is-open + .tp-members-nested,
+.tp-member-row.is-open ~ .tp-members-nested { display: flex; }
+/* Add-member combo row at the bottom of a .tp-members list */
+.tp-members-add {
+  padding: 7px 10px;
+  border-top: 1px dashed var(--tp-border-strong);
+  background: var(--tp-surface-2);
+}
 
 /* ============================================================================
    Comments + activity drawer
@@ -1014,8 +1135,11 @@
   .tp-card-h { flex-wrap: wrap; padding: 12px 14px; }
   .tp-card-ha { margin-left: 0; width: 100%; }
 
-  /* A.7 — Data tables → horizontal scroll inside container */
-  .tp-card-b, .tp-detail-inner, .tp-ed-body { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* A.7 — Data tables → horizontal scroll inside .tp-table-scroll wrapper.
+     Do NOT put overflow-x:auto on .tp-card-b — that would create a new stacking
+     context that clips .tp-combo-pop even after overflow:hidden was removed from
+     .tp-card.  Wrap the table in <div class="tp-table-scroll"> instead. */
+  .tp-table-scroll, .tp-detail-inner, .tp-ed-body { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tp-ptable, .tp-itable { min-width: 560px; }
   .tp-pn, .tp-pname { max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -1075,7 +1199,9 @@
   /* Issues view mobile */
   .tp-issues-filters { flex-direction: column; }
   .tp-issue-row { flex-wrap: wrap; gap: 8px; }
-  .tp-rule-row { flex-wrap: wrap; gap: 10px; }
+  /* .tp-rule-row flex-wrap:wrap is now set globally (all widths) — no override needed. */
+  .tp-rule-row { gap: 10px; }
+  /* On very small screens, let the severity selector stretch full-width for easy tapping. */
   .tp-rule-sev-sel { width: 100%; }
 
 }
@@ -1140,18 +1266,39 @@
 /* Rules list */
 .tp-rules-list { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
 .tp-rule-row {
-  display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+  display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px;
   border: 1px solid var(--tp-border); border-radius: var(--tp-r-lg); background: var(--tp-surface);
   transition: opacity .15s;
+  /* flex-wrap:wrap at ALL widths — controls cluster wraps below the meta line on
+     any screen size, preventing the fixed-width selects from overflowing the card. */
+  flex-wrap: wrap;
 }
 .tp-rule-disabled { opacity: .55; }
-.tp-rule-meta { flex: 1; min-width: 0; }
+/* Meta block (label + type slug + optional help text): grows to fill available space;
+   min-width:0 lets it shrink without pushing the controls off-screen. */
+.tp-rule-meta { flex: 1 1 200px; min-width: 0; }
 .tp-rule-label { font-size: 13px; font-weight: 550; color: var(--tp-text); }
-.tp-rule-type { font-family: var(--tp-mono); font-size: 11px; margin-top: 1px; }
+.tp-rule-type { font-family: var(--tp-mono); font-size: 11px; margin-top: 1px; color: var(--tp-text-3); }
+.tp-rule-help { font-size: 11.5px; color: var(--tp-text-3); margin-top: 4px; line-height: 1.45; }
+/* Controls cluster: wraps freely; does NOT get margin-left:auto so it can drop to its
+   own line cleanly when the row is too narrow. */
+.tp-rule-controls {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  flex: 0 1 auto; min-width: 0;
+}
+/* Legacy .tp-rule-config — kept for backward compat; same treatment as .tp-rule-controls */
 .tp-rule-config {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  flex: 0 1 auto; min-width: 0;
 }
 .tp-rule-config-label { font-size: 11.5px; white-space: nowrap; }
 .tp-rule-config-sel { width: auto; min-width: 100px; height: 30px; padding: 0 28px 0 9px; font-size: 12.5px; }
 .tp-rule-config-inp { width: 180px; height: 30px; padding: 0 9px; font-size: 12.5px; font-family: var(--tp-mono); }
-.tp-rule-sev-sel { width: auto; min-width: 90px; height: 30px; padding: 0 28px 0 9px; font-size: 12.5px; margin-left: auto; flex: none; }
+/* Severity selector: no margin-left:auto (that would pin it right and break wrapping);
+   it simply sits in the flow and drops to the next line when the row is narrow. */
+.tp-rule-sev-sel { width: auto; min-width: 90px; height: 30px; padding: 0 28px 0 9px; font-size: 12.5px; flex: none; }
+/* Light label span inside a rule control cluster */
+.tp-rule-field {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--tp-text-2); white-space: nowrap;
+}

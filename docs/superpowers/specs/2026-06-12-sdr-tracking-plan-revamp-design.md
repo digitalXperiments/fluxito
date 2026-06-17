@@ -16,7 +16,7 @@ testing, Excel export) already consumes those *structured* tables — so the str
 exists, but it sits behind a fragile "AI writes prose → regex parses prose" seam.
 
 **Goal:** invert the architecture. A tight, well-defined **relational schema becomes
-the sole source of truth**, modeled on [Avo.app](https://avo.app): events, a reusable
+the sole source of truth**, modeled on industry tracking-plan references: events, a reusable
 **property library**, user properties, first-class **sources** and **destinations**
 with routing, and per-event **mapping rules**. AI **assists** humans in filling this
 structure via MCP tools rather than emitting a markdown document. The team manages and
@@ -35,9 +35,9 @@ publishes.
 | # | Decision | Choice |
 |---|----------|--------|
 | 1 | Source of truth & legacy markdown | Relational DB is the **sole** source of truth. Markdown + parser kept **only** as a generated export/import artifact. **Greenfield** — no production SDR data to migrate. |
-| 2 | Property modeling | **Reusable, project-level property library (Avo-style).** Events attach to properties many-to-many with per-attachment overrides. Covers event *and* user properties. |
-| 3 | Sources / destinations | **Full Avo topology.** First-class Sources + Destinations, source→destination routing, events scoped to sources, per (event × destination) mapping rules. |
-| 4 | Change-control model | **Target = branch + review (full Avo).** Schema is branch-ready from day one. **Phase 1 builds the structured core + AI CRUD on a single `main` branch**; the branch *workflow* is deferred to Phase 2. |
+| 2 | Property modeling | **Reusable, project-level property library (industry-standard).** Events attach to properties many-to-many with per-attachment overrides. Covers event *and* user properties. |
+| 3 | Sources / destinations | **Full the reference model topology.** First-class Sources + Destinations, source→destination routing, events scoped to sources, per (event × destination) mapping rules. |
+| 4 | Change-control model | **Target = branch + review (full the reference model).** Schema is branch-ready from day one. **Phase 1 builds the structured core + AI CRUD on a single `main` branch**; the branch *workflow* is deferred to Phase 2. |
 | 5 | Schema extras (all included) | Event **categories & tags**; **rich property constraints** (enum/regex/min-max + object/array/nested types); event-based **metrics**; **per-source implementation status**. |
 | 6 | Phase-1 UI depth | **Full structured editing** in the browser — same operations the AI performs via MCP. |
 | 7 | Representation architecture | **Approach 1:** normalized branch-scoped live tables + JSONB published-version snapshots + (future) copy-on-write branching. One canonical `plan_to_dict` serializer feeds markdown export, Excel export, MCP reads, and version snapshots. |
@@ -314,7 +314,7 @@ Net: a large, **negative**-LOC change in the tools layer — which is the point.
   MCP), diff/review screen, merge-to-main with conflict detection.
 - **Phase 3:** collaboration — comment threads on events/properties/mappings, review/
   approval on merges, change-attribution surfacing, notifications.
-- **Phase 4:** import (Avo/Segment/markdown/xlsx), codegen/snippets, live
+- **Phase 4:** import (Segment/markdown/xlsx), codegen/snippets, live
   implementation-status sync from audit results, advanced metrics.
 
 ---

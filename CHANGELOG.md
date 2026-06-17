@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.15] — 2026-06-15
 
 ### Added
-- **Tracking plan: validation rules engine + Issues screen.** A configurable, Avo-style rules
+- **Tracking plan: validation rules engine + Issues screen.** A configurable, industry-standard rules
   engine (`tp_validation_rule`, migration 062) with seeded defaults — name casing, name regex,
   required description/owner, required property, property type-consistency, and PII-must-be-flagged.
   A new **Issues** view groups findings by severity and deep-links to the offending event/property;
@@ -158,7 +158,7 @@ _These entries accumulated in Unreleased across 1.1.12–1.1.14 and shipped by v
   card has no cached result, which accurately describes the situation.
 
 ### Added
-- **Tracking Plan — a relational, Avo-style data-governance workspace** that replaces the
+- **Tracking Plan — a relational, industry-standard data-governance workspace** that replaces the
   markdown Solution Design Reference (SDR). The plan is now a structured database rather than a
   generated document: first-class **events**, a reusable project-level **property library**
   (events attach library properties with per-event overrides), **sources** and **destinations**

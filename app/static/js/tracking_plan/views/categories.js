@@ -1,5 +1,5 @@
 // app/static/js/tracking_plan/views/categories.js
-// Categories — refined master-detail (Avo-grade redesign).
+// Categories — refined master-detail (best-in-class redesign).
 // Master: searchable list of categories with a color dot, name (sentence-case
 // label) and live event count. Detail: a buffered editor — selecting a category
 // snapshots draft={name, color, description}; field edits mutate the DRAFT only
