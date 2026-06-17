@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 from typing import Any
 
@@ -142,14 +143,66 @@ class AskToolBridge:
         tool = tm.get_tool(name) or tm._legacy_tools.get(name)
         if tool is None:
             return (json.dumps({"error": f"Tool '{name}' is not registered."}), True)
+        t0 = time.monotonic()
         try:
             async with _AskToolContext(self._user_id, self._project_id):
-                raw = await asyncio.wait_for(tool.run(dict(params)), timeout=_TOOL_TIMEOUT_S)
-            return (json.dumps(raw, default=str), False)
-        except TimeoutError:
-            return (json.dumps({"error": f"Tool '{name}' timed out."}), True)
-        except Exception as exc:  # surface tool errors to the model, don't crash the loop
-            return (json.dumps({"error": f"{type(exc).__name__}: {exc}"}), True)
+                try:
+                    raw = await asyncio.wait_for(tool.run(dict(params)), timeout=_TOOL_TIMEOUT_S)
+                    content = json.dumps(raw, default=str)
+                    elapsed_ms = int((time.monotonic() - t0) * 1000)
+                    try:
+                        from app.tools.registry import _write_audit_row
+
+                        await _write_audit_row(
+                            tool_name=name,
+                            arguments=params,
+                            raw_text=content,
+                            parsed=raw,
+                            status="success",
+                            source_client="ask_fluxito",
+                            duration_ms=elapsed_ms,
+                        )
+                    except Exception:
+                        pass
+                    return (content, False)
+                except TimeoutError:
+                    elapsed_ms = int((time.monotonic() - t0) * 1000)
+                    err_text = json.dumps({"error": f"Tool '{name}' timed out."})
+                    try:
+                        from app.tools.registry import _write_audit_row
+
+                        await _write_audit_row(
+                            tool_name=name,
+                            arguments=params,
+                            raw_text=err_text,
+                            parsed=None,
+                            status="error",
+                            source_client="ask_fluxito",
+                            duration_ms=elapsed_ms,
+                        )
+                    except Exception:
+                        pass
+                    return (err_text, True)
+                except Exception as exc:  # surface tool errors to the model, don't crash the loop
+                    elapsed_ms = int((time.monotonic() - t0) * 1000)
+                    err_text = json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+                    try:
+                        from app.tools.registry import _write_audit_row
+
+                        await _write_audit_row(
+                            tool_name=name,
+                            arguments=params,
+                            raw_text=err_text,
+                            parsed=None,
+                            status="error",
+                            source_client="ask_fluxito",
+                            duration_ms=elapsed_ms,
+                        )
+                    except Exception:
+                        pass
+                    return (err_text, True)
+        except Exception as ctx_exc:  # _AskToolContext setup failed
+            return (json.dumps({"error": f"{type(ctx_exc).__name__}: {ctx_exc}"}), True)
 
 
 def new_tool_use_id() -> str:
