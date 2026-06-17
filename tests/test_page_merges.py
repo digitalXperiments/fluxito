@@ -11,6 +11,7 @@ DASHBOARDS_HUB_TEMPLATE = Path("app/templates/dashboards_hub.html")
 KNOWLEDGE_ROUTES = Path("app/api/knowledge_routes.py")
 DASHBOARD_ROUTES = Path("app/api/dashboard_routes.py")
 TEMPLATE_ROUTES = Path("app/api/template_routes.py")
+AUDIT_ROUTES = Path("app/api/audit_routes.py")
 
 
 # ---------------------------------------------------------------------------
@@ -187,3 +188,18 @@ def test_templates_slug_route_has_no_embed_redirect():
     source = TEMPLATE_ROUTES.read_text()
     # The redirect to /dashboards?view=gallery must only appear once (in templates_page).
     assert source.count('RedirectResponse("/dashboards?view=gallery"') == 1
+
+
+# ---------------------------------------------------------------------------
+# Route redirects — audit_routes.py (/activity-log → Settings)
+# ---------------------------------------------------------------------------
+
+
+def test_activity_log_embed_guard_present():
+    source = AUDIT_ROUTES.read_text()
+    assert 'request.query_params.get("embed")' in source
+
+
+def test_activity_log_redirects_to_settings_activity():
+    source = AUDIT_ROUTES.read_text()
+    assert 'RedirectResponse("/settings?tab=activity"' in source

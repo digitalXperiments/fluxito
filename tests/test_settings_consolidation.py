@@ -46,8 +46,25 @@ def test_platform_tab_gated_on_is_superadmin():
 
 def test_all_data_tab_values_present():
     source = INDEX_TEMPLATE.read_text()
-    for tab in ("account", "ai", "project", "integrations", "system", "platform", "ai-models"):
+    for tab in ("account", "ai", "project", "integrations", "system", "activity", "platform", "ai-models"):
         assert f'data-tab="{tab}"' in source, f"Missing data-tab={tab!r}"
+
+
+def test_activity_tab_gated_on_is_install_admin():
+    source = INDEX_TEMPLATE.read_text()
+    # activity tab must appear inside the is_install_admin block
+    admin_idx = source.index("{% if is_install_admin %}")
+    activity_idx = source.index('data-tab="activity"')
+    endif_idx = source.index("{% endif %}", activity_idx)
+    # The is_install_admin guard must open before the tab and close after it
+    assert admin_idx < activity_idx
+    # The endif must come after the activity tab (not before)
+    assert activity_idx < endif_idx
+
+
+def test_activity_tab_src():
+    source = INDEX_TEMPLATE.read_text()
+    assert "/activity-log?embed=1" in source
 
 
 def test_iframe_with_settings_frame_class_present():
