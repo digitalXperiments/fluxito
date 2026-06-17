@@ -10,12 +10,14 @@
   </aside>
   <main class="ask-main">
     <div class="ask-messages" id="ask-messages">
-      <div class="ask-empty" id="ask-empty">
-        <h2>Ask Fluxito</h2>
-        <p>Ask about your analytics, tracking plan, dashboards, or marketing data.</p>
-        <p class="ask-setup-hint" id="ask-setup-hint" hidden>
-          No AI provider key yet — <a href="/settings?tab=ai">add one</a> to start.
-        </p>
+      <div class="ask-messages-inner">
+        <div class="ask-empty" id="ask-empty">
+          <h2>Ask Fluxito</h2>
+          <p>Ask about your analytics, tracking plan, dashboards, or marketing data.</p>
+          <p class="ask-setup-hint" id="ask-setup-hint" hidden>
+            No AI provider key yet — <a href="/settings?tab=ai">add one</a> to start.
+          </p>
+        </div>
       </div>
     </div>
     <form class="ask-composer" id="ask-composer">
@@ -25,6 +27,36 @@
       </div>
     </form>
   </main>
+  <aside class="ask-usage" id="ask-usage" hidden>
+    <div class="ask-usage-header">
+      <span class="ask-usage-title">Run info</span>
+      <button class="ask-usage-toggle" id="ask-usage-toggle" title="Close run info" aria-label="Close run info">✕</button>
+    </div>
+    <div class="ask-usage-body" id="ask-usage-body">
+      <div class="ask-usage-section">
+        <div class="ask-usage-label">Model</div>
+        <div class="ask-usage-value" id="rail-model">—</div>
+      </div>
+      <div class="ask-usage-section">
+        <div class="ask-usage-label">Tool calls</div>
+        <div class="ask-usage-value" id="rail-tools">—</div>
+        <div class="ask-tool-names" id="rail-tool-names" hidden></div>
+      </div>
+      <div class="ask-usage-section">
+        <div class="ask-usage-label">Tokens</div>
+        <table class="ask-usage-table" id="rail-tokens">
+          <tr><td>Input</td><td id="rail-tok-in">—</td></tr>
+          <tr><td>Output</td><td id="rail-tok-out">—</td></tr>
+          <tr><td>Total</td><td id="rail-tok-total">—</td></tr>
+        </table>
+      </div>
+      <div class="ask-usage-section">
+        <div class="ask-usage-label">Est. cost <span class="ask-usage-note">(estimated)</span></div>
+        <div class="ask-usage-value" id="rail-cost">—</div>
+      </div>
+    </div>
+  </aside>
+  <button class="ask-usage-open" id="ask-usage-open" title="Show run info" aria-label="Show run info">⊞</button>
 </div>
 
 {% endblock %}

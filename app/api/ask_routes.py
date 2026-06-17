@@ -169,7 +169,13 @@ async def ask_stream(request: Request):
     async def event_stream():
         # First frame carries the conversation id so the client can persist it.
         # For new conversations, title is included so the sidebar can update immediately.
-        first_frame: dict = {"type": "conversation", "conversation_id": str(conv.id)}
+        # model + provider are always included so the client usage rail can display them.
+        first_frame: dict = {
+            "type": "conversation",
+            "conversation_id": str(conv.id),
+            "model": model,
+            "provider": provider_name,
+        }
         if new_conv_title:
             first_frame["title"] = new_conv_title
         yield _sse_frame(first_frame)
@@ -248,12 +254,21 @@ async def get_conversation(request: Request, conversation_id: str):
     conv = await _service.get(conv_uuid) if conv_uuid else None
     if conv is None or str(conv.user_id) != uid:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    history = await _service.load_history(conv.id)
+    history_with_usage = await _service.load_history_with_usage(conv.id)
     return JSONResponse(
         {
             "id": str(conv.id),
             "title": conv.title,
-            "messages": [{"role": m.role, "content": _blocks_for_ui(m)} for m in history],
+            "model": conv.model,
+            "provider": conv.provider,
+            "messages": [
+                {
+                    "role": m.role,
+                    "content": _blocks_for_ui(m),
+                    **({"token_usage": usage} if usage is not None else {}),
+                }
+                for m, usage in history_with_usage
+            ],
         }
     )
 

@@ -121,6 +121,54 @@ async def test_max_iterations_guard_stops_loop():
 
 
 @pytest.mark.asyncio
+async def test_usage_summed_across_iterations():
+    """Terminal message_done.usage must equal the SUM of per-iteration usages, normalized."""
+    provider = FakeProvider(
+        [
+            [  # iteration 1: tool call — openai-style usage keys
+                StreamEvent(type="tool_call_start", tool_id="t1", tool_name="analytics_read"),
+                StreamEvent(type="tool_args_delta", args_fragment="{}"),
+                StreamEvent(type="tool_call_end"),
+                StreamEvent(
+                    type="message_done",
+                    stop_reason=StopReason.TOOL_USE,
+                    usage={"prompt_tokens": 100, "completion_tokens": 50},
+                ),
+            ],
+            [  # iteration 2: final answer — anthropic-style usage keys
+                StreamEvent(type="text_delta", text="Done"),
+                StreamEvent(
+                    type="message_done",
+                    stop_reason=StopReason.END,
+                    usage={"input_tokens": 200, "output_tokens": 80},
+                ),
+            ],
+        ]
+    )
+    svc = RecordingService()
+    deps = HarnessDeps(
+        provider=provider,
+        bridge=FakeBridge(),
+        service=svc,
+        conversation_id="c1",
+        model="m",
+        system="SYS",
+    )
+    h = Harness(deps, max_iterations=5)
+    out = [e async for e in h.run(LLMMessage(role="user", content=[TextBlock(text="hi")]))]
+
+    # Find the terminal message_done (the one yielded to the client)
+    done_events = [e for e in out if e.type == "message_done"]
+    assert len(done_events) == 1
+    terminal = done_events[0]
+    assert terminal.usage is not None
+    # input: 100 (prompt_tokens iter1) + 200 (input_tokens iter2)
+    assert terminal.usage["input_tokens"] == 300
+    # output: 50 (completion_tokens iter1) + 80 (output_tokens iter2)
+    assert terminal.usage["output_tokens"] == 130
+
+
+@pytest.mark.asyncio
 async def test_parallel_tool_calls_dispatched_correctly():
     """Two parallel tool calls with interleaved args — both must be dispatched with correct args,
     the assistant message must have two tool_use blocks, and the tool message two tool_result blocks

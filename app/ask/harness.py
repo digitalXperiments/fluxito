@@ -83,6 +83,10 @@ class Harness:
 
         tools = d.bridge.tool_specs()
 
+        # Accumulated token usage across all iterations.
+        total_input: int = 0
+        total_output: int = 0
+
         for _ in range(self._max_iter):
             assistant_blocks: list[Any] = []
             text_buf: list[str] = []
@@ -125,6 +129,11 @@ class Harness:
                     stop = ev.stop_reason
                     usage = ev.usage
 
+            # Accumulate token usage across iterations (normalize both provider shapes).
+            if usage:
+                total_input += usage.get("input_tokens") or usage.get("prompt_tokens") or 0
+                total_output += usage.get("output_tokens") or usage.get("completion_tokens") or 0
+
             # Build + persist the assistant turn.
             if text_buf:
                 assistant_blocks.append(TextBlock(text="".join(text_buf)))
@@ -151,18 +160,24 @@ class Harness:
                 await d.service.append(d.conversation_id, tool_msg)
                 continue  # next iteration: feed results back to the model
 
+            # Terminal frame: use summed token totals.
+            summed_usage: dict | None = (
+                {"input_tokens": total_input, "output_tokens": total_output}
+                if (total_input or total_output)
+                else None
+            )
             if stop in (
                 StopReason.END,
                 StopReason.MAX_TOKENS,
                 StopReason.REFUSAL,
                 StopReason.ERROR,
             ):
-                yield StreamEvent(type="message_done", stop_reason=stop, usage=usage)
+                yield StreamEvent(type="message_done", stop_reason=stop, usage=summed_usage)
                 return
             if stop == StopReason.PAUSE:
                 continue
             # No tool calls but also not a clean terminal — treat as done.
-            yield StreamEvent(type="message_done", stop_reason=StopReason.END, usage=usage)
+            yield StreamEvent(type="message_done", stop_reason=StopReason.END, usage=summed_usage)
             return
 
         # Iteration budget exhausted.

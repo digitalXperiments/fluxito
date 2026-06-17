@@ -95,6 +95,26 @@ class ConversationService:
             )
             return [LLMMessage(role=r.role, content=blocks_from_json(r.content)) for r in rows]
 
+    async def load_history_with_usage(
+        self, conversation_id: uuid.UUID
+    ) -> list[tuple[LLMMessage, dict | None]]:
+        """Like load_history but also returns the stored token_usage per row."""
+        async with app_state.db_session_factory() as db:
+            rows = (
+                (
+                    await db.execute(
+                        select(ChatMessage)
+                        .where(ChatMessage.conversation_id == conversation_id)
+                        .order_by(ChatMessage.seq.asc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [
+                (LLMMessage(role=r.role, content=blocks_from_json(r.content)), r.token_usage) for r in rows
+            ]
+
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None:
         async with app_state.db_session_factory() as db:
             await db.execute(
