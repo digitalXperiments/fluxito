@@ -9,34 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Ask Fluxito — native AI assistant.** A ChatGPT-style assistant embedded in the app
-  (new `/ask` page + a docked-panel seam in the shell). Bring your own AI provider key
-  (Anthropic or OpenAI) — keys are stored encrypted per project and managed from the
-  assistant's setup dialog (linkable at `/settings/ai`). The harness is vendor-owned (raw
-  HTTP, no SDKs) behind a normalized provider interface: it reasons, asks a clarifying
+  (new `/ask` page). Bring your own AI-provider key; the harness is **vendor-owned (raw
+  HTTP, no SDKs)** behind a normalized provider interface: it reasons, asks a clarifying
   question when a request is ambiguous, then calls the Fluxito MCP tools in a loop and
-  streams the answer back over SSE. Tool access is **read-only** in this release
+  streams the answer back over SSE. Tool access is **read-only**
   (analytics/tag-manager/marketing/warehouse/SEO reads, dashboards, tracking-plan reads,
   audits, and cross-connector analysis) — the assistant cannot modify anything. In-process
-  tool dispatch inherits the caller's RBAC. Conversations persist per project/user
-  (migration `064`: `conversations`, `chat_messages`, `ai_provider_keys`).
+  tool dispatch inherits the caller's RBAC, and every call is recorded to the Activity Log.
+  Conversations persist per project/user (migration `064`: `conversations`,
+  `chat_messages`, `ai_provider_keys`).
+- **Six AI providers.** Anthropic (native) plus **OpenAI, xAI Grok, Google Gemini,
+  Mistral, and LM Studio** (the latter five via a configurable-base-URL OpenAI-compatible
+  adapter; migration `065` adds a per-key base URL). OpenAI uses `max_completion_tokens`
+  for current models. Provider key model defaults are user-selectable, with a "Custom…"
+  option for any model id.
+- **AI keys management.** A role-scoped **Settings → AI keys** panel: a card per provider
+  with connection status, Add/Edit/Remove, **Set as default** (which provider Ask Fluxito
+  uses; migration `066`), **Test connection**, a show/hide key field, per-provider
+  get-key links, and a model dropdown. Keys are encrypted at rest (Fernet) and scoped to
+  your account within the project.
+- **Superadmin model catalog.** A **Settings → AI models** tab (superadmin) to add extra
+  model names that appear in every user's per-provider model dropdown.
+- **Chat experience.** Streaming responses with **Markdown rendering** (tables, code,
+  lists), tool-call chips shown inline in arrival order, auto-generated conversation
+  titles, and a **run-info rail** summarizing tokens, tool calls, model(s) used, and an
+  estimated cost — per model when several are used in one conversation.
 
 ### Changed
 - **Navigation: simplified sidebar.** The seven feature groups collapse into two short,
   workflow-ordered clusters — **Set up** (Connections, Tracking Plan, Context) and **Work**
-  (Dashboards, Automations, Auditing) — plus Home, Ask Fluxito, Activity Log, Tutorials, and a
-  single **Settings** entry. Every permission gate is preserved exactly.
+  (Dashboards, Automations, Tag Auditing) — plus Home, Ask Fluxito, Tutorials, and a single
+  **Settings** entry. "Auditing" is renamed **Tag Auditing**. Every permission gate is
+  preserved exactly.
 - **One Settings destination.** Profile, project settings, install Integrations, System
-  settings, and the superadmin Admin console are unified into a single role-scoped
-  `/settings` with a left tab rail (Account · Project · Workspace · Platform) — you only
-  see the tabs your role allows. The existing pages are reused as embedded panels (no form
-  rewrites); the old paths (`/profile`, `/settings/integrations`, `/settings/system`,
-  `/admin`, `/project/{slug}/settings`) now redirect into the matching tab, so existing
-  links keep working.
+  settings, the superadmin Admin console, AI keys, AI models, and the Activity Log are
+  unified into a single role-scoped `/settings` with a left tab rail
+  (Account · Project · Workspace · Platform) — you only see the tabs your role allows. The
+  existing pages are reused as embedded panels (no form rewrites); the old paths
+  (`/profile`, `/settings/integrations`, `/settings/system`, `/admin`,
+  `/project/{slug}/settings`, `/activity-log`) now redirect into the matching tab, so
+  existing links keep working.
 - **Context = KPI Library + Business Context.** Merged into one `/context` page with two
   tabs; `/kpi-library` and `/business-context` redirect in.
 - **Dashboards = live dashboards + template gallery.** Merged into one `/dashboards` page
   with "Your dashboards" and "Gallery · + New from template" views; `/live-dashboards` and
   `/templates` redirect in.
+
+### Fixed
+- **Activity Log now records Ask Fluxito tool calls** — the in-process bridge previously
+  bypassed the audit instrumentation, so the assistant's tool calls never appeared.
 
 ## [1.1.15] — 2026-06-15
 
