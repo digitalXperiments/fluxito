@@ -194,7 +194,13 @@ async def test_update_key_meta_updates_model_and_base_url(_patch_db, db_session_
 
     pid, uid = await _seed_user_project(db_session_factory, "10")
 
-    await store_key(project_id=pid, user_id=uid, provider="anthropic", api_key="sk-secret", default_model="claude-opus-4-8")
+    await store_key(
+        project_id=pid,
+        user_id=uid,
+        provider="anthropic",
+        api_key="sk-secret",
+        default_model="claude-opus-4-8",
+    )
     updated = await update_key_meta(
         project_id=pid,
         user_id=uid,
