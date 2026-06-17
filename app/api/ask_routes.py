@@ -20,6 +20,7 @@ from app.ask.keys import (
     list_providers,
     set_default,
     store_key,
+    update_key_meta,
 )
 from app.ask.prompts import build_system_prompt
 from app.ask.providers.base import LLMMessage, StreamEvent, TextBlock
@@ -324,11 +325,26 @@ async def save_key(request: Request):
     provider = body.get("provider")
     api_key = (body.get("api_key") or "").strip()
     base_url = (body.get("base_url") or "").strip() or None
-    # LM Studio doesn't require a real API key; all others do.
-    key_required = provider != "lmstudio"
-    if provider not in SUPPORTED_PROVIDERS or (key_required and not api_key):
+    if provider not in SUPPORTED_PROVIDERS:
         return JSONResponse({"error": "Invalid provider or key."}, status_code=400)
     default_model = body.get("default_model") or default_model_for(provider)
+    key_required = provider != "lmstudio"
+    if key_required and not api_key:
+        # No new key supplied — update meta only if a stored key exists.
+        pid = uuid.UUID(project_id)
+        uid_uuid = uuid.UUID(uid)
+        updated = await update_key_meta(
+            project_id=pid,
+            user_id=uid_uuid,
+            provider=provider,
+            default_model=default_model,
+            base_url=base_url,
+        )
+        if not updated:
+            return JSONResponse({"error": "API key is required."}, status_code=400)
+        resp = JSONResponse({"ok": True})
+        set_active_project_cookie(resp, project_id)
+        return resp
     await store_key(
         project_id=uuid.UUID(project_id),
         user_id=uuid.UUID(uid),
@@ -376,6 +392,74 @@ async def set_default_key(request: Request):
     return JSONResponse({"ok": True})
 
 
+# ---- model options (extras from superadmin) --------------------------------
+
+
+@router.get("/api/ask/model-options")
+async def get_model_options(request: Request):
+    """Any authed user — returns the superadmin-configured extra models dict."""
+    uid = _require_user_id(request)
+    if not uid:
+        return JSONResponse({"error": "auth"}, status_code=401)
+    from app.ask.model_catalog import get_extra_models
+
+    extras = await get_extra_models()
+    return JSONResponse(extras)
+
+
+@router.get("/api/ask/admin/models")
+async def admin_get_models(request: Request):
+    """Superadmin — returns the extras dict."""
+    from app.api.admin_routes import require_superadmin
+
+    await require_superadmin(request)
+    from app.ask.model_catalog import get_extra_models
+
+    extras = await get_extra_models()
+    return JSONResponse(extras)
+
+
+@router.post("/api/ask/admin/models")
+async def admin_set_models(request: Request):
+    """Superadmin — replaces the model list for one provider."""
+    from app.api.admin_routes import require_superadmin
+
+    await require_superadmin(request)
+    body = await request.json()
+    provider = body.get("provider")
+    models = body.get("models")
+    if provider not in SUPPORTED_PROVIDERS:
+        return JSONResponse({"error": "Invalid provider."}, status_code=400)
+    if not isinstance(models, list):
+        return JSONResponse({"error": "models must be a list."}, status_code=400)
+    # Strip, dedupe, limit to 50
+    cleaned = list(dict.fromkeys(m.strip() for m in models if isinstance(m, str) and m.strip()))[:50]
+    from app.ask.model_catalog import get_extra_models, set_extra_models
+
+    extras = await get_extra_models()
+    extras[provider] = cleaned
+    await set_extra_models(extras)
+    return JSONResponse(extras)
+
+
+@router.get("/settings/ai-models")
+async def ai_models_settings(request: Request):
+    """Superadmin-only model catalog manager page."""
+    from app.api.admin_routes import require_superadmin
+
+    try:
+        await require_superadmin(request)
+    except Exception:
+        return RedirectResponse("/settings", status_code=302)
+    if not request.query_params.get("embed"):
+        return RedirectResponse("/settings?tab=ai-models", status_code=302)
+    from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
+
+    user_ctx = await _resolve_user_ctx(request)
+    user_view = await _load_user_view(user_ctx) if user_ctx else None
+    return render(request, "settings/ai_models.html", {"user": user_view})
+
+
 @router.post("/api/ask/keys/test")
 async def test_key(request: Request):
     import asyncio
@@ -397,7 +481,17 @@ async def test_key(request: Request):
         return JSONResponse({"ok": False, "error": "Invalid provider."})
     key_required = provider != "lmstudio"
     if key_required and not api_key:
-        return JSONResponse({"ok": False, "error": "API key is required."})
+        # No key in the form — try to load the stored key for this provider.
+        stored = await get_active_key(
+            project_id=uuid.UUID(project_id),
+            user_id=uuid.UUID(uid),
+            provider=provider,
+        )
+        if stored is None:
+            return JSONResponse({"ok": False, "error": "Enter an API key to test, or save one first."})
+        api_key = stored.api_key
+        if not base_url:
+            base_url = stored.base_url
     model = default_model or default_model_for(provider)
     try:
         provider_obj = make_provider(provider, api_key, base_url=base_url)

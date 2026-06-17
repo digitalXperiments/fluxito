@@ -44,3 +44,25 @@ def test_default_and_test_routes_are_post():
     post_paths = {r.path for r in router.routes if "POST" in getattr(r, "methods", set())}
     assert "/api/ask/keys/default" in post_paths
     assert "/api/ask/keys/test" in post_paths
+
+
+def test_model_options_route_registered():
+    paths = {r.path for r in router.routes}
+    assert "/api/ask/model-options" in paths
+
+
+def test_admin_models_routes_registered():
+    paths = {r.path for r in router.routes}
+    assert "/api/ask/admin/models" in paths
+
+
+def test_admin_models_get_and_post_methods():
+    for r in router.routes:
+        if r.path == "/api/ask/admin/models":
+            methods = getattr(r, "methods", set())
+            assert "GET" in methods or "POST" in methods
+
+
+def test_ai_models_settings_page_registered():
+    paths = {r.path for r in router.routes}
+    assert "/settings/ai-models" in paths

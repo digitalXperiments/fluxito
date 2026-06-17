@@ -46,7 +46,7 @@ def test_platform_tab_gated_on_is_superadmin():
 
 def test_all_data_tab_values_present():
     source = INDEX_TEMPLATE.read_text()
-    for tab in ("account", "ai", "project", "integrations", "system", "platform"):
+    for tab in ("account", "ai", "project", "integrations", "system", "platform", "ai-models"):
         assert f'data-tab="{tab}"' in source, f"Missing data-tab={tab!r}"
 
 
@@ -105,3 +105,18 @@ def test_ai_template_exists():
 def test_ai_template_references_api_ask_keys():
     source = AI_TEMPLATE.read_text()
     assert "/api/ask/keys" in source
+
+
+def test_ai_models_tab_gated_on_is_superadmin():
+    source = INDEX_TEMPLATE.read_text()
+    # The ai-models tab must exist and be inside the is_superadmin block
+    assert 'data-tab="ai-models"' in source
+    # The superadmin guard must appear before the ai-models tab
+    sa_idx = source.index("{% if is_superadmin %}")
+    ai_models_idx = source.index('data-tab="ai-models"')
+    assert sa_idx < ai_models_idx
+
+
+def test_ai_models_tab_src():
+    source = INDEX_TEMPLATE.read_text()
+    assert "/settings/ai-models?embed=1" in source

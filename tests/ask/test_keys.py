@@ -186,3 +186,60 @@ async def test_list_keys_returns_provider_key_info(_patch_db, db_session_factory
     assert info.default_model == "claude-opus-4-8"
     # No api_key field exposed
     assert not hasattr(info, "api_key")
+
+
+@pytest.mark.asyncio
+async def test_update_key_meta_updates_model_and_base_url(_patch_db, db_session_factory):
+    from app.ask.keys import update_key_meta
+
+    pid, uid = await _seed_user_project(db_session_factory, "10")
+
+    await store_key(project_id=pid, user_id=uid, provider="anthropic", api_key="sk-secret", default_model="claude-opus-4-8")
+    updated = await update_key_meta(
+        project_id=pid,
+        user_id=uid,
+        provider="anthropic",
+        default_model="claude-sonnet-4-6",
+        base_url=None,
+    )
+    assert updated is True
+    got = await get_active_key(project_id=pid, user_id=uid, provider="anthropic")
+    assert got is not None
+    assert got.api_key == "sk-secret"  # key unchanged
+    assert got.default_model == "claude-sonnet-4-6"
+
+
+@pytest.mark.asyncio
+async def test_update_key_meta_returns_false_when_no_key(_patch_db, db_session_factory):
+    import uuid as uuid_mod
+
+    from app.ask.keys import update_key_meta
+
+    updated = await update_key_meta(
+        project_id=uuid_mod.uuid4(),
+        user_id=uuid_mod.uuid4(),
+        provider="anthropic",
+        default_model="x",
+        base_url=None,
+    )
+    assert updated is False
+
+
+@pytest.mark.asyncio
+async def test_model_catalog_round_trip(_patch_db, db_session_factory):
+    from app.ask.model_catalog import get_extra_models, set_extra_models
+
+    await set_extra_models({"anthropic": ["claude-custom-v1"], "openai": ["gpt-5"]})
+    result = await get_extra_models()
+    assert result["anthropic"] == ["claude-custom-v1"]
+    assert result["openai"] == ["gpt-5"]
+
+
+@pytest.mark.asyncio
+async def test_model_catalog_filters_unknown_providers(_patch_db, db_session_factory):
+    from app.ask.model_catalog import get_extra_models, set_extra_models
+
+    await set_extra_models({"anthropic": ["m1"], "unknown_provider": ["x"]})
+    result = await get_extra_models()
+    assert "unknown_provider" not in result
+    assert "anthropic" in result

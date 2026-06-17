@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}AI Model Catalog — Fluxito{% endblock %}
+{% set active = 'ai_models' %}
+
+{% block main %}
+<main class="app-main" style="max-width:760px;padding:2rem 1.5rem;">
+  <div class="page-head" style="margin-bottom:1.75rem;">
+    <div>
+      <h1 style="font-size:1.35rem;margin:0 0 0.3rem;">AI model catalog</h1>
+      <p style="margin:0;color:var(--text-muted,#71717a);font-size:0.875rem;">
+        Add extra model names that appear in the per-provider model dropdown for all users.
+      </p>
+    </div>
+  </div>
+
+  <div id="catalog-sections">
+    <span style="color:var(--text-muted,#71717a);font-size:0.875rem;">Loading…</span>
+  </div>
+</main>
+
+<style>
+.catalog-provider-section {
+  background: var(--surface,#131316);
+  border: 1px solid var(--border,#27272a);
+  border-radius: var(--r-lg,12px);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+.catalog-provider-name {
+  font-size:0.9rem;font-weight:600;color:var(--text,#fafafa);margin:0 0 0.75rem;
+}
+.catalog-chips {
+  display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.75rem;min-height:1.5rem;
+}
+.catalog-chip {
+  display:inline-flex;align-items:center;gap:0.3rem;
+  padding:0.2rem 0.55rem;background:var(--surface-3,#27272a);
+  border:1px solid var(--border,#27272a);border-radius:var(--r-full,999px);
+  font-size:0.78rem;color:var(--text,#fafafa);font-family:var(--font-mono,monospace);
+}
+.catalog-chip-remove {
+  background:none;border:none;cursor:pointer;color:var(--text-muted,#71717a);
+  padding:0;line-height:1;font-size:0.9rem;
+}
+.catalog-chip-remove:hover { color:var(--danger,#f87171); }
+.catalog-add-row {
+  display:flex;gap:0.5rem;align-items:center;
+}
+.catalog-status {
+  font-size:0.8rem;min-height:1rem;margin-top:0.4rem;
+}
+</style>
+
+<script>
+(function(){
+"use strict";
+
+var PROVIDERS = ["anthropic","openai","grok","gemini","mistral","lmstudio"];
+var PROVIDER_LABELS = {anthropic:"Anthropic",openai:"OpenAI",grok:"xAI Grok",gemini:"Google Gemini",mistral:"Mistral AI",lmstudio:"LM Studio"};
+
+function csrfToken(){
+  var m=document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+  return m?decodeURIComponent(m[1]):"";
+}
+
+var _extras = {};
+
+function render(extras){
+  _extras = extras || {};
+  var container = document.getElementById("catalog-sections");
+  container.innerHTML="";
+  PROVIDERS.forEach(function(p){
+    var models = (_extras[p]||[]).slice();
+    var section = document.createElement("div");
+    section.className="catalog-provider-section";
+    section.dataset.provider=p;
+
+    var title = document.createElement("div");
+    title.className="catalog-provider-name";
+    title.textContent = PROVIDER_LABELS[p]||p;
+    section.appendChild(title);
+
+    var chips = document.createElement("div");
+    chips.className="catalog-chips";
+    chips.id="chips-"+p;
+    renderChips(chips, p, models);
+    section.appendChild(chips);
+
+    var addRow = document.createElement("div");
+    addRow.className="catalog-add-row";
+    var inp = document.createElement("input");
+    inp.type="text";inp.className="f-input";inp.placeholder="model name…";
+    inp.style.cssText="flex:1;max-width:280px;box-sizing:border-box;";
+    var addBtn = document.createElement("button");
+    addBtn.type="button";addBtn.className="btn";
+    addBtn.style.cssText="background:var(--surface-3,#27272a);border:1px solid var(--border,#27272a);color:var(--text,#fafafa);";
+    addBtn.textContent="Add";
+    addRow.appendChild(inp);addRow.appendChild(addBtn);
+    section.appendChild(addRow);
+
+    var status = document.createElement("div");
+    status.className="catalog-status";
+    status.id="status-"+p;
+    section.appendChild(status);
+
+    addBtn.addEventListener("click",function(){
+      var val=(inp.value||"").trim();
+      if(!val)return;
+      var cur=(_extras[p]||[]);
+      if(cur.indexOf(val)!==-1){inp.value="";return;}
+      var next=cur.concat([val]);
+      save(p,next,status,function(){inp.value="";});
+    });
+    inp.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();addBtn.click();}});
+
+    container.appendChild(section);
+  });
+}
+
+function renderChips(container, provider, models){
+  container.innerHTML="";
+  if(!models.length){
+    var empty=document.createElement("span");
+    empty.style.cssText="color:var(--text-muted,#71717a);font-size:0.78rem;";
+    empty.textContent="No extra models.";
+    container.appendChild(empty);
+    return;
+  }
+  models.forEach(function(m){
+    var chip=document.createElement("span");chip.className="catalog-chip";
+    chip.textContent=m;
+    var rm=document.createElement("button");
+    rm.type="button";rm.className="catalog-chip-remove";rm.setAttribute("aria-label","Remove "+m);
+    rm.innerHTML="&times;";
+    rm.addEventListener("click",function(){
+      var cur=(_extras[provider]||[]);
+      var next=cur.filter(function(x){return x!==m;});
+      var statusEl=document.getElementById("status-"+provider);
+      save(provider,next,statusEl,null);
+    });
+    chip.appendChild(rm);
+    container.appendChild(chip);
+  });
+}
+
+function save(provider, models, statusEl, cb){
+  if(statusEl){statusEl.textContent="Saving…";statusEl.style.color="var(--text-muted,#71717a)";}
+  fetch("/api/ask/admin/models",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","X-CSRF-Token":csrfToken()},
+    body:JSON.stringify({provider:provider,models:models})
+  }).then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d};});})
+  .then(function(result){
+    if(result.ok){
+      render(result.data);
+      if(statusEl){statusEl.textContent="Saved.";statusEl.style.color="var(--success,#4ade80)";}
+      if(cb)cb();
+      setTimeout(function(){if(statusEl)statusEl.textContent="";},2000);
+    } else {
+      if(statusEl){statusEl.textContent=result.data.error||"Save failed.";statusEl.style.color="var(--danger,#f87171)";}
+    }
+  }).catch(function(){
+    if(statusEl){statusEl.textContent="Network error.";statusEl.style.color="var(--danger,#f87171)";}
+  });
+}
+
+fetch("/api/ask/admin/models")
+  .then(function(r){return r.json();})
+  .then(render)
+  .catch(function(){
+    document.getElementById("catalog-sections").innerHTML='<span style="color:var(--danger,#f87171);font-size:0.875rem;">Failed to load model catalog.</span>';
+  });
+})();
+</script>
+{% endblock %}
