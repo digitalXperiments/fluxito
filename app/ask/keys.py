@@ -102,6 +102,31 @@ async def store_key(
         await db.commit()
 
 
+async def update_key_meta(
+    *,
+    project_id: uuid.UUID,
+    user_id: uuid.UUID,
+    provider: str,
+    default_model: str | None,
+    base_url: str | None,
+) -> bool:
+    """Update model/base_url on the active key without touching the encrypted secret.
+    Returns True if a row was updated, False if no active key exists."""
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(
+            update(AIProviderKey)
+            .where(
+                AIProviderKey.project_id == project_id,
+                AIProviderKey.user_id == user_id,
+                AIProviderKey.provider == provider,
+                AIProviderKey.is_active.is_(True),
+            )
+            .values(default_model=default_model, base_url=base_url or None)
+        )
+        await db.commit()
+        return result.rowcount > 0
+
+
 async def get_active_key(*, project_id: uuid.UUID, user_id: uuid.UUID, provider: str) -> ProviderKey | None:
     async with app_state.db_session_factory() as db:
         row = (
