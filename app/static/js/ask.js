@@ -475,28 +475,24 @@
           }
 
           var body = addMessage(m.role === "assistant" ? "assistant" : "user");
-          var toolNames = [];
-
+          // Render blocks in order, keeping tool-call chips inline (consecutive
+          // tool calls group into one chips row) — mirrors the live stream.
+          var openChips = null;
           (m.content || []).forEach(function (b) {
             if (b.type === "text") {
+              openChips = null;
               var mdDiv = el("div", "ask-md");
               mdDiv.innerHTML = renderMarkdown(b.text || "");
               body.appendChild(mdDiv);
             } else if (b.type === "tool_use") {
-              toolNames.push(b.name || "tool");
               addToolToUsage(b.name || "tool");
+              if (!openChips) {
+                openChips = el("div", "ask-chips-row");
+                body.appendChild(openChips);
+              }
+              openChips.appendChild(makeToolChip(b.name || "tool", true));
             }
           });
-
-          // Render collapsed summary for tool calls in historical messages
-          if (toolNames.length > 0) {
-            var chipsRow = el("div", "ask-chips-row");
-            toolNames.forEach(function (name) {
-              chipsRow.appendChild(makeToolChip(name, true));
-            });
-            body.appendChild(chipsRow);
-            collapseChipsToSummary(chipsRow, toolNames);
-          }
         });
 
         renderRail();
@@ -716,11 +712,9 @@
               }
             }
           } else if (p.type === "message_done") {
-            // Collapse inline chips to summary on turn completion
-            if (chipsRow && turnToolNames.length > 0) {
-              collapseChipsToSummary(chipsRow, turnToolNames);
-            }
-            // Accumulate token usage from the terminal message_done
+            // Keep the tool-call chips inline in the thread (they show the context
+            // of when each call was made). The right rail carries the aggregate.
+            // Accumulate token usage from the terminal message_done.
             if (p.usage) {
               addUsageFromTokens(p.usage);
             }
