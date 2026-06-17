@@ -19,8 +19,12 @@
     <span style="color:var(--text-muted,#71717a);font-size:0.875rem;">Loading…</span>
   </div>
 
-  {# Inline editor panel (hidden until a card action triggers it) #}
-  <div id="ai-editor-panel" style="display:none;background:var(--surface-2,#1a1a1f);border:1px solid var(--border,#27272a);border-radius:var(--r-lg,12px);padding:1.5rem;max-width:520px;margin-top:0.5rem;">
+
+</main>
+
+{# Modal backdrop + dialog #}
+<div id="ai-modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center;">
+  <div id="ai-editor-panel" style="background:var(--surface-2,#1a1a1f);border:1px solid var(--border,#27272a);border-radius:var(--r-lg,12px);padding:1.5rem;width:100%;max-width:480px;margin:1rem;box-sizing:border-box;position:relative;">
     <h2 id="ai-editor-title" style="font-size:1rem;font-weight:600;margin:0 0 1.25rem;color:var(--text,#fafafa);"></h2>
     <form id="ai-editor-form" style="display:flex;flex-direction:column;gap:1rem;" autocomplete="off">
       <input type="hidden" id="ai-editor-provider" name="provider" />
@@ -79,8 +83,7 @@
       <div id="ai-editor-status" style="font-size:0.85rem;min-height:1.25rem;" aria-live="polite"></div>
     </form>
   </div>
-
-</main>
+</div>
 
 <style>
 .ai-provider-card {
@@ -294,6 +297,7 @@
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
   var grid = document.getElementById("ai-cards-grid");
+  var backdrop = document.getElementById("ai-modal-backdrop");
   var editorPanel = document.getElementById("ai-editor-panel");
   var editorTitle = document.getElementById("ai-editor-title");
   var editorForm = document.getElementById("ai-editor-form");
@@ -310,9 +314,17 @@
   var MODEL_CUSTOM = "__custom__";
 
   // Build the model dropdown for a provider: "Provider default", known models,
-  // then "Custom…" (which reveals the free-text input).
+  // extra superadmin models, then "Custom…" (which reveals the free-text input).
   function populateModelField(meta, currentModel) {
-    var models = (meta && meta.models) || [];
+    var builtins = (meta && meta.models) || [];
+    var providerName = editorProvider.value;
+    var extras = (_extraModels[providerName] || []);
+    // Merge: built-ins first, then extras deduped against built-ins.
+    var models = builtins.slice();
+    extras.forEach(function (m) {
+      if (models.indexOf(m) === -1) models.push(m);
+    });
+
     editorModelSelect.innerHTML = "";
     var defOpt = document.createElement("option");
     defOpt.value = "";
@@ -375,6 +387,8 @@
   // State
   var _keysData = []; // last loaded key infos
   var _activeCard = null; // provider name of the open editor
+  var _editorMode = "add"; // "add" or "edit"
+  var _extraModels = {}; // superadmin-configured extra models per provider
 
   // ── Key show/hide toggle ──────────────────────────────────────────────────
   if (keyToggle) {
@@ -387,20 +401,18 @@
 
   // ── Load & render cards ───────────────────────────────────────────────────
   function loadKeys() {
-    try {
-      fetch("/api/ask/keys")
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          _keysData = data.keys || [];
-          var supported = data.supported || PROVIDER_ORDER;
-          renderCards(_keysData, supported);
-        })
-        .catch(function () {
-          grid.innerHTML = '<span style="color:var(--danger,#f87171);font-size:0.875rem;">Could not load providers.</span>';
-        });
-    } catch (e) {
-      // ignore
-    }
+    Promise.all([
+      fetch("/api/ask/keys").then(function (r) { return r.json(); }),
+      fetch("/api/ask/model-options").then(function (r) { return r.json(); }).catch(function () { return {}; })
+    ]).then(function (results) {
+      var data = results[0];
+      _extraModels = results[1] || {};
+      _keysData = data.keys || [];
+      var supported = data.supported || PROVIDER_ORDER;
+      renderCards(_keysData, supported);
+    }).catch(function () {
+      grid.innerHTML = '<span style="color:var(--danger,#f87171);font-size:0.875rem;">Could not load providers.</span>';
+    });
   }
 
   function findKeyInfo(provider) {
@@ -545,19 +557,28 @@
   function openEditor(provider, info, mode) {
     var meta = PROVIDERS[provider] || { label: provider, placeholder: "", models: [], needsBaseUrl: false, getKeyUrl: null };
     _activeCard = provider;
+    _editorMode = mode;
 
     editorTitle.textContent = mode === "edit" ? ("Edit " + meta.label + " key") : ("Add " + meta.label + " key");
     editorProvider.value = provider;
 
     // API key field
     editorKey.value = "";
-    editorKey.placeholder = meta.placeholder || "…";
-    if (provider === "lmstudio") {
+    if (mode === "edit") {
+      // In edit mode: key is never prefilled; blank is fine (server keeps stored key).
+      editorKey.placeholder = "leave blank to keep current key";
       editorKey.removeAttribute("required");
       keyOptionalHint.textContent = "(optional)";
     } else {
-      editorKey.setAttribute("required", "required");
-      keyOptionalHint.textContent = "";
+      // In add mode: require a key for all providers except lmstudio.
+      editorKey.placeholder = meta.placeholder || "…";
+      if (provider === "lmstudio") {
+        editorKey.removeAttribute("required");
+        keyOptionalHint.textContent = "(optional)";
+      } else {
+        editorKey.setAttribute("required", "required");
+        keyOptionalHint.textContent = "";
+      }
     }
 
     // Get-key link
@@ -582,25 +603,30 @@
     // Reset status
     setEditorStatus("", "");
 
-    // Scroll editor into view
-    editorPanel.style.display = "block";
-
-    // Anchor the editor under the clicked card in the DOM
-    var cardEl = grid.querySelector('[data-provider="' + provider + '"]');
-    if (cardEl && cardEl.parentNode) {
-      cardEl.parentNode.insertBefore(editorPanel, cardEl.nextSibling);
-    }
-
-    editorPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // Open modal
+    backdrop.style.display = "flex";
   }
 
   function closeEditor() {
-    editorPanel.style.display = "none";
+    backdrop.style.display = "none";
     _activeCard = null;
+    _editorMode = "add";
     setEditorStatus("", "");
     editorKey.type = "password"; // reset visibility
     keyToggle.setAttribute("aria-label", "Show/hide key");
   }
+
+  // Backdrop click-to-close (clicks on the inner panel don't bubble to backdrop).
+  if (backdrop) {
+    backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) closeEditor();
+    });
+  }
+
+  // Esc key closes the modal.
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && backdrop && backdrop.style.display === "flex") closeEditor();
+  });
 
   if (cancelBtn) cancelBtn.addEventListener("click", closeEditor);
 
@@ -619,7 +645,7 @@
       var default_model = getModelValue();
       var isLocal = provider === "lmstudio";
 
-      if (!isLocal && !api_key) {
+      if (!isLocal && !api_key && _editorMode === "add") {
         setEditorStatus("API key is required.", "var(--danger,#f87171)");
         return;
       }
