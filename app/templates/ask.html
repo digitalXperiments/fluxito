@@ -33,17 +33,9 @@
       <button class="ask-usage-toggle" id="ask-usage-toggle" title="Close run info" aria-label="Close run info">✕</button>
     </div>
     <div class="ask-usage-body" id="ask-usage-body">
+      <!-- Grand totals -->
       <div class="ask-usage-section">
-        <div class="ask-usage-label">Model</div>
-        <div class="ask-usage-value" id="rail-model">—</div>
-      </div>
-      <div class="ask-usage-section">
-        <div class="ask-usage-label">Tool calls</div>
-        <div class="ask-usage-value" id="rail-tools">—</div>
-        <div class="ask-tool-names" id="rail-tool-names" hidden></div>
-      </div>
-      <div class="ask-usage-section">
-        <div class="ask-usage-label">Tokens</div>
+        <div class="ask-usage-label">Total tokens</div>
         <table class="ask-usage-table" id="rail-tokens">
           <tr><td>Input</td><td id="rail-tok-in">—</td></tr>
           <tr><td>Output</td><td id="rail-tok-out">—</td></tr>
@@ -53,6 +45,17 @@
       <div class="ask-usage-section">
         <div class="ask-usage-label">Est. cost <span class="ask-usage-note">(estimated)</span></div>
         <div class="ask-usage-value" id="rail-cost">—</div>
+      </div>
+      <!-- Tool calls (conversation-level) -->
+      <div class="ask-usage-section">
+        <div class="ask-usage-label">Tool calls</div>
+        <div class="ask-usage-value" id="rail-tools">—</div>
+        <div class="ask-tool-names" id="rail-tool-names" hidden></div>
+      </div>
+      <!-- Per-model breakdown — populated by JS -->
+      <div class="ask-usage-section" id="rail-models-section" hidden>
+        <div class="ask-usage-label">By model</div>
+        <div id="rail-models-list"></div>
       </div>
     </div>
   </aside>
