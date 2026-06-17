@@ -143,7 +143,12 @@ class Harness:
             if assistant_blocks:
                 assistant_msg = LLMMessage(role="assistant", content=assistant_blocks)
                 messages.append(assistant_msg)
-                await d.service.append(d.conversation_id, assistant_msg, token_usage=usage)
+                # Fold model + provider into stored token_usage so per-model
+                # grouping works when the conversation is reloaded.
+                tu = dict(usage or {})
+                tu["model"] = d.model
+                tu["provider"] = d.provider.name
+                await d.service.append(d.conversation_id, assistant_msg, token_usage=tu)
 
             if stop == StopReason.TOOL_USE and order:
                 # Execute all tool calls concurrently, preserving order.

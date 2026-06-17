@@ -16,31 +16,35 @@
   var usageEl = document.getElementById("ask-usage");
   var usageToggle = document.getElementById("ask-usage-toggle");
   var usageOpen = document.getElementById("ask-usage-open");
-  var railModel = document.getElementById("rail-model");
   var railTools = document.getElementById("rail-tools");
   var railToolNames = document.getElementById("rail-tool-names");
   var railTokIn = document.getElementById("rail-tok-in");
   var railTokOut = document.getElementById("rail-tok-out");
   var railTokTotal = document.getElementById("rail-tok-total");
   var railCost = document.getElementById("rail-cost");
+  var railModelsSection = document.getElementById("rail-models-section");
+  var railModelsList = document.getElementById("rail-models-list");
 
   var conversationId = null;
 
   // ── Per-conversation usage state ──────────────────────────────────────────
+  // modelBuckets: { "<provider> · <model>": { input: n, output: n } }
+  // currentTurnKey: the model key for the in-flight turn (set from "conversation" frame)
   var usageState = {
-    model: null,
-    provider: null,
-    inputTokens: 0,
-    outputTokens: 0,
-    toolCounts: {}, // { tool_name: count }
+    currentTurnKey: null,  // "<provider> · <model>" for the live turn
+    modelBuckets: {},      // per-model token totals
+    toolCounts: {},        // { tool_name: count }
   };
 
   function resetUsageState() {
-    usageState.model = null;
-    usageState.provider = null;
-    usageState.inputTokens = 0;
-    usageState.outputTokens = 0;
+    usageState.currentTurnKey = null;
+    usageState.modelBuckets = {};
     usageState.toolCounts = {};
+  }
+
+  function _modelKey(provider, model) {
+    if (!model) return null;
+    return provider ? (provider + " · " + model) : model;
   }
 
   // ── Pricing map (USD per 1M tokens, input/output) ── labeled as estimated
@@ -52,7 +56,15 @@
     "gpt-4o-mini": [0.15, 0.6],
   };
 
-  function computeCost(model, inputTok, outputTok) {
+  function _modelOnly(key) {
+    // Extract just the model part from "<provider> · <model>" for pricing lookup
+    if (!key) return null;
+    var parts = key.split(" · ");
+    return parts[parts.length - 1];
+  }
+
+  function computeCost(modelKey, inputTok, outputTok) {
+    var model = _modelOnly(modelKey);
     var p = PRICING[model];
     if (!p) return null;
     return (inputTok / 1e6) * p[0] + (outputTok / 1e6) * p[1];
@@ -72,11 +84,38 @@
 
   function renderRail() {
     try {
-      // Model
-      if (railModel) {
-        railModel.textContent = usageState.model
-          ? (usageState.provider ? usageState.provider + " · " : "") + usageState.model
-          : "—";
+      // Grand total tokens across all models
+      var totalIn = 0, totalOut = 0;
+      Object.values(usageState.modelBuckets).forEach(function (b) {
+        totalIn += b.input;
+        totalOut += b.output;
+      });
+      var grandTotal = totalIn + totalOut;
+
+      if (railTokIn) railTokIn.textContent = grandTotal > 0 ? fmtNum(totalIn) : "—";
+      if (railTokOut) railTokOut.textContent = grandTotal > 0 ? fmtNum(totalOut) : "—";
+      if (railTokTotal) railTokTotal.textContent = grandTotal > 0 ? fmtNum(grandTotal) : "—";
+
+      // Grand total estimated cost (sum known models; note partial if any unknown)
+      var totalCost = 0;
+      var hasUnknown = false;
+      Object.keys(usageState.modelBuckets).forEach(function (key) {
+        var b = usageState.modelBuckets[key];
+        var c = computeCost(key, b.input, b.output);
+        if (c !== null) {
+          totalCost += c;
+        } else {
+          hasUnknown = true;
+        }
+      });
+      if (railCost) {
+        if (grandTotal === 0) {
+          railCost.textContent = "—";
+        } else {
+          var costStr = formatCost(totalCost > 0 ? totalCost : null);
+          if (hasUnknown && totalCost > 0) costStr += " (partial)";
+          railCost.textContent = costStr;
+        }
       }
 
       // Tool calls
@@ -109,27 +148,68 @@
         }
       }
 
-      // Tokens
-      var inp = usageState.inputTokens;
-      var out = usageState.outputTokens;
-      var total = inp + out;
-      if (railTokIn) railTokIn.textContent = total > 0 ? fmtNum(inp) : "—";
-      if (railTokOut) railTokOut.textContent = total > 0 ? fmtNum(out) : "—";
-      if (railTokTotal) railTokTotal.textContent = total > 0 ? fmtNum(total) : "—";
+      // Per-model breakdown
+      var keys = Object.keys(usageState.modelBuckets);
+      if (railModelsSection) {
+        if (keys.length > 0) {
+          railModelsSection.hidden = false;
+          if (railModelsList) {
+            railModelsList.innerHTML = "";
+            keys.forEach(function (key) {
+              var b = usageState.modelBuckets[key];
+              var bTotal = b.input + b.output;
+              var card = document.createElement("div");
+              card.className = "ask-model-card";
 
-      // Cost
-      var cost = total > 0 ? computeCost(usageState.model, inp, out) : null;
-      if (railCost) railCost.textContent = formatCost(cost);
+              var nameDiv = document.createElement("div");
+              nameDiv.className = "ask-model-card-name";
+              nameDiv.textContent = key;
+              card.appendChild(nameDiv);
+
+              var tbl = document.createElement("table");
+              tbl.className = "ask-usage-table";
+
+              function mkRow(label, val) {
+                var tr = document.createElement("tr");
+                var td1 = document.createElement("td");
+                td1.textContent = label;
+                var td2 = document.createElement("td");
+                td2.textContent = val;
+                tr.appendChild(td1);
+                tr.appendChild(td2);
+                return tr;
+              }
+
+              tbl.appendChild(mkRow("Input", bTotal > 0 ? fmtNum(b.input) : "—"));
+              tbl.appendChild(mkRow("Output", bTotal > 0 ? fmtNum(b.output) : "—"));
+              tbl.appendChild(mkRow("Total", bTotal > 0 ? fmtNum(bTotal) : "—"));
+
+              var modelCost = computeCost(key, b.input, b.output);
+              tbl.appendChild(mkRow("Cost", formatCost(modelCost)));
+
+              card.appendChild(tbl);
+              railModelsList.appendChild(card);
+            });
+          }
+        } else {
+          railModelsSection.hidden = true;
+        }
+      }
     } catch (e) {
       // Never crash the stream
     }
   }
 
-  function addUsageFromTokens(usageObj) {
+  function addUsageFromTokens(usageObj, modelKey) {
     if (!usageObj) return;
-    usageState.inputTokens +=
+    var key = modelKey || usageState.currentTurnKey;
+    if (!key) return;
+    if (!usageState.modelBuckets[key]) {
+      usageState.modelBuckets[key] = { input: 0, output: 0 };
+    }
+    usageState.modelBuckets[key].input +=
       (usageObj.input_tokens || usageObj.prompt_tokens || 0);
-    usageState.outputTokens +=
+    usageState.modelBuckets[key].output +=
       (usageObj.output_tokens || usageObj.completion_tokens || 0);
     renderRail();
   }
@@ -461,17 +541,22 @@
 
         // Reset and rebuild usage state from persisted data
         resetUsageState();
-        usageState.model = data.model || null;
-        usageState.provider = data.provider || null;
 
         (data.messages || []).forEach(function (m) {
           if (m.role === "tool") return;
 
-          // Accumulate token usage from persisted assistant messages
+          // Accumulate token usage from persisted assistant messages — grouped
+          // by the model/provider stored alongside the usage in the DB.
           if (m.role === "assistant" && m.token_usage) {
             var u = m.token_usage;
-            usageState.inputTokens += u.input_tokens || u.prompt_tokens || 0;
-            usageState.outputTokens += u.output_tokens || u.completion_tokens || 0;
+            // Prefer the model/provider annotated on the stored usage; fall
+            // back to the conversation-level model if the row predates Fix 3.
+            var msgModel = u.model || data.model || null;
+            var msgProvider = u.provider || data.provider || null;
+            var key = _modelKey(msgProvider, msgModel);
+            if (key) {
+              addUsageFromTokens(u, key);
+            }
           }
 
           var body = addMessage(m.role === "assistant" ? "assistant" : "user");
@@ -650,9 +735,11 @@
             conversationId = p.conversation_id;
             markActiveConv(conversationId);
 
-            // Update usage rail with model/provider from this frame
-            if (p.model) usageState.model = p.model;
-            if (p.provider) usageState.provider = p.provider;
+            // Record which model/provider this turn uses so message_done
+            // can credit the right bucket.
+            if (p.model) {
+              usageState.currentTurnKey = _modelKey(p.provider || null, p.model);
+            }
             renderRail();
             showRail();
 
