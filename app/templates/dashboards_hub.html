@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Dashboards — {{ brand().name }}{% endblock %}
+{% set active = 'dashboards' %}
+
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="/static/css/settings.css?v={{ asset_hash('css/settings.css') }}"/>
+{% endblock %}
+
+{% block main %}
+<div class="settings-shell">
+
+  {# ── Left tab rail ── #}
+  <nav class="settings-rail" aria-label="Dashboards sections">
+
+    <div class="settings-rail-group">
+      <div class="settings-rail-group-label">Dashboards</div>
+      <button
+        type="button"
+        class="settings-tab"
+        data-tab="dashboards"
+        data-src="/live-dashboards?embed=1"
+        aria-label="Your dashboards"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Your dashboards
+      </button>
+      <button
+        type="button"
+        class="settings-tab"
+        data-tab="gallery"
+        data-src="/templates?embed=1"
+        aria-label="Gallery · + New from template"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><path d="M3 15h6"/><path d="M6 12v6"/></svg>
+        Gallery · + New from template
+      </button>
+    </div>
+
+  </nav>
+
+  {# ── Right iframe panel ── #}
+  <div class="settings-panel">
+    <iframe
+      id="dashboardsHubFrame"
+      class="settings-frame"
+      src=""
+      title="Dashboards panel"
+      allow="same-origin"
+    ></iframe>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var tabs = document.querySelectorAll('.settings-tab');
+  var frame = document.getElementById('dashboardsHubFrame');
+  if (!frame || !tabs.length) return;
+
+  function activateTab(tabEl) {
+    tabs.forEach(function (t) { t.classList.remove('is-active'); });
+    tabEl.classList.add('is-active');
+    var src = tabEl.getAttribute('data-src');
+    var key = tabEl.getAttribute('data-tab');
+    // Always re-point the shared iframe (re-clicking a visited tab must reload it).
+    frame.src = src;
+    // Update URL without reload so back/forward and bookmarks work.
+    try {
+      var url = new URL(window.location.href);
+      url.searchParams.set('view', key);
+      history.replaceState(null, '', url.toString());
+    } catch (e) {}
+  }
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      activateTab(tab);
+    });
+  });
+
+  // Pick the initial tab: ?view=gallery → "Your dashboards" (default).
+  function getInitialTab() {
+    try {
+      var param = new URL(window.location.href).searchParams.get('view');
+      if (param) {
+        for (var i = 0; i < tabs.length; i++) {
+          if (tabs[i].getAttribute('data-tab') === param) return tabs[i];
+        }
+      }
+    } catch (e) {}
+    return tabs[0] || null;
+  }
+
+  var initial = getInitialTab();
+  if (initial) activateTab(initial);
+})();
+</script>
+{% endblock %}

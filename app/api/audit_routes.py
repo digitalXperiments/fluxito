@@ -71,6 +71,8 @@ async def audit_page(request: Request):
     user_ctx = await _resolve_user_ctx(request)
     if not user_ctx:
         return RedirectResponse("/signin?next=/activity-log", status_code=302)
+    if not request.query_params.get("embed"):
+        return RedirectResponse("/settings?tab=activity", status_code=302)
     user_view = await _load_user_view(user_ctx)
     user_uuid = uuid.UUID(user_ctx.user_id)
 

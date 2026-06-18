@@ -211,6 +211,9 @@ async def profile_page(request: Request):
     uid = get_uid_from_request(request)
     if not uid:
         return RedirectResponse("/signin?next=/profile", status_code=302)
+    # Redirect to consolidated settings shell unless this is an embedded panel.
+    if not request.query_params.get("embed"):
+        return RedirectResponse("/settings?tab=account", status_code=302)
 
     user = await _load_user(uid)
     if not user:

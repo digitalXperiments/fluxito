@@ -8,45 +8,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Tracking plan: nested properties as a shared pool (best-in-class).** Object properties now own
-  **members** through a new `tp_property_members` link table (migration 064). Every member is a
-  first-class, reusable property — pick an existing one from the library or create a new one inline —
-  shared across every object that references it (edit once, reflected everywhere). Members nest
-  recursively (object-of-objects) with cycle and depth guards, and the serializer emits a full
-  `members` tree on both library properties and event-attached properties.
-- **Tracking plan: predefined Sources & Destinations vendors.** Destination platform is now chosen
-  from a category-grouped vendor catalog (`tracking_plan/vendors.py`) unioned from the connector
-  registry, the granular OAuth catalog, **and the tag-audit rule-book platforms** — so the tracking
-  plan stays aligned with the audit — plus a curated tail (Moengage, Braze, Klaviyo, RudderStack,
-  PostHog, …) and a **Custom…** escape hatch. Served via `GET …/tracking-plan/vendors`.
-- **Tracking plan: richer governance rules.** A structured **event-name-components** rule (ordered
-  components / separators / casing), an editable **PII patterns** list, **per-rule category scope**,
-  and a **severity** gate, all configurable from the Rules tab.
+- **Ask Fluxito — native AI assistant.** A ChatGPT-style assistant embedded in the app
+  (new `/ask` page). Bring your own AI-provider key; the harness is **vendor-owned (raw
+  HTTP, no SDKs)** behind a normalized provider interface: it reasons, asks a clarifying
+  question when a request is ambiguous, then calls the Fluxito MCP tools in a loop and
+  streams the answer back over SSE. Tool access is **read-only**
+  (analytics/tag-manager/marketing/warehouse/SEO reads, dashboards, tracking-plan reads,
+  audits, and cross-connector analysis) — the assistant cannot modify anything. In-process
+  tool dispatch inherits the caller's RBAC, and every call is recorded to the Activity Log.
+  Conversations persist per project/user (migration `064`: `conversations`,
+  `chat_messages`, `ai_provider_keys`).
+- **Six AI providers.** Anthropic (native) plus **OpenAI, xAI Grok, Google Gemini,
+  Mistral, and LM Studio** (the latter five via a configurable-base-URL OpenAI-compatible
+  adapter; migration `065` adds a per-key base URL). OpenAI uses `max_completion_tokens`
+  for current models. Provider key model defaults are user-selectable, with a "Custom…"
+  option for any model id.
+- **AI keys management.** A role-scoped **Settings → AI keys** panel: a card per provider
+  with connection status, Add/Edit/Remove, **Set as default** (which provider Ask Fluxito
+  uses; migration `066`), **Test connection**, a show/hide key field, per-provider
+  get-key links, and a model dropdown. Keys are encrypted at rest (Fernet) and scoped to
+  your account within the project.
+- **Superadmin model catalog.** A **Settings → AI models** tab (superadmin) to add extra
+  model names that appear in every user's per-provider model dropdown.
+- **Chat experience.** Streaming responses with **Markdown rendering** (tables, code,
+  lists), tool-call chips shown inline in arrival order, auto-generated conversation
+  titles, and a **run-info rail** summarizing tokens, tool calls, model(s) used, and an
+  estimated cost — per model when several are used in one conversation.
 
 ### Changed
-- **Tracking plan: property data types simplified to match the reference model.** The type set is now
-  `string / integer / float / boolean / object`, with an orthogonal **List** toggle for arrays
-  (the redundant `array` type is gone; `int` is now `integer`). "List of X" is `X` + List; "list of
-  objects" is `object` + List.
-- **Tracking plan: Metrics repositioned.** The standalone Metrics tab is removed; metrics are now a
-  lightweight **Success metrics** panel inside the event detail (name + description, linked to the
-  event) — a design/intent marker, not a measurement engine.
-- **Tracking plan: event property picker reworked.** The add-property combobox opens on focus to
-  browse the full library, supports keyboard navigation, shows an "already added" state, and lets you
-  pick the data type inline when creating a new property.
+- **Navigation: simplified sidebar.** The seven feature groups collapse into two short,
+  workflow-ordered clusters — **Set up** (Connections, Tracking Plan, Context) and **Work**
+  (Dashboards, Automations, Tag Auditing) — plus Home, Ask Fluxito, Tutorials, and a single
+  **Settings** entry. "Auditing" is renamed **Tag Auditing**. Every permission gate is
+  preserved exactly.
+- **One Settings destination.** Profile, project settings, install Integrations, System
+  settings, the superadmin Admin console, AI keys, AI models, and the Activity Log are
+  unified into a single role-scoped `/settings` with a left tab rail
+  (Account · Project · Workspace · Platform) — you only see the tabs your role allows. The
+  existing pages are reused as embedded panels (no form rewrites); the old paths
+  (`/profile`, `/settings/integrations`, `/settings/system`, `/admin`,
+  `/project/{slug}/settings`, `/activity-log`) now redirect into the matching tab, so
+  existing links keep working.
+- **Context = KPI Library + Business Context.** Merged into one `/context` page with two
+  tabs; `/kpi-library` and `/business-context` redirect in.
+- **Dashboards = live dashboards + template gallery.** Merged into one `/dashboards` page
+  with "Your dashboards" and "Gallery · + New from template" views; `/live-dashboards` and
+  `/templates` redirect in.
 
 ### Fixed
-- **Tracking plan: the event property dropdown was clipped and unusable.** The suggestion popover was
-  cut off by the card's `overflow:hidden` (and a mobile overflow rule), so the empty-state "add one
-  below" pointed at an invisible control. The popover now floats above the card.
-- **Tracking plan: the Rules tab controls overlapped their labels.** Rule rows never wrapped on
-  desktop and a nested-config layout doubled the width of the "applies to / pick property" controls.
-  Rows now wrap cleanly and the config layout is flattened.
-
-### Removed
-- **Tracking plan: metric measurement scaffolding.** Dropped `type`, `property_id`, `filters`, and
-  `dashboard_card_id` from `TPMetric` and removed the `metric_not_measured` finding (migration 064).
-  Metrics are intent markers tied to events, consistent with how leading tools treat in-plan metrics.
+- **Activity Log now records Ask Fluxito tool calls** — the in-process bridge previously
+  bypassed the audit instrumentation, so the assistant's tool calls never appeared.
 
 ## [1.1.15] — 2026-06-15
 

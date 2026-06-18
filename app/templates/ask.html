@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/ask.css?v={{ asset_hash('css/ask.css') }}"/>
+{% endblock %}
+{% block main %}
+<div class="ask-shell" id="ask-shell">
+  <aside class="ask-history">
+    <button class="ask-new" id="ask-new">+ New chat</button>
+    <ul class="ask-conv-list" id="ask-conv-list"></ul>
+  </aside>
+  <main class="ask-main">
+    <div class="ask-messages" id="ask-messages">
+      <div class="ask-messages-inner">
+        <div class="ask-empty" id="ask-empty">
+          <h2>Ask Fluxito</h2>
+          <p>Ask about your analytics, tracking plan, dashboards, or marketing data.</p>
+          <p class="ask-setup-hint" id="ask-setup-hint" hidden>
+            No AI provider key yet — <a href="/settings?tab=ai">add one</a> to start.
+          </p>
+        </div>
+      </div>
+    </div>
+    <form class="ask-composer" id="ask-composer">
+      <div class="ask-composer-inner">
+        <textarea id="ask-input" rows="1" placeholder="Ask Fluxito…"></textarea>
+        <button type="submit" id="ask-send">Send</button>
+      </div>
+    </form>
+  </main>
+  <aside class="ask-usage" id="ask-usage" hidden>
+    <div class="ask-usage-header">
+      <span class="ask-usage-title">Run info</span>
+      <button class="ask-usage-toggle" id="ask-usage-toggle" title="Close run info" aria-label="Close run info">✕</button>
+    </div>
+    <div class="ask-usage-body" id="ask-usage-body">
+      <!-- Grand totals -->
+      <div class="ask-usage-section">
+        <div class="ask-usage-label">Total tokens</div>
+        <table class="ask-usage-table" id="rail-tokens">
+          <tr><td>Input</td><td id="rail-tok-in">—</td></tr>
+          <tr><td>Output</td><td id="rail-tok-out">—</td></tr>
+          <tr><td>Total</td><td id="rail-tok-total">—</td></tr>
+        </table>
+      </div>
+      <div class="ask-usage-section">
+        <div class="ask-usage-label">Est. cost <span class="ask-usage-note">(estimated)</span></div>
+        <div class="ask-usage-value" id="rail-cost">—</div>
+      </div>
+      <!-- Tool calls (conversation-level) -->
+      <div class="ask-usage-section">
+        <div class="ask-usage-label">Tool calls</div>
+        <div class="ask-usage-value" id="rail-tools">—</div>
+        <div class="ask-tool-names" id="rail-tool-names" hidden></div>
+      </div>
+      <!-- Per-model breakdown — populated by JS -->
+      <div class="ask-usage-section" id="rail-models-section" hidden>
+        <div class="ask-usage-label">By model</div>
+        <div id="rail-models-list"></div>
+      </div>
+    </div>
+  </aside>
+  <button class="ask-usage-open" id="ask-usage-open" title="Show run info" aria-label="Show run info">⊞</button>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/ask.js?v={{ asset_hash('js/ask.js') }}" defer></script>
+{% endblock %}

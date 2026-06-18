@@ -1,0 +1,754 @@
+{% extends "base.html" %}
+{% block title %}AI Provider Keys — Fluxito{% endblock %}
+{% set active = 'ai_keys' %}
+
+{% block main %}
+<main class="app-main" style="max-width:760px;padding:2rem 1.5rem;">
+
+  <div class="page-head" style="margin-bottom:1.75rem;">
+    <div>
+      <h1 style="font-size:1.35rem;margin:0 0 0.3rem;">AI provider keys</h1>
+      <p style="margin:0;color:var(--text-muted,#71717a);font-size:0.875rem;">
+        Store API keys for AI providers. Keys are encrypted at rest and scoped to your account within this project.
+      </p>
+    </div>
+  </div>
+
+  {# Provider cards grid #}
+  <div id="ai-cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem;margin-bottom:2rem;">
+    <span style="color:var(--text-muted,#71717a);font-size:0.875rem;">Loading…</span>
+  </div>
+
+
+</main>
+
+{# Modal backdrop + dialog #}
+<div id="ai-modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center;">
+  <div id="ai-editor-panel" style="background:var(--surface-2,#1a1a1f);border:1px solid var(--border,#27272a);border-radius:var(--r-lg,12px);padding:1.5rem;width:100%;max-width:480px;margin:1rem;box-sizing:border-box;position:relative;">
+    <h2 id="ai-editor-title" style="font-size:1rem;font-weight:600;margin:0 0 1.25rem;color:var(--text,#fafafa);"></h2>
+    <form id="ai-editor-form" style="display:flex;flex-direction:column;gap:1rem;" autocomplete="off">
+      <input type="hidden" id="ai-editor-provider" name="provider" />
+
+      {# API Key #}
+      <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
+        <span style="color:var(--text,#fafafa);">API key <span id="ai-key-optional-hint" style="color:var(--text-muted,#71717a);font-weight:400;"></span></span>
+        <div style="position:relative;">
+          <input id="ai-editor-key" name="ai_provider_secret" type="password"
+            autocomplete="new-password" autocapitalize="off" autocorrect="off"
+            spellcheck="false" data-1p-ignore="true" data-lpignore="true"
+            data-bwignore="true" data-form-type="other"
+            class="f-input" placeholder="sk-…"
+            style="padding-right:2.5rem;width:100%;box-sizing:border-box;" />
+          <button type="button" id="ai-key-toggle"
+            style="position:absolute;right:0.5rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted,#71717a);padding:0.25rem;"
+            aria-label="Show/hide key">
+            <svg id="ai-key-eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <span id="ai-key-getlink" style="font-size:0.8rem;color:var(--text-muted,#71717a);"></span>
+      </label>
+
+      {# Base URL — lmstudio only #}
+      <label id="ai-editor-baseurl-row" style="display:none;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
+        <span style="color:var(--text,#fafafa);">Base URL <span style="color:var(--text-muted,#71717a);font-weight:400;">(optional)</span></span>
+        <input id="ai-editor-baseurl" name="base_url" type="text" class="f-input"
+          placeholder="http://localhost:1234/v1" style="width:100%;box-sizing:border-box;" />
+        <span style="font-size:0.8rem;color:var(--text-muted,#71717a);">Default: <code>http://localhost:1234/v1</code> — runs locally, no key needed.</span>
+      </label>
+
+      {# Default model #}
+      <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
+        <span style="color:var(--text,#fafafa);">Default model <span style="color:var(--text-muted,#71717a);font-weight:400;">(optional)</span></span>
+        <select id="ai-editor-model-select" class="f-input" style="width:100%;box-sizing:border-box;"></select>
+        <input id="ai-editor-model-custom" name="default_model_custom" type="text"
+          class="f-input" placeholder="enter a custom model name"
+          style="width:100%;box-sizing:border-box;display:none;margin-top:0.4rem;" />
+        <span id="ai-editor-model-hint" style="font-size:0.8rem;color:var(--text-muted,#71717a);"></span>
+      </label>
+
+      {# Buttons row #}
+      <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+        <button type="button" id="ai-test-btn" class="btn"
+          style="background:var(--surface-3,#27272a);border:1px solid var(--border,#27272a);color:var(--text,#fafafa);">
+          Test
+        </button>
+        <button type="submit" id="ai-save-btn" class="btn primary">Save key</button>
+        <button type="button" id="ai-cancel-btn" class="btn"
+          style="background:none;border:none;color:var(--text-muted,#71717a);cursor:pointer;">
+          Cancel
+        </button>
+      </div>
+
+      {# Status / feedback #}
+      <div id="ai-editor-status" style="font-size:0.85rem;min-height:1.25rem;" aria-live="polite"></div>
+    </form>
+  </div>
+</div>
+
+<style>
+.ai-provider-card {
+  background: var(--surface, #131316);
+  border: 1px solid var(--border, #27272a);
+  border-radius: var(--r-lg, 12px);
+  padding: 1.25rem 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: border-color 0.15s;
+}
+.ai-provider-card.is-connected {
+  border-color: var(--border-strong, #3f3f46);
+}
+.ai-provider-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.ai-provider-monogram {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md, 8px);
+  background: var(--surface-3, #27272a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text, #fafafa);
+  flex-shrink: 0;
+  letter-spacing: -0.02em;
+}
+.ai-provider-meta {
+  flex: 1;
+  min-width: 0;
+}
+.ai-provider-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text, #fafafa);
+  margin: 0 0 0.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.ai-provider-tagline {
+  font-size: 0.78rem;
+  color: var(--text-muted, #71717a);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+.ai-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ai-status-dot.connected { background: var(--success, #4ade80); }
+.ai-status-dot.not-configured { background: var(--text-subtle, #71717a); }
+.ai-status-text.connected { color: var(--success, #4ade80); }
+.ai-status-text.not-configured { color: var(--text-muted, #71717a); }
+.ai-status-model {
+  color: var(--text-muted, #71717a);
+  font-size: 0.78rem;
+  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-badge-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  background: var(--info-soft, rgba(96, 165, 250, 0.12));
+  color: var(--info, #60a5fa);
+  border-radius: var(--r-full, 999px);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.ai-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.ai-card-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-radius: var(--r-sm, 6px);
+  border: 1px solid var(--border, #27272a);
+  background: var(--surface-3, #27272a);
+  color: var(--text, #fafafa);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+.ai-card-btn:hover {
+  background: var(--surface-2, #1a1a1f);
+  border-color: var(--border-strong, #3f3f46);
+}
+.ai-card-btn.primary {
+  background: var(--accent, #fafafa);
+  color: var(--bg, #0b0b0e);
+  border-color: transparent;
+}
+.ai-card-btn.primary:hover {
+  opacity: 0.88;
+}
+.ai-card-btn.danger {
+  color: var(--danger, #f87171);
+  border-color: var(--border, #27272a);
+}
+.ai-card-btn.danger:hover {
+  background: var(--danger-soft, rgba(248, 113, 113, 0.1));
+  border-color: var(--danger, #f87171);
+}
+</style>
+
+<script>
+(function () {
+  "use strict";
+
+  // ── CSRF ──────────────────────────────────────────────────────────────────
+  function csrfToken() {
+    var m = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+
+  // ── Provider metadata ─────────────────────────────────────────────────────
+  var PROVIDERS = {
+    anthropic: {
+      label: "Anthropic",
+      tagline: "Claude — frontier reasoning & agentic tasks",
+      getKeyUrl: "https://console.anthropic.com/settings/keys",
+      getKeyLabel: "Get your Anthropic API key",
+      placeholder: "sk-ant-…",
+      models: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
+      modelHint: "",
+      needsBaseUrl: false,
+    },
+    openai: {
+      label: "OpenAI",
+      tagline: "GPT-4o, o3-mini — widely compatible",
+      getKeyUrl: "https://platform.openai.com/api-keys",
+      getKeyLabel: "Get your OpenAI API key",
+      placeholder: "sk-…",
+      models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+      modelHint: "",
+      needsBaseUrl: false,
+    },
+    grok: {
+      label: "xAI Grok",
+      tagline: "Grok — fast, real-time knowledge",
+      getKeyUrl: "https://console.x.ai",
+      getKeyLabel: "Get your xAI API key",
+      placeholder: "xai-…",
+      models: ["grok-2-latest", "grok-2"],
+      modelHint: "",
+      needsBaseUrl: false,
+    },
+    gemini: {
+      label: "Google Gemini",
+      tagline: "Gemini 2.5 — Google's multimodal models",
+      getKeyUrl: "https://aistudio.google.com/apikey",
+      getKeyLabel: "Get your Gemini API key",
+      placeholder: "AIza…",
+      models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+      modelHint: "",
+      needsBaseUrl: false,
+    },
+    mistral: {
+      label: "Mistral AI",
+      tagline: "Mistral Large — efficient European AI",
+      getKeyUrl: "https://console.mistral.ai/api-keys",
+      getKeyLabel: "Get your Mistral API key",
+      placeholder: "…",
+      models: ["mistral-large-latest", "mistral-small-latest"],
+      modelHint: "",
+      needsBaseUrl: false,
+    },
+    lmstudio: {
+      label: "LM Studio",
+      tagline: "Run models locally via LM Studio",
+      getKeyUrl: null,
+      getKeyLabel: null,
+      placeholder: "optional for LM Studio",
+      models: [],
+      modelHint: "Enter the model name loaded in LM Studio (e.g. llama-3-8b-instruct).",
+      needsBaseUrl: true,
+    },
+  };
+
+  var PROVIDER_ORDER = ["anthropic", "openai", "grok", "gemini", "mistral", "lmstudio"];
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  var grid = document.getElementById("ai-cards-grid");
+  var backdrop = document.getElementById("ai-modal-backdrop");
+  var editorPanel = document.getElementById("ai-editor-panel");
+  var editorTitle = document.getElementById("ai-editor-title");
+  var editorForm = document.getElementById("ai-editor-form");
+  var editorProvider = document.getElementById("ai-editor-provider");
+  var editorKey = document.getElementById("ai-editor-key");
+  var keyOptionalHint = document.getElementById("ai-key-optional-hint");
+  var keyGetLink = document.getElementById("ai-key-getlink");
+  var keyToggle = document.getElementById("ai-key-toggle");
+  var editorBaseurlRow = document.getElementById("ai-editor-baseurl-row");
+  var editorBaseurl = document.getElementById("ai-editor-baseurl");
+  var editorModelSelect = document.getElementById("ai-editor-model-select");
+  var editorModelCustom = document.getElementById("ai-editor-model-custom");
+  var editorModelHint = document.getElementById("ai-editor-model-hint");
+  var MODEL_CUSTOM = "__custom__";
+
+  // Build the model dropdown for a provider: "Provider default", known models,
+  // extra superadmin models, then "Custom…" (which reveals the free-text input).
+  function populateModelField(meta, currentModel) {
+    var builtins = (meta && meta.models) || [];
+    var providerName = editorProvider.value;
+    var extras = (_extraModels[providerName] || []);
+    // Merge: built-ins first, then extras deduped against built-ins.
+    var models = builtins.slice();
+    extras.forEach(function (m) {
+      if (models.indexOf(m) === -1) models.push(m);
+    });
+
+    editorModelSelect.innerHTML = "";
+    var defOpt = document.createElement("option");
+    defOpt.value = "";
+    defOpt.textContent = "Provider default";
+    editorModelSelect.appendChild(defOpt);
+    models.forEach(function (m) {
+      var o = document.createElement("option");
+      o.value = m;
+      o.textContent = m;
+      editorModelSelect.appendChild(o);
+    });
+    var customOpt = document.createElement("option");
+    customOpt.value = MODEL_CUSTOM;
+    customOpt.textContent = "Custom…";
+    editorModelSelect.appendChild(customOpt);
+
+    var cur = currentModel || "";
+    if (cur && models.indexOf(cur) === -1) {
+      editorModelSelect.value = MODEL_CUSTOM;
+      editorModelCustom.value = cur;
+      editorModelCustom.style.display = "block";
+    } else if (cur) {
+      editorModelSelect.value = cur;
+      editorModelCustom.value = "";
+      editorModelCustom.style.display = "none";
+    } else if (models.length === 0) {
+      // Providers with no known list (e.g. LM Studio) always take a custom name.
+      editorModelSelect.value = MODEL_CUSTOM;
+      editorModelCustom.value = "";
+      editorModelCustom.style.display = "block";
+    } else {
+      editorModelSelect.value = "";
+      editorModelCustom.value = "";
+      editorModelCustom.style.display = "none";
+    }
+    editorModelHint.textContent = (meta && meta.modelHint) || "";
+  }
+
+  function getModelValue() {
+    if (editorModelSelect.value === MODEL_CUSTOM) {
+      return (editorModelCustom.value || "").trim() || null;
+    }
+    return (editorModelSelect.value || "").trim() || null;
+  }
+
+  if (editorModelSelect) {
+    editorModelSelect.addEventListener("change", function () {
+      var isCustom = editorModelSelect.value === MODEL_CUSTOM;
+      editorModelCustom.style.display = isCustom ? "block" : "none";
+      if (isCustom) {
+        try { editorModelCustom.focus(); } catch (e) {}
+      }
+    });
+  }
+  var testBtn = document.getElementById("ai-test-btn");
+  var saveBtn = document.getElementById("ai-save-btn");
+  var cancelBtn = document.getElementById("ai-cancel-btn");
+  var editorStatus = document.getElementById("ai-editor-status");
+
+  // State
+  var _keysData = []; // last loaded key infos
+  var _activeCard = null; // provider name of the open editor
+  var _editorMode = "add"; // "add" or "edit"
+  var _extraModels = {}; // superadmin-configured extra models per provider
+
+  // ── Key show/hide toggle ──────────────────────────────────────────────────
+  if (keyToggle) {
+    keyToggle.addEventListener("click", function () {
+      var isPassword = editorKey.type === "password";
+      editorKey.type = isPassword ? "text" : "password";
+      keyToggle.setAttribute("aria-label", isPassword ? "Hide key" : "Show key");
+    });
+  }
+
+  // ── Load & render cards ───────────────────────────────────────────────────
+  function loadKeys() {
+    Promise.all([
+      fetch("/api/ask/keys").then(function (r) { return r.json(); }),
+      fetch("/api/ask/model-options").then(function (r) { return r.json(); }).catch(function () { return {}; })
+    ]).then(function (results) {
+      var data = results[0];
+      _extraModels = results[1] || {};
+      _keysData = data.keys || [];
+      var supported = data.supported || PROVIDER_ORDER;
+      renderCards(_keysData, supported);
+    }).catch(function () {
+      grid.innerHTML = '<span style="color:var(--danger,#f87171);font-size:0.875rem;">Could not load providers.</span>';
+    });
+  }
+
+  function findKeyInfo(provider) {
+    for (var i = 0; i < _keysData.length; i++) {
+      if (_keysData[i].provider === provider) return _keysData[i];
+    }
+    return null;
+  }
+
+  function renderCards(keys, supported) {
+    // Build set of configured providers
+    var configured = {};
+    for (var i = 0; i < keys.length; i++) {
+      configured[keys[i].provider] = keys[i];
+    }
+
+    // Use PROVIDER_ORDER but fallback to supported for unknown providers
+    var order = PROVIDER_ORDER.filter(function (p) {
+      return supported.indexOf(p) !== -1;
+    });
+    // Append any supported providers not in our known order
+    for (var j = 0; j < supported.length; j++) {
+      if (order.indexOf(supported[j]) === -1) order.push(supported[j]);
+    }
+
+    grid.innerHTML = "";
+    order.forEach(function (provider) {
+      var info = configured[provider] || null;
+      var meta = PROVIDERS[provider] || { label: provider, tagline: "", models: [], needsBaseUrl: false };
+      grid.appendChild(makeCard(provider, meta, info));
+    });
+  }
+
+  function makeCard(provider, meta, info) {
+    var card = document.createElement("div");
+    card.className = "ai-provider-card" + (info ? " is-connected" : "");
+    card.dataset.provider = provider;
+
+    // Monogram
+    var monogram = document.createElement("div");
+    monogram.className = "ai-provider-monogram";
+    monogram.textContent = meta.label.charAt(0).toUpperCase();
+
+    // Meta block
+    var metaDiv = document.createElement("div");
+    metaDiv.className = "ai-provider-meta";
+
+    var nameRow = document.createElement("div");
+    nameRow.className = "ai-provider-name";
+    nameRow.textContent = meta.label;
+    if (info && info.is_default) {
+      var badge = document.createElement("span");
+      badge.className = "ai-badge-default";
+      badge.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg> Default';
+      nameRow.appendChild(badge);
+    }
+
+    var tagline = document.createElement("p");
+    tagline.className = "ai-provider-tagline";
+    tagline.textContent = meta.tagline || "";
+
+    metaDiv.appendChild(nameRow);
+    metaDiv.appendChild(tagline);
+
+    // Head row
+    var head = document.createElement("div");
+    head.className = "ai-provider-card-head";
+    head.appendChild(monogram);
+    head.appendChild(metaDiv);
+
+    // Status row
+    var statusRow = document.createElement("div");
+    statusRow.className = "ai-status-row";
+    var dot = document.createElement("span");
+    var statusText = document.createElement("span");
+    if (info) {
+      dot.className = "ai-status-dot connected";
+      statusText.className = "ai-status-text connected";
+      statusText.textContent = "Connected";
+      statusRow.appendChild(dot);
+      statusRow.appendChild(statusText);
+      // Show model
+      var modelStr = info.default_model || "";
+      if (info.base_url && provider === "lmstudio") {
+        modelStr = (modelStr ? modelStr + " · " : "") + info.base_url;
+      }
+      if (modelStr) {
+        var modelSpan = document.createElement("span");
+        modelSpan.className = "ai-status-model";
+        modelSpan.textContent = modelStr;
+        statusRow.appendChild(document.createTextNode(" · "));
+        statusRow.appendChild(modelSpan);
+      }
+    } else {
+      dot.className = "ai-status-dot not-configured";
+      statusText.className = "ai-status-text not-configured";
+      statusText.textContent = "Not configured";
+      statusRow.appendChild(dot);
+      statusRow.appendChild(statusText);
+    }
+
+    // Actions row
+    var actions = document.createElement("div");
+    actions.className = "ai-card-actions";
+
+    if (info) {
+      // Set as default (hidden if already default)
+      if (!info.is_default) {
+        var setDefaultBtn = makeActionBtn("Set as default", null, false, false);
+        setDefaultBtn.addEventListener("click", function () { doSetDefault(provider); });
+        actions.appendChild(setDefaultBtn);
+      }
+      // Edit
+      var editBtn = makeActionBtn("Edit", null, false, false);
+      editBtn.addEventListener("click", function () { openEditor(provider, info, "edit"); });
+      actions.appendChild(editBtn);
+      // Remove
+      var removeBtn = makeActionBtn("Remove", null, false, true);
+      removeBtn.addEventListener("click", function () { doRemove(provider); });
+      actions.appendChild(removeBtn);
+    } else {
+      var addBtn = makeActionBtn("Add key", null, true, false);
+      addBtn.addEventListener("click", function () { openEditor(provider, null, "add"); });
+      actions.appendChild(addBtn);
+    }
+
+    card.appendChild(head);
+    card.appendChild(statusRow);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function makeActionBtn(label, icon, isPrimary, isDanger) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ai-card-btn" + (isPrimary ? " primary" : "") + (isDanger ? " danger" : "");
+    btn.textContent = label;
+    return btn;
+  }
+
+  // ── Editor open/close ─────────────────────────────────────────────────────
+  function openEditor(provider, info, mode) {
+    var meta = PROVIDERS[provider] || { label: provider, placeholder: "", models: [], needsBaseUrl: false, getKeyUrl: null };
+    _activeCard = provider;
+    _editorMode = mode;
+
+    editorTitle.textContent = mode === "edit" ? ("Edit " + meta.label + " key") : ("Add " + meta.label + " key");
+    editorProvider.value = provider;
+
+    // API key field
+    editorKey.value = "";
+    if (mode === "edit") {
+      // In edit mode: key is never prefilled; blank is fine (server keeps stored key).
+      editorKey.placeholder = "leave blank to keep current key";
+      editorKey.removeAttribute("required");
+      keyOptionalHint.textContent = "(optional)";
+    } else {
+      // In add mode: require a key for all providers except lmstudio.
+      editorKey.placeholder = meta.placeholder || "…";
+      if (provider === "lmstudio") {
+        editorKey.removeAttribute("required");
+        keyOptionalHint.textContent = "(optional)";
+      } else {
+        editorKey.setAttribute("required", "required");
+        keyOptionalHint.textContent = "";
+      }
+    }
+
+    // Get-key link
+    if (meta.getKeyUrl) {
+      keyGetLink.innerHTML = '<a href="' + meta.getKeyUrl + '" target="_blank" rel="noopener noreferrer" style="color:var(--info,#60a5fa);">' + (meta.getKeyLabel || "Get your API key") + ' ↗</a>';
+    } else {
+      keyGetLink.textContent = "Runs locally — no API key needed.";
+    }
+
+    // Base URL (lmstudio only)
+    if (meta.needsBaseUrl) {
+      editorBaseurlRow.style.display = "flex";
+      editorBaseurl.value = (info && info.base_url) ? info.base_url : "";
+    } else {
+      editorBaseurlRow.style.display = "none";
+      editorBaseurl.value = "";
+    }
+
+    // Model field (dropdown of known models + Custom…)
+    populateModelField(meta, info && info.default_model ? info.default_model : "");
+
+    // Reset status
+    setEditorStatus("", "");
+
+    // Open modal
+    backdrop.style.display = "flex";
+  }
+
+  function closeEditor() {
+    backdrop.style.display = "none";
+    _activeCard = null;
+    _editorMode = "add";
+    setEditorStatus("", "");
+    editorKey.type = "password"; // reset visibility
+    keyToggle.setAttribute("aria-label", "Show/hide key");
+  }
+
+  // Backdrop click-to-close (clicks on the inner panel don't bubble to backdrop).
+  if (backdrop) {
+    backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) closeEditor();
+    });
+  }
+
+  // Esc key closes the modal.
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && backdrop && backdrop.style.display === "flex") closeEditor();
+  });
+
+  if (cancelBtn) cancelBtn.addEventListener("click", closeEditor);
+
+  function setEditorStatus(text, color) {
+    editorStatus.textContent = text;
+    editorStatus.style.color = color || "";
+  }
+
+  // ── Save key ──────────────────────────────────────────────────────────────
+  editorForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    try {
+      var provider = editorProvider.value;
+      var api_key = (editorKey.value || "").trim();
+      var base_url = (editorBaseurl.value || "").trim() || null;
+      var default_model = getModelValue();
+      var isLocal = provider === "lmstudio";
+
+      if (!isLocal && !api_key && _editorMode === "add") {
+        setEditorStatus("API key is required.", "var(--danger,#f87171)");
+        return;
+      }
+
+      saveBtn.disabled = true;
+      setEditorStatus("Saving…", "var(--text-muted,#71717a)");
+
+      fetch("/api/ask/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
+        body: JSON.stringify({ provider: provider, api_key: api_key, base_url: base_url, default_model: default_model }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (result) {
+          saveBtn.disabled = false;
+          if (result.ok) {
+            setEditorStatus("Saved.", "var(--success,#4ade80)");
+            loadKeys();
+            setTimeout(function () { closeEditor(); }, 900);
+          } else {
+            setEditorStatus(result.data.error || "Save failed.", "var(--danger,#f87171)");
+          }
+        })
+        .catch(function () {
+          saveBtn.disabled = false;
+          setEditorStatus("Network error.", "var(--danger,#f87171)");
+        });
+    } catch (e) {
+      saveBtn.disabled = false;
+      setEditorStatus("Unexpected error.", "var(--danger,#f87171)");
+    }
+  });
+
+  // ── Remove key ────────────────────────────────────────────────────────────
+  function doRemove(provider) {
+    try {
+      var meta = PROVIDERS[provider] || { label: provider };
+      if (!confirm("Remove the " + meta.label + " key? This cannot be undone.")) return;
+      fetch("/api/ask/keys/" + encodeURIComponent(provider), {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": csrfToken() },
+      })
+        .then(function (r) { return r.json(); })
+        .then(function () { loadKeys(); closeEditor(); })
+        .catch(function () { /* silently ignore UI flicker */ });
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // ── Set default ───────────────────────────────────────────────────────────
+  function doSetDefault(provider) {
+    try {
+      fetch("/api/ask/keys/default", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
+        body: JSON.stringify({ provider: provider }),
+      })
+        .then(function () { loadKeys(); })
+        .catch(function () { /* ignore */ });
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // ── Test key ──────────────────────────────────────────────────────────────
+  if (testBtn) {
+    testBtn.addEventListener("click", function () {
+      try {
+        var provider = editorProvider.value;
+        var api_key = (editorKey.value || "").trim();
+        var base_url = (editorBaseurl.value || "").trim() || null;
+        var default_model = getModelValue();
+
+        testBtn.disabled = true;
+        setEditorStatus("Testing…", "var(--text-muted,#71717a)");
+
+        fetch("/api/ask/keys/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
+          body: JSON.stringify({ provider: provider, api_key: api_key, base_url: base_url, default_model: default_model }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            testBtn.disabled = false;
+            if (data.ok) {
+              setEditorStatus("✓ Key works", "var(--success,#4ade80)");
+            } else {
+              setEditorStatus("✗ " + (data.error || "Test failed."), "var(--danger,#f87171)");
+            }
+          })
+          .catch(function () {
+            testBtn.disabled = false;
+            setEditorStatus("Network error.", "var(--danger,#f87171)");
+          });
+      } catch (e) {
+        testBtn.disabled = false;
+      }
+    });
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  loadKeys();
+})();
+</script>
+{% endblock %}

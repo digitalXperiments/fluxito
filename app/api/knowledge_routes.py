@@ -217,6 +217,28 @@ def _build_inputs(payload: KPIPayload) -> list[KPIInput]:
 
 
 # ---------------------------------------------------------------------------
+# Context hub — /context (merges KPI Library + Business Context)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/context")
+async def context_page(request: Request):
+    """Merged context hub: KPI Library + Business Context in tabbed iframes."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse("/signin?next=/context", status_code=302)
+
+    project_id_str = await ensure_active_project(request, user_ctx.user_id)
+    if not project_id_str:
+        return RedirectResponse("/projects", status_code=302)
+
+    user_view = await _load_user_view(user_ctx)
+    response = render(request, "context.html", {"user": user_view})
+    set_active_project_cookie(response, project_id_str)
+    return response
+
+
+# ---------------------------------------------------------------------------
 # KPI Library — HTML page
 # ---------------------------------------------------------------------------
 
@@ -230,6 +252,11 @@ async def kpi_library_page(request: Request):
     project_id_str = await ensure_active_project(request, user_ctx.user_id)
     if not project_id_str:
         return RedirectResponse("/projects", status_code=302)
+
+    # Non-embed requests are served by the /context hub.
+    if not request.query_params.get("embed"):
+        return RedirectResponse("/context", status_code=302)
+
     project_id = uuid.UUID(project_id_str)
 
     from app.auth.web_guards import require_domain_permission
@@ -414,11 +441,16 @@ async def business_context_page(request: Request):
     user_ctx = await _resolve_user_ctx(request)
     if not user_ctx:
         return RedirectResponse("/signin?next=/business-context", status_code=302)
-    user_view = await _load_user_view(user_ctx)
 
     project_id_str = await ensure_active_project(request, user_ctx.user_id)
     if not project_id_str:
         return RedirectResponse("/projects", status_code=302)
+
+    # Non-embed requests are served by the /context hub (business tab).
+    if not request.query_params.get("embed"):
+        return RedirectResponse("/context#business", status_code=302)
+
+    user_view = await _load_user_view(user_ctx)
     project_id = uuid.UUID(project_id_str)
 
     content = await _load_business_context_content(project_id)

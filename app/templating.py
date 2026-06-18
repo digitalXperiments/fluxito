@@ -167,6 +167,14 @@ def render(
         ctx["user_project_role"] = getattr(request.state, "active_project_role", None)
     if "nav_projects" not in ctx:
         ctx["nav_projects"] = getattr(request.state, "nav_projects", [])
+    # Chromeless embed mode (used by the consolidated /settings, /context, /dashboards
+    # pages to render existing pages inside iframes). Computed defensively so templates
+    # never touch request.query_params directly (a minimal Request scope may lack it).
+    if "embed" not in ctx:
+        try:
+            ctx["embed"] = request.query_params.get("embed") in ("1", "true", "yes")
+        except Exception:
+            ctx["embed"] = False
     return templates.TemplateResponse(request, template_name, ctx, status_code=status_code)
 
 
