@@ -3904,8 +3904,19 @@ section.muted   { background: var(--bg-2); }
    tall, out of flow). Without an offset the header tucks underneath it — the
    back-link and page title slide behind the bar. Clear it. The logged-in
    sidebar layout has no top nav, so the base padding above is enough. */
-body:not(.has-sidebar) .app-main {
+body:not(.has-sidebar):not(.embed) .app-main {
   padding-top: calc(var(--nav-h) + 32px);
+}
+
+/* Embedded panels (rendered inside a settings/context/dashboards iframe with
+   ?embed=1) have no sidebar AND no fixed top nav. They must fill their iframe
+   panel edge-to-edge — not inherit the landing page's centered max-width or its
+   top-nav clearance, which would leave a large empty gutter and a phantom gap
+   above the content. */
+body.embed .app-main {
+  max-width: none;
+  margin: 0;
+  padding: 24px var(--gutter) 48px;
 }
 
 /* Page header — sits at top of every app page */

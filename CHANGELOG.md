@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.19] — 2026-06-18
+
+### Fixed
+- **Embedded panels (Activity Log, Platform, and every other Settings/Context/Dashboards
+  tab) now fill their panel instead of floating in a huge empty gutter.** The iframe pages
+  carried no `embed` marker on `<body>`, so they inherited the **logged-out landing-page**
+  layout — content capped at `max-width: 1240px` and centred (`margin: 0 auto`), plus a
+  `padding-top` reserved to clear a fixed top-nav that doesn't exist inside an iframe. That
+  produced the large left/side gutter, a phantom gap above the heading, and horizontal
+  scrolling. `<body>` now gets an `embed` class in embed mode, and `.app-main` renders
+  edge-to-edge with normal padding and no phantom nav clearance.
+
 ## [1.1.18] — 2026-06-18
 
 ### Fixed
