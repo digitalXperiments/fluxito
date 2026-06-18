@@ -3,7 +3,7 @@
 Additive: three new tables for the Ask Fluxito assistant. Reversible.
 
 Revision ID: 064_ask_fluxito
-Revises: 063_tp_metric_dashboard_link
+Revises: 064_tp_members_type_cleanup
 """
 
 import sqlalchemy as sa
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "064_ask_fluxito"
-down_revision = "063_tp_metric_dashboard_link"
+down_revision = "064_tp_members_type_cleanup"
 branch_labels = None
 depends_on = None
 
