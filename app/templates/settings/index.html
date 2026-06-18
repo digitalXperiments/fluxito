@@ -131,9 +131,14 @@
   if (!frame || !tabs.length) return;
 
   function activateTab(tabEl) {
+    var src = tabEl.getAttribute('data-src');
+    // Skip redundant reload when the tab is already active and loaded.
+    try {
+      if (tabEl.classList.contains('is-active') &&
+          frame.src === new URL(src, window.location.origin).href) return;
+    } catch (e) {}
     tabs.forEach(function (t) { t.classList.remove('is-active'); });
     tabEl.classList.add('is-active');
-    var src = tabEl.getAttribute('data-src');
     var key = tabEl.getAttribute('data-tab');
     frame.src = src;
     // Update URL without reload so back/forward and bookmarks work.

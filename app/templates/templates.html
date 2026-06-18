@@ -58,12 +58,12 @@
   {# ── Fluxito library vs My templates toggle ── #}
   {% if user %}
   <div class="t-seg">
-    <a href="/templates{% if current_category %}?category={{ current_category }}{% endif %}"
+    <a href="/templates?embed=1{% if current_category %}&category={{ current_category }}{% endif %}"
        class="{% if not show_mine %}is-active{% endif %}">
       Fluxito Library
       <span class="t-seg-count">{{ system_count }}</span>
     </a>
-    <a href="/templates?mine=1{% if current_category %}&category={{ current_category }}{% endif %}"
+    <a href="/templates?embed=1&mine=1{% if current_category %}&category={{ current_category }}{% endif %}"
        class="{% if show_mine %}is-active{% endif %}">
       My Templates
       <span class="t-seg-count">{{ user_count }}</span>
@@ -73,10 +73,10 @@
 
   {# ── Category filters ── #}
   <div class="t-filters">
-    <a href="/templates{% if show_mine %}?mine=1{% endif %}"
+    <a href="/templates?embed=1{% if show_mine %}&mine=1{% endif %}"
        class="t-chip-filter {% if not current_category %}is-active{% endif %}">All</a>
     {% for cat in categories %}
-    <a href="/templates?category={{ cat }}{% if show_mine %}&mine=1{% endif %}"
+    <a href="/templates?embed=1&category={{ cat }}{% if show_mine %}&mine=1{% endif %}"
        class="t-chip-filter {% if current_category == cat %}is-active{% endif %}">
       {{ cat | replace('_',' ') | title }}
     </a>
@@ -87,7 +87,7 @@
   {% if templates %}
   <div class="t-grid">
     {% for t in templates %}
-    <a href="/templates/{{ t.slug }}" class="t-card">
+    <a href="/templates/{{ t.slug }}" class="t-card" target="_top">
       <div class="t-card-hd">
         <span class="t-cat t-cat-{{ t.category }}">{{ t.category | replace('_',' ') | title }}</span>
         {% if t.is_featured %}<span class="t-flag">★ Featured</span>{% endif %}
@@ -129,11 +129,11 @@
     </h3>
     <p>
       {% if show_mine %}Ask your AI assistant: <em>"Save these queries as a template called [name]"</em> — it creates your first custom template.
-      {% elif current_category %}Try <a href="/templates">all templates</a>.
+      {% elif current_category %}Try <a href="/templates?embed=1">all templates</a>.
       {% else %}Templates will appear here once the library is populated.
       {% endif %}
     </p>
-    {% if show_mine %}<a href="/templates" class="btn primary" style="margin-top:12px">Browse Fluxito Library</a>{% endif %}
+    {% if show_mine %}<a href="/templates?embed=1" class="btn primary" style="margin-top:12px">Browse Fluxito Library</a>{% endif %}
   </div>
   {% endif %}
 
@@ -144,7 +144,7 @@
       <h3>Create your own templates</h3>
       <p>Ask your AI: <span class="mono">"Save these queries as a template called [name]"</span> — your custom templates appear under <em>My Templates.</em></p>
     </div>
-    <a href="/templates?mine=1" class="btn primary">View my templates <span class="arrow">→</span></a>
+    <a href="/templates?embed=1&mine=1" class="btn primary">View my templates <span class="arrow">→</span></a>
   </div>
   {% endif %}
 

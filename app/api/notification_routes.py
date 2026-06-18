@@ -815,4 +815,6 @@ async def delete_account(request: Request):
 async def activity_page(request: Request):
     """Legacy route — the activity log now lives at /activity-log as a unified
     day-by-day view backed by tool_call_audit. Permanently redirect."""
-    return RedirectResponse("/activity-log", status_code=301)
+    embed = request.query_params.get("embed")
+    target = "/activity-log?embed=1" if embed else "/activity-log"
+    return RedirectResponse(target, status_code=301)

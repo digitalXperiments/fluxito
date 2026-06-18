@@ -124,7 +124,7 @@
         {# ── Summary row (always visible, clickable to expand) ── #}
         <div class="plat-head plat-toggle" onclick="togglePlatCalls('{{ group_id }}')" role="button" tabindex="0">
           <span class="pbadge sm {{ pbadge_class(plat.slug) }}"><span>{{ pbadge_letters(plat.slug) }}</span></span>
-          <span class="plat-name">{{ plat.name }}</span>
+          <span class="plat-name">{{ plat.label }}</span>
           <span class="plat-stats">
             {% set tool_names = [] %}
             {% for c in plat.calls %}
@@ -151,7 +151,7 @@
         {# ── Individual calls (hidden by default) ── #}
         <div class="plat-calls" id="calls-{{ group_id }}" style="display:none">
           {% for c in plat.calls %}
-          <a class="activity-row{% if c.is_issue %} is-err{% endif %}" href="/activity-log/{{ c.id }}" style="text-decoration:none;color:inherit">
+          <a class="activity-row{% if c.is_issue %} is-err{% endif %}" href="/activity-log/{{ c.id }}{% if embed %}?embed=1{% endif %}" style="text-decoration:none;color:inherit">
             <span class="t">{{ c.time_str }}</span>
             <span class="pbadge sm {{ pbadge_class(plat.slug) }}"><span>{{ pbadge_letters(plat.slug) }}</span></span>
             <span class="tool">{{ c.tool_name }}</span>
@@ -187,7 +187,7 @@
   <div class="audit-empty">
     <h3>No activity yet.</h3>
     <p>Once your AI starts making tool calls, every request will appear here — day by day, click into any row for the full arguments and response.</p>
-    <a href="/connect" class="btn primary">Connect a platform <span class="arrow">→</span></a>
+    <a href="/connect" class="btn primary" target="_top">Connect a platform <span class="arrow">→</span></a>
   </div>
   {% endif %}
 

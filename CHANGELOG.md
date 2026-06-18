@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.18] — 2026-06-18
+
+### Fixed
+- **Embedded Settings / Context / Dashboards panels no longer "loop" the navigation.**
+  Clicking a row or link inside an embedded panel — most visibly an **Activity Log**
+  tool-call row, or the detail page's "Back" link — used to navigate the panel's iframe
+  to a full-chrome page, or bounce through a redirect that re-rendered the entire Settings
+  shell *inside* the panel, stacking the sidebar/rail on every click. Internal links now
+  stay in embed mode, and links that leave the section (Connect, Projects, live dashboards,
+  template detail, account/project deletion redirects) break out to the top window instead
+  of nesting. Covers the Activity Log list + detail, Profile, Project settings, the Templates
+  gallery + detail, and the live-dashboards hub / view / scopes pages.
+- **Activity Log platform names rendered blank** — the template referenced a field the
+  backend never set; it now reads the correct platform label.
+- **Embedded panels no longer leak app chrome** — the announcement banner and the
+  notifications slide-out are suppressed in embed mode, and the Settings shell height no
+  longer clips its panel when the banner is showing.
+- **Settings tabs** no longer reload (and discard in-panel form state) when you click the
+  tab that's already open; the Context page clears a stale `#business` URL fragment so it
+  can't override later tab selection.
+- Repaired unbalanced markup in the live-dashboards hub (an orphan `</div>` and an unclosed
+  loading overlay) and removed an invalid nested `<main>` element in the base layout.
+
+### Removed
+- Dead `activity.html` template, superseded by the unified Activity Log (`audit.html`); no
+  route rendered it.
+
+## [1.1.17] — 2026-06-17
+
 ### Added
 - **Ask Fluxito — native AI assistant.** A ChatGPT-style assistant embedded in the app
   (new `/ask` page). Bring your own AI-provider key; the harness is **vendor-owned (raw

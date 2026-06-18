@@ -316,7 +316,7 @@
   {% endif %}
   {% endblock %}
 
-  {% if user and announcement() %}
+  {% if user and not embed and announcement() %}
   <div class="announcement-banner" role="status">
     <span class="announcement-dot" aria-hidden="true"></span>
     <span>{{ announcement() }}</span>
@@ -336,9 +336,9 @@
   </style>
   {% endif %}
 
-  <main class="main">
+  <div class="main">
     {% block main %}{% endblock %}
-  </main>
+  </div>
 
   {% block footer %}
   {% if not user %}
@@ -595,7 +595,7 @@
     };
   })();
   </script>
-  {% if user %}
+  {% if user and not embed %}
   {# ── Notifications slide-out panel ── #}
   <div class="notif-overlay" id="notifOverlay"></div>
   <aside class="notif-panel" id="notifPanel">

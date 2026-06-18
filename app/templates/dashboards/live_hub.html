@@ -18,7 +18,7 @@
     {% for d in deployed_dashboards %}
     <div class="lh-card" data-dash-id="{{ d.id }}">
       <div class="lh-card-hd">
-        <a href="/live-dashboards/{{ d.slug }}" class="lh-title">{{ d.name }}</a>
+        <a href="/live-dashboards/{{ d.slug }}" class="lh-title" target="_top">{{ d.name }}</a>
         {% if d.is_public %}
         <span class="status-pill live js-visibility-badge">Public</span>
         {% else %}
@@ -36,7 +36,7 @@
       {% endif %}
 
       <div class="lh-foot">
-        <a href="/live-dashboards/{{ d.slug }}" class="lh-open">Open <span class="arrow">→</span></a>
+        <a href="/live-dashboards/{{ d.slug }}" class="lh-open" target="_top">Open <span class="arrow">→</span></a>
         <div class="lh-actions">
           <button type="button" class="mini-btn"
                   onclick="toggleDashVisibility('{{ d.id }}', {{ 'false' if d.is_public else 'true' }}, this)">
@@ -59,21 +59,21 @@
       {% include "partials/add_to_ai.html" %}
     </div>
     <div style="margin-top:18px;">
-      <a href="/templates" class="btn">Browse templates</a>
+      <a href="/templates?embed=1" class="btn">Browse templates</a>
     </div>
     {% else %}
     <p>Connect a platform first, then ask your AI to build a dashboard.<br>
        <em>"Create a dashboard showing GA4 sessions and Google Ads spend for the last 7 days."</em></p>
-    <a href="/connect" class="btn primary" style="margin-top:16px">Connect your first platform <span class="arrow">→</span></a>
+    <a href="/connect" class="btn primary" style="margin-top:16px" target="_top">Connect your first platform <span class="arrow">→</span></a>
     {% endif %}
   </div>
   {% endif %}
-</div>
 
 <!-- Full-page loading overlay — shown when a dashboard link is clicked -->
 <div id="dashLoadingOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:16px;">
   <div style="width:36px;height:36px;border:3px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:spin .8s linear infinite;"></div>
   <div id="dashLoadingTitle" style="font-size:14px;font-weight:500;color:var(--ink);font-family:var(--mono);letter-spacing:0.02em;">Loading dashboard…</div>
+</div>
 </main>
 
 <style>

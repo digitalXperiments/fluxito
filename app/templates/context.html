@@ -87,7 +87,14 @@
       // Hash takes priority: #business selects the business tab.
       if (window.location.hash === '#business') {
         for (var i = 0; i < tabs.length; i++) {
-          if (tabs[i].getAttribute('data-tab') === 'business') return tabs[i];
+          if (tabs[i].getAttribute('data-tab') === 'business') {
+            try {
+              var cleanUrl = new URL(window.location.href);
+              cleanUrl.hash = '';
+              history.replaceState(null, '', cleanUrl.toString());
+            } catch (e) {}
+            return tabs[i];
+          }
         }
       }
       var param = new URL(window.location.href).searchParams.get('tab');

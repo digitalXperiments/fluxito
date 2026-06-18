@@ -8,7 +8,7 @@
 
   {# ── Breadcrumb ── #}
   <div class="breadcrumbs">
-    <a href="/projects">Projects</a>
+    <a href="/projects" target="_top">Projects</a>
     <span class="bc-sep">/</span>
     <span class="bc-here">{{ project.name }}</span>
   </div>
@@ -166,7 +166,7 @@
     <div class="audit-empty">
       <h3>No connections yet</h3>
       <p>Connect a platform to start pulling data into this project.</p>
-      <a href="/connect" class="btn primary" style="margin-top:14px">Connect a platform</a>
+      <a href="/connect" class="btn primary" style="margin-top:14px" target="_top">Connect a platform</a>
     </div>
     {% endif %}
   </div>
@@ -197,7 +197,7 @@
     <div class="audit-empty" style="margin-bottom:26px">
       <h3>No tools connected yet</h3>
       <p>Connect a platform to see its limits highlighted here. The full catalog is below.</p>
-      <a href="/connect" class="btn primary" style="margin-top:14px">Connect a platform</a>
+      <a href="/connect" class="btn primary" style="margin-top:14px" target="_top">Connect a platform</a>
     </div>
     {% endif %}
 
@@ -3157,9 +3157,9 @@ async function deleteProject() {
     var data = await res.json();
     if (!res.ok) throw new Error(data.message || data.detail || 'Failed to delete project');
     if (data.redirect_url) {
-      window.location.href = data.redirect_url;
+      window.top.location.href = data.redirect_url;
     } else {
-      window.location.href = '/projects';
+      window.top.location.href = '/projects';
     }
   } catch(err) {
     alert(err.message);
