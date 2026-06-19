@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.22] — 2026-06-19
+
+### Fixed
+- **Activity Log filter dropdowns now match the site's general styling.** The project and
+  tool `<select>` filters were raw unstyled elements. They now use the standard `.f-input`
+  class with the site's custom chevron, padding, border-radius, and hover/focus states.
+- **Project name no longer breaks the tool call row layout.** The project name was a
+  standalone `<span>` in a 5-column CSS grid, pushing subsequent cells out of alignment
+  and causing overflow. It's now nested inside the tool name cell as a secondary line,
+  with `text-overflow: ellipsis` for graceful truncation on long names.
+- **Overflow handling for long tool names and client summaries.** Both `.client` and
+  the nested `.proj` span now truncate with ellipsis instead of overflowing the row.
+
+## [1.1.21] — 2026-06-19
+
+### Added
+- **Activity Log project name column + project and tool filters.** Tool call rows now
+  display the project name alongside each call. Dropdown filters for project and tool
+  name let users narrow down the list without scrolling through every day group.
+
 ## [1.1.20] — 2026-06-19
 
 ### Changed
