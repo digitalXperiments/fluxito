@@ -282,9 +282,9 @@
       });
   }
 
-  // ── "Run Audit in Claude" button ─────────────────────────
+  // ── "Run Audit" button ───────────────────────────────────
   function handleRunAudit() {
-    showToast('Ask Claude to run_audit or tag_rulebook — results will appear here automatically.', 'info', 5000);
+    showToast('Ask your AI to run_audit or tag_rulebook — results will appear here automatically.', 'info', 5000);
   }
   var runBtns = document.querySelectorAll('#runAuditBtn, #runAuditBtn2');
   runBtns.forEach(function (btn) {

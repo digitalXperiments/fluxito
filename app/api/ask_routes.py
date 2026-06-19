@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
+from app import app_state
 from app.ask.context import window_history
 from app.ask.harness import Harness, HarnessDeps
 from app.ask.keys import (
@@ -405,7 +406,7 @@ async def set_default_key(request: Request):
     return JSONResponse({"ok": True})
 
 
-# ---- model options (extras from superadmin) --------------------------------
+# ---- model options & catalog -----------------------------------------------
 
 
 @router.get("/api/ask/model-options")
@@ -422,7 +423,7 @@ async def get_model_options(request: Request):
 
 @router.get("/api/ask/admin/models")
 async def admin_get_models(request: Request):
-    """Superadmin — returns the extras dict."""
+    """Superadmin — returns the extras dict (backward compat)."""
     from app.api.admin_routes import require_superadmin
 
     await require_superadmin(request)
@@ -434,7 +435,7 @@ async def admin_get_models(request: Request):
 
 @router.post("/api/ask/admin/models")
 async def admin_set_models(request: Request):
-    """Superadmin — replaces the model list for one provider."""
+    """Superadmin — replaces the extra model list for one provider."""
     from app.api.admin_routes import require_superadmin
 
     await require_superadmin(request)
@@ -445,7 +446,6 @@ async def admin_set_models(request: Request):
         return JSONResponse({"error": "Invalid provider."}, status_code=400)
     if not isinstance(models, list):
         return JSONResponse({"error": "models must be a list."}, status_code=400)
-    # Strip, dedupe, limit to 50
     cleaned = list(dict.fromkeys(m.strip() for m in models if isinstance(m, str) and m.strip()))[:50]
     from app.ask.model_catalog import get_extra_models, set_extra_models
 
@@ -455,20 +455,130 @@ async def admin_set_models(request: Request):
     return JSONResponse(extras)
 
 
-@router.get("/settings/ai-models")
-async def ai_models_settings(request: Request):
-    """Superadmin-only model catalog manager page."""
+@router.get("/api/ask/admin/models/catalog")
+async def admin_get_catalog(request: Request):
+    """Returns the full merged catalog (builtin + live + extra) for any authed user."""
+    uid = _require_user_id(request)
+    if not uid:
+        return JSONResponse({"error": "auth"}, status_code=401)
+    from app.ask.model_catalog import get_merged_catalog
+
+    catalog = await get_merged_catalog()
+    return JSONResponse(_catalog_to_json(catalog))
+
+
+@router.post("/api/ask/admin/models/sync")
+async def admin_sync_models(request: Request):
+    """Superadmin — trigger a live sync from all configured providers."""
     from app.api.admin_routes import require_superadmin
 
-    try:
-        await require_superadmin(request)
-    except Exception:
-        return RedirectResponse("/settings", status_code=302)
-    from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
+    await require_superadmin(request)
+    from app.ask.model_sync import sync_all_providers
 
-    user_ctx = await _resolve_user_ctx(request)
-    user_view = await _load_user_view(user_ctx) if user_ctx else None
-    return render(request, "settings/ai_models.html", {"user": user_view})
+    results = await sync_all_providers()
+    return JSONResponse(
+        {
+            "results": [
+                {"provider": r.provider, "model_count": r.model_count, "errors": r.errors} for r in results
+            ],
+        }
+    )
+
+
+@router.post("/api/ask/admin/models/sync/{provider}")
+async def admin_sync_provider(request: Request, provider: str):
+    """Superadmin — trigger a live sync for one provider."""
+    from app.api.admin_routes import require_superadmin
+
+    await require_superadmin(request)
+    if provider not in SUPPORTED_PROVIDERS:
+        return JSONResponse({"error": "Invalid provider."}, status_code=400)
+
+    from app.ask.model_sync import sync_provider, find_key_for_provider
+
+    key_info = await find_key_for_provider(provider)
+    if not key_info:
+        return JSONResponse({"error": f"No active key found for {provider}."}, status_code=400)
+
+    result = await sync_provider(provider, key_info["api_key"], base_url=key_info.get("base_url"))
+    return JSONResponse(
+        {
+            "provider": result.provider,
+            "model_count": result.model_count,
+            "errors": result.errors,
+        }
+    )
+
+
+@router.put("/api/ask/admin/models/{model_id}/toggle")
+async def admin_toggle_model(request: Request, model_id: str):
+    """Superadmin — enable/disable a catalog model."""
+    from app.api.admin_routes import require_superadmin
+
+    await require_superadmin(request)
+    body = await request.json()
+    is_enabled = body.get("is_enabled")
+    if not isinstance(is_enabled, bool):
+        return JSONResponse({"error": "is_enabled must be a boolean."}, status_code=400)
+
+    from app.models.ai_catalog import AiCatalogModel
+    from sqlalchemy import select, update as sa_update
+
+    async with app_state.db_session_factory() as db:
+        row = (
+            await db.execute(select(AiCatalogModel).where(AiCatalogModel.id == uuid.UUID(model_id)))
+        ).scalar_one_or_none()
+        if row is None:
+            return JSONResponse({"error": "Model not found."}, status_code=404)
+        await db.execute(
+            sa_update(AiCatalogModel)
+            .where(AiCatalogModel.id == uuid.UUID(model_id))
+            .values(is_enabled=is_enabled)
+        )
+        await db.commit()
+    return JSONResponse({"ok": True})
+
+
+@router.get("/api/ask/admin/models/catalog/{provider}")
+async def admin_get_provider_catalog(request: Request, provider: str):
+    """Superadmin — merged catalog for a single provider."""
+    from app.api.admin_routes import require_superadmin
+
+    await require_superadmin(request)
+    if provider not in SUPPORTED_PROVIDERS:
+        return JSONResponse({"error": "Invalid provider."}, status_code=400)
+    from app.ask.model_catalog import get_catalog_for_provider
+
+    entries = await get_catalog_for_provider(provider)
+    return JSONResponse({"provider": provider, "models": _entries_to_json(entries)})
+
+
+def _catalog_to_json(catalog: dict[str, list]) -> dict[str, list]:
+    """Convert CatalogEntry lists to JSON-safe dicts per provider."""
+    return {prov: _entries_to_json(entries) for prov, entries in catalog.items()}
+
+
+def _entries_to_json(entries: list) -> list[dict]:
+    return [
+        {
+            "id": e.id_,
+            "provider": e.provider,
+            "model_id": e.model_id,
+            "display_name": e.display_name,
+            "context_window": e.context_window,
+            "capabilities": e.capabilities,
+            "is_deprecated": e.is_deprecated,
+            "source": e.source,
+            "is_enabled": e.is_enabled,
+        }
+        for e in entries
+    ]
+
+
+@router.get("/settings/ai-models")
+async def ai_models_settings(request: Request):
+    """Superadmin-only model catalog — redirects to unified AI settings."""
+    return RedirectResponse("/settings/ai", status_code=302)
 
 
 @router.post("/api/ask/keys/test")

@@ -45,11 +45,43 @@
       border: 1px solid color-mix(in srgb, var(--blue, #2557f6) 30%, transparent);
       border-radius: 999px; vertical-align: middle; line-height: 1.4;
     }
-    .sidebar-header { display: flex; align-items: center; }
-    .version-chip { font-family: var(--mono); font-size: 10px; color: var(--muted, #888);
-      margin-left: 6px; vertical-align: middle; position: relative; cursor: default; }
-    .update-dot { display: inline-block; width: 6px; height: 6px; border-radius: 99px;
-      background: var(--blue, #4D7CE3); margin-left: 4px; vertical-align: middle; }
+    .sidebar-header {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 0 8px;
+      align-items: center;
+    }
+    html.sidebar-collapsed .sidebar-header {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      padding: 14px 4px;
+    }
+    .sidebar-header .sidebar-logo-mark {
+      grid-column: 1;
+      grid-row: 1 / 3;
+      align-self: center;
+    }
+    .sidebar-brand-row {
+      display: inline-flex;
+      align-items: center;
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .version-chip {
+      font-family: var(--mono); font-size: 10px; color: var(--muted, #888);
+      grid-column: 2;
+      grid-row: 2;
+      cursor: default;
+    }
+    html.sidebar-collapsed .version-chip {
+      display: none;
+    }
+    .sidebar-header .sidebar-collapse-btn {
+      grid-column: 3;
+      grid-row: 1 / 3;
+      align-self: center;
+    }
   </style>
   {% block head_extra %}{% endblock %}
 </head>
@@ -100,15 +132,14 @@
   <aside class="sidebar">
     {# ── Header: wordmark ── #}
     <div class="sidebar-header">
-      {# Compact brand mark — shown only when the rail is collapsed (logo always visible) #}
       <a href="/home" class="sidebar-logo-mark" aria-label="{{ brand().name }} home" title="{{ brand().name }}">{% if brand().logo_url %}<img src="{{ brand().logo_url }}" alt="{{ brand().name }}">{% elif brand().name == 'Fluxito' %}f{% else %}{{ brand().name[0] | upper }}{% endif %}</a>
-      <a href="/home" class="wordmark">
-        {{ wordmark() }}
-      </a>
-      {% if brand().name == 'Fluxito' %}<span class="beta-pill" title="Fluxito is in public beta">Beta</span>{% endif %}
-      <span class="version-chip" id="version-chip" data-current="{{ app_version }}" title="Version {{ app_version }}">
-        v{{ app_version }}{% if user and user.is_superadmin %}<span class="update-dot" id="update-dot" hidden></span>{% endif %}
-      </span>
+      <div class="sidebar-brand-row">
+        <a href="/home" class="wordmark">
+          {{ wordmark() }}
+        </a>
+        {% if brand().name == 'Fluxito' %}<span class="beta-pill" title="Fluxito is in public beta">Beta</span>{% endif %}
+      </div>
+      <span class="version-chip" id="version-chip" data-current="{{ app_version }}" title="Version {{ app_version }}">v{{ app_version }}</span>
       <button type="button" id="sidebarCollapse" class="sidebar-collapse-btn" aria-label="Collapse sidebar" title="Collapse sidebar">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
       </button>
@@ -239,15 +270,6 @@
           <svg class="sidebar-user-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="sidebar-user-menu">
-          <a href="/settings" class="sidebar-user-menu-item">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            Profile & settings
-          </a>
-          <a href="/projects" class="sidebar-user-menu-item">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20V4a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>
-            Projects
-          </a>
-          <div style="height:1px;background:var(--line);margin:4px 8px;"></div>
           <button type="button" id="themeMenuToggle" class="sidebar-user-menu-item" data-theme-button title="Click to cycle: Auto → Light → Dark">
             <svg class="theme-icon-auto"  width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M3 12h18"/></svg>
             <svg class="theme-icon-light" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/></svg>
@@ -726,22 +748,7 @@
   })();
   </script>
   {% endif %}
-  <script>
-  (function () {
-    var dot = document.getElementById('update-dot');
-    if (!dot) return;
-    fetch('/api/updates/status', { credentials: 'same-origin' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) {
-        if (d && d.update_available) {
-          dot.hidden = false;
-          var chip = document.getElementById('version-chip');
-          if (chip) chip.title = 'Update available: v' + d.latest;
-        }
-      })
-      .catch(function () {});
-  })();
-  </script>
+
   {% block scripts %}{% endblock %}
   <!-- Ask Fluxito docked panel mount (seam; populated by ask.js in a later increment) -->
   <div id="ask-fluxito-panel" class="ask-fluxito-panel" hidden aria-hidden="true"></div>

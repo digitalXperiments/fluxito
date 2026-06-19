@@ -1,36 +1,58 @@
 {% extends "settings/shell.html" %}
-{% block title %}AI Provider Keys — Fluxito{% endblock %}
+{% block title %}AI Providers — Fluxito{% endblock %}
 {% set settings_section = 'ai' %}
 
 {% block settings_main %}
-<main class="app-main" style="max-width:760px;padding:2rem 1.5rem;">
+<main class="app-main" style="max-width:none;padding:2rem 1.5rem;">
 
   <div class="page-head" style="margin-bottom:1.75rem;">
     <div>
-      <h1 style="font-size:1.35rem;margin:0 0 0.3rem;">AI provider keys</h1>
-      <p style="margin:0;color:var(--text-muted,#71717a);font-size:0.875rem;">
-        Store API keys for AI providers. Keys are encrypted at rest and scoped to your account within this project.
+      <h1 style="font-size:1.5rem;margin:0 0 0.3rem;">AI providers</h1>
+      <p style="margin:0;color:var(--text-muted,#71717a);font-size:0.95rem;">
+        Configure API keys and browse available models. Keys are encrypted at rest and scoped to your account within this project.
       </p>
     </div>
   </div>
 
-  {# Provider cards grid #}
-  <div id="ai-cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem;margin-bottom:2rem;">
-    <span style="color:var(--text-muted,#71717a);font-size:0.875rem;">Loading…</span>
+  {# Capability legend + toolbar #}
+  <div id="ai-toolbar" style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;">
+    <div style="position:relative;flex:1;min-width:200px;max-width:400px;">
+      <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-muted,#71717a);pointer-events:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="ai-model-search" type="search" placeholder="Search models by name…" autocomplete="off"
+        style="width:100%;padding:0.6rem 0.85rem 0.6rem 2.25rem;background:var(--surface,#131316);color:var(--text,#fafafa);border:1px solid var(--border,#27272a);border-radius:var(--r-md,8px);font-size:0.9rem;box-sizing:border-box;"
+        aria-label="Search models across all providers" />
+    </div>
+    <div id="ai-cap-filters" class="ai-cap-filters" style="display:flex;gap:0.35rem;flex-wrap:wrap;align-items:center;">
+      <span style="font-size:0.82rem;color:var(--text-muted,#71717a);margin-right:0.25rem;">Capabilities:</span>
+      <button type="button" class="ai-cap-filter is-active" data-cap="" title="Show all models">All</button>
+      <button type="button" class="ai-cap-filter" data-cap="reasoning" title="Reasoning">🧠 Reasoning</button>
+      <button type="button" class="ai-cap-filter" data-cap="vision" title="Vision">👁 Vision</button>
+      <button type="button" class="ai-cap-filter" data-cap="code" title="Code">💻 Code</button>
+      <button type="button" class="ai-cap-filter" data-cap="fast" title="Fast">⚡ Fast</button>
+      <button type="button" class="ai-cap-filter" data-cap="cheap" title="Cheap">💰 Cheap</button>
+      <button type="button" class="ai-cap-filter" data-cap="agentic" title="Agentic">🤖 Agentic</button>
+    </div>
+    {% if is_superadmin %}
+    <button id="ai-sync-all-btn" type="button" class="ai-toolbar-btn" title="Sync all providers">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+      Sync all
+    </button>
+    {% endif %}
   </div>
 
+  <div id="ai-providers-grid">
+    <span style="color:var(--text-muted,#71717a);font-size:0.95rem;">Loading…</span>
+  </div>
 
 </main>
 
-{# Modal backdrop + dialog #}
 <div id="ai-modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center;">
-  <div id="ai-editor-panel" style="background:var(--surface-2,#1a1a1f);border:1px solid var(--border,#27272a);border-radius:var(--r-lg,12px);padding:1.5rem;width:100%;max-width:480px;margin:1rem;box-sizing:border-box;position:relative;">
-    <h2 id="ai-editor-title" style="font-size:1rem;font-weight:600;margin:0 0 1.25rem;color:var(--text,#fafafa);"></h2>
+  <div id="ai-editor-panel" style="background:var(--surface-2,#1a1a1f);border:1px solid var(--border,#27272a);border-radius:var(--r-lg,12px);padding:1.75rem;width:100%;max-width:520px;margin:1rem;box-sizing:border-box;position:relative;">
+    <h2 id="ai-editor-title" style="font-size:1.1rem;font-weight:600;margin:0 0 1.25rem;color:var(--text,#fafafa);"></h2>
     <form id="ai-editor-form" style="display:flex;flex-direction:column;gap:1rem;" autocomplete="off">
       <input type="hidden" id="ai-editor-provider" name="provider" />
 
-      {# API Key #}
-      <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
+      <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.9rem;">
         <span style="color:var(--text,#fafafa);">API key <span id="ai-key-optional-hint" style="color:var(--text-muted,#71717a);font-weight:400;"></span></span>
         <div style="position:relative;">
           <input id="ai-editor-key" name="ai_provider_secret" type="password"
@@ -38,35 +60,32 @@
             spellcheck="false" data-1p-ignore="true" data-lpignore="true"
             data-bwignore="true" data-form-type="other"
             class="f-input" placeholder="sk-…"
-            style="padding-right:2.5rem;width:100%;box-sizing:border-box;" />
+            style="padding-right:2.5rem;width:100%;box-sizing:border-box;font-size:0.9rem;" />
           <button type="button" id="ai-key-toggle"
             style="position:absolute;right:0.5rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted,#71717a);padding:0.25rem;"
             aria-label="Show/hide key">
             <svg id="ai-key-eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
-        <span id="ai-key-getlink" style="font-size:0.8rem;color:var(--text-muted,#71717a);"></span>
+        <span id="ai-key-getlink" style="font-size:0.85rem;color:var(--text-muted,#71717a);"></span>
       </label>
 
-      {# Base URL — lmstudio only #}
-      <label id="ai-editor-baseurl-row" style="display:none;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
+      <label id="ai-editor-baseurl-row" style="display:none;flex-direction:column;gap:0.35rem;font-size:0.9rem;">
         <span style="color:var(--text,#fafafa);">Base URL <span style="color:var(--text-muted,#71717a);font-weight:400;">(optional)</span></span>
         <input id="ai-editor-baseurl" name="base_url" type="text" class="f-input"
-          placeholder="http://localhost:1234/v1" style="width:100%;box-sizing:border-box;" />
-        <span style="font-size:0.8rem;color:var(--text-muted,#71717a);">Default: <code>http://localhost:1234/v1</code> — runs locally, no key needed.</span>
+          placeholder="http://localhost:1234/v1" style="width:100%;box-sizing:border-box;font-size:0.9rem;" />
+        <span style="font-size:0.85rem;color:var(--text-muted,#71717a);">Default: <code>http://localhost:1234/v1</code></span>
       </label>
 
-      {# Default model #}
-      <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
+      <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.9rem;">
         <span style="color:var(--text,#fafafa);">Default model <span style="color:var(--text-muted,#71717a);font-weight:400;">(optional)</span></span>
-        <select id="ai-editor-model-select" class="f-input" style="width:100%;box-sizing:border-box;"></select>
+        <select id="ai-editor-model-select" class="f-input" style="width:100%;box-sizing:border-box;font-size:0.9rem;"></select>
         <input id="ai-editor-model-custom" name="default_model_custom" type="text"
           class="f-input" placeholder="enter a custom model name"
-          style="width:100%;box-sizing:border-box;display:none;margin-top:0.4rem;" />
-        <span id="ai-editor-model-hint" style="font-size:0.8rem;color:var(--text-muted,#71717a);"></span>
+          style="width:100%;box-sizing:border-box;display:none;margin-top:0.4rem;font-size:0.9rem;" />
+        <span id="ai-editor-model-hint" style="font-size:0.85rem;color:var(--text-muted,#71717a);"></span>
       </label>
 
-      {# Buttons row #}
       <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
         <button type="button" id="ai-test-btn" class="btn"
           style="background:var(--surface-3,#27272a);border:1px solid var(--border,#27272a);color:var(--text,#fafafa);">
@@ -79,51 +98,59 @@
         </button>
       </div>
 
-      {# Status / feedback #}
-      <div id="ai-editor-status" style="font-size:0.85rem;min-height:1.25rem;" aria-live="polite"></div>
+      <div id="ai-editor-status" style="font-size:0.9rem;min-height:1.25rem;" aria-live="polite"></div>
     </form>
   </div>
 </div>
 
 <style>
+#ai-providers-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+@media (min-width: 900px) {
+  #ai-providers-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .ai-provider-card {
   background: var(--surface, #131316);
   border: 1px solid var(--border, #27272a);
   border-radius: var(--r-lg, 12px);
-  padding: 1.25rem 1.25rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  overflow: hidden;
   transition: border-color 0.15s;
 }
 .ai-provider-card.is-connected {
   border-color: var(--border-strong, #3f3f46);
 }
-.ai-provider-card-head {
+.ai-provider-header {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
+  gap: 0.85rem;
+  padding: 1.25rem 1.25rem 0.85rem;
 }
 .ai-provider-monogram {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--r-md, 8px);
   background: var(--surface-3, #27272a);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: var(--text, #fafafa);
   flex-shrink: 0;
   letter-spacing: -0.02em;
 }
-.ai-provider-meta {
+.ai-provider-info {
   flex: 1;
   min-width: 0;
 }
-.ai-provider-name {
-  font-size: 0.9rem;
+.ai-provider-info h3 {
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text, #fafafa);
   margin: 0 0 0.1rem;
@@ -133,61 +160,66 @@
   flex-wrap: wrap;
 }
 .ai-provider-tagline {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   color: var(--text-muted, #71717a);
   margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.ai-status-row {
+.ai-conn-status {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
 }
-.ai-status-dot {
-  width: 7px;
-  height: 7px;
+.ai-conn-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.ai-status-dot.connected { background: var(--success, #4ade80); }
-.ai-status-dot.not-configured { background: var(--text-subtle, #71717a); }
-.ai-status-text.connected { color: var(--success, #4ade80); }
-.ai-status-text.not-configured { color: var(--text-muted, #71717a); }
-.ai-status-model {
-  color: var(--text-muted, #71717a);
-  font-size: 0.78rem;
-  font-family: var(--font-mono, monospace);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.ai-conn-dot.connected { background: var(--success, #4ade80); }
+.ai-conn-dot.not-configured { background: var(--text-subtle, #71717a); }
+.ai-conn-text.connected { color: var(--success, #4ade80); }
+.ai-conn-text.not-configured { color: var(--text-muted, #71717a); }
 .ai-badge-default {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.2rem;
   padding: 0.15rem 0.45rem;
-  background: var(--info-soft, rgba(96, 165, 250, 0.12));
+  background: var(--info-soft, rgba(96,165,250,0.12));
   color: var(--info, #60a5fa);
   border-radius: var(--r-full, 999px);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.01em;
   white-space: nowrap;
 }
-.ai-card-actions {
+.ai-keys-row {
   display: flex;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1.25rem 0.85rem;
   flex-wrap: wrap;
+}
+.ai-key-preview {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+  color: var(--text-muted, #71717a);
+  background: var(--surface-3, #27272a);
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--r-sm, 6px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
 }
 .ai-card-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
   padding: 0.3rem 0.7rem;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 500;
   border-radius: var(--r-sm, 6px);
   border: 1px solid var(--border, #27272a);
@@ -206,16 +238,194 @@
   color: var(--bg, #0b0b0e);
   border-color: transparent;
 }
-.ai-card-btn.primary:hover {
-  opacity: 0.88;
-}
-.ai-card-btn.danger {
-  color: var(--danger, #f87171);
-  border-color: var(--border, #27272a);
-}
+.ai-card-btn.primary:hover { opacity: 0.88; }
+.ai-card-btn.danger { color: var(--danger, #f87171); }
 .ai-card-btn.danger:hover {
-  background: var(--danger-soft, rgba(248, 113, 113, 0.1));
+  background: var(--danger-soft, rgba(248,113,113,0.1));
   border-color: var(--danger, #f87171);
+}
+.ai-card-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+.ai-models-section {
+  border-top: 1px solid var(--border, #27272a);
+  padding: 0.85rem 1.25rem 1rem;
+}
+.ai-models-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.ai-models-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text, #fafafa);
+}
+.ai-models-count {
+  font-size: 0.82rem;
+  color: var(--text-muted, #71717a);
+  font-weight: 400;
+  margin-left: 0.3rem;
+}
+.ai-models-filter { display: flex; gap: 0.35rem; align-items: center; }
+.ai-models-filter select {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.78rem;
+  background: var(--surface, #131316);
+  color: var(--text, #fafafa);
+  border: 1px solid var(--border, #27272a);
+  border-radius: var(--r-sm, 6px);
+}
+.ai-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-height: 380px;
+  overflow-y: auto;
+}
+.ai-model-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: var(--r-sm, 6px);
+  font-size: 0.85rem;
+  color: var(--text, #fafafa);
+  transition: background 0.1s;
+}
+.ai-model-item:hover { background: var(--surface-2, #1a1a1f); }
+.ai-model-item.is-deprecated { opacity: 0.4; }
+.ai-model-item.is-current-default {
+  background: var(--info-soft, rgba(96,165,250,0.08));
+  border: 1px solid var(--info-soft, rgba(96,165,250,0.2));
+}
+.ai-model-source-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ai-model-source-dot.source-builtin { background: var(--info, #60a5fa); }
+.ai-model-source-dot.source-live { background: var(--success, #4ade80); }
+.ai-model-source-dot.source-extra { background: var(--warning, #fbbf24); }
+.ai-model-name {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-model-display-name {
+  font-size: 0.8rem;
+  color: var(--text-muted, #71717a);
+  margin-left: 0.25rem;
+  display: none;
+}
+.ai-model-caps { display: flex; gap: 0.2rem; flex-shrink: 0; }
+.ai-cap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-sm, 4px);
+  font-size: 0.7rem;
+  background: var(--surface-3, #27272a);
+  flex-shrink: 0;
+  cursor: help;
+}
+.ai-model-ctx {
+  font-size: 0.75rem;
+  color: var(--text-subtle, #71717a);
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+}
+.ai-model-source-label {
+  font-size: 0.68rem;
+  color: var(--text-subtle, #71717a);
+  background: var(--surface-3, #27272a);
+  padding: 0.07rem 0.4rem;
+  border-radius: var(--r-full, 999px);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ai-model-empty {
+  font-size: 0.85rem;
+  color: var(--text-muted, #71717a);
+  padding: 0.75rem;
+  text-align: center;
+}
+.ai-add-extra {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  margin-top: 0.6rem;
+}
+.ai-add-extra input {
+  flex: 1;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+  background: var(--surface, #131316);
+  color: var(--text, #fafafa);
+  border: 1px solid var(--border, #27272a);
+  border-radius: var(--r-sm, 6px);
+}
+.ai-sync-status {
+  font-size: 0.8rem;
+  color: var(--text-muted, #71717a);
+  padding: 0.3rem 1.25rem 0;
+}
+.ai-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border-radius: var(--r-md, 8px);
+  border: 1px solid var(--border, #27272a);
+  background: var(--surface-3, #27272a);
+  color: var(--text, #fafafa);
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+.ai-toolbar-btn:hover {
+  background: var(--surface-2, #1a1a1f);
+  border-color: var(--border-strong, #3f3f46);
+}
+.ai-toolbar-btn:disabled { opacity: 0.5; cursor: default; }
+.ai-cap-filters { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+.ai-cap-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  border-radius: var(--r-full, 999px);
+  border: 1px solid var(--border, #27272a);
+  background: transparent;
+  color: var(--text-muted, #71717a);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.ai-cap-filter:hover {
+  border-color: var(--border-strong, #3f3f46);
+  color: var(--text, #fafafa);
+}
+.ai-cap-filter.is-active {
+  background: var(--surface-3, #27272a);
+  color: var(--text, #fafafa);
+  border-color: var(--border-strong, #3f3f46);
 }
 </style>
 
@@ -223,13 +433,11 @@
 (function () {
   "use strict";
 
-  // ── CSRF ──────────────────────────────────────────────────────────────────
   function csrfToken() {
     var m = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : "";
   }
 
-  // ── Provider metadata ─────────────────────────────────────────────────────
   var PROVIDERS = {
     anthropic: {
       label: "Anthropic",
@@ -237,7 +445,6 @@
       getKeyUrl: "https://console.anthropic.com/settings/keys",
       getKeyLabel: "Get your Anthropic API key",
       placeholder: "sk-ant-…",
-      models: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
       modelHint: "",
       needsBaseUrl: false,
     },
@@ -247,7 +454,6 @@
       getKeyUrl: "https://platform.openai.com/api-keys",
       getKeyLabel: "Get your OpenAI API key",
       placeholder: "sk-…",
-      models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
       modelHint: "",
       needsBaseUrl: false,
     },
@@ -257,7 +463,6 @@
       getKeyUrl: "https://console.x.ai",
       getKeyLabel: "Get your xAI API key",
       placeholder: "xai-…",
-      models: ["grok-2-latest", "grok-2"],
       modelHint: "",
       needsBaseUrl: false,
     },
@@ -267,7 +472,6 @@
       getKeyUrl: "https://aistudio.google.com/apikey",
       getKeyLabel: "Get your Gemini API key",
       placeholder: "AIza…",
-      models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
       modelHint: "",
       needsBaseUrl: false,
     },
@@ -277,7 +481,6 @@
       getKeyUrl: "https://console.mistral.ai/api-keys",
       getKeyLabel: "Get your Mistral API key",
       placeholder: "…",
-      models: ["mistral-large-latest", "mistral-small-latest"],
       modelHint: "",
       needsBaseUrl: false,
     },
@@ -287,18 +490,57 @@
       getKeyUrl: null,
       getKeyLabel: null,
       placeholder: "optional for LM Studio",
-      models: [],
-      modelHint: "Enter the model name loaded in LM Studio (e.g. llama-3-8b-instruct).",
+      modelHint: "Enter the model name loaded in LM Studio.",
       needsBaseUrl: true,
     },
   };
 
   var PROVIDER_ORDER = ["anthropic", "openai", "grok", "gemini", "mistral", "lmstudio"];
 
-  // ── DOM refs ──────────────────────────────────────────────────────────────
-  var grid = document.getElementById("ai-cards-grid");
+  var CAP_LABELS = {
+    reasoning: "Reasoning",
+    vision: "Vision",
+    code: "Code",
+    fast: "Fast",
+    cheap: "Cheap",
+    agentic: "Agentic",
+  };
+
+  // Known capability mapping for built-in models (fallback before sync populates the catalog).
+  var _KNOWN_CAPS = {
+    "claude-opus-4-8": ["reasoning","code","vision","agentic"],
+    "claude-sonnet-4-6": ["reasoning","code","vision","fast"],
+    "claude-haiku-4-5": ["code","fast","vision","cheap"],
+    "claude-3-5-sonnet-latest": ["reasoning","code","vision"],
+    "claude-3-5-haiku-latest": ["fast","code","vision","cheap"],
+    "gpt-4o": ["reasoning","code","vision","fast"],
+    "gpt-4o-mini": ["code","vision","fast","cheap"],
+    "o3-mini": ["reasoning","code","cheap"],
+    "o4-mini": ["reasoning","code","cheap"],
+    "gpt-4.1": ["reasoning","code","vision"],
+    "gpt-4.1-mini": ["code","fast","cheap"],
+    "gpt-4.1-nano": ["fast","cheap"],
+    "grok-2-latest": ["reasoning","code"],
+    "grok-3": ["reasoning","code","vision"],
+    "grok-3-mini-latest": ["fast","cheap"],
+    "gemini-2.5-flash": ["vision","code","fast","cheap"],
+    "gemini-2.5-pro": ["reasoning","code","vision","agentic"],
+    "gemini-2.0-flash": ["vision","fast","cheap"],
+    "mistral-large-latest": ["reasoning","code","vision"],
+    "mistral-small-latest": ["fast","cheap"],
+    "codestral-latest": ["code"],
+  };
+
+  var SOURCE_LABELS = {
+    builtin: "Built-in",
+    live: "Live",
+    extra: "Extra",
+  };
+
+  var grid = document.getElementById("ai-providers-grid");
+  var searchInput = document.getElementById("ai-model-search");
+  var syncAllBtn = document.getElementById("ai-sync-all-btn");
   var backdrop = document.getElementById("ai-modal-backdrop");
-  var editorPanel = document.getElementById("ai-editor-panel");
   var editorTitle = document.getElementById("ai-editor-title");
   var editorForm = document.getElementById("ai-editor-form");
   var editorProvider = document.getElementById("ai-editor-provider");
@@ -313,16 +555,540 @@
   var editorModelHint = document.getElementById("ai-editor-model-hint");
   var MODEL_CUSTOM = "__custom__";
 
-  // Build the model dropdown for a provider: "Provider default", known models,
-  // extra superadmin models, then "Custom…" (which reveals the free-text input).
+  var _keysData = [];
+  var _catalog = {};
+  var _activeCard = null;
+  var _editorMode = "add";
+  var _searchQuery = "";
+  var _capFilter = "";
+  var _isSuperadmin = {{ 'true' if is_superadmin else 'false' }};
+
+  // ── Capability filter ─────────────────────────────────────────────────────
+  var capFilterBtns = document.querySelectorAll(".ai-cap-filter");
+  capFilterBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      capFilterBtns.forEach(function (b) { b.classList.remove("is-active"); });
+      btn.classList.add("is-active");
+      _capFilter = btn.getAttribute("data-cap") || "";
+      renderAll();
+    });
+  });
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  if (searchInput) {
+    searchInput.addEventListener("input", function () {
+      _searchQuery = (searchInput.value || "").toLowerCase().trim();
+      renderAll();
+    });
+  }
+
+  // ── Load ──────────────────────────────────────────────────────────────────
+  function loadAll() {
+    Promise.all([
+      fetch("/api/ask/keys").then(function (r) { return r.json(); }),
+      fetch("/api/ask/admin/models/catalog").then(function (r) { return r.json(); }).catch(function () { return {}; }),
+    ]).then(function (results) {
+      var data = results[0];
+      _keysData = data.keys || [];
+      _catalog = results[1] || {};
+
+      var supported = data.supported || PROVIDER_ORDER;
+      renderAll(supported);
+    }).catch(function () {
+      grid.innerHTML = '<span style="color:var(--danger,#f87171);font-size:0.95rem;">Could not load providers.</span>';
+    });
+  }
+
+  function renderAll(supported) {
+    supported = supported || PROVIDER_ORDER;
+    var configured = {};
+    for (var i = 0; i < _keysData.length; i++) {
+      configured[_keysData[i].provider] = _keysData[i];
+    }
+    var order = PROVIDER_ORDER.filter(function (p) {
+      return supported.indexOf(p) !== -1;
+    });
+    for (var j = 0; j < supported.length; j++) {
+      if (order.indexOf(supported[j]) === -1) order.push(supported[j]);
+    }
+    grid.innerHTML = "";
+    order.forEach(function (provider) {
+      var info = configured[provider] || null;
+      var meta = PROVIDERS[provider] || { label: provider, tagline: "", models: [], needsBaseUrl: false };
+      var models = _catalog[provider] || [];
+      grid.appendChild(makeCard(provider, meta, info, models));
+    });
+  }
+
+  function makeCard(provider, meta, info, models) {
+    var card = document.createElement("div");
+    card.className = "ai-provider-card" + (info ? " is-connected" : "");
+    card.dataset.provider = provider;
+
+    // ── Header ──────────────────────────────────────────────────────────────
+    var header = document.createElement("div");
+    header.className = "ai-provider-header";
+
+    var monogram = document.createElement("div");
+    monogram.className = "ai-provider-monogram";
+    monogram.textContent = meta.label.charAt(0).toUpperCase();
+
+    var infoDiv = document.createElement("div");
+    infoDiv.className = "ai-provider-info";
+
+    var nameRow = document.createElement("h3");
+    nameRow.textContent = meta.label;
+    if (info && info.is_default) {
+      var badge = document.createElement("span");
+      badge.className = "ai-badge-default";
+      badge.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg> Default';
+      nameRow.appendChild(badge);
+    }
+
+    var tagline = document.createElement("p");
+    tagline.className = "ai-provider-tagline";
+    tagline.textContent = meta.tagline || "";
+
+    infoDiv.appendChild(nameRow);
+    infoDiv.appendChild(tagline);
+
+    var connStatus = document.createElement("div");
+    connStatus.className = "ai-conn-status";
+    var dot = document.createElement("span");
+    var connText = document.createElement("span");
+    connText.className = "ai-conn-text";
+    if (info) {
+      dot.className = "ai-conn-dot connected";
+      connText.className = "ai-conn-text connected";
+      connText.textContent = "Connected";
+    } else {
+      dot.className = "ai-conn-dot not-configured";
+      connText.className = "ai-conn-text not-configured";
+      connText.textContent = "Not configured";
+    }
+    connStatus.appendChild(dot);
+    connStatus.appendChild(connText);
+
+    header.appendChild(monogram);
+    header.appendChild(infoDiv);
+    header.appendChild(connStatus);
+    card.appendChild(header);
+
+    // ── Keys row ────────────────────────────────────────────────────────────
+    var keysRow = document.createElement("div");
+    keysRow.className = "ai-keys-row";
+
+    if (info) {
+      var modelStr = info.default_model || "";
+      if (info.base_url && provider === "lmstudio") {
+        modelStr = (modelStr ? modelStr + " \u00b7 " : "") + info.base_url;
+      }
+      if (modelStr) {
+        var preview = document.createElement("span");
+        preview.className = "ai-key-preview";
+        preview.textContent = modelStr;
+        keysRow.appendChild(preview);
+      }
+
+      if (!info.is_default) {
+        var defBtn = makeBtn("Set as default");
+        defBtn.addEventListener("click", function () { doSetDefault(provider); });
+        keysRow.appendChild(defBtn);
+      }
+      var editBtn = makeBtn("Edit");
+      editBtn.addEventListener("click", function () { openEditor(provider, info, "edit"); });
+      keysRow.appendChild(editBtn);
+      var rmBtn = makeBtn("Remove", true);
+      rmBtn.addEventListener("click", function () { doRemove(provider); });
+      keysRow.appendChild(rmBtn);
+    } else {
+      var addBtn = makeBtn("Add key", false, true);
+      addBtn.addEventListener("click", function () { openEditor(provider, null, "add"); });
+      keysRow.appendChild(addBtn);
+    }
+
+    if (_isSuperadmin && info) {
+      keysRow.appendChild(makeSyncBtn(provider));
+    }
+
+    card.appendChild(keysRow);
+
+    // ── Models section ──────────────────────────────────────────────────────
+    var modelsSection = document.createElement("div");
+    modelsSection.className = "ai-models-section";
+
+    var filtered = filterModels(models, provider);
+
+    var modelsHead = document.createElement("div");
+    modelsHead.className = "ai-models-header";
+
+    var titleSpan = document.createElement("span");
+    titleSpan.className = "ai-models-title";
+    titleSpan.textContent = "Models";
+    var countSpan = document.createElement("span");
+    countSpan.className = "ai-models-count";
+    countSpan.textContent = "(" + (models.length || "0") + ")";
+    titleSpan.appendChild(countSpan);
+
+    if (filtered.length < models.length) {
+      var matchSpan = document.createElement("span");
+      matchSpan.style.cssText = "font-size:0.78rem;color:var(--info,#60a5fa);margin-left:0.3rem;";
+      matchSpan.textContent = filtered.length + " matching";
+      titleSpan.appendChild(matchSpan);
+    }
+
+    modelsHead.appendChild(titleSpan);
+
+    var filterWrap = document.createElement("div");
+    filterWrap.className = "ai-models-filter";
+    var filterSelect = document.createElement("select");
+    filterSelect.setAttribute("aria-label", "Filter by source");
+    [
+      { value: "", label: "All sources" },
+      { value: "builtin", label: "Built-in" },
+      { value: "live", label: "Live" },
+      { value: "extra", label: "Extra" },
+    ].forEach(function (opt) {
+      var o = document.createElement("option");
+      o.value = opt.value;
+      o.textContent = opt.label;
+      filterSelect.appendChild(o);
+    });
+    var currentFilter = "";
+    filterSelect.addEventListener("change", function () {
+      currentFilter = filterSelect.value;
+      renderModelList(modelListEl, filterModels(models, provider, currentFilter));
+    });
+    filterWrap.appendChild(filterSelect);
+    modelsHead.appendChild(filterWrap);
+
+    modelsSection.appendChild(modelsHead);
+
+    var modelListEl = document.createElement("div");
+    modelListEl.className = "ai-model-list";
+    renderModelList(modelListEl, filtered);
+
+    modelsSection.appendChild(modelListEl);
+
+    if (_isSuperadmin) {
+      var addExtra = document.createElement("div");
+      addExtra.className = "ai-add-extra";
+      var inp = document.createElement("input");
+      inp.type = "text";
+      inp.placeholder = "Add extra model\u2026";
+      inp.setAttribute("autocomplete", "off");
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ai-card-btn";
+      btn.textContent = "Add";
+      function doAddExtra() {
+        var val = (inp.value || "").trim();
+        if (!val) return;
+        saveExtra(provider, val);
+        inp.value = "";
+      }
+      btn.addEventListener("click", doAddExtra);
+      inp.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); doAddExtra(); }
+      });
+      addExtra.appendChild(inp);
+      addExtra.appendChild(btn);
+      modelsSection.appendChild(addExtra);
+    }
+
+    card.appendChild(modelsSection);
+    return card;
+  }
+
+  function resolveCaps(m) {
+    if (!m) return [];
+    if (m.capabilities && Array.isArray(m.capabilities) && m.capabilities.length > 0) return m.capabilities;
+    if (m.model_id && _KNOWN_CAPS[m.model_id]) return _KNOWN_CAPS[m.model_id];
+    return [];
+  }
+
+  function filterModels(models, provider, sourceFilter) {
+    if (!models || !Array.isArray(models)) return [];
+    sourceFilter = sourceFilter || "";
+    return models.filter(function (m) {
+      if (!m || typeof m !== "object") return false;
+      if (!m.is_enabled) return false;
+      if (sourceFilter && m.source !== sourceFilter) return false;
+
+      if (_capFilter) {
+        var caps = resolveCaps(m);
+        if (!Array.isArray(caps) || caps.indexOf(_capFilter) === -1) return false;
+      }
+
+      if (_searchQuery) {
+        var q = _searchQuery;
+        var id = (m.model_id || "").toLowerCase();
+        var disp = (m.display_name || "").toLowerCase();
+        if (id.indexOf(q) === -1 && disp.indexOf(q) === -1) return false;
+      }
+
+      return true;
+    });
+  }
+
+  function renderModelList(container, models) {
+    container.innerHTML = "";
+    if (models.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "ai-model-empty";
+      if (_searchQuery || _capFilter) {
+        empty.textContent = "No models match your filters.";
+      } else {
+        empty.textContent = "No models available.";
+      }
+      container.appendChild(empty);
+      return;
+    }
+    models.forEach(function (m) {
+      container.appendChild(makeModelRow(m));
+    });
+  }
+
+  function makeModelRow(m) {
+    var row = document.createElement("div");
+    row.className = "ai-model-item" + (m.is_deprecated ? " is-deprecated" : "");
+
+    var dot = document.createElement("span");
+    dot.className = "ai-model-source-dot source-" + (m.source || "builtin");
+    dot.title = SOURCE_LABELS[m.source] || m.source;
+    row.appendChild(dot);
+
+    var nameSpan = document.createElement("span");
+    nameSpan.className = "ai-model-name";
+    nameSpan.textContent = m.model_id;
+    row.appendChild(nameSpan);
+
+    if (m.display_name && m.display_name !== m.model_id) {
+      var disp = document.createElement("span");
+      disp.className = "ai-model-display-name";
+      disp.textContent = m.display_name;
+      row.appendChild(disp);
+    }
+
+    var rowCaps = resolveCaps(m);
+    if (rowCaps.length > 0) {
+      var caps = document.createElement("div");
+      caps.className = "ai-model-caps";
+      rowCaps.forEach(function (c) {
+        var label = CAP_LABELS[c];
+        if (!label) return;
+        var span = document.createElement("span");
+        span.className = "ai-cap";
+        span.textContent = c === "reasoning" ? "\u{1F9E0}" :
+                           c === "vision" ? "\u{1F441}" :
+                           c === "code" ? "\u{1F4BB}" :
+                           c === "fast" ? "\u26A1" :
+                           c === "cheap" ? "\u{1F4B0}" :
+                           c === "agentic" ? "\u{1F916}" : "?";
+        span.title = label;
+        caps.appendChild(span);
+      });
+      row.appendChild(caps);
+    }
+
+    if (m.context_window) {
+      var ctx = document.createElement("span");
+      ctx.className = "ai-model-ctx";
+      ctx.textContent = formatCtx(m.context_window);
+      row.appendChild(ctx);
+    }
+
+    var src = document.createElement("span");
+    src.className = "ai-model-source-label";
+    src.textContent = SOURCE_LABELS[m.source] || m.source;
+    row.appendChild(src);
+
+    return row;
+  }
+
+  function formatCtx(n) {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+    if (n >= 1_000) return (n / 1_000).toFixed(0) + "K";
+    return String(n);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function makeBtn(label, isDanger, isPrimary) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ai-card-btn" + (isPrimary ? " primary" : "") + (isDanger ? " danger" : "");
+    btn.textContent = label;
+    return btn;
+  }
+
+  function makeSyncBtn(provider) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ai-card-btn";
+    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:0.15rem;"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg> Sync';
+    btn.addEventListener("click", function () { doSyncProvider(provider, btn); });
+    return btn;
+  }
+
+  // ── Sync ──────────────────────────────────────────────────────────────────
+  function doSyncProvider(provider, btn) {
+    if (btn) btn.disabled = true;
+    var orig = btn ? btn.textContent : "";
+    if (btn) btn.innerHTML = "Syncing\u2026";
+    fetch("/api/ask/admin/models/sync/" + encodeURIComponent(provider), {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken() },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function () {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+        loadAll();
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+      });
+  }
+
+  if (syncAllBtn) {
+    syncAllBtn.addEventListener("click", function () {
+      syncAllBtn.disabled = true;
+      syncAllBtn.innerHTML = "Syncing\u2026";
+      fetch("/api/ask/admin/models/sync", {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrfToken() },
+      })
+        .then(function () {
+          syncAllBtn.disabled = false;
+          syncAllBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg> Sync all';
+          loadAll();
+        })
+        .catch(function () {
+          syncAllBtn.disabled = false;
+          syncAllBtn.textContent = "Sync all";
+        });
+    });
+  }
+
+  // ── Extra model save ──────────────────────────────────────────────────────
+  function saveExtra(provider, modelName) {
+    var cur = _catalog[provider] || [];
+    var extras = cur.filter(function (m) { return m.source === "extra"; }).map(function (m) { return m.model_id; });
+    if (extras.indexOf(modelName) !== -1) return;
+    extras.push(modelName);
+    fetch("/api/ask/admin/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
+      body: JSON.stringify({ provider: provider, models: extras }),
+    })
+      .then(function () { loadAll(); })
+      .catch(function () {});
+  }
+
+  // ── Key actions ───────────────────────────────────────────────────────────
+  function doRemove(provider) {
+    var meta = PROVIDERS[provider] || { label: provider };
+    if (!confirm("Remove the " + meta.label + " key? This cannot be undone.")) return;
+    fetch("/api/ask/keys/" + encodeURIComponent(provider), {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrfToken() },
+    })
+      .then(function () { loadAll(); closeEditor(); })
+      .catch(function () {});
+  }
+
+  function doSetDefault(provider) {
+    fetch("/api/ask/keys/default", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
+      body: JSON.stringify({ provider: provider }),
+    })
+      .then(function () { loadAll(); })
+      .catch(function () {});
+  }
+
+  // ── Editor (modal) ────────────────────────────────────────────────────────
+  function openEditor(provider, info, mode) {
+    var meta = PROVIDERS[provider] || { label: provider, placeholder: "", models: [], needsBaseUrl: false, getKeyUrl: null };
+    _activeCard = provider;
+    _editorMode = mode;
+
+    editorTitle.textContent = mode === "edit" ? ("Edit " + meta.label + " key") : ("Add " + meta.label + " key");
+    editorProvider.value = provider;
+
+    editorKey.value = "";
+    if (mode === "edit") {
+      editorKey.placeholder = "leave blank to keep current key";
+      editorKey.removeAttribute("required");
+      keyOptionalHint.textContent = "(optional)";
+    } else {
+      editorKey.placeholder = meta.placeholder || "\u2026";
+      if (provider === "lmstudio") {
+        editorKey.removeAttribute("required");
+        keyOptionalHint.textContent = "(optional)";
+      } else {
+        editorKey.setAttribute("required", "required");
+        keyOptionalHint.textContent = "";
+      }
+    }
+
+    if (meta.getKeyUrl) {
+      keyGetLink.innerHTML = '<a href="' + meta.getKeyUrl + '" target="_blank" rel="noopener noreferrer" style="color:var(--info,#60a5fa);">' + (meta.getKeyLabel || "Get your API key") + ' \u2197</a>';
+    } else {
+      keyGetLink.textContent = "Runs locally \u2014 no API key needed.";
+    }
+
+    if (meta.needsBaseUrl) {
+      editorBaseurlRow.style.display = "flex";
+      editorBaseurl.value = (info && info.base_url) ? info.base_url : "";
+    } else {
+      editorBaseurlRow.style.display = "none";
+      editorBaseurl.value = "";
+    }
+
+    populateModelField(meta, info && info.default_model ? info.default_model : "");
+
+    setEditorStatus("", "");
+    backdrop.style.display = "flex";
+  }
+
+  function closeEditor() {
+    backdrop.style.display = "none";
+    _activeCard = null;
+    _editorMode = "add";
+    setEditorStatus("", "");
+    editorKey.type = "password";
+    keyToggle.setAttribute("aria-label", "Show/hide key");
+  }
+
+  if (backdrop) {
+    backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) closeEditor();
+    });
+  }
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && backdrop && backdrop.style.display === "flex") closeEditor();
+  });
+
+  var cancelBtn = document.getElementById("ai-cancel-btn");
+  if (cancelBtn) cancelBtn.addEventListener("click", closeEditor);
+
+  // ── Editor model dropdown — includes ALL catalog models ─────────────────
   function populateModelField(meta, currentModel) {
-    var builtins = (meta && meta.models) || [];
     var providerName = editorProvider.value;
-    var extras = (_extraModels[providerName] || []);
-    // Merge: built-ins first, then extras deduped against built-ins.
-    var models = builtins.slice();
-    extras.forEach(function (m) {
-      if (models.indexOf(m) === -1) models.push(m);
+    var providerModels = _catalog[providerName] || [];
+
+    // Collect all model IDs from the catalog: builtin + live + extra
+    var all = [];
+    providerModels.forEach(function (m) {
+      if (all.indexOf(m.model_id) === -1) {
+        all.push(m.model_id);
+      }
+    });
+
+    // Also add builtins from hardcoded PROVIDERS that might not yet be in catalog
+    var builtins = (meta && meta.models) || [];
+    builtins.forEach(function (m) {
+      if (all.indexOf(m) === -1) all.push(m);
     });
 
     editorModelSelect.innerHTML = "";
@@ -330,7 +1096,7 @@
     defOpt.value = "";
     defOpt.textContent = "Provider default";
     editorModelSelect.appendChild(defOpt);
-    models.forEach(function (m) {
+    all.forEach(function (m) {
       var o = document.createElement("option");
       o.value = m;
       o.textContent = m;
@@ -338,11 +1104,11 @@
     });
     var customOpt = document.createElement("option");
     customOpt.value = MODEL_CUSTOM;
-    customOpt.textContent = "Custom…";
+    customOpt.textContent = "Custom\u2026";
     editorModelSelect.appendChild(customOpt);
 
     var cur = currentModel || "";
-    if (cur && models.indexOf(cur) === -1) {
+    if (cur && all.indexOf(cur) === -1) {
       editorModelSelect.value = MODEL_CUSTOM;
       editorModelCustom.value = cur;
       editorModelCustom.style.display = "block";
@@ -350,8 +1116,7 @@
       editorModelSelect.value = cur;
       editorModelCustom.value = "";
       editorModelCustom.style.display = "none";
-    } else if (models.length === 0) {
-      // Providers with no known list (e.g. LM Studio) always take a custom name.
+    } else if (all.length === 0) {
       editorModelSelect.value = MODEL_CUSTOM;
       editorModelCustom.value = "";
       editorModelCustom.style.display = "block";
@@ -363,6 +1128,12 @@
     editorModelHint.textContent = (meta && meta.modelHint) || "";
   }
 
+  editorModelSelect.addEventListener("change", function () {
+    var isCustom = editorModelSelect.value === MODEL_CUSTOM;
+    editorModelCustom.style.display = isCustom ? "block" : "none";
+    if (isCustom) { try { editorModelCustom.focus(); } catch (e) {} }
+  });
+
   function getModelValue() {
     if (editorModelSelect.value === MODEL_CUSTOM) {
       return (editorModelCustom.value || "").trim() || null;
@@ -370,272 +1141,16 @@
     return (editorModelSelect.value || "").trim() || null;
   }
 
-  if (editorModelSelect) {
-    editorModelSelect.addEventListener("change", function () {
-      var isCustom = editorModelSelect.value === MODEL_CUSTOM;
-      editorModelCustom.style.display = isCustom ? "block" : "none";
-      if (isCustom) {
-        try { editorModelCustom.focus(); } catch (e) {}
-      }
-    });
-  }
+  // ── Editor save ───────────────────────────────────────────────────────────
   var testBtn = document.getElementById("ai-test-btn");
   var saveBtn = document.getElementById("ai-save-btn");
-  var cancelBtn = document.getElementById("ai-cancel-btn");
   var editorStatus = document.getElementById("ai-editor-status");
-
-  // State
-  var _keysData = []; // last loaded key infos
-  var _activeCard = null; // provider name of the open editor
-  var _editorMode = "add"; // "add" or "edit"
-  var _extraModels = {}; // superadmin-configured extra models per provider
-
-  // ── Key show/hide toggle ──────────────────────────────────────────────────
-  if (keyToggle) {
-    keyToggle.addEventListener("click", function () {
-      var isPassword = editorKey.type === "password";
-      editorKey.type = isPassword ? "text" : "password";
-      keyToggle.setAttribute("aria-label", isPassword ? "Hide key" : "Show key");
-    });
-  }
-
-  // ── Load & render cards ───────────────────────────────────────────────────
-  function loadKeys() {
-    Promise.all([
-      fetch("/api/ask/keys").then(function (r) { return r.json(); }),
-      fetch("/api/ask/model-options").then(function (r) { return r.json(); }).catch(function () { return {}; })
-    ]).then(function (results) {
-      var data = results[0];
-      _extraModels = results[1] || {};
-      _keysData = data.keys || [];
-      var supported = data.supported || PROVIDER_ORDER;
-      renderCards(_keysData, supported);
-    }).catch(function () {
-      grid.innerHTML = '<span style="color:var(--danger,#f87171);font-size:0.875rem;">Could not load providers.</span>';
-    });
-  }
-
-  function findKeyInfo(provider) {
-    for (var i = 0; i < _keysData.length; i++) {
-      if (_keysData[i].provider === provider) return _keysData[i];
-    }
-    return null;
-  }
-
-  function renderCards(keys, supported) {
-    // Build set of configured providers
-    var configured = {};
-    for (var i = 0; i < keys.length; i++) {
-      configured[keys[i].provider] = keys[i];
-    }
-
-    // Use PROVIDER_ORDER but fallback to supported for unknown providers
-    var order = PROVIDER_ORDER.filter(function (p) {
-      return supported.indexOf(p) !== -1;
-    });
-    // Append any supported providers not in our known order
-    for (var j = 0; j < supported.length; j++) {
-      if (order.indexOf(supported[j]) === -1) order.push(supported[j]);
-    }
-
-    grid.innerHTML = "";
-    order.forEach(function (provider) {
-      var info = configured[provider] || null;
-      var meta = PROVIDERS[provider] || { label: provider, tagline: "", models: [], needsBaseUrl: false };
-      grid.appendChild(makeCard(provider, meta, info));
-    });
-  }
-
-  function makeCard(provider, meta, info) {
-    var card = document.createElement("div");
-    card.className = "ai-provider-card" + (info ? " is-connected" : "");
-    card.dataset.provider = provider;
-
-    // Monogram
-    var monogram = document.createElement("div");
-    monogram.className = "ai-provider-monogram";
-    monogram.textContent = meta.label.charAt(0).toUpperCase();
-
-    // Meta block
-    var metaDiv = document.createElement("div");
-    metaDiv.className = "ai-provider-meta";
-
-    var nameRow = document.createElement("div");
-    nameRow.className = "ai-provider-name";
-    nameRow.textContent = meta.label;
-    if (info && info.is_default) {
-      var badge = document.createElement("span");
-      badge.className = "ai-badge-default";
-      badge.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg> Default';
-      nameRow.appendChild(badge);
-    }
-
-    var tagline = document.createElement("p");
-    tagline.className = "ai-provider-tagline";
-    tagline.textContent = meta.tagline || "";
-
-    metaDiv.appendChild(nameRow);
-    metaDiv.appendChild(tagline);
-
-    // Head row
-    var head = document.createElement("div");
-    head.className = "ai-provider-card-head";
-    head.appendChild(monogram);
-    head.appendChild(metaDiv);
-
-    // Status row
-    var statusRow = document.createElement("div");
-    statusRow.className = "ai-status-row";
-    var dot = document.createElement("span");
-    var statusText = document.createElement("span");
-    if (info) {
-      dot.className = "ai-status-dot connected";
-      statusText.className = "ai-status-text connected";
-      statusText.textContent = "Connected";
-      statusRow.appendChild(dot);
-      statusRow.appendChild(statusText);
-      // Show model
-      var modelStr = info.default_model || "";
-      if (info.base_url && provider === "lmstudio") {
-        modelStr = (modelStr ? modelStr + " · " : "") + info.base_url;
-      }
-      if (modelStr) {
-        var modelSpan = document.createElement("span");
-        modelSpan.className = "ai-status-model";
-        modelSpan.textContent = modelStr;
-        statusRow.appendChild(document.createTextNode(" · "));
-        statusRow.appendChild(modelSpan);
-      }
-    } else {
-      dot.className = "ai-status-dot not-configured";
-      statusText.className = "ai-status-text not-configured";
-      statusText.textContent = "Not configured";
-      statusRow.appendChild(dot);
-      statusRow.appendChild(statusText);
-    }
-
-    // Actions row
-    var actions = document.createElement("div");
-    actions.className = "ai-card-actions";
-
-    if (info) {
-      // Set as default (hidden if already default)
-      if (!info.is_default) {
-        var setDefaultBtn = makeActionBtn("Set as default", null, false, false);
-        setDefaultBtn.addEventListener("click", function () { doSetDefault(provider); });
-        actions.appendChild(setDefaultBtn);
-      }
-      // Edit
-      var editBtn = makeActionBtn("Edit", null, false, false);
-      editBtn.addEventListener("click", function () { openEditor(provider, info, "edit"); });
-      actions.appendChild(editBtn);
-      // Remove
-      var removeBtn = makeActionBtn("Remove", null, false, true);
-      removeBtn.addEventListener("click", function () { doRemove(provider); });
-      actions.appendChild(removeBtn);
-    } else {
-      var addBtn = makeActionBtn("Add key", null, true, false);
-      addBtn.addEventListener("click", function () { openEditor(provider, null, "add"); });
-      actions.appendChild(addBtn);
-    }
-
-    card.appendChild(head);
-    card.appendChild(statusRow);
-    card.appendChild(actions);
-    return card;
-  }
-
-  function makeActionBtn(label, icon, isPrimary, isDanger) {
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "ai-card-btn" + (isPrimary ? " primary" : "") + (isDanger ? " danger" : "");
-    btn.textContent = label;
-    return btn;
-  }
-
-  // ── Editor open/close ─────────────────────────────────────────────────────
-  function openEditor(provider, info, mode) {
-    var meta = PROVIDERS[provider] || { label: provider, placeholder: "", models: [], needsBaseUrl: false, getKeyUrl: null };
-    _activeCard = provider;
-    _editorMode = mode;
-
-    editorTitle.textContent = mode === "edit" ? ("Edit " + meta.label + " key") : ("Add " + meta.label + " key");
-    editorProvider.value = provider;
-
-    // API key field
-    editorKey.value = "";
-    if (mode === "edit") {
-      // In edit mode: key is never prefilled; blank is fine (server keeps stored key).
-      editorKey.placeholder = "leave blank to keep current key";
-      editorKey.removeAttribute("required");
-      keyOptionalHint.textContent = "(optional)";
-    } else {
-      // In add mode: require a key for all providers except lmstudio.
-      editorKey.placeholder = meta.placeholder || "…";
-      if (provider === "lmstudio") {
-        editorKey.removeAttribute("required");
-        keyOptionalHint.textContent = "(optional)";
-      } else {
-        editorKey.setAttribute("required", "required");
-        keyOptionalHint.textContent = "";
-      }
-    }
-
-    // Get-key link
-    if (meta.getKeyUrl) {
-      keyGetLink.innerHTML = '<a href="' + meta.getKeyUrl + '" target="_blank" rel="noopener noreferrer" style="color:var(--info,#60a5fa);">' + (meta.getKeyLabel || "Get your API key") + ' ↗</a>';
-    } else {
-      keyGetLink.textContent = "Runs locally — no API key needed.";
-    }
-
-    // Base URL (lmstudio only)
-    if (meta.needsBaseUrl) {
-      editorBaseurlRow.style.display = "flex";
-      editorBaseurl.value = (info && info.base_url) ? info.base_url : "";
-    } else {
-      editorBaseurlRow.style.display = "none";
-      editorBaseurl.value = "";
-    }
-
-    // Model field (dropdown of known models + Custom…)
-    populateModelField(meta, info && info.default_model ? info.default_model : "");
-
-    // Reset status
-    setEditorStatus("", "");
-
-    // Open modal
-    backdrop.style.display = "flex";
-  }
-
-  function closeEditor() {
-    backdrop.style.display = "none";
-    _activeCard = null;
-    _editorMode = "add";
-    setEditorStatus("", "");
-    editorKey.type = "password"; // reset visibility
-    keyToggle.setAttribute("aria-label", "Show/hide key");
-  }
-
-  // Backdrop click-to-close (clicks on the inner panel don't bubble to backdrop).
-  if (backdrop) {
-    backdrop.addEventListener("click", function (e) {
-      if (e.target === backdrop) closeEditor();
-    });
-  }
-
-  // Esc key closes the modal.
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && backdrop && backdrop.style.display === "flex") closeEditor();
-  });
-
-  if (cancelBtn) cancelBtn.addEventListener("click", closeEditor);
 
   function setEditorStatus(text, color) {
     editorStatus.textContent = text;
     editorStatus.style.color = color || "";
   }
 
-  // ── Save key ──────────────────────────────────────────────────────────────
   editorForm.addEventListener("submit", function (e) {
     e.preventDefault();
     try {
@@ -651,7 +1166,7 @@
       }
 
       saveBtn.disabled = true;
-      setEditorStatus("Saving…", "var(--text-muted,#71717a)");
+      setEditorStatus("Saving\u2026", "var(--text-muted,#71717a)");
 
       fetch("/api/ask/keys", {
         method: "POST",
@@ -663,7 +1178,7 @@
           saveBtn.disabled = false;
           if (result.ok) {
             setEditorStatus("Saved.", "var(--success,#4ade80)");
-            loadKeys();
+            loadAll();
             setTimeout(function () { closeEditor(); }, 900);
           } else {
             setEditorStatus(result.data.error || "Save failed.", "var(--danger,#f87171)");
@@ -679,36 +1194,13 @@
     }
   });
 
-  // ── Remove key ────────────────────────────────────────────────────────────
-  function doRemove(provider) {
-    try {
-      var meta = PROVIDERS[provider] || { label: provider };
-      if (!confirm("Remove the " + meta.label + " key? This cannot be undone.")) return;
-      fetch("/api/ask/keys/" + encodeURIComponent(provider), {
-        method: "DELETE",
-        headers: { "X-CSRF-Token": csrfToken() },
-      })
-        .then(function (r) { return r.json(); })
-        .then(function () { loadKeys(); closeEditor(); })
-        .catch(function () { /* silently ignore UI flicker */ });
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  // ── Set default ───────────────────────────────────────────────────────────
-  function doSetDefault(provider) {
-    try {
-      fetch("/api/ask/keys/default", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
-        body: JSON.stringify({ provider: provider }),
-      })
-        .then(function () { loadKeys(); })
-        .catch(function () { /* ignore */ });
-    } catch (e) {
-      // ignore
-    }
+  // ── Key show/hide ─────────────────────────────────────────────────────────
+  if (keyToggle) {
+    keyToggle.addEventListener("click", function () {
+      var isPassword = editorKey.type === "password";
+      editorKey.type = isPassword ? "text" : "password";
+      keyToggle.setAttribute("aria-label", isPassword ? "Hide key" : "Show key");
+    });
   }
 
   // ── Test key ──────────────────────────────────────────────────────────────
@@ -721,7 +1213,7 @@
         var default_model = getModelValue();
 
         testBtn.disabled = true;
-        setEditorStatus("Testing…", "var(--text-muted,#71717a)");
+        setEditorStatus("Testing\u2026", "var(--text-muted,#71717a)");
 
         fetch("/api/ask/keys/test", {
           method: "POST",
@@ -732,9 +1224,9 @@
           .then(function (data) {
             testBtn.disabled = false;
             if (data.ok) {
-              setEditorStatus("✓ Key works", "var(--success,#4ade80)");
+              setEditorStatus("\u2713 Key works", "var(--success,#4ade80)");
             } else {
-              setEditorStatus("✗ " + (data.error || "Test failed."), "var(--danger,#f87171)");
+              setEditorStatus("\u2717 " + (data.error || "Test failed."), "var(--danger,#f87171)");
             }
           })
           .catch(function () {
@@ -748,7 +1240,7 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
-  loadKeys();
+  loadAll();
 })();
 </script>
 {% endblock settings_main %}

@@ -44,6 +44,9 @@ _OPENAI_COMPAT: dict[str, dict[str, object]] = {
 
 SUPPORTED_PROVIDERS = ("anthropic", "openai", "grok", "gemini", "mistral", "lmstudio")
 
+# Public alias for the sync service and other consumers.
+OPENAI_COMPAT: dict[str, dict[str, object]] = _OPENAI_COMPAT
+
 _DEFAULT_MODELS: dict[str, str] = {
     "anthropic": "claude-opus-4-8",
     **{k: str(v["default_model"]) for k, v in _OPENAI_COMPAT.items()},

@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2] — 2026-06-19
+
+### Added
+- **Live AI model catalog.** New `ai_catalog_models` database table stores models
+  synced directly from OpenAI, Anthropic, xAI Grok, Mistral, and Google Gemini
+  via their `/v1/models` endpoints. A new `model_sync` service fetches live model
+  lists on demand — built-in fallback metadata (display names, capability tags,
+  context windows) is maintained for ~35 popular models.
+- **Unified AI provider settings page.** The separate "AI Keys" and "AI Models"
+  pages are merged into a single `/settings/ai` hub. Each provider card shows
+  connection status, key management, and a searchable/filterable model browser
+  with capability badges (🧠 Reasoning, 👁 Vision, 💻 Code, ⚡ Fast, 💰 Cheap),
+  context window sizes, and source indicators (built-in / live / extra).
+- **"Sync models" button** (superadmin). Triggers a live fetch from vendor APIs
+  for the latest model lists. Available per-provider and as a global "Sync all"
+  button in the toolbar.
+- **Capability filter chips.** Clickable pill buttons for each capability tag
+  filter model lists across all providers simultaneously.
+- **Thinking animation in Ask Fluxito.** A bouncing-dots indicator appears in the
+  assistant message area while the AI generates a response, giving the user
+  clear feedback that work is in progress.
+
+### Changed
+- **Sidebar version display.** Version number now sits below the logo/brand row
+  instead of inline, preventing overflow on narrow sidebars. The update-
+  notification dot has been removed. "Profile & settings" and "Projects" links
+  removed from the avatar dropdown (all settings are accessible from the sidebar
+  nav).
+- **Project settings form alignment.** Invite, Transfer ownership, and Slack
+  webhook forms now have consistent button/input vertical alignment using grid
+  layouts with zero bottom-margin on field containers.
+- **Auditing page copy.** All references to "Claude" replaced with "your AI" or
+  "AI" to reflect that any MCP-compatible agentic client can drive audits.
+  Buttons relabeled from "Run Audit in Claude" to "Run Audit".
+- **AI provider model selection.** The editor modal now includes all catalog
+  models (built-in, live-synced, and extras) in the default model dropdown,
+  not just hardcoded built-ins.
+
+### Infrastructure
+- **New database migration** `067_ai_catalog_models` — creates the
+  `ai_catalog_models` table with provider, model_id, display_name, capabilities
+  (JSONB), context_window, source tier, and enabled toggle.
+
 ## [1.1.23] — 2026-06-19
 
 ### Added
