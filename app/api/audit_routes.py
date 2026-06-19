@@ -22,6 +22,7 @@ from sqlalchemy import desc, select
 import app.app_state as app_state
 from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
 from app.models.audit import ToolCallAudit
+from app.models.project import Project, ProjectMember
 from app.templating import render
 
 logger = logging.getLogger(__name__)
@@ -160,9 +161,29 @@ async def audit_page(request: Request):
     # the browser cookie hid the user's entire tool-call history. Default to
     # showing everything the user did; let project filtering be opt-in.
     active_project_id = request.query_params.get("project_id")
+    tool_filter = request.query_params.get("tool")
 
     db_factory = app_state.db_session_factory
     async with db_factory() as db:
+        # Load user's projects for filter dropdown
+        member_q = (
+            select(Project)
+            .join(ProjectMember, ProjectMember.project_id == Project.id)
+            .where(ProjectMember.user_id == user_uuid)
+            .order_by(Project.name)
+        )
+        user_projects = (await db.execute(member_q)).scalars().all()
+
+        # Collect distinct tool names for filter dropdown (last 14 days)
+        tool_names_q = (
+            select(ToolCallAudit.tool_name)
+            .where(ToolCallAudit.user_id == user_uuid)
+            .where(ToolCallAudit.created_at >= window_start)
+            .distinct()
+            .order_by(ToolCallAudit.tool_name)
+        )
+        all_tool_names = [r[0] for r in (await db.execute(tool_names_q)).all()]
+
         # ---- Load tool calls from the audit table (last N days) ----
         rows_q = (
             select(ToolCallAudit)
@@ -176,6 +197,8 @@ async def audit_page(request: Request):
                 rows_q = rows_q.where(ToolCallAudit.project_id == uuid.UUID(active_project_id))
             except ValueError:
                 pass
+        if tool_filter:
+            rows_q = rows_q.where(ToolCallAudit.tool_name == tool_filter)
         tool_rows = (await db.execute(rows_q)).scalars().all()
 
         for r in tool_rows:
@@ -248,6 +271,8 @@ async def audit_page(request: Request):
                         "summary": r.response_summary,
                         "duration_ms": r.duration_ms,
                         "time_str": r.created_at.strftime("%H:%M"),
+                        "project_id": str(r.project_id) if r.project_id else None,
+                        "project_name": next((p.name for p in user_projects if p.id == r.project_id), None),
                     }
                 )
 
@@ -318,6 +343,10 @@ async def audit_page(request: Request):
             "stats": stats,
             "day_list": day_list,
             "window_days": window_days,
+            "projects": user_projects,
+            "selected_project_id": active_project_id,
+            "all_tool_names": all_tool_names,
+            "selected_tool": tool_filter,
         },
     )
 
