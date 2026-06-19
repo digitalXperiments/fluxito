@@ -83,6 +83,25 @@
     </div>
   </div>
 
+  {# ── Filters ── #}
+  <form method="get" class="audit-filters" style="margin:0 0 24px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+    <select name="project_id" onchange="this.form.submit()" style="min-width:200px">
+      <option value="">All projects</option>
+      {% for p in projects %}
+      <option value="{{ p.id }}" {% if selected_project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="tool" onchange="this.form.submit()" style="min-width:200px">
+      <option value="">All tools</option>
+      {% for tn in all_tool_names %}
+      <option value="{{ tn }}" {% if selected_tool == tn %}selected{% endif %}>{{ tn }}</option>
+      {% endfor %}
+    </select>
+    {% if selected_project_id or selected_tool %}
+    <a href="/activity-log" class="btn ghost" style="padding:6px 12px">Clear</a>
+    {% endif %}
+  </form>
+
   {# ── Daily groups ── #}
   {% if day_list %}
     {% for d in day_list %}
@@ -151,16 +170,17 @@
         {# ── Individual calls (hidden by default) ── #}
         <div class="plat-calls" id="calls-{{ group_id }}" style="display:none">
           {% for c in plat.calls %}
-          <a class="activity-row{% if c.is_issue %} is-err{% endif %}" href="/activity-log/{{ c.id }}" style="text-decoration:none;color:inherit">
-            <span class="t">{{ c.time_str }}</span>
-            <span class="pbadge sm {{ pbadge_class(plat.slug) }}"><span>{{ pbadge_letters(plat.slug) }}</span></span>
-            <span class="tool">{{ c.tool_name }}</span>
-            <span class="client">{% if c.summary %}{{ c.summary }}{% endif %}</span>
-            <span class="status {% if c.is_issue %}err{% endif %}">
-              {% if c.is_write %}write{% else %}read{% endif %} · {{ c.status }}
-              {% if c.duration_ms is not none %} · {{ c.duration_ms }}ms{% endif %}
-            </span>
-          </a>
+           <a class="activity-row{% if c.is_issue %} is-err{% endif %}" href="/activity-log/{{ c.id }}" style="text-decoration:none;color:inherit">
+             <span class="t">{{ c.time_str }}</span>
+             <span class="pbadge sm {{ pbadge_class(plat.slug) }}"><span>{{ pbadge_letters(plat.slug) }}</span></span>
+             <span class="tool">{{ c.tool_name }}</span>
+             {% if c.project_name %}<span class="proj" style="color:var(--muted);font-size:12px">{{ c.project_name }}</span>{% endif %}
+             <span class="client">{% if c.summary %}{{ c.summary }}{% endif %}</span>
+             <span class="status {% if c.is_issue %}err{% endif %}">
+               {% if c.is_write %}write{% else %}read{% endif %} · {{ c.status }}
+               {% if c.duration_ms is not none %} · {{ c.duration_ms }}ms{% endif %}
+             </span>
+           </a>
           {% endfor %}
           {% if plat.count > plat.calls|length %}
           <div class="activity-row more-row">
