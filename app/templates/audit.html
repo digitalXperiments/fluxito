@@ -91,13 +91,19 @@
       <option value="{{ p.id }}" {% if selected_project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>
       {% endfor %}
     </select>
+    <select name="platform" class="f-input" onchange="this.form.submit()">
+      <option value="">All platforms</option>
+      {% for slug, label in platform_options %}
+      <option value="{{ slug }}" {% if selected_platform == slug %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
     <select name="tool" class="f-input" onchange="this.form.submit()">
       <option value="">All tools</option>
       {% for tn in all_tool_names %}
       <option value="{{ tn }}" {% if selected_tool == tn %}selected{% endif %}>{{ tn }}</option>
       {% endfor %}
     </select>
-    {% if selected_project_id or selected_tool %}
+    {% if selected_project_id or selected_platform or selected_tool %}
     <a href="/activity-log" class="btn ghost">Clear</a>
     {% endif %}
   </form>

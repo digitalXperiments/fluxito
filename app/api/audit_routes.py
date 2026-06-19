@@ -162,6 +162,7 @@ async def audit_page(request: Request):
     # showing everything the user did; let project filtering be opt-in.
     active_project_id = request.query_params.get("project_id")
     tool_filter = request.query_params.get("tool")
+    platform_filter = request.query_params.get("platform")
 
     db_factory = app_state.db_session_factory
     async with db_factory() as db:
@@ -184,6 +185,23 @@ async def audit_page(request: Request):
         )
         all_tool_names = [r[0] for r in (await db.execute(tool_names_q)).all()]
 
+        # Collect distinct platforms for filter dropdown
+        platform_q = (
+            select(ToolCallAudit.platform)
+            .where(ToolCallAudit.user_id == user_uuid)
+            .where(ToolCallAudit.created_at >= window_start)
+            .where(ToolCallAudit.platform.isnot(None))
+            .distinct()
+            .order_by(ToolCallAudit.platform)
+        )
+        all_platforms_raw = [r[0] for r in (await db.execute(platform_q)).all()]
+        inferred_from_tools = {_infer_platform(tn) for tn in all_tool_names if _infer_platform(tn)}
+        all_platforms = sorted(
+            set(all_platforms_raw) | inferred_from_tools,
+            key=lambda s: (PLATFORM_LABELS.get(s, s.replace("_", " ").title())),
+        )
+        platform_options = [(p, PLATFORM_LABELS.get(p, p.replace("_", " ").title())) for p in all_platforms]
+
         # ---- Load tool calls from the audit table (last N days) ----
         rows_q = (
             select(ToolCallAudit)
@@ -200,6 +218,14 @@ async def audit_page(request: Request):
         if tool_filter:
             rows_q = rows_q.where(ToolCallAudit.tool_name == tool_filter)
         tool_rows = (await db.execute(rows_q)).scalars().all()
+
+        # Apply platform filter in Python (platform may be inferred)
+        if platform_filter:
+            tool_rows = [
+                r
+                for r in tool_rows
+                if (r.platform or _infer_platform(r.tool_name) or "other") == platform_filter
+            ]
 
         for r in tool_rows:
             if not r.created_at:
@@ -347,6 +373,8 @@ async def audit_page(request: Request):
             "selected_project_id": active_project_id,
             "all_tool_names": all_tool_names,
             "selected_tool": tool_filter,
+            "platform_options": platform_options,
+            "selected_platform": platform_filter,
         },
     )
 

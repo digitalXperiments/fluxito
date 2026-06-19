@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.23] — 2026-06-19
+
+### Added
+- **Activity Log platform filter.** A new `<select>` dropdown between the project and
+  tool filters lets users narrow down tool calls by platform (GA4, GTM, Meta Ads, etc.).
+  Platforms are sourced from stored values and inferred from tool name prefixes, with
+  human-readable labels matching the rest of the UI.
+
 ## [1.1.22] — 2026-06-19
 
 ### Fixed
