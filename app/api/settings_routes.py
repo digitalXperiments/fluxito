@@ -23,7 +23,7 @@ _TAB_DESTINATIONS = {
     "system": "/settings/system",
     "activity": "/activity-log",
     "platform": "/admin",
-    "ai-models": "/settings/ai-models",
+    "ai-models": "/settings/ai",
 }
 
 

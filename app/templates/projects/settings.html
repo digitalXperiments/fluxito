@@ -446,7 +446,7 @@
           <span>Webhook URL *</span>
           <input type="url" name="webhook_url" class="f-input" placeholder="https://hooks.slack.com/services/…" required autocomplete="off">
         </label>
-        <button type="submit" class="btn primary" id="slackWebhookBtn" style="margin-top:22px">Save</button>
+        <button type="submit" class="btn primary" id="slackWebhookBtn">Save</button>
       </form>
       <div id="slackWebhookMsg" class="ps-msg" style="display:none;margin-top:12px"></div>
     </div>
@@ -1131,6 +1131,14 @@
   display: grid; grid-template-columns: 1fr 2fr auto;
   gap: 12px; align-items: end;
 }
+.ps-slack-form .f-field {
+  margin-bottom: 0;
+}
+.ps-slack-form button {
+  min-height: 44px;
+  justify-content: center;
+  margin-bottom: 0;
+}
 
 /* ── Detail list (general) ─────────────────────── */
 .ps-detail-list { display: grid; gap: 12px; font-size: 14px; }
@@ -1267,9 +1275,13 @@
   gap: 12px;
   align-items: end;
 }
+.ps-invite .f-field {
+  margin-bottom: 0;
+}
 .ps-invite .btn {
   min-height: 44px;
   justify-content: center;
+  margin-bottom: 0;
 }
 .ps-invite-email,
 .ps-invite-role {

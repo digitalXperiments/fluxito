@@ -77,7 +77,7 @@
       <div class="rsb-run-meta">
         {% if run.triggered_by == 'claude' %}
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-        Claude
+        AI
         {% endif %}
         · {{ run.created_at[:10] if run.created_at else '—' }}
         {% if run.duration_ms %}· {{ run.duration_ms }}ms{% endif %}
@@ -90,7 +90,7 @@
   <div class="run-summary-card">
     <div class="run-summary-header">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      Claude's Analysis
+      AI Analysis
     </div>
     <div class="run-summary-body">{{ run.raw_summary }}</div>
   </div>

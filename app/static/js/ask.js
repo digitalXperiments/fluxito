@@ -646,6 +646,11 @@
 
       // Prepare assistant turn container
       var assistantBody = addMessage("assistant");
+      var thinkingEl = el("div", "ask-thinking");
+      for (var di = 0; di < 3; di++) {
+        thinkingEl.appendChild(el("span", "ask-thinking-dot"));
+      }
+      assistantBody.appendChild(thinkingEl);
 
       // Streaming state per turn
       var currentTextEl = null;
@@ -670,6 +675,10 @@
                 return {};
               })
               .then(function (j) {
+                if (thinkingEl && thinkingEl.parentNode) {
+                  thinkingEl.remove();
+                  thinkingEl = null;
+                }
                 var errDiv = el("div", "ask-error", j.message || "Error: " + resp.status);
                 assistantBody.appendChild(errDiv);
                 if (j.error === "no_key") window.location.href = "/settings?tab=ai";
@@ -687,6 +696,7 @@
               .read()
               .then(function (result) {
                 if (result.done) {
+                  removeThinking();
                   sendBtn.disabled = false;
                   loadConversations();
                   return;
@@ -722,10 +732,23 @@
           pump();
         })
         .catch(function () {
+          removeThinking();
           var errDiv = el("div", "ask-error", "Network error.");
           assistantBody.appendChild(errDiv);
           sendBtn.disabled = false;
         });
+
+      // ── Thinking indicator ────────────────────────────────────────────────
+
+      var thinkingRemoved = false;
+      function removeThinking() {
+        if (thinkingRemoved) return;
+        thinkingRemoved = true;
+        if (thinkingEl && thinkingEl.parentNode) {
+          thinkingEl.remove();
+          thinkingEl = null;
+        }
+      }
 
       // ── SSE event handler ─────────────────────────────────────────────────
 
@@ -759,6 +782,7 @@
               }
             }
           } else if (p.type === "text_delta") {
+            removeThinking();
             // Seal any open chips row so text and chips don't interleave visually
             if (!currentTextEl) {
               currentTextEl = el("div", "ask-md");
@@ -768,6 +792,7 @@
             currentTextSrc += p.text || "";
             currentTextEl.innerHTML = renderMarkdown(currentTextSrc);
           } else if (p.type === "tool_call_start") {
+            removeThinking();
             // Start a new text block after tool chips
             currentTextEl = null;
             currentTextSrc = "";
@@ -806,6 +831,7 @@
               addUsageFromTokens(p.usage);
             }
           } else if (p.type === "error") {
+            removeThinking();
             var errDiv = el("div", "ask-error", p.error || "Something went wrong.");
             assistantBody.appendChild(errDiv);
           }

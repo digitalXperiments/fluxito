@@ -15,7 +15,7 @@
       <div style="flex:1;min-width:280px">
         <span class="label">Powered by Rule Books + AI</span>
         <h1>Auditing <em class="serif-italic">intelligence.</em></h1>
-        <p>Continuous tag auditing, live tag testing, and data quality monitoring — all in one place. Claude analyses your tracking stack against 183+ rules across 20 platforms.</p>
+        <p>Continuous tag auditing, live tag testing, and data quality monitoring — all in one place. Your AI analyses your tracking stack against 183+ rules across 20 platforms.</p>
       </div>
       <div class="audit-hero-actions">
         <a href="/tracking-plan" class="btn ghost sm">
@@ -24,7 +24,7 @@
         </a>
         <button class="btn primary sm" id="runAuditBtn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          Run Audit in Claude
+          Run Audit
         </button>
       </div>
     </div>
@@ -169,8 +169,8 @@
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       </div>
       <h3>No audit runs yet</h3>
-      <p>Ask Claude to run a tag audit, live tag test, or data quality check. Results appear here automatically.</p>
-      <button class="btn primary" id="runAuditBtn2" style="margin-top:16px">Run Audit in Claude</button>
+      <p>Ask your AI to run a tag audit, live tag test, or data quality check. Results appear here automatically.</p>
+      <button class="btn primary" id="runAuditBtn2" style="margin-top:16px">Run Audit</button>
     </div>
     {% endif %}
   </div>
@@ -178,7 +178,7 @@
   {# ── Tab: Rule Books ── #}
   <div class="audit-tab-panel" id="tab-rulebooks">
     <div class="rb-intro">
-      <p>Rule Books define <strong>{{ platforms_summary | sum(attribute='event_count') }}+ validation rules</strong> across {{ platforms_summary | length }} platforms. Claude uses these to validate every tag payload — no connector required.</p>
+      <p>Rule Books define <strong>{{ platforms_summary | sum(attribute='event_count') }}+ validation rules</strong> across {{ platforms_summary | length }} platforms. Your AI uses these to validate every tag payload — no connector required.</p>
     </div>
 
     <div class="rb-search-row">
@@ -255,11 +255,11 @@
     </div>
   </div>
 
-  {# ── Claude prompt tip ── #}
+  {# ── AI prompt tip ── #}
   <div class="audit-tip">
     <strong>How auditing works —</strong>
-    Ask Claude to <code>run_audit</code>, <code>tag_rulebook</code>, or <code>live_tag_test</code>. Claude uses Fluxito's Rule Books ({{ platforms_summary | length }} platforms, 183+ rules) and your SDR as context, validates tags against them, and saves results here automatically via <code>save_audit_result</code>.
-    No server-side browsers or compute — Claude does the heavy lifting.
+    Ask your AI to <code>run_audit</code>, <code>tag_rulebook</code>, or <code>live_tag_test</code>. It uses Fluxito's Rule Books ({{ platforms_summary | length }} platforms, 183+ rules) and your SDR as context, validates tags against them, and saves results here automatically via <code>save_audit_result</code>.
+    No server-side browsers or compute — your AI does the heavy lifting.
   </div>
 
 </div>{# /app-main #}
