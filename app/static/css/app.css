@@ -1210,7 +1210,7 @@ html[data-theme="dark"] .avatar-btn { color: #09090b; }
 /* ---- Container & sections -------------------------------- */
 .container { max-width: var(--container); margin: 0 auto; padding: 0 24px; }
 .container-narrow { max-width: var(--container-narrow); margin: 0 auto; padding: 0 24px; }
-.main { padding: 0; flex: 1; min-height: 0; }
+.main { padding: 0; flex: 1; min-width: 0; min-height: 0; }
 .has-sidebar .main { margin-left: 240px; }
 .has-sidebar .site-footer { margin-left: 240px; }
 .site-footer { margin-left: 0; }
@@ -3908,15 +3908,28 @@ body:not(.has-sidebar):not(.embed) .app-main {
   padding-top: calc(var(--nav-h) + 32px);
 }
 
-/* Embedded panels (rendered inside a settings/context/dashboards iframe with
-   ?embed=1) have no sidebar AND no fixed top nav. They must fill their iframe
-   panel edge-to-edge — not inherit the landing page's centered max-width or its
-   top-nav clearance, which would leave a large empty gutter and a phantom gap
-   above the content. */
-body.embed .app-main {
-  max-width: none;
-  margin: 0;
-  padding: 24px var(--gutter) 48px;
+/* Sub-section tab bar (Context, Dashboards) — real-page navigation, no iframe. */
+.sub-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  margin: 0 0 24px;
+  flex-wrap: wrap;
+}
+.sub-tab {
+  padding: 10px 16px;
+  font-size: 14px;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-weight: 450;
+}
+.sub-tab:hover { color: var(--ink); }
+.sub-tab.is-active {
+  color: var(--ink);
+  border-bottom-color: var(--blue);
+  font-weight: 550;
 }
 
 /* Page header — sits at top of every app page */

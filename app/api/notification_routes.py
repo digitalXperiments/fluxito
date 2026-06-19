@@ -211,9 +211,6 @@ async def profile_page(request: Request):
     uid = get_uid_from_request(request)
     if not uid:
         return RedirectResponse("/signin?next=/profile", status_code=302)
-    # Redirect to consolidated settings shell unless this is an embedded panel.
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/settings?tab=account", status_code=302)
 
     user = await _load_user(uid)
     if not user:
@@ -815,6 +812,4 @@ async def delete_account(request: Request):
 async def activity_page(request: Request):
     """Legacy route — the activity log now lives at /activity-log as a unified
     day-by-day view backed by tool_call_audit. Permanently redirect."""
-    embed = request.query_params.get("embed")
-    target = "/activity-log?embed=1" if embed else "/activity-log"
-    return RedirectResponse(target, status_code=301)
+    return RedirectResponse("/activity-log", status_code=301)

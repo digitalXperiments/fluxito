@@ -167,14 +167,27 @@ def render(
         ctx["user_project_role"] = getattr(request.state, "active_project_role", None)
     if "nav_projects" not in ctx:
         ctx["nav_projects"] = getattr(request.state, "nav_projects", [])
-    # Chromeless embed mode (used by the consolidated /settings, /context, /dashboards
-    # pages to render existing pages inside iframes). Computed defensively so templates
-    # never touch request.query_params directly (a minimal Request scope may lack it).
-    if "embed" not in ctx:
-        try:
-            ctx["embed"] = request.query_params.get("embed") in ("1", "true", "yes")
-        except Exception:
-            ctx["embed"] = False
+    # Settings-rail context — derived purely from the nav state already on
+    # request.state (no extra DB queries) so the shared settings rail renders
+    # with correct role gating on every standalone settings page.
+    _nav = ctx.get("nav_projects") or []
+    if "active_project_slug" not in ctx:
+        _apid = ctx.get("active_project_id")
+        ctx["active_project_slug"] = (
+            next((p["slug"] for p in _nav if p.get("id") == _apid), _nav[0]["slug"]) if _nav else None
+        )
+    if "is_install_admin" not in ctx:
+        ctx["is_install_admin"] = any(p.get("role") in ("owner", "admin") for p in _nav)
+    if "is_superadmin" not in ctx:
+        _u = ctx.get("user")
+        if isinstance(_u, dict):
+            ctx["is_superadmin"] = bool(_u.get("is_superadmin"))
+        else:
+            ctx["is_superadmin"] = bool(getattr(_u, "is_superadmin", False)) if _u is not None else False
+    # Embed/iframe mode has been removed — /settings, /context and /dashboards are
+    # now real standalone pages, not iframe hubs. Force embed=False so no page can
+    # ever render chromeless (neutralises any stray ?embed=1 link or bookmark).
+    ctx["embed"] = False
     return templates.TemplateResponse(request, template_name, ctx, status_code=status_code)
 
 

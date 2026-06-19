@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{% extends "settings/shell.html" %}
 {% block title %}AI Model Catalog — Fluxito{% endblock %}
-{% set active = 'ai_models' %}
+{% set settings_section = 'ai-models' %}
 
-{% block main %}
+{% block settings_main %}
 <main class="app-main" style="max-width:720px;padding:1.75rem 1.5rem;">
   <div class="page-head" style="margin-bottom:1.25rem;">
     <h1 style="font-size:1.2rem;margin:0 0 0.25rem;">AI model catalog</h1>
@@ -188,4 +188,4 @@
     });
 })();
 </script>
-{% endblock %}
+{% endblock settings_main %}

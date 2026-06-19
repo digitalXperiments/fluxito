@@ -388,9 +388,6 @@ async def project_settings_page(request: Request, slug: str):
     user = await _resolve_user(request)
     if not user:
         return RedirectResponse(f"/signin?next=/project/{slug}/settings", status_code=302)
-    # Redirect to consolidated settings shell unless this is an embedded panel.
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/settings?tab=project", status_code=302)
 
     project = await _get_project_by_slug(slug)
     if not project:

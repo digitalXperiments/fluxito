@@ -1,12 +1,12 @@
-{% extends "base.html" %}
+{% extends "settings/shell.html" %}
 {% block title %}Integrations — Fluxito{% endblock %}
-{% set active = 'integrations' %}
+{% set settings_section = 'integrations' %}
 
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/integrations.css?v={{ asset_hash('css/integrations.css') }}"/>
 {% endblock %}
 
-{% block main %}
+{% block settings_main %}
 <main class="app-main">
 
   {# ── Page header ── #}

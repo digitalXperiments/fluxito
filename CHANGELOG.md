@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.20] — 2026-06-19
+
+### Changed
+- **Settings, Context and Dashboards are real pages again — the iframe/embed system
+  is gone.** These sections were previously single shells that loaded each sub-page in
+  an `?embed=1` `<iframe>`. That nesting was the root cause of a string of layout bugs
+  (a navigation "loop", leaked chrome, and a horizontal-overflow / cut-off-content issue
+  that appeared at non-default browser zoom because the iframe panel couldn't shrink to
+  the viewport). Every section is now a normal standalone page using the same sidebar +
+  content layout as the rest of the app:
+  - **Settings** keeps its grouped left rail (Account · AI keys · Project · Integrations ·
+    System · Activity Log · Platform · AI models), but each item is now a real link to a
+    real page, role-gated exactly as before, with the current section highlighted.
+  - **Context** (KPI Library + Business Context) and **Dashboards** (Your dashboards +
+    Gallery) use a lightweight sub-nav tab bar of real links.
+  - `/settings`, `/context`, `/dashboards` and the old `?tab=` / `?view=` deep-links now
+    redirect to the matching real page, so existing links and bookmarks keep working.
+
+### Fixed
+- **Embedded-panel layout bugs are resolved by construction** — with no iframe to size,
+  the zoom-dependent overflow (Settings/Integrations/Account content running off the right
+  edge, "Create token"/"Revoke" pushed off-screen) can no longer occur. Settings pages now
+  render identically to every other page at any zoom level.
+
 ## [1.1.19] — 2026-06-18
 
 ### Fixed

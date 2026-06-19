@@ -1,205 +1,93 @@
-"""File-read tests for the Phase D page merges.
+"""File-read tests for the Context / Dashboards page merges.
 
-Pure file reads — no HTTP, no DB. Mirrors the style of
-tests/test_settings_consolidation.py.
+These pages used to embed their sub-pages in ``?embed=1`` iframes. They are now
+real standalone pages joined by a shared sub-nav tab bar
+(partials/context_tabs.html, partials/dashboards_tabs.html). Pure file reads.
 """
 
 from pathlib import Path
 
-CONTEXT_TEMPLATE = Path("app/templates/context.html")
-DASHBOARDS_HUB_TEMPLATE = Path("app/templates/dashboards_hub.html")
+CONTEXT_TABS = Path("app/templates/partials/context_tabs.html")
+DASH_TABS = Path("app/templates/partials/dashboards_tabs.html")
+KPI = Path("app/templates/kpi_library.html")
+BUSINESS = Path("app/templates/business_context.html")
+LIVE_HUB = Path("app/templates/dashboards/live_hub.html")
+GALLERY = Path("app/templates/templates.html")
 KNOWLEDGE_ROUTES = Path("app/api/knowledge_routes.py")
 DASHBOARD_ROUTES = Path("app/api/dashboard_routes.py")
 TEMPLATE_ROUTES = Path("app/api/template_routes.py")
-AUDIT_ROUTES = Path("app/api/audit_routes.py")
 
 
 # ---------------------------------------------------------------------------
-# context.html
+# Old iframe hubs are gone
 # ---------------------------------------------------------------------------
 
 
-def test_context_has_kpis_tab_button():
-    source = CONTEXT_TEMPLATE.read_text()
-    assert 'data-tab="kpis"' in source
-
-
-def test_context_has_business_tab_button():
-    source = CONTEXT_TEMPLATE.read_text()
-    assert 'data-tab="business"' in source
-
-
-def test_context_has_kpi_library_embed_iframe():
-    source = CONTEXT_TEMPLATE.read_text()
-    assert "/kpi-library?embed=1" in source
-
-
-def test_context_has_business_context_embed_iframe():
-    source = CONTEXT_TEMPLATE.read_text()
-    assert "/business-context?embed=1" in source
-
-
-def test_context_iframe_present():
-    source = CONTEXT_TEMPLATE.read_text()
-    assert "<iframe" in source
-
-
-def test_context_tab_buttons_both_present():
-    source = CONTEXT_TEMPLATE.read_text()
-    assert "KPIs" in source
-    assert "Business context" in source
-
-
-def test_context_selects_business_on_hash():
-    source = CONTEXT_TEMPLATE.read_text()
-    # The JS must check for the #business hash to select the business tab.
-    assert "#business" in source
-    assert "'business'" in source
-
-
-def test_context_active_is_context():
-    source = CONTEXT_TEMPLATE.read_text()
-    assert "active = 'context'" in source
+def test_iframe_hubs_removed():
+    assert not Path("app/templates/context.html").exists()
+    assert not Path("app/templates/dashboards_hub.html").exists()
 
 
 # ---------------------------------------------------------------------------
-# dashboards_hub.html
+# Context — sub-nav tabs are real links
 # ---------------------------------------------------------------------------
 
 
-def test_dashboards_hub_has_dashboards_tab_button():
-    source = DASHBOARDS_HUB_TEMPLATE.read_text()
-    assert 'data-tab="dashboards"' in source
+def test_context_tabs_are_real_links():
+    src = CONTEXT_TABS.read_text()
+    assert 'href="/kpi-library"' in src
+    assert 'href="/business-context"' in src
+    assert "context_section ==" in src
 
 
-def test_dashboards_hub_has_gallery_tab_button():
-    source = DASHBOARDS_HUB_TEMPLATE.read_text()
-    assert 'data-tab="gallery"' in source
+def test_context_pages_include_tabs_and_section():
+    kpi = KPI.read_text()
+    assert 'include "partials/context_tabs.html"' in kpi
+    assert "context_section = 'kpi'" in kpi
+    biz = BUSINESS.read_text()
+    assert 'include "partials/context_tabs.html"' in biz
+    assert "context_section = 'business'" in biz
 
 
-def test_dashboards_hub_has_live_dashboards_embed_iframe():
-    source = DASHBOARDS_HUB_TEMPLATE.read_text()
-    assert "/live-dashboards?embed=1" in source
+def test_context_route_redirects_to_kpi_library():
+    src = KNOWLEDGE_ROUTES.read_text()
+    assert 'RedirectResponse("/kpi-library"' in src
 
 
-def test_dashboards_hub_has_templates_embed_iframe():
-    source = DASHBOARDS_HUB_TEMPLATE.read_text()
-    assert "/templates?embed=1" in source
-
-
-def test_dashboards_hub_iframe_present():
-    source = DASHBOARDS_HUB_TEMPLATE.read_text()
-    assert "<iframe" in source
-
-
-def test_dashboards_hub_tab_labels():
-    source = DASHBOARDS_HUB_TEMPLATE.read_text()
-    assert "Your dashboards" in source
-    assert "Gallery" in source
-
-
-def test_dashboards_hub_active_is_dashboards():
-    source = DASHBOARDS_HUB_TEMPLATE.read_text()
-    assert "active = 'dashboards'" in source
-
-
-def test_dashboards_hub_gallery_view_param():
-    source = DASHBOARDS_HUB_TEMPLATE.read_text()
-    # The JS must use ?view= param to select the gallery tab on load.
-    assert "'view'" in source or '"view"' in source
+def test_context_sub_routes_no_longer_embed_guarded():
+    src = KNOWLEDGE_ROUTES.read_text()
+    assert 'request.query_params.get("embed")' not in src
 
 
 # ---------------------------------------------------------------------------
-# Route redirects — knowledge_routes.py
+# Dashboards — sub-nav tabs are real links
 # ---------------------------------------------------------------------------
 
 
-def test_kpi_library_redirect_to_context():
-    source = KNOWLEDGE_ROUTES.read_text()
-    # kpi_library_page must redirect to /context when not embed.
-    assert 'RedirectResponse("/context"' in source
+def test_dashboards_tabs_are_real_links():
+    src = DASH_TABS.read_text()
+    assert 'href="/live-dashboards"' in src
+    assert 'href="/templates"' in src
+    assert "dashboards_section ==" in src
 
 
-def test_kpi_library_redirect_guarded_by_embed():
-    source = KNOWLEDGE_ROUTES.read_text()
-    # The embed guard must be present in the route.
-    assert 'request.query_params.get("embed")' in source
+def test_dashboards_pages_include_tabs_and_section():
+    hub = LIVE_HUB.read_text()
+    assert 'include "partials/dashboards_tabs.html"' in hub
+    assert "dashboards_section = 'live'" in hub
+    gallery = GALLERY.read_text()
+    assert 'include "partials/dashboards_tabs.html"' in gallery
+    assert "dashboards_section = 'gallery'" in gallery
 
 
-def test_business_context_redirect_to_context_hash():
-    source = KNOWLEDGE_ROUTES.read_text()
-    # business_context_page must redirect to /context#business when not embed.
-    assert 'RedirectResponse("/context#business"' in source
+def test_dashboards_route_redirects():
+    src = DASHBOARD_ROUTES.read_text()
+    # /dashboards redirects: default -> /live-dashboards, ?view=gallery -> /templates
+    assert 'view == "gallery"' in src
+    assert '"/templates"' in src
+    assert '"/live-dashboards"' in src
 
 
-def test_context_route_defined():
-    source = KNOWLEDGE_ROUTES.read_text()
-    assert '@router.get("/context")' in source
-
-
-# ---------------------------------------------------------------------------
-# Route redirects — dashboard_routes.py
-# ---------------------------------------------------------------------------
-
-
-def test_dashboards_hub_route_defined():
-    source = DASHBOARD_ROUTES.read_text()
-    assert '@router.get("/dashboards"' in source
-
-
-def test_live_dashboards_redirect_to_dashboards():
-    source = DASHBOARD_ROUTES.read_text()
-    assert 'RedirectResponse("/dashboards"' in source
-
-
-def test_live_dashboards_redirect_guarded_by_embed():
-    source = DASHBOARD_ROUTES.read_text()
-    assert 'request.query_params.get("embed")' in source
-
-
-# ---------------------------------------------------------------------------
-# Route redirects — template_routes.py
-# ---------------------------------------------------------------------------
-
-
-def test_templates_redirect_to_dashboards_gallery():
-    source = TEMPLATE_ROUTES.read_text()
-    assert 'RedirectResponse("/dashboards?view=gallery"' in source
-
-
-def test_templates_redirect_guarded_by_embed():
-    source = TEMPLATE_ROUTES.read_text()
-    assert 'request.query_params.get("embed")' in source
-
-
-# ---------------------------------------------------------------------------
-# Sub-routes untouched (no redirect added to slug routes)
-# ---------------------------------------------------------------------------
-
-
-def test_live_dashboards_slug_route_has_no_embed_redirect():
-    source = DASHBOARD_ROUTES.read_text()
-    # The /live-dashboards/{slug} handler must NOT contain a redirect to /dashboards.
-    # We verify by checking that the redirect only appears once (in live_dashboards_hub).
-    assert source.count('RedirectResponse("/dashboards"') == 1
-
-
-def test_templates_slug_route_has_no_embed_redirect():
-    source = TEMPLATE_ROUTES.read_text()
-    # The redirect to /dashboards?view=gallery must only appear once (in templates_page).
-    assert source.count('RedirectResponse("/dashboards?view=gallery"') == 1
-
-
-# ---------------------------------------------------------------------------
-# Route redirects — audit_routes.py (/activity-log → Settings)
-# ---------------------------------------------------------------------------
-
-
-def test_activity_log_embed_guard_present():
-    source = AUDIT_ROUTES.read_text()
-    assert 'request.query_params.get("embed")' in source
-
-
-def test_activity_log_redirects_to_settings_activity():
-    source = AUDIT_ROUTES.read_text()
-    assert 'RedirectResponse("/settings?tab=activity"' in source
+def test_dashboards_sub_routes_no_longer_embed_guarded():
+    assert 'request.query_params.get("embed")' not in DASHBOARD_ROUTES.read_text()
+    assert 'request.query_params.get("embed")' not in TEMPLATE_ROUTES.read_text()

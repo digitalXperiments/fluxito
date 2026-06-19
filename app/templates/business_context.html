@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Business Context — Fluxito{% endblock %}
 {% set active = 'business_context' %}
+{% set context_section = 'business' %}
 
 {% block head_extra %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css">
@@ -117,6 +118,8 @@
 
 {% block main %}
 <main class="app-main">
+  {% include "partials/context_tabs.html" %}
+
   <div class="page-head">
     <div>
       <span class="label">{{ 'Org-wide context' if scope_type == 'organization' else 'Business context' }}</span>

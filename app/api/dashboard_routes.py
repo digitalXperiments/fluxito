@@ -872,13 +872,13 @@ async def dashboard_scopes_page(slug: str, request: Request):
 
 @router.get("/dashboards", response_class=HTMLResponse)
 async def dashboards_hub(request: Request):
-    """Merged dashboards hub — Your dashboards + Gallery in tabbed iframes."""
+    """Legacy /dashboards hub — redirects to the real standalone page."""
     uid = get_uid_from_request(request)
     if not uid:
         return RedirectResponse("/signin?next=/dashboards", status_code=302)
 
-    user_view = await _load_user_view_from_uid(uid)
-    return render(request, "dashboards_hub.html", {"user": user_view})
+    view = request.query_params.get("view")
+    return RedirectResponse("/templates" if view == "gallery" else "/live-dashboards", status_code=302)
 
 
 @router.get("/live-dashboards", response_class=HTMLResponse)
@@ -887,10 +887,6 @@ async def live_dashboards_hub(request: Request):
     uid = get_uid_from_request(request)
     if not uid:
         return RedirectResponse("/signin?next=/live-dashboards", status_code=302)
-
-    # Non-embed requests are served by the /dashboards hub.
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/dashboards", status_code=302)
 
     active_project_id = request.cookies.get("active_project_id")
     deployed = []

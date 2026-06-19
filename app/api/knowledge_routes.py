@@ -223,7 +223,7 @@ def _build_inputs(payload: KPIPayload) -> list[KPIInput]:
 
 @router.get("/context")
 async def context_page(request: Request):
-    """Merged context hub: KPI Library + Business Context in tabbed iframes."""
+    """Redirect to the default sub-page of the context section."""
     user_ctx = await _resolve_user_ctx(request)
     if not user_ctx:
         return RedirectResponse("/signin?next=/context", status_code=302)
@@ -232,10 +232,7 @@ async def context_page(request: Request):
     if not project_id_str:
         return RedirectResponse("/projects", status_code=302)
 
-    user_view = await _load_user_view(user_ctx)
-    response = render(request, "context.html", {"user": user_view})
-    set_active_project_cookie(response, project_id_str)
-    return response
+    return RedirectResponse("/kpi-library", status_code=302)
 
 
 # ---------------------------------------------------------------------------
@@ -252,10 +249,6 @@ async def kpi_library_page(request: Request):
     project_id_str = await ensure_active_project(request, user_ctx.user_id)
     if not project_id_str:
         return RedirectResponse("/projects", status_code=302)
-
-    # Non-embed requests are served by the /context hub.
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/context", status_code=302)
 
     project_id = uuid.UUID(project_id_str)
 
@@ -445,10 +438,6 @@ async def business_context_page(request: Request):
     project_id_str = await ensure_active_project(request, user_ctx.user_id)
     if not project_id_str:
         return RedirectResponse("/projects", status_code=302)
-
-    # Non-embed requests are served by the /context hub (business tab).
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/context#business", status_code=302)
 
     user_view = await _load_user_view(user_ctx)
     project_id = uuid.UUID(project_id_str)

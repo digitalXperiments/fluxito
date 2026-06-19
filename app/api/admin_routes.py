@@ -26,11 +26,6 @@ _ACCENT_RE = _re.compile(r"^#?[0-9a-zA-Z]{3,8}$")
 async def admin_page(request: Request):
     """Super-admin instance panel (page enforces 401/403)."""
     await require_superadmin(request)
-    # Redirect to consolidated settings shell unless this is an embedded panel.
-    if not request.query_params.get("embed"):
-        from fastapi.responses import RedirectResponse as _Redirect
-
-        return _Redirect("/settings?tab=platform", status_code=302)
     from app.api.google_oauth_routes import _load_user_view
     from app.settings_service import access_approval_required
 

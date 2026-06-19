@@ -6,7 +6,7 @@
 <main class="app-main">
 
   <div class="breadcrumbs">
-    <a href="/templates" target="_top">Templates</a>
+    <a href="/templates">Templates</a>
     <span class="sep">›</span>
     <span class="crumb-mid">{{ template.category | replace('_',' ') | title }}</span>
     <span class="sep">›</span>
@@ -78,7 +78,7 @@
       {% else %}
       <button class="btn" disabled>Missing platforms</button>
       {% endif %}
-      <a href="/templates" class="btn" target="_top">Back to library</a>
+      <a href="/templates" class="btn">Back to library</a>
     </div>
   </div>
 
@@ -94,7 +94,7 @@
         {% if is_connected %}
         <span class="status">Connected</span>
         {% else %}
-        <a href="/connect" class="status link" target="_top">Connect →</a>
+        <a href="/connect" class="status link">Connect →</a>
         {% endif %}
       </div>
       {% endfor %}
@@ -193,7 +193,7 @@
     {% if can_deploy %}
     <button class="btn primary" onclick="deployTemplate('{{ template.slug }}','{{ template.title | e }}')">Deploy <span class="arrow">→</span></button>
     {% else %}
-    <a href="/connect" class="btn" target="_top">Connect missing platforms</a>
+    <a href="/connect" class="btn">Connect missing platforms</a>
     {% endif %}
   </div>
 
@@ -394,7 +394,7 @@ async function deployTemplate(slug, title) {
   if (data.success) {
     if (typeof Fluxito !== 'undefined' && Fluxito.toast) Fluxito.toast('Dashboard deployed!');
     else alert('Dashboard deployed!');
-    setTimeout(() => { try { window.top.location.href = data.live_url; } catch(e) { window.location.href = data.live_url; } }, 600);
+    setTimeout(() => { window.location.href = data.live_url; }, 600);
   } else {
     const msg = data.message || 'Deploy failed';
     if (typeof Fluxito !== 'undefined' && Fluxito.toast) Fluxito.toast(msg, 'error');

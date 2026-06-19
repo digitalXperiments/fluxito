@@ -1,0 +1,6 @@
+{# Sub-nav for the Context section (real pages, no iframe).
+   Set `context_section` to 'kpi' or 'business' on the page. #}
+<div class="sub-tabs" role="tablist" aria-label="Context sections">
+  <a href="/kpi-library" class="sub-tab {% if context_section == 'kpi' %}is-active{% endif %}" {% if context_section == 'kpi' %}aria-current="page"{% endif %}>KPI Library</a>
+  <a href="/business-context" class="sub-tab {% if context_section == 'business' %}is-active{% endif %}" {% if context_section == 'business' %}aria-current="page"{% endif %}>Business Context</a>
+</div>

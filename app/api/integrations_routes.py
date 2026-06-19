@@ -598,9 +598,6 @@ async def integrations_page(request: Request):
     # Auth gate: must be signed in and an install admin
     async with app_state.db_session_factory() as db:
         await _require_install_admin(request, db)
-    # Redirect to consolidated settings shell unless this is an embedded panel.
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/settings?tab=integrations", status_code=302)
     async with app_state.db_session_factory() as db:
         items = await list_oauth_app_status(db)
 
@@ -625,9 +622,6 @@ async def system_settings_page(request: Request):
 
     async with app_state.db_session_factory() as db:
         await _require_install_admin(request, db)
-    # Redirect to consolidated settings shell unless this is an embedded panel.
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/settings?tab=system", status_code=302)
     async with app_state.db_session_factory() as db:
         items = await list_runtime_settings(db)
 

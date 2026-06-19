@@ -1,12 +1,12 @@
-{% extends "base.html" %}
+{% extends "settings/shell.html" %}
 {% block title %}System Settings — Fluxito{% endblock %}
-{% set active = 'system_settings' %}
+{% set settings_section = 'system' %}
 
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/system-settings.css?v={{ asset_hash('css/system-settings.css') }}"/>
 {% endblock %}
 
-{% block main %}
+{% block settings_main %}
 <main class="app-main system-settings-page">
   <div class="page-head">
     <div>

@@ -1,0 +1,22 @@
+{# Shared layout for standalone settings pages: app sidebar (from base) +
+   settings rail + the page's own content. No iframe, no embed.
+   Each settings page does:
+     {% extends "settings/shell.html" %}
+     {% set settings_section = 'account' %}      (drives rail highlight)
+     {% block settings_main %} ...page content... {% endblock %}
+   Children keep their own {% block title %} / {% block head_extra %} freely —
+   the rail stylesheet is loaded in the body below so it never collides with a
+   child's head_extra override.
+#}
+{% extends "base.html" %}
+{% set active = 'settings' %}
+
+{% block main %}
+<link rel="stylesheet" href="/static/css/settings.css?v={{ asset_hash('css/settings.css') }}"/>
+<div class="settings-shell">
+  {% include "partials/settings_rail.html" %}
+  <div class="settings-content">
+    {% block settings_main %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

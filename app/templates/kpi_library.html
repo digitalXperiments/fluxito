@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}KPI Library — Fluxito{% endblock %}
 {% set active = 'kpi_library' %}
+{% set context_section = 'kpi' %}
 
 {% block main %}
 <main class="app-main">
+  {% include "partials/context_tabs.html" %}
 
   <div class="page-head">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap">

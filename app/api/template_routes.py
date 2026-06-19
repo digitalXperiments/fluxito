@@ -197,10 +197,6 @@ async def templates_page(
     if not uid:
         return RedirectResponse("/signin?next=/templates", status_code=302)
 
-    # Non-embed requests are served by the /dashboards hub (gallery view).
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/dashboards?view=gallery", status_code=302)
-
     user = await _load_user_view(uid) if uid else None
     active_pid = get_active_project_id(request) if uid else None
     show_mine = mine == "1" and active_pid is not None

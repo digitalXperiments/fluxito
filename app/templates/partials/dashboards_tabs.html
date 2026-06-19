@@ -1,0 +1,6 @@
+{# Sub-nav for the Dashboards section (real pages, no iframe).
+   Set `dashboards_section` to 'live' or 'gallery' on the page. #}
+<div class="sub-tabs" role="tablist" aria-label="Dashboard sections">
+  <a href="/live-dashboards" class="sub-tab {% if dashboards_section == 'live' %}is-active{% endif %}" {% if dashboards_section == 'live' %}aria-current="page"{% endif %}>Your dashboards</a>
+  <a href="/templates" class="sub-tab {% if dashboards_section == 'gallery' %}is-active{% endif %}" {% if dashboards_section == 'gallery' %}aria-current="page"{% endif %}>Gallery</a>
+</div>

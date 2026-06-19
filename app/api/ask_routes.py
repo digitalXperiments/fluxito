@@ -79,8 +79,6 @@ async def ai_settings(request: Request):
     uid = _require_user_id(request)
     if not uid:
         return RedirectResponse("/signin?next=/settings/ai", status_code=302)
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/settings?tab=ai", status_code=302)
     from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
 
     user_ctx = await _resolve_user_ctx(request)
@@ -466,8 +464,6 @@ async def ai_models_settings(request: Request):
         await require_superadmin(request)
     except Exception:
         return RedirectResponse("/settings", status_code=302)
-    if not request.query_params.get("embed"):
-        return RedirectResponse("/settings?tab=ai-models", status_code=302)
     from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
 
     user_ctx = await _resolve_user_ctx(request)

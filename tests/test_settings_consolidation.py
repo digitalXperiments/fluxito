@@ -1,139 +1,127 @@
-"""File-read tests for the consolidated /settings shell.
+"""File-read tests for the real-page settings system.
 
-These tests are pure file reads (no HTTP, no DB) — same style as
-tests/test_project_settings_template.py and tests/test_admin_updates_template.py.
+Settings used to be a single iframe shell (settings/index.html) with embedded
+``?embed=1`` panels. They are now real standalone pages joined by a shared
+settings rail (partials/settings_rail.html + settings/shell.html). These pure
+file-read tests lock in the new structure.
 """
 
 from pathlib import Path
 
-INDEX_TEMPLATE = Path("app/templates/settings/index.html")
-BASE_TEMPLATE = Path("app/templates/base.html")
+RAIL = Path("app/templates/partials/settings_rail.html")
+SHELL = Path("app/templates/settings/shell.html")
+SETTINGS_ROUTES = Path("app/api/settings_routes.py")
+TEMPLATING = Path("app/templating.py")
+TEMPLATES_DIR = Path("app/templates")
+
+SETTINGS_PAGES = {
+    "profile.html": "account",
+    "settings/ai.html": "ai",
+    "settings/integrations.html": "integrations",
+    "settings/system.html": "system",
+    "settings/ai_models.html": "ai-models",
+    "admin.html": "platform",
+    "audit.html": "activity",
+    "projects/settings.html": "project",
+}
 
 
 # ---------------------------------------------------------------------------
-# settings/index.html — role-gated regions
+# The old iframe shell is gone
 # ---------------------------------------------------------------------------
 
 
-def test_account_tab_always_present():
-    source = INDEX_TEMPLATE.read_text()
-    assert 'data-tab="account"' in source
-    assert "/profile?embed=1" in source
+def test_iframe_settings_hub_removed():
+    assert not Path("app/templates/settings/index.html").exists()
 
 
-def test_project_tab_gated_on_active_project_slug():
-    source = INDEX_TEMPLATE.read_text()
-    # The project tab must be inside a Jinja conditional on active_project_slug
-    assert "{% if active_project_slug %}" in source
-    assert 'data-tab="project"' in source
-
-
-def test_workspace_tabs_gated_on_is_install_admin():
-    source = INDEX_TEMPLATE.read_text()
-    assert "{% if is_install_admin %}" in source
-    assert 'data-tab="integrations"' in source
-    assert 'data-tab="system"' in source
-    assert "/settings/integrations?embed=1" in source
-    assert "/settings/system?embed=1" in source
-
-
-def test_platform_tab_gated_on_is_superadmin():
-    source = INDEX_TEMPLATE.read_text()
-    assert "{% if is_superadmin %}" in source
-    assert 'data-tab="platform"' in source
-    assert "/admin?embed=1" in source
-
-
-def test_all_data_tab_values_present():
-    source = INDEX_TEMPLATE.read_text()
-    for tab in ("account", "ai", "project", "integrations", "system", "activity", "platform", "ai-models"):
-        assert f'data-tab="{tab}"' in source, f"Missing data-tab={tab!r}"
-
-
-def test_activity_tab_gated_on_is_install_admin():
-    source = INDEX_TEMPLATE.read_text()
-    # activity tab must appear inside the is_install_admin block
-    admin_idx = source.index("{% if is_install_admin %}")
-    activity_idx = source.index('data-tab="activity"')
-    endif_idx = source.index("{% endif %}", activity_idx)
-    # The is_install_admin guard must open before the tab and close after it
-    assert admin_idx < activity_idx
-    # The endif must come after the activity tab (not before)
-    assert activity_idx < endif_idx
-
-
-def test_activity_tab_src():
-    source = INDEX_TEMPLATE.read_text()
-    assert "/activity-log?embed=1" in source
-
-
-def test_iframe_with_settings_frame_class_present():
-    source = INDEX_TEMPLATE.read_text()
-    assert 'class="settings-frame"' in source
-    assert "<iframe" in source
+def test_no_embed_panels_anywhere():
+    for tpl in TEMPLATES_DIR.rglob("*.html"):
+        src = tpl.read_text()
+        assert "?embed=1" not in src, f"{tpl} still has an ?embed=1 link"
+        assert "settings-frame" not in src, f"{tpl} still references the iframe"
+        assert "data-src=" not in src, f"{tpl} still has an iframe data-src"
 
 
 # ---------------------------------------------------------------------------
-# base.html — embed guard
+# Shared rail — real links, role gated
 # ---------------------------------------------------------------------------
 
 
-def test_base_html_body_class_has_embed_guard():
-    source = BASE_TEMPLATE.read_text()
-    # Chrome is suppressed in embed mode via the `embed` context var (computed
-    # defensively in templating.render() so templates never touch
-    # request.query_params, which a minimal Request scope may lack).
-    assert "not embed" in source
+def test_rail_has_real_anchor_links():
+    src = RAIL.read_text()
+    for href in (
+        "/profile",
+        "/settings/ai",
+        "/settings/integrations",
+        "/settings/system",
+        "/activity-log",
+        "/admin",
+        "/settings/ai-models",
+    ):
+        assert f'href="{href}"' in src, f"rail missing real link {href}"
+    assert 'href="/project/{{ active_project_slug }}/settings"' in src
 
 
-def test_base_html_sidebar_wrapped_in_embed_guard():
-    source = BASE_TEMPLATE.read_text()
-    # The embed guard must appear before the sidebar and the mobile topbar
-    guard_idx = source.index("{% if not embed %}")
-    sidebar_idx = source.index('<aside class="sidebar">')
-    mobile_idx = source.index('<div class="mobile-topbar">')
-    assert guard_idx < sidebar_idx
-    assert guard_idx < mobile_idx
+def test_rail_role_gates():
+    src = RAIL.read_text()
+    assert "{% if active_project_slug %}" in src
+    assert "{% if is_install_admin %}" in src
+    assert "{% if is_superadmin %}" in src
 
 
-def test_templating_computes_embed_flag():
-    # render() must inject an `embed` flag so base.html never reads request.query_params.
-    src = Path("app/templating.py").read_text()
-    assert '"embed"' in src and "query_params.get(" in src
+def test_rail_highlights_active_section():
+    src = RAIL.read_text()
+    assert "settings_section ==" in src
+    assert "is-active" in src
 
 
 # ---------------------------------------------------------------------------
-# AI keys tab
+# Shell + child pages
 # ---------------------------------------------------------------------------
 
-AI_TEMPLATE = Path("app/templates/settings/ai.html")
+
+def test_shell_extends_base_and_includes_rail():
+    src = SHELL.read_text()
+    assert '{% extends "base.html" %}' in src
+    assert 'include "partials/settings_rail.html"' in src
+    assert "{% block settings_main %}" in src
+    assert "settings-shell" in src
 
 
-def test_ai_tab_present_in_settings_rail():
-    source = INDEX_TEMPLATE.read_text()
-    assert 'data-tab="ai"' in source
-    assert "/settings/ai?embed=1" in source
+def test_settings_pages_use_the_shell():
+    for page, section in SETTINGS_PAGES.items():
+        src = (TEMPLATES_DIR / page).read_text()
+        assert '{% extends "settings/shell.html" %}' in src, f"{page} not on the shell"
+        assert f"settings_section = '{section}'" in src, f"{page} wrong/no section"
+        assert "{% block settings_main %}" in src, f"{page} missing settings_main block"
 
 
-def test_ai_template_exists():
-    assert AI_TEMPLATE.exists(), "settings/ai.html must exist"
+# ---------------------------------------------------------------------------
+# /settings is now a redirect, not a rendered shell
+# ---------------------------------------------------------------------------
 
 
-def test_ai_template_references_api_ask_keys():
-    source = AI_TEMPLATE.read_text()
-    assert "/api/ask/keys" in source
+def test_settings_route_redirects():
+    src = SETTINGS_ROUTES.read_text()
+    assert "RedirectResponse" in src
+    assert '"/profile"' in src
+    assert "settings/index.html" not in src
+    assert '"/activity-log"' in src and '"/admin"' in src
 
 
-def test_ai_models_tab_gated_on_is_superadmin():
-    source = INDEX_TEMPLATE.read_text()
-    # The ai-models tab must exist and be inside the is_superadmin block
-    assert 'data-tab="ai-models"' in source
-    # The superadmin guard must appear before the ai-models tab
-    sa_idx = source.index("{% if is_superadmin %}")
-    ai_models_idx = source.index('data-tab="ai-models"')
-    assert sa_idx < ai_models_idx
+# ---------------------------------------------------------------------------
+# render() injects rail context + retires embed
+# ---------------------------------------------------------------------------
 
 
-def test_ai_models_tab_src():
-    source = INDEX_TEMPLATE.read_text()
-    assert "/settings/ai-models?embed=1" in source
+def test_render_injects_rail_flags():
+    src = TEMPLATING.read_text()
+    assert "is_install_admin" in src
+    assert "is_superadmin" in src
+    assert "active_project_slug" in src
+
+
+def test_render_forces_embed_false():
+    src = TEMPLATING.read_text()
+    assert 'ctx["embed"] = False' in src
