@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-06-20
+
+### Fixed
+- **Consistent viewport alignment across settings pages.** All settings content
+  is now constrained to `max-width: 1240px` and centered, matching the layout of
+  Connections, Dashboards, and Context screens. Previously, AI Providers filled
+  the full remaining width while AI Models capped at 720px — the content shifted
+  when navigating between tabs. Now every settings page (Account, AI Providers,
+  AI Models, Integrations, System, Project) uses the same centered 1240px layout.
+- **Tracking Plan nav + content alignment.** The TP left nav width was bumped
+  from 212px → 220px to match the settings rail, so sub-menu content starts at
+  the same horizontal position. Overview, detail, diff, and versions views all
+  use `max-width: 1240px` (up from 920–1100px) for consistency with Connections.
+- **Removed stale `/settings/ai-models` link from test expectations.** The AI
+  models page is no longer a direct rail link, so the consolidation test no
+  longer requires one.
+
 ## [1.2] — 2026-06-19
 
 ### Added

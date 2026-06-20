@@ -14,10 +14,11 @@
   min-width: 0;
 }
 
-/* Fill the column next to the rail instead of centering in a max-width box. */
+/* Center the content within the settings area (after sidebar + rail),
+   matching the centered behavior of .app-main on Connections/Dashboards. */
 .settings-content > .app-main {
-  max-width: none;
-  margin: 0;
+  max-width: var(--max);
+  margin: 0 auto;
 }
 
 /* ── Left rail ── */

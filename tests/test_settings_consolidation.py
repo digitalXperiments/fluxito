@@ -57,7 +57,6 @@ def test_rail_has_real_anchor_links():
         "/settings/system",
         "/activity-log",
         "/admin",
-        "/settings/ai-models",
     ):
         assert f'href="{href}"' in src, f"rail missing real link {href}"
     assert 'href="/project/{{ active_project_slug }}/settings"' in src
