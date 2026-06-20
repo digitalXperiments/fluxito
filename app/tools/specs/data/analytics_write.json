@@ -12,6 +12,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -66,6 +68,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -110,6 +114,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -164,6 +170,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -219,6 +227,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -263,6 +273,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -298,6 +310,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -333,6 +347,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -386,6 +402,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -429,5 +447,140 @@
     "returns": "Adobe update_segment dict | {error,message}",
     "scope": "analytics_write",
     "reversible": true
+  },
+  {
+    "tool": "analytics_write",
+    "action": "create_event_type",
+    "summary": "Amplitude/Mixpanel/PostHog: create an event type definition. Requires config.event_type.",
+    "group": "",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "amplitude",
+        "doc": "Amplitude, Mixpanel, or PostHog."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "event_type": "purchase",
+          "description": "User completed checkout",
+          "category": "ecommerce"
+        },
+        "doc": "Must contain truthy event_type. description and category optional."
+      },
+      {
+        "name": "config.description",
+        "type": "string",
+        "required": false,
+        "example": "User completed checkout",
+        "doc": "Optional event description."
+      },
+      {
+        "name": "config.category",
+        "type": "string",
+        "required": false,
+        "example": "ecommerce",
+        "doc": "Optional event category."
+      }
+    ],
+    "platforms": [
+      "amplitude",
+      "mixpanel",
+      "posthog"
+    ],
+    "returns": "Platform-specific create_event_type dict | {error,message}",
+    "scope": "analytics_write",
+    "reversible": true
+  },
+  {
+    "tool": "analytics_write",
+    "action": "update_event_type",
+    "summary": "Amplitude/Mixpanel/PostHog: update an event type definition. Requires config.event_type.",
+    "group": "",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "amplitude",
+        "doc": "Amplitude, Mixpanel, or PostHog."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "event_type": "purchase",
+          "new_name": "checkout_complete",
+          "description": "Updated description"
+        },
+        "doc": "Must contain truthy event_type. new_name, description, category optional."
+      }
+    ],
+    "platforms": [
+      "amplitude",
+      "mixpanel",
+      "posthog"
+    ],
+    "returns": "Platform-specific update_event_type dict | {error,message}",
+    "scope": "analytics_write",
+    "reversible": true
+  },
+  {
+    "tool": "analytics_write",
+    "action": "delete_event_type",
+    "summary": "Amplitude/Mixpanel/PostHog: delete/hide an event type. IRREVERSIBLE. Requires config.event_type.",
+    "group": "",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "amplitude",
+        "doc": "Amplitude, Mixpanel, or PostHog."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "event_type": "purchase"
+        },
+        "doc": "Must contain truthy event_type."
+      }
+    ],
+    "platforms": [
+      "amplitude",
+      "mixpanel",
+      "posthog"
+    ],
+    "returns": "Platform-specific delete_event_type dict | {error,message}",
+    "scope": "analytics_write",
+    "reversible": false
   }
 ]

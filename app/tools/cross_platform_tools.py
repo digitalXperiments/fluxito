@@ -368,7 +368,7 @@ def _blended_totals(all_rows: list[dict]) -> dict:
 #   }
 #
 # Adapters are picked by `_resolve_revenue_source()` using the hierarchy:
-#   warehouse → ga4 → amplitude → adobe_analytics
+#   warehouse → ga4 → amplitude → mixpanel → posthog → adobe_analytics
 #   → ad_platforms_self_reported → spend_only
 # The caller can short-circuit this with the explicit `revenue_source` arg.
 # ---------------------------------------------------------------------------
@@ -581,11 +581,9 @@ async def _adapter_amplitude(
         out["error"] = "amplitude_connector not initialised"
         return out
     try:
-        # Credential resolution is per-project; the helper is expected
-        # to resolve api_key/secret_key for the active project.
-        from app.tools.shared_helpers import get_amplitude_creds  # type: ignore
+        from app.tools.shared_helpers import get_amplitude_creds
 
-        api_key, secret_key = await get_amplitude_creds(user, amplitude_project_id)
+        _, api_key, secret_key = await get_amplitude_creds(str(getattr(user, "id", "")))
     except Exception as exc:
         out["error"] = f"could not resolve Amplitude creds: {exc}"
         return out
@@ -619,6 +617,111 @@ async def _adapter_amplitude(
     return out
 
 
+async def _adapter_mixpanel(
+    user,
+    date_start: str,
+    date_end: str,
+    mixpanel_project_id: str | None,
+) -> dict:
+    """Mixpanel revenue adapter. The Revenue API (`/2.0/retention/revenue/`)
+    gives aggregate revenue only — no channel split. We report it as a
+    TOTAL-only source with medium confidence; the channel split must come
+    from another layer (self-reported ad platforms or GA4)."""
+    out = {"source": "mixpanel", "success": False, **_EMPTY_ADAPTER}
+    if not getattr(user, "has_mixpanel", False):
+        out["error"] = "Mixpanel not connected"
+        return out
+    mp = getattr(state, "mixpanel_connector", None)
+    if mp is None:
+        out["error"] = "mixpanel_connector not initialised"
+        return out
+    try:
+        from app.tools.shared_helpers import get_mixpanel_creds
+
+        _, api_key, secret_key = await get_mixpanel_creds(str(getattr(user, "id", "")))
+    except Exception as exc:
+        out["error"] = f"could not resolve Mixpanel creds: {exc}"
+        return out
+    try:
+        result = await mp.get_revenue(api_key, secret_key, date_start, date_end)
+    except Exception as exc:
+        out["error"] = f"Mixpanel get_revenue failed: {exc}"
+        return out
+    if isinstance(result, dict) and result.get("error"):
+        out["error"] = result.get("message") or "mixpanel error"
+        return out
+    # Extract total revenue — Mixpanel revenue shape varies; sum any
+    # numeric leaves defensively.
+    total_rev = 0.0
+    data = (result.get("data") or result.get("results") or {}) if isinstance(result, dict) else {}
+    if isinstance(data, list):
+        for item in data:
+            total_rev += _safe_float(item.get("revenue") if isinstance(item, dict) else item)
+    elif isinstance(data, dict):
+        for v in data.values():
+            total_rev += _safe_float(v)
+    else:
+        total_rev += _safe_float(data)
+    out["total_revenue_ground_truth"] = round(total_rev, 2) or None
+    out["success"] = total_rev > 0
+    out["confidence"] = "medium"
+    out["notes"] = (
+        "Mixpanel Revenue API gives aggregate revenue only (no channel "
+        "split). Use ad-platform self-reported or GA4 for the channel "
+        "breakdown."
+    )
+    return out
+
+
+async def _adapter_posthog(
+    user,
+    date_start: str,
+    date_end: str,
+    posthog_project_id: str | None,
+) -> dict:
+    """PostHog revenue adapter. PostHog does not have a native revenue
+    endpoint — revenue is tracked via custom events. The connector queries
+    the events API for a revenue event and sums the revenue property.
+    Returns aggregate revenue with medium confidence."""
+    out = {"source": "posthog", "success": False, **_EMPTY_ADAPTER}
+    if not getattr(user, "has_posthog", False):
+        out["error"] = "PostHog not connected"
+        return out
+    ph = getattr(state, "posthog_connector", None)
+    if ph is None:
+        out["error"] = "posthog_connector not initialised"
+        return out
+    try:
+        from app.tools.shared_helpers import get_posthog_creds
+
+        _, api_key, project_host, project_id = await get_posthog_creds(
+            str(getattr(user, "id", "")),
+        )
+    except Exception as exc:
+        out["error"] = f"could not resolve PostHog creds: {exc}"
+        return out
+    try:
+        result = await ph.get_revenue(api_key, project_host, project_id, date_start, date_end)
+    except Exception as exc:
+        out["error"] = f"PostHog get_revenue failed: {exc}"
+        return out
+    if isinstance(result, dict) and result.get("error"):
+        out["error"] = result.get("message") or "posthog error"
+        return out
+    total_rev = 0.0
+    if isinstance(result, dict):
+        total_rev = _safe_float(result.get("total_revenue") or result.get("revenue"))
+    out["total_revenue_ground_truth"] = round(total_rev, 2) or None
+    out["success"] = total_rev > 0
+    out["confidence"] = "medium"
+    out["notes"] = (
+        "PostHog revenue is derived from custom events (e.g. 'purchase' "
+        "event with a revenue property). No native revenue endpoint — "
+        "use ad-platform self-reported or GA4 for the channel breakdown."
+    )
+    return out
+
+
 async def _adapter_adobe_analytics(
     user,
     date_start: str,
@@ -641,9 +744,12 @@ async def _adapter_adobe_analytics(
         out["error"] = "adobe_analytics_connector not initialised"
         return out
     try:
-        from app.tools.shared_helpers import get_adobe_analytics_creds  # type: ignore
+        from app.tools.shared_helpers import get_adobe_analytics_creds
 
-        client_id, client_secret, org_id = await get_adobe_analytics_creds(user, adobe_org_id)
+        _, client_id, client_secret, resolved_org = await get_adobe_analytics_creds(
+            str(getattr(user, "id", "")), adobe_org_id
+        )
+        org_id = resolved_org
     except Exception as exc:
         out["error"] = f"could not resolve Adobe creds: {exc}"
         return out
@@ -763,7 +869,7 @@ def _adapter_spend_only(all_rows: list[dict]) -> dict:
         "notes": (
             "No revenue source available. Returning spend-per-channel. "
             "ROAS / attributed revenue will be null — connect GA4, a "
-            "warehouse, Amplitude, or Adobe Analytics to enable attribution."
+            "warehouse, Amplitude, Mixpanel, PostHog, or Adobe Analytics to enable attribution."
         ),
         "error": None,
     }
@@ -794,6 +900,10 @@ def _available_revenue_sources(
         avail.append("ga4")
     if getattr(user, "has_amplitude", False):
         avail.append("amplitude")
+    if getattr(user, "has_mixpanel", False):
+        avail.append("mixpanel")
+    if getattr(user, "has_posthog", False):
+        avail.append("posthog")
     if getattr(user, "has_adobe_analytics", False) and adobe_report_suite_id:
         avail.append("adobe_analytics")
     if all_rows:
@@ -1007,6 +1117,7 @@ def register_cross_platform_tools(mcp_server):
         elif action == "revenue_attribution":
             # ── Multi-touch revenue attribution ───────────────────────
             # Resolves a revenue source (warehouse > ga4 > amplitude >
+            # mixpanel > posthog >
             # adobe_analytics > ad_platforms_self_reported > spend_only),
             # then distributes channel credit per the chosen model.
             #
@@ -1041,6 +1152,8 @@ def register_cross_platform_tools(mcp_server):
                 "warehouse",
                 "ga4",
                 "amplitude",
+                "mixpanel",
+                "posthog",
                 "adobe_analytics",
                 "ad_platforms_self_reported",
                 "spend_only",
@@ -1094,6 +1207,22 @@ def register_cross_platform_tools(mcp_server):
                     amplitude_project_id,
                 )
 
+            async def _try_mixpanel():
+                return await _adapter_mixpanel(
+                    user,
+                    date_range_start,
+                    date_range_end,
+                    None,
+                )
+
+            async def _try_posthog():
+                return await _adapter_posthog(
+                    user,
+                    date_range_start,
+                    date_range_end,
+                    None,
+                )
+
             async def _try_warehouse():
                 return await _adapter_warehouse(
                     user,
@@ -1124,6 +1253,14 @@ def register_cross_platform_tools(mcp_server):
                 channel_source = await _try_ga4()
             elif requested_source == "amplitude":
                 total_source = await _try_amplitude()
+                sr = _adapter_self_reported(all_rows)
+                channel_source = sr if sr["success"] else _adapter_spend_only(all_rows)
+            elif requested_source == "mixpanel":
+                total_source = await _try_mixpanel()
+                sr = _adapter_self_reported(all_rows)
+                channel_source = sr if sr["success"] else _adapter_spend_only(all_rows)
+            elif requested_source == "posthog":
+                total_source = await _try_posthog()
                 sr = _adapter_self_reported(all_rows)
                 channel_source = sr if sr["success"] else _adapter_spend_only(all_rows)
             elif requested_source == "adobe_analytics":
@@ -1164,6 +1301,18 @@ def register_cross_platform_tools(mcp_server):
                         total_source = amp
                     sr = _adapter_self_reported(all_rows)
                     channel_source = sr if sr["success"] else _adapter_spend_only(all_rows)
+                if channel_source is None and getattr(user, "has_mixpanel", False):
+                    mp = await _try_mixpanel()
+                    if mp["success"] and total_source is None:
+                        total_source = mp
+                    sr = _adapter_self_reported(all_rows)
+                    channel_source = sr if sr["success"] else _adapter_spend_only(all_rows)
+                if channel_source is None and getattr(user, "has_posthog", False):
+                    ph = await _try_posthog()
+                    if ph["success"] and total_source is None:
+                        total_source = ph
+                    sr = _adapter_self_reported(all_rows)
+                    channel_source = sr if sr["success"] else _adapter_spend_only(all_rows)
                 if channel_source is None:
                     sr = _adapter_self_reported(all_rows)
                     channel_source = sr if sr["success"] else _adapter_spend_only(all_rows)
@@ -1176,7 +1325,7 @@ def register_cross_platform_tools(mcp_server):
                         "Could not resolve any revenue source. Tried "
                         f"'{channel_source.get('source')}' — "
                         f"{channel_source.get('error') or 'empty result'}. "
-                        "Connect GA4, a warehouse, Amplitude, Adobe "
+                        "Connect GA4, a warehouse, Amplitude, Mixpanel, PostHog, Adobe "
                         "Analytics, or at least one ad platform."
                     ),
                     "available_revenue_sources": available,

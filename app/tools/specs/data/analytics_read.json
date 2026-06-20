@@ -12,6 +12,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -75,7 +77,7 @@
   {
     "tool": "analytics_read",
     "action": "get_active_users",
-    "summary": "Amplitude-only: DAU/WAU/MAU over a date range (cached 120s). Needs dates.",
+    "summary": "Amplitude/Mixpanel/PostHog: DAU/WAU/MAU over a date range (cached 120s). Needs dates.",
     "group": "REPORTING",
     "params": [
       {
@@ -85,10 +87,12 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "amplitude",
-        "doc": "Amplitude only."
+        "doc": "Amplitude, Mixpanel, or PostHog."
       },
       {
         "name": "start_date",
@@ -106,9 +110,11 @@
       }
     ],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
-    "returns": "Amplitude get_active_users dict | {error,message}",
+    "returns": "Amplitude/Mixpanel/PostHog get_active_users dict | {error,message}",
     "scope": "analytics_read"
   },
   {
@@ -124,6 +130,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -156,6 +164,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -205,6 +215,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -240,6 +252,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -286,7 +300,7 @@
   {
     "tool": "analytics_read",
     "action": "get_event_properties",
-    "summary": "Amplitude-only: list properties seen on a given event. Needs event_name.",
+    "summary": "Amplitude/Mixpanel/PostHog: list properties seen on a given event. Needs event_name.",
     "group": "CATALOG / METADATA",
     "params": [
       {
@@ -296,10 +310,12 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "amplitude",
-        "doc": "Amplitude only."
+        "doc": "Amplitude, Mixpanel, or PostHog."
       },
       {
         "name": "event_name",
@@ -310,15 +326,17 @@
       }
     ],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
-    "returns": "Amplitude get_event_properties dict | {error,message}",
+    "returns": "Amplitude/Mixpanel/PostHog get_event_properties dict | {error,message}",
     "scope": "analytics_read"
   },
   {
     "tool": "analytics_read",
     "action": "get_funnel",
-    "summary": "Amplitude-only: funnel conversion across an ordered list of events. Needs dates; events passed via `metrics`.",
+    "summary": "Amplitude/Mixpanel/PostHog: funnel conversion across an ordered list of events. Needs dates; events passed via `metrics`.",
     "group": "REPORTING",
     "params": [
       {
@@ -328,10 +346,12 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "amplitude",
-        "doc": "Amplitude only."
+        "doc": "Amplitude, Mixpanel, or PostHog."
       },
       {
         "name": "start_date",
@@ -357,13 +377,15 @@
           "add_to_cart",
           "purchase"
         ],
-        "doc": "OVERLOADED: for get_funnel `metrics` is actually the ordered list of funnel EVENT names, passed as `metrics or []` to the connector. NOT validated as required \u2014 empty list is silently allowed."
+        "doc": "OVERLOADED: for get_funnel `metrics` is actually the ordered list of funnel EVENT names, passed as `metrics or []` to the connector. NOT validated as required — empty list is silently allowed."
       }
     ],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
-    "returns": "Amplitude get_funnel dict | {error,message}",
+    "returns": "Amplitude/Mixpanel/PostHog get_funnel dict | {error,message}",
     "scope": "analytics_read"
   },
   {
@@ -379,6 +401,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -414,6 +438,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -439,7 +465,7 @@
   {
     "tool": "analytics_read",
     "action": "get_retention",
-    "summary": "Amplitude-only: retention analysis over a date range. Needs dates.",
+    "summary": "Amplitude/Mixpanel/PostHog: retention analysis over a date range. Needs dates.",
     "group": "REPORTING",
     "params": [
       {
@@ -449,10 +475,12 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "amplitude",
-        "doc": "Amplitude only."
+        "doc": "Amplitude, Mixpanel, or PostHog."
       },
       {
         "name": "start_date",
@@ -470,15 +498,17 @@
       }
     ],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
-    "returns": "Amplitude get_retention dict | {error,message}",
+    "returns": "Amplitude/Mixpanel/PostHog get_retention dict | {error,message}",
     "scope": "analytics_read"
   },
   {
     "tool": "analytics_read",
     "action": "get_revenue",
-    "summary": "Amplitude-only: revenue metrics over a date range. Needs dates.",
+    "summary": "Amplitude/Mixpanel/PostHog: revenue metrics over a date range. Needs dates.",
     "group": "REPORTING",
     "params": [
       {
@@ -488,10 +518,12 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "amplitude",
-        "doc": "Amplitude only."
+        "doc": "Amplitude, Mixpanel, or PostHog."
       },
       {
         "name": "start_date",
@@ -509,9 +541,11 @@
       }
     ],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
-    "returns": "Amplitude get_revenue dict | {error,message}",
+    "returns": "Amplitude/Mixpanel/PostHog get_revenue dict | {error,message}",
     "scope": "analytics_read"
   },
   {
@@ -527,6 +561,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -549,7 +585,7 @@
   {
     "tool": "analytics_read",
     "action": "get_user_properties",
-    "summary": "Amplitude-only: list user properties in the taxonomy (cached 300s). No extra params.",
+    "summary": "Amplitude/Mixpanel/PostHog: list user properties in the taxonomy (cached 300s). No extra params.",
     "group": "CATALOG / METADATA",
     "params": [
       {
@@ -559,16 +595,20 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "amplitude",
-        "doc": "Amplitude only."
+        "doc": "Amplitude, Mixpanel, or PostHog."
       }
     ],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
-    "returns": "Amplitude get_user_properties dict | {error,message}",
+    "returns": "Amplitude/Mixpanel/PostHog get_user_properties dict | {error,message}",
     "scope": "analytics_read"
   },
   {
@@ -584,6 +624,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -609,7 +651,7 @@
   {
     "tool": "analytics_read",
     "action": "list_cohorts",
-    "summary": "Amplitude-only: list saved cohorts (cached 300s). No extra params.",
+    "summary": "Amplitude/Mixpanel/PostHog: list saved cohorts (cached 300s). No extra params.",
     "group": "CATALOG / METADATA",
     "params": [
       {
@@ -619,14 +661,18 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "amplitude",
-        "doc": "Amplitude only."
+        "doc": "Amplitude, Mixpanel, or PostHog."
       }
     ],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
     "returns": "Amplitude list_cohorts dict | {error,message}",
     "scope": "analytics_read"
@@ -644,6 +690,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -679,6 +727,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -714,6 +764,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -749,6 +801,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -787,7 +841,9 @@
     ],
     "platforms": [
       "ga4",
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
     "returns": "GA4: list_events dict (events+counts). Amplitude: get_events_list dict (taxonomy). | {error,message}",
     "scope": "analytics_read"
@@ -805,6 +861,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",
@@ -830,6 +888,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "adobe_analytics",
@@ -845,7 +905,7 @@
   {
     "tool": "analytics_read",
     "action": "query_events",
-    "summary": "Amplitude-only: query a single event over a date range. Needs event_name + dates.",
+    "summary": "Amplitude/Mixpanel/PostHog: query a single event over a date range. Needs event_name + dates.",
     "group": "REPORTING",
     "params": [
       {
@@ -855,6 +915,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "amplitude",
@@ -883,7 +945,9 @@
       }
     ],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
     "returns": "Amplitude query_events dict | {error,message}",
     "scope": "analytics_read"
@@ -901,6 +965,8 @@
         "enum": [
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics"
         ],
         "example": "ga4",

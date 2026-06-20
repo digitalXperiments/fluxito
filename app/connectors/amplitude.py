@@ -413,14 +413,104 @@ class AmplitudeConnector:
 
     @friendly_errors("Amplitude")
     async def check_event_volume_anomalies(self, api_key: str, secret_key: str, days_back: int = 30) -> dict:
+        """Compare recent event volumes to a historical baseline using z-scores.
+
+        Fetches daily event counts for the last days_back*2 days, splits into
+        a baseline (older half) and recent (newer half), computes per-day z-scores
+        against the baseline mean+std, and flags days where |z| > 2.
         """
-        Compare recent event volumes to historical baseline.
-        Currently a simplified check; full implementation would use query_events over date ranges.
-        """
-        # For now, return placeholder indicating this would require historical data
+        from datetime import datetime, timedelta
+
+        end = datetime.utcnow().date()
+        start = end - timedelta(days=days_back * 2)
+        start_str = start.isoformat()
+        end_str = end.isoformat()
+
+        json_body = {
+            "metrics": [{"name": "events"}],
+            "start": start_str,
+            "end": end_str,
+            "interval": 1,
+        }
+        result = await self._request(
+            api_key, secret_key, "POST", "/2/events/segmentation", json_body=json_body
+        )
+        if result.get("error"):
+            return {"error": True, "message": result.get("message", "Amplitude error")}
+
+        data = result.get("data", {})
+        series = data.get("series", [])
+        xaxis = data.get("xaxis", [])
+
+        # Amplitude returns series as [[val1, val2, ...]] or [val1, val2, ...]
+        if series and isinstance(series[0], list):
+            volumes = [int(v or 0) for v in series[0]]
+        else:
+            volumes = [int(v or 0) for v in series]
+
+        if len(volumes) < 4:
+            return {
+                "metric": "event_volume_anomalies",
+                "days_back": days_back,
+                "baseline_mean": 0.0,
+                "baseline_std": 0.0,
+                "anomalies": [],
+                "anomaly_count": 0,
+                "health_score": 100,
+                "note": "Insufficient data for anomaly detection.",
+            }
+
+        half = len(volumes) // 2
+        baseline = volumes[:half]
+        recent = volumes[half:]
+        recent_dates = xaxis[half:] if len(xaxis) >= len(volumes) else []
+
+        import statistics
+
+        try:
+            baseline_mean = statistics.mean(baseline)
+            baseline_std = statistics.pstdev(baseline) if len(baseline) > 1 else 0.0
+        except Exception:
+            baseline_mean = sum(baseline) / len(baseline) if baseline else 0.0
+            baseline_std = 0.0
+
+        if baseline_std == 0:
+            return {
+                "metric": "event_volume_anomalies",
+                "days_back": days_back,
+                "baseline_mean": round(baseline_mean, 2),
+                "baseline_std": 0.0,
+                "anomalies": [],
+                "anomaly_count": 0,
+                "health_score": 100,
+                "note": "Baseline has zero variance; cannot compute z-scores.",
+            }
+
+        anomalies = []
+        for i, val in enumerate(recent):
+            z = (val - baseline_mean) / baseline_std
+            if abs(z) > 2.0:
+                direction = "spike" if z > 0 else "drop"
+                date_str = recent_dates[i] if i < len(recent_dates) else f"day_{half + i}"
+                anomalies.append(
+                    {
+                        "date": date_str,
+                        "volume": val,
+                        "z_score": round(z, 3),
+                        "direction": direction,
+                    }
+                )
+
+        health = max(0, 100 - len(anomalies) * 10)
         return {
-            "note": "Event volume anomaly detection requires historical baseline data.",
-            "recommendation": "Use query_events() with date ranges to compare baseline vs. recent periods.",
+            "metric": "event_volume_anomalies",
+            "days_back": days_back,
+            "baseline_mean": round(baseline_mean, 2),
+            "baseline_std": round(baseline_std, 2),
+            "anomalies": anomalies,
+            "anomaly_count": len(anomalies),
+            "health_score": health,
+            "note": f"Compared last {len(recent)} days against prior {len(baseline)} days baseline.",
         }
 
     # ------------------------------------------------------------------

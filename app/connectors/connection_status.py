@@ -35,6 +35,8 @@ async def resolve_connection_flags(
         AdobeConnection,
         AmplitudeConnection,
         MarketoConnection,
+        MixpanelConnection,
+        PostHogConnection,
         RedshiftConnection,
         SnowflakeConnection,
     )
@@ -48,6 +50,8 @@ async def resolve_connection_flags(
         has_redshift=False,
         has_snowflake=False,
         has_amplitude=False,
+        has_mixpanel=False,
+        has_posthog=False,
         has_adobe_analytics=False,
         has_adobe_launch=False,
         has_marketo=False,
@@ -116,6 +120,8 @@ async def resolve_connection_flags(
 
             credential_models = (
                 (AmplitudeConnection, ("has_amplitude",)),
+                (MixpanelConnection, ("has_mixpanel",)),
+                (PostHogConnection, ("has_posthog",)),
                 (AdobeConnection, ("has_adobe_analytics", "has_adobe_launch")),
                 (MarketoConnection, ("has_marketo",)),
                 (RedshiftConnection, ("has_redshift",)),

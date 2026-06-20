@@ -81,6 +81,13 @@ def test_identify_mixpanel_by_regex():
     assert result.matched_platform == "mixpanel"
 
 
+def test_identify_posthog_by_regex():
+    html = "posthog.init('phc_abc123', {api_host:'https://app.posthog.com'})"
+    result = identify_tag({"type": "html", "parameter": [{"key": "html", "value": html}]})
+    assert result is not None
+    assert result.matched_platform == "posthog"
+
+
 # ── Name prefix heuristic (tier 3) ───────────────────────────────────────────
 
 

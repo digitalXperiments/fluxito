@@ -40,6 +40,33 @@ class AmplitudeConnection(Base):
         return f"<AmplitudeConnection(display_name={self.display_name}, is_active={self.is_active})>"
 
 
+class MixpanelConnection(Base):
+    """Mixpanel API secret + service token connection scoped to a project."""
+
+    __tablename__ = "mixpanel_connections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    project_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    connection_status: Mapped[str] = mapped_column(String(50), default=CONNECTION_STATUS_ACTIVE, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("idx_mixpanel_project_user_active", project_id, user_id, is_active),)
+
+    def __repr__(self) -> str:
+        return f"<MixpanelConnection(display_name={self.display_name}, is_active={self.is_active})>"
+
+
 class AdobeConnection(Base):
     """Adobe IMS connection (Analytics + Launch share this) scoped to a project."""
 
@@ -99,6 +126,41 @@ class MarketoConnection(Base):
 
     def __repr__(self) -> str:
         return f"<MarketoConnection(display_name={self.display_name}, is_active={self.is_active})>"
+
+
+class PostHogConnection(Base):
+    """PostHog API key connection scoped to a project.
+
+    PostHog needs three fields: project_host (instance URL), posthog_project_id
+    (numeric project ID within PostHog), and api_key_encrypted (personal/project
+    API key).  No secret_key — PostHog uses a single key.
+    """
+
+    __tablename__ = "posthog_connections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # PostHog instance URL, e.g. https://app.posthog.com or self-hosted URL.
+    project_host: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Numeric PostHog project ID (as string).  Named external_project_id to
+    # avoid collision with the Fluxito project FK column ``project_id``.
+    external_project_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    connection_status: Mapped[str] = mapped_column(String(50), default=CONNECTION_STATUS_ACTIVE, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("idx_posthog_project_user_active", project_id, user_id, is_active),)
+
+    def __repr__(self) -> str:
+        return f"<PostHogConnection(display_name={self.display_name}, is_active={self.is_active})>"
 
 
 class RedshiftConnection(Base):

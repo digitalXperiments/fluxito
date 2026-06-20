@@ -79,6 +79,7 @@ _URL_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"api\.segment\.io", re.I), "segment"),
     (re.compile(r"cdn\.segment\.com", re.I), "segment"),
     (re.compile(r"api\.mixpanel\.com", re.I), "mixpanel"),
+    (re.compile(r"app\.posthog\.com|t\.posthog\.com", re.I), "posthog"),
     (re.compile(r"snap\.licdn\.com", re.I), "linkedin_insight"),
     (re.compile(r"googleadservices\.com", re.I), "google_ads_conversion"),
     (re.compile(r"doubleclick\.net", re.I), "floodlight"),

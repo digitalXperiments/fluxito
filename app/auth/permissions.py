@@ -121,6 +121,8 @@ PROVIDERS: list[str] = [
     "reddit",
     "apple",
     "amplitude",
+    "mixpanel",
+    "posthog",
     "adobe_analytics",
     "adobe_launch",
     "adobe_marketo",

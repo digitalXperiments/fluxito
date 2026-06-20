@@ -36,6 +36,8 @@ from app.models.credential_connection import (
     AdobeConnection,
     AmplitudeConnection,
     MarketoConnection,
+    MixpanelConnection,
+    PostHogConnection,
     RedshiftConnection,
     SnowflakeConnection,
 )
@@ -164,6 +166,8 @@ class UserContext:
     has_bing: bool = False
     has_apple: bool = False
     has_amplitude: bool = False
+    has_mixpanel: bool = False
+    has_posthog: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
     has_adobe_marketo: bool = False
@@ -222,6 +226,8 @@ class ProjectContext:
     has_bing: bool = False
     has_apple: bool = False
     has_amplitude: bool = False
+    has_mixpanel: bool = False
+    has_posthog: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
     has_adobe_marketo: bool = False
@@ -568,6 +574,10 @@ async def _load_connections_and_resources(
     bool,
     bool,
     bool,
+    bool,
+    bool,
+    bool,
+    bool,
     list,
     list,
     list,
@@ -579,7 +589,8 @@ async def _load_connections_and_resources(
 
     Returns: (
         all_connections_orm, google_connections,
-        has_bq, has_amplitude, has_adobe_analytics, has_adobe_launch,
+        has_bq, has_amplitude, has_mixpanel, has_posthog,
+        has_adobe_analytics, has_adobe_launch,
         has_adobe_marketo, has_redshift, has_snowflake, has_meta, has_tiktok, has_snap,
         has_linkedin, has_pinterest, has_x, has_reddit, has_bing, has_apple,
         has_ga4, has_gtm, has_ads, has_gsc,
@@ -664,6 +675,20 @@ async def _load_connections_and_resources(
         .limit(1)
     )
     has_snowflake = result.scalar_one_or_none() is not None
+
+    result = await db.execute(
+        select(MixpanelConnection)
+        .where(_cred_scope(MixpanelConnection), MixpanelConnection.is_active == True)
+        .limit(1)
+    )
+    has_mixpanel = result.scalar_one_or_none() is not None
+
+    result = await db.execute(
+        select(PostHogConnection)
+        .where(_cred_scope(PostHogConnection), PostHogConnection.is_active == True)
+        .limit(1)
+    )
+    has_posthog = result.scalar_one_or_none() is not None
 
     # Filter to Google connections for scope-checking and resource loading
     google_connections = [c for c in all_connections_orm if (c.provider or "google") == "google"]
@@ -754,6 +779,8 @@ async def _load_connections_and_resources(
         google_connections,
         has_bq,
         has_amplitude,
+        has_mixpanel,
+        has_posthog,
         has_adobe_analytics,
         has_adobe_launch,
         has_adobe_marketo,
@@ -859,6 +886,8 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             _google_connections,
             has_bq,
             has_amplitude,
+            has_mixpanel,
+            has_posthog,
             has_adobe_analytics,
             has_adobe_launch,
             has_adobe_marketo,
@@ -916,6 +945,8 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             has_bing=has_bing,
             has_apple=has_apple,
             has_amplitude=has_amplitude,
+            has_mixpanel=has_mixpanel,
+            has_posthog=has_posthog,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
             has_adobe_marketo=has_adobe_marketo,
@@ -977,6 +1008,8 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             _google_connections,
             has_bq,
             has_amplitude,
+            has_mixpanel,
+            has_posthog,
             has_adobe_analytics,
             has_adobe_launch,
             has_adobe_marketo,
@@ -1031,6 +1064,8 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             # Gate credential-based flags by provider grant
             has_bq = has_bq and eff.allows_provider("bigquery")
             has_amplitude = has_amplitude and eff.allows_provider("amplitude")
+            has_mixpanel = has_mixpanel and eff.allows_provider("mixpanel")
+            has_posthog = has_posthog and eff.allows_provider("posthog")
             has_adobe_analytics = has_adobe_analytics and eff.allows_provider("adobe_analytics")
             has_adobe_launch = has_adobe_launch and eff.allows_provider("adobe_launch")
             has_adobe_marketo = has_adobe_marketo and eff.allows_provider("adobe_marketo")
@@ -1079,6 +1114,8 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             has_bing=has_bing,
             has_apple=has_apple,
             has_amplitude=has_amplitude,
+            has_mixpanel=has_mixpanel,
+            has_posthog=has_posthog,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
             has_adobe_marketo=has_adobe_marketo,
@@ -1208,6 +1245,8 @@ _PROJECT_FLAG_ATTRS = (
     "has_bing",
     "has_apple",
     "has_amplitude",
+    "has_mixpanel",
+    "has_posthog",
     "has_adobe_analytics",
     "has_adobe_launch",
     "has_adobe_marketo",
@@ -1381,6 +1420,14 @@ def no_bing_response(base_url: str) -> dict:
 
 def no_amplitude_response(base_url: str) -> dict:
     return _no_connection(base_url, "No Amplitude connection found.", "/connect/amplitude")
+
+
+def no_mixpanel_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Mixpanel connection found.", "/connect/mixpanel")
+
+
+def no_posthog_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No PostHog connection found.", "/connect/posthog")
 
 
 def no_adobe_analytics_response(base_url: str) -> dict:

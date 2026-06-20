@@ -269,6 +269,8 @@ async def profile_page(request: Request):
         from app.models.credential_connection import (
             AdobeConnection,
             AmplitudeConnection,
+            MixpanelConnection,
+            PostHogConnection,
             RedshiftConnection,
             SnowflakeConnection,
         )
@@ -276,6 +278,8 @@ async def profile_page(request: Request):
         cred_models = {
             "bq": BQConnection,
             "amp": AmplitudeConnection,
+            "mp": MixpanelConnection,
+            "ph": PostHogConnection,
             "adobe": AdobeConnection,
             "rs": RedshiftConnection,
             "sf": SnowflakeConnection,
@@ -292,6 +296,8 @@ async def profile_page(request: Request):
         pass
     bq_count = cred_counts["bq"]
     amp_count = cred_counts["amp"]
+    mp_count = cred_counts["mp"]
+    ph_count = cred_counts["ph"]
     adobe_count = cred_counts["adobe"]
     rs_count = cred_counts["rs"]
     sf_count = cred_counts["sf"]
@@ -304,6 +310,8 @@ async def profile_page(request: Request):
         + tiktok_count
         + snap_count
         + amp_count
+        + mp_count
+        + ph_count
         + adobe_count
         + rs_count
         + sf_count
@@ -364,6 +372,20 @@ async def profile_page(request: Request):
             "name": "Amplitude",
             "desc": "Product analytics",
             "count": amp_count,
+            "via_google": False,
+        },
+        {
+            "slug": "mixpanel",
+            "name": "Mixpanel",
+            "desc": "Product analytics",
+            "count": mp_count,
+            "via_google": False,
+        },
+        {
+            "slug": "posthog",
+            "name": "PostHog",
+            "desc": "Product analytics",
+            "count": ph_count,
             "via_google": False,
         },
         {

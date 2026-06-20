@@ -41,6 +41,8 @@ def _check_platform_compatibility(user, required_platforms: list) -> dict:
         "snap": getattr(user, "has_snap", False),
         "bigquery": getattr(user, "has_bq", False),
         "amplitude": getattr(user, "has_amplitude", False),
+        "mixpanel": getattr(user, "has_mixpanel", False),
+        "posthog": getattr(user, "has_posthog", False),
         "adobe_analytics": getattr(user, "has_adobe_analytics", False),
         "adobe_launch": getattr(user, "has_adobe_launch", False),
         "adobe_marketo": getattr(user, "has_adobe_marketo", False),
