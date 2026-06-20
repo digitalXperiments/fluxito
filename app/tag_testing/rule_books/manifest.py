@@ -33,6 +33,7 @@ from app.tag_testing.rule_books.platforms.meta_pixel import RULE_BOOK as _META_P
 from app.tag_testing.rule_books.platforms.microsoft_uet import RULE_BOOK as _MICROSOFT_UET
 from app.tag_testing.rule_books.platforms.mixpanel import RULE_BOOK as _MIXPANEL
 from app.tag_testing.rule_books.platforms.pinterest_tag import RULE_BOOK as _PINTEREST
+from app.tag_testing.rule_books.platforms.posthog import RULE_BOOK as _POSTHOG
 from app.tag_testing.rule_books.platforms.segment import RULE_BOOK as _SEGMENT
 from app.tag_testing.rule_books.platforms.snap_pixel import RULE_BOOK as _SNAP
 from app.tag_testing.rule_books.platforms.tiktok_pixel import RULE_BOOK as _TIKTOK_PIXEL
@@ -59,6 +60,7 @@ RULE_BOOK_MANIFEST: list[RuleBook] = [
     _AMPLITUDE,
     _SEGMENT,
     _MIXPANEL,
+    _POSTHOG,
     _HOTJAR,
 ]
 

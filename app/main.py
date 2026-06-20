@@ -179,7 +179,9 @@ async def lifespan(app: FastAPI):
     from app.connectors.gtm import GTMConnector
     from app.connectors.linkedin_ads import LinkedInAdsConnector
     from app.connectors.meta_ads import MetaAdsConnector
+    from app.connectors.mixpanel import MixpanelConnector
     from app.connectors.pinterest_ads import PinterestAdsConnector
+    from app.connectors.posthog import PostHogConnector
     from app.connectors.reddit_ads import RedditAdsConnector
     from app.connectors.redshift import RedshiftConnector
     from app.connectors.search_console import SearchConsoleConnector
@@ -207,6 +209,8 @@ async def lifespan(app: FastAPI):
     app_state.bing_connector = BingWebmasterConnector()
     app_state.apple_connector = AppleAdsConnector()
     app_state.amplitude_connector = AmplitudeConnector()
+    app_state.mixpanel_connector = MixpanelConnector()
+    app_state.posthog_connector = PostHogConnector()
     app_state.adobe_analytics_connector = AdobeAnalyticsConnector()
     app_state.adobe_launch_connector = AdobeLaunchConnector()
     app_state.adobe_marketo_connector = AdobeMarketoConnector()
@@ -863,6 +867,8 @@ def _sync_user_ctx_flags(user_ctx, pctx) -> None:
         "has_bing",
         "has_apple",
         "has_amplitude",
+        "has_mixpanel",
+        "has_posthog",
         "has_adobe_analytics",
         "has_adobe_launch",
         "has_adobe_marketo",

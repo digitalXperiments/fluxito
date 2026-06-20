@@ -73,6 +73,8 @@ _NETWORK_PATTERNS_TO_WATCH = [
     "api.amplitude.com",
     "api.segment.io",
     "api.mixpanel.com",
+    "app.posthog.com",
+    "t.posthog.com",
     "snap.licdn.com",
     "googleadservices.com",
     "doubleclick.net",

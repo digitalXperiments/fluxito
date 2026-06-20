@@ -10,6 +10,8 @@ from app.models.conversation import AIProviderKey, ChatMessage, Conversation
 from app.models.credential_connection import (
     AdobeConnection,
     AmplitudeConnection,
+    MixpanelConnection,
+    PostHogConnection,
     RedshiftConnection,
     SnowflakeConnection,
 )
@@ -85,9 +87,11 @@ __all__ = [
     "MCPSession",
     "MemberRole",
     "MetaAdsAccount",
+    "MixpanelConnection",
     "Notification",
     "OAuthAppCredential",
     "OAuthConnection",
+    "PostHogConnection",
     "Project",
     "ProjectEmailSender",
     "ProjectMember",

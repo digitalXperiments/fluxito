@@ -219,3 +219,78 @@ def decrypt_field(encrypted_value: str) -> str:
 
     f = Fernet(settings.TOKEN_ENCRYPTION_KEY.encode())
     return f.decrypt(encrypted_value.encode()).decode()
+
+
+# ---------------------------------------------------------------------------
+# Amplitude / Adobe credential helpers (public, for cross_platform + analytics)
+# ---------------------------------------------------------------------------
+
+
+async def get_amplitude_creds(user_id: str) -> tuple[str | None, str | None, str | None]:
+    """
+    Fetch user's active Amplitude connection and return (conn_id, api_key, secret_key).
+    Returns (None, None, None) if no active connection.
+    """
+    from app.models.credential_connection import AmplitudeConnection
+
+    conn = await get_encrypted_credential_conn(AmplitudeConnection, user_id)
+    if not conn:
+        return None, None, None
+    api_key = decrypt_field(conn.api_key_encrypted)
+    secret_key = decrypt_field(conn.secret_key_encrypted)
+    return str(conn.id), api_key, secret_key
+
+
+async def get_adobe_analytics_creds(
+    user_id: str, org_id: str | None = None
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """
+    Fetch user's active Adobe Analytics connection and return
+    (conn_id, client_id, client_secret, org_id).
+    Returns (None, None, None, None) if no active connection.
+    """
+    from app.models.credential_connection import AdobeConnection
+
+    extra = [AdobeConnection.has_analytics == True] if org_id is None else None
+    conn = await get_encrypted_credential_conn(AdobeConnection, user_id, extra_filters=extra)
+    if not conn:
+        return None, None, None, None
+    client_id = decrypt_field(conn.client_id_encrypted)
+    client_secret = decrypt_field(conn.client_secret_encrypted)
+    resolved_org = org_id or conn.org_id
+    return str(conn.id), client_id, client_secret, resolved_org
+
+
+async def get_mixpanel_creds(
+    user_id: str,
+) -> tuple[str | None, str | None, str | None]:
+    """
+    Resolve active Mixpanel connection credentials for a user.
+    Returns (conn_id, api_secret, service_token).
+    Returns (None, None, None) if no active connection.
+    """
+    from app.models.credential_connection import MixpanelConnection
+
+    conn = await get_encrypted_credential_conn(MixpanelConnection, user_id)
+    if not conn:
+        return None, None, None
+    api_secret = decrypt_field(conn.api_key_encrypted)
+    service_token = decrypt_field(conn.secret_key_encrypted)
+    return str(conn.id), api_secret, service_token
+
+
+async def get_posthog_creds(
+    user_id: str,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """
+    Resolve active PostHog connection credentials for a user.
+    Returns (conn_id, api_key, project_host, project_id).
+    Returns (None, None, None, None) if no active connection.
+    """
+    from app.models.credential_connection import PostHogConnection
+
+    conn = await get_encrypted_credential_conn(PostHogConnection, user_id)
+    if not conn:
+        return None, None, None, None
+    api_key = decrypt_field(conn.api_key_encrypted)
+    return str(conn.id), api_key, conn.project_host, conn.external_project_id

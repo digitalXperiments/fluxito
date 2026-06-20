@@ -35,6 +35,8 @@ _PREFIX_TO_CONNECTOR: dict[str, str] = {
     "linkedin": "linkedin_ads",
     "apple": "apple_ads",
     "amp": "amplitude",
+    "mix": "mixpanel",
+    "posthog": "posthog",
     "adobe": "adobe_analytics",
     "launch": "adobe_launch",
 }

@@ -79,6 +79,22 @@ def _amplitude(params: dict) -> dict:
     }
 
 
+def _mixpanel(params: dict) -> dict:
+    return {
+        "platform": "mixpanel",
+        "connection_id": str(params.get("connection_id") or ""),
+        "project_id": params.get("project_id") or None,
+    }
+
+
+def _posthog(params: dict) -> dict:
+    return {
+        "platform": "posthog",
+        "connection_id": str(params.get("connection_id") or ""),
+        "project_id": params.get("project_id") or None,
+    }
+
+
 def _adobe_analytics(params: dict) -> dict:
     return {
         "platform": "adobe_analytics",
@@ -138,6 +154,8 @@ _FINGERPRINT_EXTRACTORS: dict[str, FingerprintExtractor] = {
     "redshift": _redshift,
     "snowflake": _snowflake,
     "amplitude": _amplitude,
+    "mixpanel": _mixpanel,
+    "posthog": _posthog,
     "adobe_analytics": _adobe_analytics,
     "meta": _meta,
     "tiktok": _tiktok,

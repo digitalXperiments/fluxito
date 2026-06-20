@@ -81,6 +81,13 @@ _HTML_DETECTION_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"cdn\.segment\.com|analytics\.track\s*\(|window\.analytics\b", re.I), "segment"),
     # Mixpanel
     (re.compile(r"cdn\.mxpnl\.com|mixpanel\.track\s*\(|mixpanel\.init\s*\(", re.I), "mixpanel"),
+    # PostHog
+    (
+        re.compile(
+            r"posthog\.init|posthog\.capture|posthog\.identify|app\.posthog\.com|t\.posthog\.com", re.I
+        ),
+        "posthog",
+    ),
     # Amplitude
     (re.compile(r"cdn\.amplitude\.com|amplitude\.getInstance\s*\(|amplitudeJS", re.I), "amplitude"),
     # Adobe Analytics — check before GA4 to avoid false positives on "analytics"
@@ -133,6 +140,8 @@ _NAME_PREFIX_TO_PLATFORM: list[tuple[str, str]] = [
     ("segment ", "segment"),
     # Mixpanel
     ("mixpanel ", "mixpanel"),
+    # PostHog
+    ("posthog ", "posthog"),
     # Amplitude
     ("amplitude ", "amplitude"),
     # Adobe

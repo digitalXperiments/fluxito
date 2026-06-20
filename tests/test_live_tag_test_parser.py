@@ -64,6 +64,10 @@ class TestDetectPlatformFromUrl:
     def test_mixpanel(self):
         assert detect_platform_from_url("https://api.mixpanel.com/track") == "mixpanel"
 
+    def test_posthog(self):
+        assert detect_platform_from_url("https://app.posthog.com/e/abc") == "posthog"
+        assert detect_platform_from_url("https://t.posthog.com/ingest") == "posthog"
+
     def test_linkedin(self):
         assert (
             detect_platform_from_url("https://snap.licdn.com/li.lms-analytics/insight.min.js")

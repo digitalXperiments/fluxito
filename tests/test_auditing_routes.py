@@ -47,8 +47,8 @@ async def test_audits_page_without_project():
 
     assert response.status_code == 200
     html = response.body.decode()
-    # Rule Books tab badge should show 20
-    assert 'Rule Books <span class="t-seg-count">20</span>' in html
+    # Rule Books tab badge should show 21
+    assert 'Rule Books <span class="t-seg-count">21</span>' in html
     # Check that platforms like ga4_ecom are displayed (Note: Ecommerce without hyphen)
     assert "Google Analytics 4 (Ecommerce)" in html
     assert "Meta Pixel" in html
@@ -109,6 +109,6 @@ async def test_audits_page_with_project():
 
     assert response.status_code == 200
     html = response.body.decode()
-    # Rule Books tab badge should show 20
-    assert 'Rule Books <span class="t-seg-count">20</span>' in html
+    # Rule Books tab badge should show 21
+    assert 'Rule Books <span class="t-seg-count">21</span>' in html
     assert "Google Analytics 4 (Ecommerce)" in html

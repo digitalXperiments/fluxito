@@ -119,6 +119,41 @@ async def _get_adobe_conn(user_id: str):
     return str(conn.id), client_id, client_secret, conn.org_id
 
 
+def _no_mixpanel():
+    from app.auth.mcp_session_manager import no_mixpanel_response
+
+    return no_mixpanel_response(settings.APP_BASE_URL)
+
+
+def _no_posthog():
+    from app.auth.mcp_session_manager import no_posthog_response
+
+    return no_posthog_response(settings.APP_BASE_URL)
+
+
+async def _get_mixpanel_conn(user_id: str):
+    """Fetch user's active Mixpanel connection and decrypt credentials."""
+    from app.models.credential_connection import MixpanelConnection
+
+    conn = await get_encrypted_credential_conn(MixpanelConnection, user_id)
+    if not conn:
+        return None, None, None
+    api_key = decrypt_field(conn.api_key_encrypted)  # api_secret
+    secret_key = decrypt_field(conn.secret_key_encrypted)  # service_token
+    return str(conn.id), api_key, secret_key
+
+
+async def _get_posthog_conn(user_id: str):
+    """Fetch user's active PostHog connection and decrypt credentials."""
+    from app.models.credential_connection import PostHogConnection
+
+    conn = await get_encrypted_credential_conn(PostHogConnection, user_id)
+    if not conn:
+        return None, None, None, None
+    api_key = decrypt_field(conn.api_key_encrypted)
+    return str(conn.id), api_key, conn.project_host, conn.external_project_id
+
+
 def register_analytics_tools(mcp_server):
     # -------------------------------------------------------------------------
     # analytics_read — Layer 1: Data access
@@ -126,7 +161,7 @@ def register_analytics_tools(mcp_server):
 
     @mcp_server.tool("analytics_read")
     async def analytics_read(
-        platform: Literal["ga4", "amplitude", "adobe_analytics"] | None = None,
+        platform: Literal["ga4", "amplitude", "mixpanel", "posthog", "adobe_analytics"] | None = None,
         action: str = "",
         property_id: CoercedStr | None = None,
         start_date: str | None = None,
@@ -141,7 +176,7 @@ def register_analytics_tools(mcp_server):
     ) -> dict:
         """Reads analytics data. Use analytics_audit for health checks, analytics_write for config changes.
 
-        platform: ga4 | amplitude | adobe_analytics
+        platform: ga4 | amplitude | mixpanel | posthog | adobe_analytics
 
         GA4 actions (property_id via list_properties first):
           list_properties, run_report*, list_events*, get_event_detail*(+event_name),
@@ -155,6 +190,16 @@ def register_analytics_tools(mcp_server):
           query_events(event_name+dates), get_active_users(dates), get_retention(dates),
           get_funnel(dates+metrics=[events]), get_revenue(dates), list_cohorts
 
+        Mixpanel actions (same as Amplitude):
+          list_events, get_event_properties(event_name), get_user_properties,
+          query_events(event_name+dates), get_active_users(dates), get_retention(dates),
+          get_funnel(dates+metrics=[events]), get_revenue(dates), list_cohorts
+
+        PostHog actions (same as Amplitude):
+          list_events, get_event_properties(event_name), get_user_properties,
+          query_events(event_name+dates), get_active_users(dates), get_retention(dates),
+          get_funnel(dates+metrics=[events]), get_revenue(dates), list_cohorts
+
         Adobe actions (property_id=rsid):
           list_report_suites, get_dimensions(rsid), get_metrics(rsid),
           run_report(rsid+dims+metrics+dates), get_segments, get_calculated_metrics
@@ -163,7 +208,7 @@ def register_analytics_tools(mcp_server):
             return {
                 "error": True,
                 "error_type": "missing_required_param",
-                "message": "platform is required. Pass platform='ga4', 'amplitude', or 'adobe_analytics' in params.",
+                "message": "platform is required. Pass platform='ga4', 'amplitude', 'mixpanel', 'posthog', or 'adobe_analytics' in params.",
             }
         u = _user()
 
@@ -404,6 +449,160 @@ def register_analytics_tools(mcp_server):
                 )
             return {"error": True, "message": f"Unknown action '{action}' for Amplitude analytics_read"}
 
+        elif platform == "mixpanel":
+            if not u or not u.has_mixpanel:
+                return _no_mixpanel()
+            conn_id, api_key, secret_key = await _get_mixpanel_conn(u.user_id)
+            if not api_key:
+                return _no_mixpanel()
+            mp = state.mixpanel_connector
+
+            if action == "list_events":
+                return await cached_tool_response(
+                    f"cache:mp:events:{conn_id}",
+                    300,
+                    mp.get_events_list,
+                    api_key,
+                    secret_key,
+                )
+            elif action == "get_event_properties":
+                if not event_name:
+                    return {"error": True, "message": "event_name is required for get_event_properties"}
+                return await mp.get_event_properties(api_key, secret_key, event_name)
+            elif action == "get_user_properties":
+                return await cached_tool_response(
+                    f"cache:mp:user_props:{conn_id}",
+                    300,
+                    mp.get_user_properties,
+                    api_key,
+                    secret_key,
+                )
+            elif action == "query_events":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                if not event_name:
+                    return {"error": True, "message": "event_name is required for query_events"}
+                return await mp.query_events(api_key, secret_key, start_date, end_date, event_name)
+            elif action == "get_active_users":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                return await cached_tool_response(
+                    f"cache:mp:active:{conn_id}:{start_date}:{end_date}",
+                    120,
+                    mp.get_active_users,
+                    api_key,
+                    secret_key,
+                    start_date,
+                    end_date,
+                )
+            elif action == "get_retention":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                return await mp.get_retention(api_key, secret_key, start_date, end_date)
+            elif action == "get_funnel":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                return await mp.get_funnel(api_key, secret_key, start_date, end_date, metrics or [])
+            elif action == "get_revenue":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                return await mp.get_revenue(api_key, secret_key, start_date, end_date)
+            elif action == "list_cohorts":
+                return await cached_tool_response(
+                    f"cache:mp:cohorts:{conn_id}",
+                    300,
+                    mp.list_cohorts,
+                    api_key,
+                    secret_key,
+                )
+            return {"error": True, "message": f"Unknown action '{action}' for Mixpanel analytics_read"}
+
+        elif platform == "posthog":
+            if not u or not u.has_posthog:
+                return _no_posthog()
+            conn_id, api_key, project_host, project_id = await _get_posthog_conn(u.user_id)
+            if not api_key:
+                return _no_posthog()
+            ph = state.posthog_connector
+
+            if action == "list_events":
+                return await cached_tool_response(
+                    f"cache:ph:events:{conn_id}",
+                    300,
+                    ph.get_events_list,
+                    api_key,
+                    project_host,
+                    project_id,
+                )
+            elif action == "get_event_properties":
+                if not event_name:
+                    return {"error": True, "message": "event_name is required for get_event_properties"}
+                return await ph.get_event_properties(api_key, project_host, project_id, event_name)
+            elif action == "get_user_properties":
+                return await cached_tool_response(
+                    f"cache:ph:user_props:{conn_id}",
+                    300,
+                    ph.get_user_properties,
+                    api_key,
+                    project_host,
+                    project_id,
+                )
+            elif action == "query_events":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                if not event_name:
+                    return {"error": True, "message": "event_name is required for query_events"}
+                return await ph.query_events(
+                    api_key, project_host, project_id, start_date, end_date, event_name
+                )
+            elif action == "get_active_users":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                return await cached_tool_response(
+                    f"cache:ph:active:{conn_id}:{start_date}:{end_date}",
+                    120,
+                    ph.get_active_users,
+                    api_key,
+                    project_host,
+                    project_id,
+                    start_date,
+                    end_date,
+                )
+            elif action == "get_retention":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                return await ph.get_retention(api_key, project_host, project_id, start_date, end_date)
+            elif action == "get_funnel":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                return await ph.get_funnel(
+                    api_key, project_host, project_id, start_date, end_date, metrics or []
+                )
+            elif action == "get_revenue":
+                err = _require_dates(action, start_date, end_date)
+                if err:
+                    return err
+                return await ph.get_revenue(api_key, project_host, project_id, start_date, end_date)
+            elif action == "list_cohorts":
+                return await cached_tool_response(
+                    f"cache:ph:cohorts:{conn_id}",
+                    300,
+                    ph.list_cohorts,
+                    api_key,
+                    project_host,
+                    project_id,
+                )
+            return {"error": True, "message": f"Unknown action '{action}' for PostHog analytics_read"}
+
         elif platform == "adobe_analytics":
             if not u or not u.has_adobe_analytics:
                 return _no_adobe_analytics()
@@ -496,7 +695,7 @@ def register_analytics_tools(mcp_server):
 
     @mcp_server.tool("analytics_audit")
     async def analytics_audit(
-        platform: Literal["ga4", "amplitude", "adobe_analytics"] | None = None,
+        platform: Literal["ga4", "amplitude", "mixpanel", "posthog", "adobe_analytics"] | None = None,
         action: str = "",
         property_id: CoercedStr | None = None,
         start_date: str | None = None,
@@ -506,7 +705,7 @@ def register_analytics_tools(mcp_server):
     ) -> dict:
         """Audits analytics health. Returns scored findings + recommendations.
 
-        platform: ga4 | amplitude | adobe_analytics
+        platform: ga4 | amplitude | mixpanel | posthog | adobe_analytics
 
         GA4 (all need property_id):
           audit_ecommerce(+dates), check_data_anomalies(+days_back?,sensitivity?),
@@ -514,13 +713,15 @@ def register_analytics_tools(mcp_server):
           audit_conversion_events(dates optional)
 
         Amplitude: check_taxonomy_health, check_event_volume_anomalies(days_back?)
+        Mixpanel: check_taxonomy_health, check_event_volume_anomalies(days_back?)
+        PostHog: check_taxonomy_health, check_event_volume_anomalies(days_back?)
         Adobe (property_id=rsid): audit_report_suite, check_data_quality(+days_back?)
         """
         if not platform:
             return {
                 "error": True,
                 "error_type": "missing_required_param",
-                "message": "platform is required. Pass platform='ga4', 'amplitude', or 'adobe_analytics' in params.",
+                "message": "platform is required. Pass platform='ga4', 'amplitude', 'mixpanel', 'posthog', or 'adobe_analytics' in params.",
             }
         u = _user()
 
@@ -668,6 +869,49 @@ def register_analytics_tools(mcp_server):
                 return await amp.check_event_volume_anomalies(api_key, secret_key, days_back=days_back)
             return {"error": True, "message": f"Unknown action '{action}' for Amplitude analytics_audit"}
 
+        elif platform == "mixpanel":
+            if not u or not u.has_mixpanel:
+                return _no_mixpanel()
+            conn_id, api_key, secret_key = await _get_mixpanel_conn(u.user_id)
+            if not api_key:
+                return _no_mixpanel()
+            mp = state.mixpanel_connector
+
+            if action == "check_taxonomy_health":
+                return await cached_tool_response(
+                    f"cache:mp:tax_health:{conn_id}",
+                    300,
+                    mp.check_taxonomy_health,
+                    api_key,
+                    secret_key,
+                )
+            elif action == "check_event_volume_anomalies":
+                return await mp.check_event_volume_anomalies(api_key, secret_key, days_back=days_back)
+            return {"error": True, "message": f"Unknown action '{action}' for Mixpanel analytics_audit"}
+
+        elif platform == "posthog":
+            if not u or not u.has_posthog:
+                return _no_posthog()
+            conn_id, api_key, project_host, project_id = await _get_posthog_conn(u.user_id)
+            if not api_key:
+                return _no_posthog()
+            ph = state.posthog_connector
+
+            if action == "check_taxonomy_health":
+                return await cached_tool_response(
+                    f"cache:ph:tax_health:{conn_id}",
+                    300,
+                    ph.check_taxonomy_health,
+                    api_key,
+                    project_host,
+                    project_id,
+                )
+            elif action == "check_event_volume_anomalies":
+                return await ph.check_event_volume_anomalies(
+                    api_key, project_host, project_id, days_back=days_back
+                )
+            return {"error": True, "message": f"Unknown action '{action}' for PostHog analytics_audit"}
+
         elif platform == "adobe_analytics":
             if not u or not u.has_adobe_analytics:
                 return _no_adobe_analytics()
@@ -707,19 +951,21 @@ def register_analytics_tools(mcp_server):
 
     @mcp_server.tool("analytics_write")
     async def analytics_write(
-        platform: Literal["ga4", "amplitude", "adobe_analytics"] | None = None,
+        platform: Literal["ga4", "amplitude", "mixpanel", "posthog", "adobe_analytics"] | None = None,
         action: str = "",
         property_id: CoercedStr | None = None,
         config: dict[str, Any] | None = None,
     ) -> dict:
         """Writes analytics config. Requires full access tier. Use analytics_read first.
 
-        platform: ga4 | amplitude | adobe_analytics. config=dict of action-specific keys.
+        platform: ga4 | amplitude | mixpanel | posthog | adobe_analytics. config=dict of action-specific keys.
 
         GA4: create_custom_dimension{display_name,parameter_name,scope},
           create_custom_metric{display_name,parameter_name},
           mark_event_as_conversion{event_name}, create_audience{display_name,membership_duration_days,filter_clauses}
         Amplitude: create_event_type{event_type}, update_event_type{event_type}, delete_event_type{event_type}
+        Mixpanel: create_event_type{event_type}, update_event_type{event_type}, delete_event_type{event_type}
+        PostHog: create_event_type{event_type}, update_event_type{event_type}, delete_event_type{event_type}
         Adobe: create_segment{name,rsid,definition}, update_segment{segment_id},
           delete_segment{segment_id}, create_calculated_metric{name,rsid,definition}, delete_calculated_metric{metric_id}
         """
@@ -727,7 +973,7 @@ def register_analytics_tools(mcp_server):
             return {
                 "error": True,
                 "error_type": "missing_required_param",
-                "message": "platform is required. Pass platform='ga4', 'amplitude', or 'adobe_analytics' in params.",
+                "message": "platform is required. Pass platform='ga4', 'amplitude', 'mixpanel', 'posthog', or 'adobe_analytics' in params.",
             }
         config = config or {}
         u = _user()
@@ -829,6 +1075,78 @@ def register_analytics_tools(mcp_server):
                     return {"error": True, "message": "config.event_type is required"}
                 return await amp.delete_event_type(api_key, secret_key, config["event_type"])
             return {"error": True, "message": f"Unknown action '{action}' for Amplitude analytics_write"}
+
+        elif platform == "mixpanel":
+            if not u or not u.has_mixpanel:
+                return _no_mixpanel()
+            conn_id, api_key, secret_key = await _get_mixpanel_conn(u.user_id)
+            if not api_key:
+                return _no_mixpanel()
+            mp = state.mixpanel_connector
+
+            if action == "create_event_type":
+                if not config.get("event_type"):
+                    return {"error": True, "message": "config.event_type is required"}
+                return await mp.create_event_type(
+                    api_key,
+                    secret_key,
+                    event_type=config["event_type"],
+                    description=config.get("description"),
+                    category=config.get("category"),
+                )
+            elif action == "update_event_type":
+                if not config.get("event_type"):
+                    return {"error": True, "message": "config.event_type is required"}
+                return await mp.update_event_type(
+                    api_key,
+                    secret_key,
+                    event_type=config["event_type"],
+                    new_name=config.get("new_name"),
+                    description=config.get("description"),
+                    category=config.get("category"),
+                )
+            elif action == "delete_event_type":
+                if not config.get("event_type"):
+                    return {"error": True, "message": "config.event_type is required"}
+                return await mp.delete_event_type(api_key, secret_key, config["event_type"])
+            return {"error": True, "message": f"Unknown action '{action}' for Mixpanel analytics_write"}
+
+        elif platform == "posthog":
+            if not u or not u.has_posthog:
+                return _no_posthog()
+            conn_id, api_key, project_host, project_id = await _get_posthog_conn(u.user_id)
+            if not api_key:
+                return _no_posthog()
+            ph = state.posthog_connector
+
+            if action == "create_event_type":
+                if not config.get("event_type"):
+                    return {"error": True, "message": "config.event_type is required"}
+                return await ph.create_event_type(
+                    api_key,
+                    project_host,
+                    project_id,
+                    event_type=config["event_type"],
+                    description=config.get("description"),
+                    category=config.get("category"),
+                )
+            elif action == "update_event_type":
+                if not config.get("event_type"):
+                    return {"error": True, "message": "config.event_type is required"}
+                return await ph.update_event_type(
+                    api_key,
+                    project_host,
+                    project_id,
+                    event_type=config["event_type"],
+                    new_name=config.get("new_name"),
+                    description=config.get("description"),
+                    category=config.get("category"),
+                )
+            elif action == "delete_event_type":
+                if not config.get("event_type"):
+                    return {"error": True, "message": "config.event_type is required"}
+                return await ph.delete_event_type(api_key, project_host, project_id, config["event_type"])
+            return {"error": True, "message": f"Unknown action '{action}' for PostHog analytics_write"}
 
         elif platform == "adobe_analytics":
             if not u or not u.has_adobe_analytics:

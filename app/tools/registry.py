@@ -864,6 +864,8 @@ def register_all_tools(mcp_server):
             u.has_bing = project_ctx.has_bing
             u.has_apple = project_ctx.has_apple
             u.has_amplitude = project_ctx.has_amplitude
+            u.has_mixpanel = project_ctx.has_mixpanel
+            u.has_posthog = project_ctx.has_posthog
             u.has_adobe_analytics = project_ctx.has_adobe_analytics
             u.has_adobe_launch = project_ctx.has_adobe_launch
             u.has_adobe_marketo = project_ctx.has_adobe_marketo
@@ -889,6 +891,8 @@ def register_all_tools(mcp_server):
                     ("Apple Ads", project_ctx.has_apple),
                     ("Bing Webmaster Tools", project_ctx.has_bing),
                     ("Amplitude", project_ctx.has_amplitude),
+                    ("Mixpanel", project_ctx.has_mixpanel),
+                    ("PostHog", project_ctx.has_posthog),
                     ("Adobe Analytics", project_ctx.has_adobe_analytics),
                     ("Adobe Launch", project_ctx.has_adobe_launch),
                     ("Adobe Marketo Engage", project_ctx.has_adobe_marketo),

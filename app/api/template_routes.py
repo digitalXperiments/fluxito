@@ -123,12 +123,16 @@ async def _get_connected_platforms(uid: str, project_id: str | None = None) -> l
             from app.models.credential_connection import (
                 AdobeConnection,
                 AmplitudeConnection,
+                MixpanelConnection,
+                PostHogConnection,
                 RedshiftConnection,
                 SnowflakeConnection,
             )
 
             for ConnModel, slug in [
                 (AmplitudeConnection, "amplitude"),
+                (MixpanelConnection, "mixpanel"),
+                (PostHogConnection, "posthog"),
                 (RedshiftConnection, "redshift"),
                 (SnowflakeConnection, "snowflake"),
             ]:

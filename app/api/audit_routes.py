@@ -87,6 +87,8 @@ async def audit_page(request: Request):
         "redshift": "Redshift",
         "snowflake": "Snowflake",
         "amplitude": "Amplitude",
+        "mixpanel": "Mixpanel",
+        "posthog": "PostHog",
         "adobe": "Adobe Analytics",
     }
 
@@ -132,6 +134,10 @@ async def audit_page(request: Request):
             return "snap"
         if t.startswith("amplitude_"):
             return "amplitude"
+        if t.startswith("mixpanel_"):
+            return "mixpanel"
+        if t.startswith("posthog_"):
+            return "posthog"
         if t.startswith("adobe_"):
             return "adobe"
         return None

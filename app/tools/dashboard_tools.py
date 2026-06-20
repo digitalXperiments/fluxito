@@ -54,6 +54,8 @@ VALID_PLATFORMS = {
     "apple_ads",
     "google_ads",
     "amplitude",
+    "mixpanel",
+    "posthog",
     "adobe_analytics",
     "search_console",
     "gtm",
@@ -96,6 +98,8 @@ _CARD_PARAM_REQUIREMENTS: dict[tuple[str, str], list[str]] = {
     ("redshift", "run_query"): ["connection_id", "query"],
     ("snowflake", "run_query"): ["connection_id", "query"],
     ("amplitude", "query_events"): ["connection_id", "start_date", "end_date", "events"],
+    ("mixpanel", "query_events"): ["connection_id", "start_date", "end_date", "events"],
+    ("posthog", "query_events"): ["connection_id", "start_date", "end_date", "events"],
     ("adobe_analytics", "run_report"): [
         "connection_id",
         "report_suite_id",

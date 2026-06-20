@@ -76,6 +76,8 @@ _PLATFORM_FLAG_MAP = {
     "pinterest": "has_pinterest",
     "bigquery": "has_bq",
     "amplitude": "has_amplitude",
+    "mixpanel": "has_mixpanel",
+    "posthog": "has_posthog",
     "adobe_analytics": "has_adobe_analytics",
     "adobe_launch": "has_adobe_launch",
     "adobe_marketo": "has_adobe_marketo",
