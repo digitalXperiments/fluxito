@@ -1,4 +1,4 @@
-"""068 — add_branch_appsflyer_adjust_connections: credential connections for Branch, AppsFlyer, Adjust.
+"""069 — add_branch_appsflyer_adjust_connections: credential connections for Branch, AppsFlyer, Adjust.
 
 Creates three new credential connection tables for Mobile Measurement Partner (MMP)
 platforms. Each follows the same schema pattern as amplitude_connections:
@@ -11,16 +11,16 @@ platforms. Each follows the same schema pattern as amplitude_connections:
 - created_at, updated_at
 - compound index on (project_id, user_id, is_active)
 
-Revision ID: 068_branch_appsflyer_adjust
-Revises: 067_ai_catalog_models
+Revision ID: 069_branch_appsflyer_adjust
+Revises: 068_mixpanel_posthog_connections
 """
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "068_branch_appsflyer_adjust"
-down_revision = "067_ai_catalog_models"
+revision = "069_branch_appsflyer_adjust"
+down_revision = "068_mixpanel_posthog_connections"
 branch_labels = None
 depends_on = None
 
