@@ -8,7 +8,7 @@
 [![MCP](https://img.shields.io/badge/MCP-compatible-6f42c1.svg)](https://modelcontextprotocol.io)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
 [![Deploy: self-hosted](https://img.shields.io/badge/deploy-self--hosted-0f766e.svg)](docker-compose.yml)
-[![Platforms: 22](https://img.shields.io/badge/platforms-22-orange.svg)](#connecting-your-platforms)
+[![Platforms: 25](https://img.shields.io/badge/platforms-25-orange.svg)](#connecting-your-platforms)
 [![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC.svg)](pyproject.toml)
 [![Code style: Ruff](https://img.shields.io/badge/code_style-Ruff-D7FF64.svg)](pyproject.toml)
 [![Release](https://img.shields.io/github/v/release/digitalXperiments/fluxito?label=release&color=2F5BF4)](https://github.com/digitalXperiments/fluxito/releases/latest)
@@ -28,14 +28,15 @@ Each step is slow, error-prone, and out of sync with the others. Tracking plans 
 
 Fluxito collapses all four into a single conversation with your AI. **The AI is the operator; Fluxito gives it the hands.** It speaks the [Model Context Protocol](https://modelcontextprotocol.io) — an open standard — so it works with Claude, GPT, Cursor, Windsurf, or any other MCP-compatible client.
 
-Right now it gives your AI real, authenticated access across **22 platforms**:
+Right now it gives your AI real, authenticated access across **25 platforms**:
 
 | Stage | Platforms |
 |---|---|
 | **Define / SDR** | Generate, refine, and version Solution Design References (tracking plans + data dictionary) from live data + templates. Export to Excel. |
 | **Implement** | Google Tag Manager (full create/update/delete of tags, triggers, variables with workspace support). Adobe Launch (read + some write). |
-| **Measure** | Google Analytics 4, Adobe Analytics, Amplitude, Adjust, AppsFlyer, Branch, Search Console, Bing Webmaster Tools |
+| **Measure** | Google Analytics 4, Adobe Analytics, Amplitude, Mixpanel, PostHog, Adjust, AppsFlyer, Branch, Search Console, Bing Webmaster Tools |
 | **Acquire** | Google Ads, Meta Ads, TikTok Ads, Snap Ads, LinkedIn Ads, Pinterest Ads, X Ads, Reddit Ads, Apple Search Ads |
+| **Nurture** | Adobe Marketo Engage (read + some write) |
 | **Warehouse** | BigQuery, Snowflake, Redshift (query + some transformation) |
 | **Report** | Build native dashboards (JSON cards, filterable, signed public links), scheduled email/Slack reports, automations |
 
@@ -57,6 +58,10 @@ These are real prompts that work right now once Fluxito is connected and the AI 
 
 > "Every Monday at 9am, send me a Slack message with the biggest anomalies across GA4, Meta Ads, and Google Ads from the previous week."
 
+> "Run a live tag audit on my site. Check if the GA4 config tag, Meta pixel, and Google Ads conversion tracking are all firing correctly." (uses the Tag Auditing platform + 25 platform rule books)
+
+> "Ask Fluxito: why did my ROAS drop last week? Compare Meta Ads and Google Ads performance side by side and tell me what changed." (uses the native Ask Fluxito AI assistant)
+
 You're describing the outcome. The AI decides which tools to call, in what order, and against which connections. It handles the authentication and execution for you.
 
 ---
@@ -68,6 +73,8 @@ Fluxito runs in production at **https://fluxito.app**.
 This is the real, fully hosted product — not a demo. Sign up at [fluxito.app](https://fluxito.app), connect your platforms and your AI via MCP, and use everything end to end:
 - Generate, refine, and version Solution Design References (tracking plans + data dictionary)
 - Real GTM work, dashboards, and cross-platform analysis
+- Run live tag audits against 25+ platform rule books
+- Chat with the native Ask Fluxito AI assistant (supports Claude, GPT, Gemini, xAI, Mistral, and local models via LM Studio)
 - Audit logs and scheduled automations against your own connections
 
 Prefer to run your own instance? You can also [self-host Fluxito](#install).
@@ -277,6 +284,9 @@ Each tutorial is a clear, marketer-friendly walkthrough for registering the OAut
 | Amplitude | [amplitude.md](docs/tutorials/amplitude.md) |
 | Adobe Analytics | [adobe-analytics.md](docs/tutorials/adobe-analytics.md) |
 | Adobe Launch | [adobe-launch.md](docs/tutorials/adobe-launch.md) |
+| Adobe Marketo Engage | [adobe-marketo.md](docs/tutorials/adobe-marketo.md) |
+| Mixpanel | [mixpanel.md](docs/tutorials/mixpanel.md) |
+| PostHog | [posthog.md](docs/tutorials/posthog.md) |
 | Adjust | [adjust.md](docs/tutorials/adjust.md) |
 | AppsFlyer | [appsflyer.md](docs/tutorials/appsflyer.md) |
 | Branch | [branch.md](docs/tutorials/branch.md) |
@@ -538,11 +548,12 @@ print(f.decrypt(b"...encrypted-bytes-from-db..."))
 This is the first real step toward something much bigger. What exists today is already useful (you can generate Solution Design References, do real GTM work, build dashboards, run cross-platform analysis, etc.), but there is a lot still missing or rough.
 
 Some things I want to get to:
-- More connectors (Reddit Ads, Microsoft Advertising, Mixpanel, Klaviyo, etc.)
-- Much stronger automated tag auditing and drift detection between plan and implementation
-- A native "Ask Fluxito" chat experience inside the UI so you don't always need an external AI client
-- Better versioning and diffing for SDRs
-- More write actions on the advertising platforms
+- **More connectors** — Microsoft Advertising, Klaviyo, HubSpot, Salesforce, more MMPs (Kochava, Singular), plus deeper write actions on the advertising platforms (campaign creation, budget changes, audience push)
+- **Deeper warehouse capabilities** — read-write transformations, scheduled syncs, reverse ETL
+- **Advanced tag drift detection** — automated comparison between what your tracking plan says and what's actually firing live, with alerting
+- **Enhanced Ask Fluxito** — file uploads, memory/persistent context, custom instructions per project
+- **Better dashboards** — more chart types (funnel, cohort, geo), custom metrics builder, scheduled PDF delivery with full branding
+- **AI-powered anomaly detection** — surface changes in your metrics before you'd spot them, with root-cause suggestions
 
 The roadmap will be heavily shaped by what actual users need. If something feels painful or missing, open an issue. That's the whole point of open sourcing it.
 
