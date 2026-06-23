@@ -145,3 +145,58 @@ async def test_get_campaign_performance_posts_report_with_org_context(monkeypatc
     assert report_call[2]["Authorization"] == "Bearer apple-access-token"
     assert report_call[4]["startTime"] == "2025-01-01"
     assert report_call[4]["endTime"] == "2025-01-31"
+
+
+@pytest.mark.asyncio
+async def test_create_campaign_sends_correct_body(monkeypatch):
+    captured = {}
+
+    class FakeClient(_FakeClientBase):
+        async def post(self, url, *, headers=None, json=None):
+            captured["url"] = url
+            captured["json"] = json
+            return _resp(201, {"data": {"id": 570798765}})
+
+    monkeypatch.setattr("app.connectors.apple_ads.httpx.AsyncClient", FakeClient)
+
+    result = await AppleAdsConnector().create_campaign(
+        access_token=_TOKEN,
+        org_id=_ORG_ID,
+        name="Test Campaign",
+        status="PAUSED",
+        daily_budget=100.0,
+    )
+
+    assert result["campaign_id"] == "570798765"
+    assert result["campaign_name"] == "Test Campaign"
+    assert result["status"] == "PAUSED"
+    assert "campaigns" in captured["url"] and "api.searchads.apple.com" in captured["url"]
+    assert captured["json"]["name"] == "Test Campaign"
+    assert captured["json"]["status"] == "PAUSED"
+    assert captured["json"]["dailyBudgetAmount"] == {"amount": "100.0", "currency": "USD"}
+
+
+@pytest.mark.asyncio
+async def test_update_campaign_budget_sends_correct_body(monkeypatch):
+    captured = {}
+
+    class FakeClient(_FakeClientBase):
+        async def put(self, url, *, headers=None, json=None):
+            captured["url"] = url
+            captured["json"] = json
+            return _resp(200, {"data": {"id": _CAMPAIGN_ID}})
+
+    monkeypatch.setattr("app.connectors.apple_ads.httpx.AsyncClient", FakeClient)
+
+    result = await AppleAdsConnector().update_campaign_budget(
+        access_token=_TOKEN,
+        org_id=_ORG_ID,
+        campaign_id=_CAMPAIGN_ID,
+        daily_budget=75.0,
+    )
+
+    assert result["campaign_id"] == _CAMPAIGN_ID
+    assert result["new_daily_budget"] == 75.0
+    assert result["updated"] is True
+    assert _CAMPAIGN_ID in captured["url"]
+    assert captured["json"]["dailyBudgetAmount"] == {"amount": "75.0", "currency": "USD"}

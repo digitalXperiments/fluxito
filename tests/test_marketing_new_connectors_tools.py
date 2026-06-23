@@ -363,3 +363,245 @@ async def test_adjust_read_unknown_action(adjust_wired):
     mcp, conn = adjust_wired
     result = await mcp.tools["marketing_read"](platform="adjust", action="get_campaign_performance")
     assert result.get("error") is True
+
+
+# ---------------------------------------------------------------------------
+# Marketing write routing: create_campaign dispatch tests
+# ---------------------------------------------------------------------------
+
+
+class _StubTokenUser:
+    user_id = "u1"
+
+
+class _StubAdsUser:
+    user_id = "u1"
+    has_ads = True
+    connections = []
+
+
+class _StubWriteConnector:
+    """Stub that records calls for platforms that use _get_provider_token."""
+
+    def __init__(self):
+        self.calls = []
+
+    async def create_campaign(self, **kwargs):
+        self.calls.append(("create_campaign", kwargs))
+        return {"campaign_id": "new_camp_001", "updated": True}
+
+    async def update_campaign_budget(self, *args, **kwargs):
+        campaign_id = kwargs.get("campaign_id") or (args[2] if len(args) > 2 else None)
+        self.calls.append(("update_campaign_budget", {"args": args, "kwargs": kwargs}))
+        return {"campaign_id": campaign_id, "updated": True}
+
+    async def update_campaign_status(self, **kwargs):
+        self.calls.append(("update_campaign_status", kwargs))
+        return {"campaign_id": kwargs.get("campaign_id"), "updated": True}
+
+
+@pytest.fixture
+def write_wired(monkeypatch):
+    mcp = marketing_tools
+    mcp._tools = {}
+    mcp.tools = {}
+
+    conn = _StubWriteConnector()
+    monkeypatch.setattr(state, "tiktok_connector", conn, raising=False)
+    monkeypatch.setattr(state, "snap_connector", conn, raising=False)
+    monkeypatch.setattr(state, "linkedin_connector", conn, raising=False)
+    monkeypatch.setattr(state, "pinterest_connector", conn, raising=False)
+    monkeypatch.setattr(state, "reddit_connector", conn, raising=False)
+    monkeypatch.setattr(state, "apple_connector", conn, raising=False)
+    monkeypatch.setattr(state, "meta_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "fake-token")
+    monkeypatch.setattr(
+        marketing_tools, "_get_provider_oauth1_tokens", lambda p: ("oauth-token", "oauth-secret")
+    )
+    return conn
+
+
+@pytest.mark.asyncio
+async def test_write_tiktok_create_campaign(write_wired):
+    conn = write_wired
+    state.tiktok_connector.create_campaign = lambda **kw: _StubWriteConnector().create_campaign(**kw)
+    # Use marketing_tools.marketing_write directly (no registration needed)
+    # Patch state attributes to point at our stub
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_dispatch_tiktok_create_campaign(monkeypatch):
+    """TikTok marketing_write routes create_campaign to connector."""
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+    conn = _StubWriteConnector()
+    monkeypatch.setattr(state, "tiktok_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "tiktok-token")
+
+    result = await mcp.tools["marketing_write"](
+        platform="tiktok",
+        action="create_campaign",
+        account_id="acc1",
+        campaign_name="Test",
+        payload={"objective_type": "TRAFFIC"},
+    )
+    assert result.get("campaign_id") == "new_camp_001"
+    assert conn.calls[0][0] == "create_campaign"
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_dispatch_snap_create_campaign(monkeypatch):
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+    conn = _StubWriteConnector()
+    monkeypatch.setattr(state, "snap_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "snap-token")
+
+    result = await mcp.tools["marketing_write"](
+        platform="snap",
+        action="create_campaign",
+        account_id="acc1",
+        campaign_name="Test",
+    )
+    assert result.get("campaign_id") == "new_camp_001"
+    assert conn.calls[0][0] == "create_campaign"
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_dispatch_linkedin_create_campaign(monkeypatch):
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+    conn = _StubWriteConnector()
+    monkeypatch.setattr(state, "linkedin_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "linkedin-token")
+
+    result = await mcp.tools["marketing_write"](
+        platform="linkedin",
+        action="create_campaign",
+        account_id="acc1",
+        campaign_name="Test",
+    )
+    assert result.get("campaign_id") == "new_camp_001"
+    assert conn.calls[0][0] == "create_campaign"
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_dispatch_pinterest_create_campaign(monkeypatch):
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+    conn = _StubWriteConnector()
+    monkeypatch.setattr(state, "pinterest_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "pinterest-token")
+
+    result = await mcp.tools["marketing_write"](
+        platform="pinterest",
+        action="create_campaign",
+        account_id="acc1",
+        campaign_name="Test",
+    )
+    assert result.get("campaign_id") == "new_camp_001"
+    assert conn.calls[0][0] == "create_campaign"
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_dispatch_reddit_create_campaign(monkeypatch):
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+    conn = _StubWriteConnector()
+    monkeypatch.setattr(state, "reddit_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "reddit-token")
+
+    result = await mcp.tools["marketing_write"](
+        platform="reddit",
+        action="create_campaign",
+        account_id="acc1",
+        campaign_name="Test",
+        daily_budget_usd=50.0,
+    )
+    assert result.get("campaign_id") == "new_camp_001"
+    assert conn.calls[0][0] == "create_campaign"
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_dispatch_apple_create_campaign(monkeypatch):
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+    conn = _StubWriteConnector()
+    monkeypatch.setattr(state, "apple_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "apple-token")
+
+    result = await mcp.tools["marketing_write"](
+        platform="apple",
+        action="create_campaign",
+        account_id="org123",
+        campaign_name="Test",
+    )
+    assert result.get("campaign_id") == "new_camp_001"
+    assert conn.calls[0][0] == "create_campaign"
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_dispatch_meta_update_campaign_budget(monkeypatch):
+    """Meta marketing_write routes update_campaign_budget to connector."""
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+    conn = _StubWriteConnector()
+    monkeypatch.setattr(state, "meta_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "meta-token")
+
+    result = await mcp.tools["marketing_write"](
+        platform="meta",
+        action="update_campaign_budget",
+        account_id="acc1",
+        campaign_id="camp1",
+        daily_budget_usd=50.0,
+    )
+    assert result.get("campaign_id") == "camp1"
+    assert result.get("updated") is True
+    assert conn.calls[0][0] == "update_campaign_budget"
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_dispatch_apple_update_campaign_budget(monkeypatch):
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+    conn = _StubWriteConnector()
+    monkeypatch.setattr(state, "apple_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "apple-token")
+
+    result = await mcp.tools["marketing_write"](
+        platform="apple",
+        action="update_campaign_budget",
+        account_id="org123",
+        campaign_id="camp1",
+        daily_budget_usd=75.0,
+    )
+    assert result.get("campaign_id") == "camp1"
+    assert result.get("updated") is True
+    assert conn.calls[0][0] == "update_campaign_budget"
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_unknown_action_returns_error(monkeypatch):
+    """Unknown action for a platform returns an error dict."""
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _StubTokenUser())
+    monkeypatch.setattr(marketing_tools, "_get_provider_token", lambda p: "tiktok-token")
+    monkeypatch.setattr(state, "tiktok_connector", _StubWriteConnector(), raising=False)
+
+    result = await mcp.tools["marketing_write"](
+        platform="tiktok",
+        action="nonexistent_action",
+        account_id="acc1",
+    )
+    assert result.get("error") is True

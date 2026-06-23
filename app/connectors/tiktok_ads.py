@@ -451,3 +451,54 @@ class TikTokAdsConnector:
             "budget_mode": budget_mode,
             "updated": True,
         }
+
+    @friendly_errors("TikTok Ads")
+    async def create_campaign(
+        self,
+        access_token: str,
+        account_id: str,
+        campaign_name: str,
+        objective_type: str,
+        budget: float,
+        budget_mode: str = "BUDGET_MODE_DAY",
+        operation_system: int | None = None,
+    ) -> dict:
+        """
+        Creates a new TikTok campaign.
+        objective_type: TRAFFIC | CONVERSIONS | REACH | VIDEO_VIEWS
+        budget: in account currency (e.g. 50.0 = $50)
+        budget_mode: BUDGET_MODE_DAY (daily) | BUDGET_MODE_TOTAL (lifetime)
+        operation_system: optional OS targeting (0=Android, 1=iOS)
+        """
+        body = {
+            "advertiser_id": account_id,
+            "campaign_name": campaign_name,
+            "objective_type": objective_type,
+            "budget_mode": budget_mode,
+            "budget": budget,
+        }
+        if operation_system is not None:
+            body["operation_system"] = operation_system
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{_BASE}/campaign/create/",
+                headers=self._headers(access_token),
+                json=body,
+            )
+
+        data = resp.json()
+        err = self._check(data, "create_campaign")
+        if err:
+            return err
+
+        campaign_data = data.get("data", {})
+        return {
+            "campaign_id": campaign_data.get("campaign_id"),
+            "campaign_name": campaign_name,
+            "objective_type": objective_type,
+            "budget": budget,
+            "budget_mode": budget_mode,
+            "account_id": account_id,
+            "updated": True,
+        }

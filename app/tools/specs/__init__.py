@@ -114,6 +114,10 @@ HEADERS: dict[str, str] = {
     "marketing_write": (
         "Mutate paid-ads campaigns (budget / status / create) and Adobe Marketo "
         "(lead upsert, list membership, campaign requests). Pass `platform`.\n"
+        "create_campaign is now available on ALL 9 platforms (Google, Meta, TikTok, "
+        "Snap, LinkedIn, Pinterest, X, Reddit, Apple). update_campaign_budget is also "
+        "available on all 9. Use advertising_channel_type for platform-specific "
+        "objective/channel type.\n"
         "WARNING: budget/status changes affect LIVE ad spend immediately. The budget "
         "field is `daily_budget_usd` (not `new_budget`)."
     ),

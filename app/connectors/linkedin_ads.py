@@ -330,3 +330,50 @@ class LinkedInAdsConnector:
         if err:
             return err
         return {"campaign_id": campaign_id, "new_daily_budget_usd": daily_budget_usd, "updated": True}
+
+    @friendly_errors("LinkedIn Ads")
+    async def create_campaign(
+        self,
+        access_token: str,
+        account_id: str,
+        name: str,
+        status: str = "ACTIVE",
+        daily_budget: float | None = None,
+        objective_type: str = "BRAND_AWARENESS",
+    ) -> dict:
+        """
+        Creates a new LinkedIn campaign.
+        status: ACTIVE | PAUSED
+        daily_budget: in account currency (raw USD)
+        objective_type: BRAND_AWARENESS | WEBSITE_VISITS | LEAD_GENERATION | etc.
+        """
+        account_urn = f"urn:li:sponsoredAccount:{account_id}"
+        body = {
+            "account": account_urn,
+            "name": name,
+            "status": status,
+            "objectiveType": objective_type,
+        }
+        if daily_budget is not None:
+            body["dailyBudget"] = {"amount": daily_budget}
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{_BASE}/adCampaignsV2",
+                headers=self._headers(access_token),
+                json=body,
+            )
+
+        err = self._check(resp, "create_campaign")
+        if err:
+            return err
+
+        data = resp.json()
+        created = data.get("elements", [{}])[0] if data.get("elements") else {}
+        return {
+            "campaign_id": created.get("id"),
+            "campaign_name": name,
+            "status": status,
+            "account_id": account_id,
+            "updated": True,
+        }
