@@ -16,6 +16,8 @@ Documented endpoints only:
 Removed (not real endpoints): get_app_overview, audit_tracking_setup, get_pull_api_aurora_token.
 """
 
+import csv
+import io
 import logging
 from typing import Any
 
@@ -24,6 +26,19 @@ import httpx
 from app.connectors.errors import friendly_errors
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_csv(text: str) -> list[dict]:
+    """Parse CSV text into list of dicts with normalized column names.
+
+    Converts column names to lowercase, strips whitespace, and replaces
+    spaces/hyphens with underscores so they match the normalizer's expected keys.
+    """
+    reader = csv.DictReader(io.StringIO(text))
+    return [
+        {k.strip().lower().replace(" ", "_").replace("-", "_"): v for k, v in row.items()} for row in reader
+    ]
+
 
 _APPSFLYER_BASE = "https://hq1.appsflyer.com/api"
 # Partners report uses a different host per official docs
@@ -83,6 +98,14 @@ class AppsFlyerConnector:
                 try:
                     return response.json()  # type: ignore[no-any-return]
                 except Exception:
+                    # AppsFlyer raw-data endpoints return CSV
+                    if response.status_code < 300 and response.text.strip():
+                        try:
+                            rows = _parse_csv(response.text)
+                            if rows:
+                                return {"results": rows}
+                        except Exception:
+                            pass
                     return {"success": response.status_code < 300, "body": response.text}
 
         except Exception as e:
@@ -96,13 +119,12 @@ class AppsFlyerConnector:
     @friendly_errors("AppsFlyer")
     async def list_apps(self, api_key: str) -> dict:
         """
-        GET /mng/apps?capabilities=protect_360
-        Returns list of apps with capabilities filter.
+        GET /mng/apps
+        Returns list of apps.
         Normalize as: {"apps": [...], "total": N}
         """
-        params = {"capabilities": "protect_360"}
-        result = await self._request(api_key, "GET", "/mng/apps", params=params)
-        if result.get("error"):
+        result = await self._request(api_key, "GET", "/mng/apps")
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         apps = (
@@ -141,7 +163,7 @@ class AppsFlyerConnector:
         params = {"from": start_date, "to": end_date}
         endpoint = f"/raw-data/export/app/{app_id}/installs_report/v5"
         result = await self._request(api_key, "GET", endpoint, params=params)
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         installs = (
@@ -187,7 +209,7 @@ class AppsFlyerConnector:
         params = {"from": start_date, "to": end_date}
         endpoint = f"/raw-data/export/app/{app_id}/in_app_events_report/v5"
         result = await self._request(api_key, "GET", endpoint, params=params)
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         events = (
@@ -238,7 +260,7 @@ class AppsFlyerConnector:
         result = await self._request(
             api_key, "GET", endpoint, base_url=_APPSFLYER_PARTNERS_BASE, params=params
         )
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         partners = (

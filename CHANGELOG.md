@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.4] — 2026-06-23
+
+### Fixed
+- **AppsFlyer CSV response handling.** Raw-data endpoints (`installs_report/v5`,
+  `in_app_events_report/v5`, `partners_report/v5`) return CSV, not JSON. Added
+  a `_parse_csv` parser with normalized column names so the normalizers receive
+  structured dicts instead of empty results.
+- **AppsFlyer `list_apps` no longer hardcodes `capabilities=protect_360`.**
+  Removed the filter so the endpoint returns all apps, not just Protect360-enabled
+  ones.
+- **Latent crash on JSON array responses in all three MMP connectors.** Every
+  `result.get("error")` call is now guarded with `isinstance(result, dict) and`
+  to prevent `AttributeError` when an API returns a top-level JSON array.
+- **Standardized date parameter names in `marketing_read`.** AppsFlyer actions
+  now use `date_range_start`/`date_range_end` (matching Adjust), replacing the
+  inconsistent `start_date`/`end_date` convention.
+- **Removed unused `export_id`, `export_type`, `source_id`, `payload` params**
+  from the `marketing_read` tool signature.
+
+### Added
+- **MCP dispatcher tests for Branch, AppsFlyer, and Adjust.** 20 new tests
+  covering `marketing_read` and `marketing_write` routing — each action reaches
+  the correct connector method, missing required params are rejected, unknown
+  actions are handled.
+
 ## [1.2.1] — 2026-06-20
 
 ### Fixed

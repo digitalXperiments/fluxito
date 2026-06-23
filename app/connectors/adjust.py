@@ -122,7 +122,7 @@ class AdjustConnector:
         """
         params = {"required_filters": "apps"}
         result = await self._request(api_key, "GET", "/reports-service/filters_data", params=params)
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         # The response shape per docs is typically {"apps": [...] } or nested under data
@@ -185,7 +185,7 @@ class AdjustConnector:
                 params[k] = v
 
         result = await self._request(api_key, "GET", "/reports-service/report", params=params)
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         # Response is expected to already be the report object with rows/totals/warnings
@@ -226,7 +226,7 @@ class AdjustConnector:
                 params[k] = v
 
         result = await self._request(api_key, "GET", "/reports-service/pivot_report", params=params)
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         rows = result.get("rows", []) if isinstance(result, dict) else []
@@ -247,7 +247,7 @@ class AdjustConnector:
         Normalize as: {"events": [...], "total": N}
         """
         result = await self._request(api_key, "GET", "/reports-service/events")
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         events = (
@@ -273,7 +273,7 @@ class AdjustConnector:
         Normalize as: {"apps": [...], "total": N}
         """
         result = await self._request(api_key, "GET", "/app-automation/apps/list")
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         apps = (
@@ -303,7 +303,7 @@ class AdjustConnector:
             base_url=_ADJUST_CAMPAIGN_BASE,
             auth_type="token",
         )
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         trackers = (

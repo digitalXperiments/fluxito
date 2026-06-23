@@ -96,7 +96,7 @@ class BranchConnector:
         params = {"branch_secret": secret_key}
 
         result = await self._request("GET", url, params=params)
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         # Branch returns the app object directly or under 'data'
@@ -125,6 +125,11 @@ class BranchConnector:
         POST /v3/export
         JSON body: {"branch_key": ..., "branch_secret": ..., "export_date": ...}
         Returns dict with export S3 file paths keyed by event type.
+
+        NOTE: This requests an async export job. There is no companion
+        fetch/poll action — the response contains S3 paths to the export
+        files when the job completes. If the export is not yet ready the
+        response may indicate a pending job.
         """
         url = f"{_BRANCH_BASE}/v3/export"
         body = {
@@ -134,7 +139,7 @@ class BranchConnector:
         }
 
         result = await self._request("POST", url, json_body=body)
-        if result.get("error"):
+        if isinstance(result, dict) and result.get("error"):
             return result
 
         # Response typically contains links like {"open": "...s3...", "install": "...", ...}

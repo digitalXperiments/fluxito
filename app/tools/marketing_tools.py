@@ -181,16 +181,10 @@ def register_marketing_tools(mcp_server):
         resource_id: str | None = None,
         filters: dict | None = None,
         app_id: str | None = None,
-        export_id: str | None = None,
-        export_type: str | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        source_id: str | None = None,
-        payload: dict | None = None,
     ) -> dict:
         """Reads ad platform data. Use marketing_audit for health checks, marketing_write for changes.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo | branch | appsflyer | adjust. Dates: YYYY-MM-DD.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo | branch | appsflyer | adjust. Dates (YYYY-MM-DD) via date_range_start / date_range_end.
 
         All platforms: list_accounts, get_campaign_performance(account_id+dates)
         Google only: get_ad_group_performance(+dates,campaign_id?), get_conversion_actions(account_id), get_keyword_performance(+dates,campaign_id?)
@@ -199,7 +193,7 @@ def register_marketing_tools(mcp_server):
         Snap: get_adsquad_performance(+dates,campaign_id?)
         Marketo actions: get_leads, get_lead_by_id, list_lead_lists, get_list_leads, get_lead_activities, list_campaigns, list_programs, get_program, list_emails, list_landing_pages, list_forms
         Branch: get_app
-        AppsFlyer: list_apps, get_installs_report(app_id, dates), get_in_app_events_report(app_id, dates), get_partners_report(app_id, dates)
+        AppsFlyer: list_apps, get_installs_report(app_id, date_range_start, date_range_end), get_in_app_events_report(app_id, date_range_start, date_range_end), get_partners_report(app_id, date_range_start, date_range_end)
         Adjust: list_apps, get_report(dimensions, metrics, date_period, ...), get_pivot_report(dimensions, metrics, date_period, index, ...), list_events, list_app_automation_apps, get_partner_links(app_token)
         """
         if not platform:
@@ -770,40 +764,40 @@ def register_marketing_tools(mcp_server):
             if not app_id:
                 return {"error": True, "message": "app_id is required for this AppsFlyer action"}
             elif action == "get_installs_report":
-                if not start_date or not end_date:
-                    return {"error": True, "message": "start_date and end_date are required"}
+                if not date_range_start or not date_range_end:
+                    return {"error": True, "message": "date_range_start and date_range_end are required"}
                 return await cached_tool_response(
-                    f"cache:appsflyer:installs:{conn_id}:{app_id}:{start_date}:{end_date}",
+                    f"cache:appsflyer:installs:{conn_id}:{app_id}:{date_range_start}:{date_range_end}",
                     300,
                     af.get_installs_report,
                     api_key,
                     app_id,
-                    start_date,
-                    end_date,
+                    date_range_start,
+                    date_range_end,
                 )
             elif action == "get_in_app_events_report":
-                if not start_date or not end_date:
-                    return {"error": True, "message": "start_date and end_date are required"}
+                if not date_range_start or not date_range_end:
+                    return {"error": True, "message": "date_range_start and date_range_end are required"}
                 return await cached_tool_response(
-                    f"cache:appsflyer:events:{conn_id}:{app_id}:{start_date}:{end_date}",
+                    f"cache:appsflyer:events:{conn_id}:{app_id}:{date_range_start}:{date_range_end}",
                     300,
                     af.get_in_app_events_report,
                     api_key,
                     app_id,
-                    start_date,
-                    end_date,
+                    date_range_start,
+                    date_range_end,
                 )
             elif action == "get_partners_report":
-                if not start_date or not end_date:
-                    return {"error": True, "message": "start_date and end_date are required"}
+                if not date_range_start or not date_range_end:
+                    return {"error": True, "message": "date_range_start and date_range_end are required"}
                 return await cached_tool_response(
-                    f"cache:appsflyer:partners:{conn_id}:{app_id}:{start_date}:{end_date}",
+                    f"cache:appsflyer:partners:{conn_id}:{app_id}:{date_range_start}:{date_range_end}",
                     300,
                     af.get_partners_report,
                     api_key,
                     app_id,
-                    start_date,
-                    end_date,
+                    date_range_start,
+                    date_range_end,
                 )
 
             return {"error": True, "message": f"Unknown action '{action}' for AppsFlyer marketing_read"}
