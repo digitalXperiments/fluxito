@@ -222,3 +222,84 @@ class SnowflakeConnection(Base):
 
     def __repr__(self) -> str:
         return f"<SnowflakeConnection(warehouse={self.warehouse}, database={self.database}, is_active={self.is_active})>"
+
+
+class BranchConnection(Base):
+    """Branch API key connection scoped to a project."""
+
+    __tablename__ = "branch_connections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    project_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    connection_status: Mapped[str] = mapped_column(String(50), default=CONNECTION_STATUS_ACTIVE, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("idx_branch_project_user_active", project_id, user_id, is_active),)
+
+    def __repr__(self) -> str:
+        return f"<BranchConnection(display_name={self.display_name}, is_active={self.is_active})>"
+
+
+class AppsFlyerConnection(Base):
+    """AppsFlyer API key connection scoped to a project."""
+
+    __tablename__ = "appsflyer_connections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    project_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    connection_status: Mapped[str] = mapped_column(String(50), default=CONNECTION_STATUS_ACTIVE, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("idx_appsflyer_project_user_active", project_id, user_id, is_active),)
+
+    def __repr__(self) -> str:
+        return f"<AppsFlyerConnection(display_name={self.display_name}, is_active={self.is_active})>"
+
+
+class AdjustConnection(Base):
+    """Adjust API key connection scoped to a project."""
+
+    __tablename__ = "adjust_connections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    project_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    connection_status: Mapped[str] = mapped_column(String(50), default=CONNECTION_STATUS_ACTIVE, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("idx_adjust_project_user_active", project_id, user_id, is_active),)
+
+    def __repr__(self) -> str:
+        return f"<AdjustConnection(display_name={self.display_name}, is_active={self.is_active})>"

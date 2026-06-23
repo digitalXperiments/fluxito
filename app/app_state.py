@@ -47,6 +47,9 @@ adobe_launch_connector: Any = None
 adobe_marketo_connector: Any = None
 redshift_connector: Any = None
 snowflake_connector: Any = None
+branch_connector: Any = None
+appsflyer_connector: Any = None
+adjust_connector: Any = None
 token_manager: Optional["GoogleTokenManager"] = None
 
 # Typed as Any so static analysers (basedpyright) don't flag these as

@@ -6,6 +6,8 @@
 <link rel="stylesheet" href="/static/css/tutorials.css?v={{ asset_hash('css/tutorials.css') }}"/>
 {% endblock %}
 
+{% from "partials/platform_icons.html" import platform_icon %}
+
 {% macro platform_badge(slug) -%}
 {%- if slug == 'google-cloud-setup' -%}google
 {%- elif slug == 'google-analytics-4' -%}ga4
@@ -26,7 +28,19 @@
 {%- elif slug == 'amplitude' -%}amp
 {%- elif slug == 'adobe-analytics' -%}aa
 {%- elif slug == 'adobe-launch' -%}al
+{%- elif slug == 'branch' -%}branch
+{%- elif slug == 'appsflyer' -%}appsflyer
+{%- elif slug == 'adjust' -%}adjust
 {%- else -%}ghost
+{%- endif -%}
+{%- endmacro %}
+
+{% macro platform_badge_icon(slug) -%}
+{%- if slug == 'branch' -%}{{ platform_icon('branch', 22) }}
+{%- elif slug == 'appsflyer' -%}{{ platform_icon('appsflyer', 22) }}
+{%- elif slug == 'adjust' -%}{{ platform_icon('adjust', 22) }}
+{%- else -%}
+  <span class="pbadge {{ platform_badge(slug) }}"><span>{{ (slug.split('-')|map('first')|join('')|upper)[:2] }}</span></span>
 {%- endif -%}
 {%- endmacro %}
 
@@ -52,7 +66,7 @@
     {% for slug, name, time, note in platform_tutorials %}
     <a href="/tutorials/{{ slug }}" class="tut-card">
       <div class="tut-card-head">
-        <span class="pbadge {{ platform_badge(slug) }}"><span>{{ name[:2]|upper }}</span></span>
+        {{ platform_badge_icon(slug) }}
         <span class="status-pill {% if slug == 'google-cloud-setup' %}live{% endif %}">{{ time }}</span>
       </div>
       <h2>{{ name }}</h2>

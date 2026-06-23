@@ -29,6 +29,9 @@
 {%- elif s == 'bigquery' -%}bq
 {%- elif s == 'redshift' -%}rs
 {%- elif s == 'snowflake' -%}sf
+{%- elif s == 'branch' -%}branch
+{%- elif s == 'appsflyer' -%}appsflyer
+{%- elif s == 'adjust' -%}adjust
 {%- else -%}ghost
 {%- endif -%}
 {%- endmacro %}
@@ -64,7 +67,7 @@
     {% for c in connections %}
     <div class="conn-card is-connected" data-search="{{ [c.platform_name, c.label, c.detail or '', (c.services or []) | map(attribute='name') | join(' ')] | join(' ') | lower }}">
       <div class="conn-head">
-        <span class="pbadge {{ pbadge_class(c.provider) }}"><span>{{ c.provider[:2]|upper }}</span></span>
+        <span class="conn-card-icon">{{ platform_icon(c.provider, 26) }}</span>
         {% if c.is_active %}
           <span class="status-pill live">Live</span>
         {% else %}
@@ -142,7 +145,7 @@
       <a href="{{ p.url }}" class="conn-card {% if p.count %}is-connected{% endif %}" style="text-decoration:none;color:inherit"
          data-search="{{ [p.name, p.desc, ((p.products or []) | map(attribute='name') | join(' '))] | join(' ') | lower }}">
         <div class="conn-head">
-          <span class="pbadge {{ pbadge_class(p.slug) }}"><span>{{ p.slug[:2]|upper }}</span></span>
+          <span class="conn-card-icon">{{ platform_icon(p.slug, 26) }}</span>
           {% if p.count %}
             <span class="status-pill live">{{ p.count }} connected</span>
           {% else %}
@@ -210,6 +213,15 @@
   background: transparent;
   border-style: dashed;
 }
+
+/* Card header platform icon */
+.conn-card-icon {
+  width: 40px; height: 40px; flex-shrink: 0;
+  border-radius: var(--r-m);
+  background: var(--bg-2); border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+}
+.conn-card-icon svg { display: block; }
 
 /* Product chips — showcase the named tools a single connection unlocks */
 .svc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }

@@ -32,8 +32,11 @@ async def resolve_connection_flags(
     from app.models.bq_connection import BQConnection
     from app.models.connection import OAuthConnection
     from app.models.credential_connection import (
+        AdjustConnection,
         AdobeConnection,
         AmplitudeConnection,
+        AppsFlyerConnection,
+        BranchConnection,
         MarketoConnection,
         MixpanelConnection,
         PostHogConnection,
@@ -50,6 +53,9 @@ async def resolve_connection_flags(
         has_redshift=False,
         has_snowflake=False,
         has_amplitude=False,
+        has_branch=False,
+        has_appsflyer=False,
+        has_adjust=False,
         has_mixpanel=False,
         has_posthog=False,
         has_adobe_analytics=False,
@@ -120,6 +126,9 @@ async def resolve_connection_flags(
 
             credential_models = (
                 (AmplitudeConnection, ("has_amplitude",)),
+                (BranchConnection, ("has_branch",)),
+                (AppsFlyerConnection, ("has_appsflyer",)),
+                (AdjustConnection, ("has_adjust",)),
                 (MixpanelConnection, ("has_mixpanel",)),
                 (PostHogConnection, ("has_posthog",)),
                 (AdobeConnection, ("has_adobe_analytics", "has_adobe_launch")),
