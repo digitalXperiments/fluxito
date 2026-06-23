@@ -323,3 +323,47 @@ class PinterestAdsConnector:
         if err:
             return err
         return {"campaign_id": campaign_id, "new_daily_budget_usd": daily_budget_usd, "updated": True}
+
+    @friendly_errors("Pinterest Ads")
+    async def create_campaign(
+        self,
+        access_token: str,
+        account_id: str,
+        name: str,
+        status: str = "ACTIVE",
+        daily_budget: float | None = None,
+        objective_type: str = "AWARENESS",
+    ) -> dict:
+        """
+        Creates a new Pinterest campaign.
+        status: ACTIVE | PAUSED
+        daily_budget: in account currency (raw USD)
+        objective_type: AWARENESS | TRAFFIC | VIDEO_VIEWS | etc.
+        """
+        body = {
+            "name": name,
+            "status": status,
+            "objective_type": objective_type,
+        }
+        if daily_budget is not None:
+            body["daily_budget"] = daily_budget
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{_BASE}ad_accounts/{account_id}/campaigns",
+                headers=self._headers(access_token),
+                json=body,
+            )
+
+        err = self._check(resp, "create_campaign")
+        if err:
+            return err
+
+        created = resp.json()
+        return {
+            "campaign_id": created.get("id"),
+            "campaign_name": name,
+            "status": status,
+            "account_id": account_id,
+            "updated": True,
+        }

@@ -331,3 +331,90 @@ class AppleAdsConnector:
             "new_status": normalized,
             "updated": True,
         }
+
+    @friendly_errors("Apple Ads")
+    async def create_campaign(
+        self,
+        access_token: str,
+        org_id: str,
+        name: str,
+        status: str = "PAUSED",
+        daily_budget: float | None = None,
+        display_name: str | None = None,
+    ) -> dict:
+        """
+        Creates a new Apple Ads campaign.
+        status: ENABLED | PAUSED
+        daily_budget: in account currency
+        """
+        normalized = status.upper()
+        if normalized not in {"ENABLED", "PAUSED"}:
+            return {"error": True, "message": "status must be ENABLED or PAUSED"}
+
+        body = {
+            "name": name,
+            "status": normalized,
+            "displayName": display_name or name,
+        }
+        if daily_budget is not None:
+            body["dailyBudgetAmount"] = {
+                "amount": str(daily_budget),
+                "currency": "USD",
+            }
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{_BASE}/campaigns",
+                headers=self._headers(access_token, org_id),
+                json=body,
+            )
+
+        err = self._check(resp, "create_campaign")
+        if err:
+            return err
+
+        created = resp.json().get("data", {})
+        return {
+            "campaign_id": str(created.get("id") or created.get("campaignId") or ""),
+            "campaign_name": name,
+            "status": normalized,
+            "account_id": str(org_id),
+            "updated": True,
+        }
+
+    @friendly_errors("Apple Ads")
+    async def update_campaign_budget(
+        self,
+        access_token: str,
+        org_id: str,
+        campaign_id: str,
+        daily_budget: float,
+    ) -> dict:
+        """
+        Updates an Apple Ads campaign's daily budget.
+        daily_budget: in account currency
+        """
+        body = {
+            "dailyBudgetAmount": {
+                "amount": str(daily_budget),
+                "currency": "USD",
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.put(
+                f"{_BASE}/campaigns/{campaign_id}",
+                headers=self._headers(access_token, org_id),
+                json=body,
+            )
+
+        err = self._check(resp, "update_campaign_budget")
+        if err:
+            return err
+
+        return {
+            "campaign_id": campaign_id,
+            "account_id": str(org_id),
+            "new_daily_budget": daily_budget,
+            "updated": True,
+        }

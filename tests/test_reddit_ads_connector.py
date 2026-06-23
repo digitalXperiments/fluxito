@@ -411,3 +411,57 @@ async def test_update_campaign_budget_rejects_zero_or_negative(monkeypatch):
         _TOKEN, _ACCOUNT_ID, _CAMPAIGN_ID, daily_budget=-10.0
     )
     assert result2.get("error") is True
+
+
+# ---------------------------------------------------------------------------
+# create_campaign
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_campaign_sends_correct_payload(monkeypatch):
+    captured = {}
+
+    class FakeClient(_FakeClientBase):
+        async def post(self, url, *, headers=None, json=None):
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers or {}
+            return _resp(201, {"data": {"id": _CAMPAIGN_ID}})
+
+    monkeypatch.setattr("app.connectors.reddit_ads.httpx.AsyncClient", FakeClient)
+
+    result = await RedditAdsConnector().create_campaign(
+        access_token=_TOKEN,
+        account_id=_ACCOUNT_ID,
+        name="Test Campaign",
+        daily_budget=50.0,
+        configured_status="PAUSED",
+    )
+
+    assert result["campaign_id"] == _CAMPAIGN_ID
+    assert result["daily_budget"] == 50.0
+    assert result["configured_status"] == "PAUSED"
+    assert captured["json"]["name"] == "Test Campaign"
+    assert captured["json"]["daily_budget_micro_usd"] == 50_000_000
+    assert captured["json"]["configured_status"] == "PAUSED"
+    expected_url = f"https://ads-api.reddit.com/api/v3/ad_accounts/{_ACCOUNT_ID}/campaigns"
+    assert captured["url"] == expected_url
+    assert captured["headers"]["Authorization"] == f"Bearer {_TOKEN}"
+
+
+@pytest.mark.asyncio
+async def test_create_campaign_rejects_invalid_status(monkeypatch):
+    result = await RedditAdsConnector().create_campaign(
+        _TOKEN, _ACCOUNT_ID, "Test", daily_budget=50.0, configured_status="DELETED"
+    )
+    assert result.get("error") is True
+    assert "ACTIVE or PAUSED" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_create_campaign_rejects_zero_budget(monkeypatch):
+    result = await RedditAdsConnector().create_campaign(
+        _TOKEN, _ACCOUNT_ID, "Test", daily_budget=0, configured_status="ACTIVE"
+    )
+    assert result.get("error") is True

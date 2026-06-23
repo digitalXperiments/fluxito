@@ -466,3 +466,53 @@ class RedditAdsConnector:
             "new_daily_budget": daily_budget,
             "updated": True,
         }
+
+    @friendly_errors("Reddit Ads")
+    async def create_campaign(
+        self,
+        access_token: str,
+        account_id: str,
+        name: str,
+        daily_budget: float,
+        configured_status: str = "PAUSED",
+    ) -> dict:
+        """
+        Creates a new Reddit campaign.
+        daily_budget: in account currency (converted to micro-USD)
+        configured_status: ACTIVE | PAUSED
+        """
+        normalized = configured_status.upper()
+        if normalized not in {"ACTIVE", "PAUSED"}:
+            return {"error": True, "message": "configured_status must be ACTIVE or PAUSED"}
+        if daily_budget <= 0:
+            return {"error": True, "message": "daily_budget must be a positive number"}
+
+        daily_budget_micro = int(round(daily_budget * _MICRO))
+
+        body = {
+            "name": name,
+            "configured_status": normalized,
+            "daily_budget_micro_usd": daily_budget_micro,
+            "ad_account_id": account_id,
+        }
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{_BASE}/ad_accounts/{account_id}/campaigns",
+                headers=self._headers(access_token),
+                json=body,
+            )
+
+        err = self._check(resp, "create_campaign")
+        if err:
+            return err
+
+        created = resp.json().get("data", {})
+        return {
+            "campaign_id": created.get("id"),
+            "campaign_name": name,
+            "configured_status": normalized,
+            "daily_budget": daily_budget,
+            "account_id": account_id,
+            "updated": True,
+        }

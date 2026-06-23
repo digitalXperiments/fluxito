@@ -22,6 +22,7 @@ from app.connectors.errors import friendly_errors
 logger = logging.getLogger(__name__)
 
 _BASE = "https://ads-api.x.com/12"
+_MICRO = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,19 @@ class XAdsConnector:
         headers = {"Authorization": self._oauth_header("PUT", url, token, params=params)}
         async with httpx.AsyncClient(timeout=timeout) as client:
             return await client.put(url, headers=headers, params=params)
+
+    async def signed_post(
+        self,
+        path: str,
+        token: XOAuth1Token,
+        params: dict | None = None,
+        json_body: dict | None = None,
+        timeout: int = 20,
+    ) -> httpx.Response:
+        url = f"{_BASE}{path}"
+        headers = {"Authorization": self._oauth_header("POST", url, token, params=params)}
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            return await client.post(url, headers=headers, params=params, json=json_body)
 
     @staticmethod
     def _check(resp: httpx.Response, context: str) -> dict | None:
@@ -300,5 +314,80 @@ class XAdsConnector:
             "campaign_id": campaign_id,
             "account_id": account_id,
             "new_status": normalized,
+            "updated": True,
+        }
+
+    @friendly_errors("X Ads")
+    async def create_campaign(
+        self,
+        token: XOAuth1Token,
+        account_id: str,
+        name: str,
+        objective: str,
+        daily_budget: float,
+        entity_status: str = "PAUSED",
+        start_time: str | None = None,
+    ) -> dict:
+        """
+        Creates a new X Ads campaign.
+        objective: APP_INSTALLS | WEBSITE_CLICKS | ENGAGEMENT | VIDEO_VIEWS | etc.
+        daily_budget: in account currency (converted to micro)
+        entity_status: ACTIVE | PAUSED
+        start_time: ISO 8601 timestamp (default: now)
+        """
+        import datetime
+
+        body = {
+            "name": name,
+            "objective": objective,
+            "entity_status": entity_status,
+            "daily_budget_local_micro": int(daily_budget * _MICRO),
+            "start_time": start_time or datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
+        resp = await self.signed_post(
+            f"/accounts/{account_id}/campaigns",
+            token,
+            json_body=body,
+        )
+        err = self._check(resp, "create_campaign")
+        if err:
+            return err
+
+        data = resp.json().get("data", {})
+        return {
+            "campaign_id": data.get("id"),
+            "campaign_name": name,
+            "objective": objective,
+            "entity_status": entity_status,
+            "account_id": account_id,
+            "updated": True,
+        }
+
+    @friendly_errors("X Ads")
+    async def update_campaign_budget(
+        self,
+        token: XOAuth1Token,
+        account_id: str,
+        campaign_id: str,
+        daily_budget: float,
+    ) -> dict:
+        """
+        Updates an X Ads campaign's daily budget.
+        daily_budget: in account currency (converted to micro)
+        """
+        resp = await self.signed_put(
+            f"/accounts/{account_id}/campaigns/{campaign_id}",
+            token,
+            params={"daily_budget_local_micro": int(daily_budget * _MICRO)},
+        )
+        err = self._check(resp, "update_campaign_budget")
+        if err:
+            return err
+
+        return {
+            "campaign_id": campaign_id,
+            "account_id": account_id,
+            "new_daily_budget": daily_budget,
             "updated": True,
         }

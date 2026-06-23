@@ -1216,6 +1216,17 @@ def register_marketing_tools(mcp_server):
                         "message": "campaign_id and status are required for update_campaign_status",
                     }
                 return await state.meta_connector.update_campaign_status(token, campaign_id, status.upper())
+            elif action == "update_campaign_budget":
+                if not campaign_id or daily_budget_usd is None:
+                    return {
+                        "error": True,
+                        "message": "campaign_id and daily_budget_usd are required for update_campaign_budget",
+                    }
+                return await state.meta_connector.update_campaign_budget(
+                    access_token=token,
+                    campaign_id=campaign_id,
+                    daily_budget=daily_budget_usd,
+                )
             return {"error": True, "message": f"Unknown action '{action}' for Meta Ads write"}
 
         elif platform == "tiktok":
@@ -1223,7 +1234,28 @@ def register_marketing_tools(mcp_server):
             if not token:
                 return _unauthorized_response("tiktok")
 
-            if action == "update_campaign_status":
+            if action == "create_campaign":
+                missing = [f for f in ["campaign_name"] if locals()[f] is None]
+                if missing:
+                    return {
+                        "error": True,
+                        "message": f"Missing required fields for TikTok create_campaign: {missing}. Requires campaign_name, advertising_channel_type (as objective_type: TRAFFIC|CONVERSIONS|REACH|VIDEO_VIEWS), daily_budget_usd.",
+                    }
+                obj_type = advertising_channel_type or (payload or {}).get("objective_type", "TRAFFIC")
+                b_mode = (payload or {}).get("budget_mode", "BUDGET_MODE_DAY")
+                ops = (payload or {}).get("operation_system")
+                call_kwargs = {
+                    "access_token": token,
+                    "account_id": account_id,
+                    "campaign_name": campaign_name,
+                    "objective_type": obj_type,
+                    "budget": daily_budget_usd or 0,
+                    "budget_mode": b_mode,
+                }
+                if ops is not None:
+                    call_kwargs["operation_system"] = ops
+                return await state.tiktok_connector.create_campaign(**call_kwargs)
+            elif action == "update_campaign_status":
                 if not campaign_id or not status:
                     return {
                         "error": True,
@@ -1251,7 +1283,23 @@ def register_marketing_tools(mcp_server):
             if not token:
                 return _unauthorized_response("snap")
 
-            if action == "update_campaign_status":
+            if action == "create_campaign":
+                missing = [f for f in ["campaign_name"] if locals()[f] is None]
+                if missing:
+                    return {
+                        "error": True,
+                        "message": f"Missing required fields for Snap create_campaign: {missing}. Requires campaign_name.",
+                    }
+                return await state.snap_connector.create_campaign(
+                    access_token=token,
+                    account_id=account_id,
+                    name=campaign_name,
+                    status=(status or "PAUSED").upper(),
+                    daily_budget=daily_budget_usd,
+                    start_date=start_date,
+                    objective=advertising_channel_type or (payload or {}).get("objective", "APP_INSTALL"),
+                )
+            elif action == "update_campaign_status":
                 if not campaign_id or not status:
                     return {
                         "error": True,
@@ -1280,7 +1328,23 @@ def register_marketing_tools(mcp_server):
             if not token:
                 return _unauthorized_response("linkedin")
             linkedin = state.linkedin_connector
-            if action == "update_campaign_status":
+            if action == "create_campaign":
+                missing = [f for f in ["campaign_name"] if locals()[f] is None]
+                if missing:
+                    return {
+                        "error": True,
+                        "message": f"Missing required fields for LinkedIn create_campaign: {missing}. Requires campaign_name.",
+                    }
+                return await linkedin.create_campaign(
+                    access_token=token,
+                    account_id=account_id,
+                    name=campaign_name,
+                    status=(status or "ACTIVE").upper(),
+                    daily_budget=daily_budget_usd,
+                    objective_type=advertising_channel_type
+                    or (payload or {}).get("objective_type", "BRAND_AWARENESS"),
+                )
+            elif action == "update_campaign_status":
                 if not campaign_id or not status:
                     return {
                         "error": True,
@@ -1304,7 +1368,23 @@ def register_marketing_tools(mcp_server):
             if not token:
                 return _unauthorized_response("pinterest")
             pinterest = state.pinterest_connector
-            if action == "update_campaign_status":
+            if action == "create_campaign":
+                missing = [f for f in ["campaign_name"] if locals()[f] is None]
+                if missing:
+                    return {
+                        "error": True,
+                        "message": f"Missing required fields for Pinterest create_campaign: {missing}. Requires campaign_name.",
+                    }
+                return await pinterest.create_campaign(
+                    access_token=token,
+                    account_id=account_id,
+                    name=campaign_name,
+                    status=(status or "ACTIVE").upper(),
+                    daily_budget=daily_budget_usd,
+                    objective_type=advertising_channel_type
+                    or (payload or {}).get("objective_type", "AWARENESS"),
+                )
+            elif action == "update_campaign_status":
                 if not campaign_id or not status:
                     return {
                         "error": True,
@@ -1329,26 +1409,58 @@ def register_marketing_tools(mcp_server):
             oauth1_tokens = _get_provider_oauth1_tokens("x")
             if not oauth1_tokens:
                 return _unauthorized_response("x")
-            if action == "update_campaign_status":
+
+            from app.auth.oauth_app_credentials import get_oauth_app_credentials_cached
+            from app.connectors.x_ads import XAdsConnector, XOAuth1Token
+
+            async with state.db_session_factory() as db:
+                creds = await get_oauth_app_credentials_cached(db, "x")
+            x_ads = XAdsConnector(creds.client_id, creds.client_secret)
+            x_token = XOAuth1Token(token=oauth1_tokens[0], token_secret=oauth1_tokens[1])
+
+            if action == "create_campaign":
+                missing = [f for f in ["campaign_name"] if locals()[f] is None]
+                if missing:
+                    return {
+                        "error": True,
+                        "message": f"Missing required fields for X create_campaign: {missing}. Requires campaign_name, daily_budget_usd, advertising_channel_type (as objective).",
+                    }
+                return await x_ads.create_campaign(
+                    token=x_token,
+                    account_id=account_id,
+                    name=campaign_name,
+                    objective=advertising_channel_type or (payload or {}).get("objective", "WEBSITE_CLICKS"),
+                    daily_budget=daily_budget_usd or 0,
+                    entity_status=(status or "PAUSED").upper(),
+                    start_time=start_date,
+                )
+            elif action == "update_campaign_status":
                 if not campaign_id or not status:
                     return {
                         "error": True,
                         "message": "campaign_id and status are required for update_campaign_status",
                     }
-                from app.auth.oauth_app_credentials import get_oauth_app_credentials_cached
-                from app.connectors.x_ads import XAdsConnector, XOAuth1Token
-
-                async with state.db_session_factory() as db:
-                    creds = await get_oauth_app_credentials_cached(db, "x")
-                return await XAdsConnector(creds.client_id, creds.client_secret).update_campaign_status(
-                    XOAuth1Token(token=oauth1_tokens[0], token_secret=oauth1_tokens[1]),
+                return await x_ads.update_campaign_status(
+                    x_token,
                     account_id,
                     campaign_id,
                     status,
                 )
+            elif action == "update_campaign_budget":
+                if not campaign_id or daily_budget_usd is None:
+                    return {
+                        "error": True,
+                        "message": "campaign_id and daily_budget_usd are required for update_campaign_budget",
+                    }
+                return await x_ads.update_campaign_budget(
+                    x_token,
+                    account_id,
+                    campaign_id,
+                    daily_budget_usd,
+                )
             return {
                 "error": True,
-                "message": f"Unknown action '{action}' for X Ads write. Supported: update_campaign_status",
+                "message": f"Unknown action '{action}' for X Ads write. Supported: create_campaign, update_campaign_status, update_campaign_budget",
             }
 
         elif platform == "reddit":
@@ -1356,7 +1468,21 @@ def register_marketing_tools(mcp_server):
             if not token:
                 return _unauthorized_response("reddit")
             reddit = state.reddit_connector
-            if action == "update_campaign_status":
+            if action == "create_campaign":
+                missing = [f for f in ["campaign_name"] if locals()[f] is None]
+                if missing:
+                    return {
+                        "error": True,
+                        "message": f"Missing required fields for Reddit create_campaign: {missing}. Requires campaign_name, daily_budget_usd.",
+                    }
+                return await reddit.create_campaign(
+                    access_token=token,
+                    account_id=account_id,
+                    name=campaign_name,
+                    daily_budget=daily_budget_usd or 0,
+                    configured_status=(status or "PAUSED").upper(),
+                )
+            elif action == "update_campaign_status":
                 if not campaign_id or not status:
                     return {
                         "error": True,
@@ -1379,7 +1505,21 @@ def register_marketing_tools(mcp_server):
             token = _get_provider_token("apple")
             if not token:
                 return _unauthorized_response("apple")
-            if action == "update_campaign_status":
+            if action == "create_campaign":
+                missing = [f for f in ["campaign_name"] if locals()[f] is None]
+                if missing:
+                    return {
+                        "error": True,
+                        "message": f"Missing required fields for Apple create_campaign: {missing}. Requires campaign_name.",
+                    }
+                return await state.apple_connector.create_campaign(
+                    access_token=token,
+                    org_id=account_id,
+                    name=campaign_name,
+                    status=(status or "PAUSED").upper(),
+                    daily_budget=daily_budget_usd,
+                )
+            elif action == "update_campaign_status":
                 if not campaign_id or not status:
                     return {
                         "error": True,
@@ -1388,9 +1528,18 @@ def register_marketing_tools(mcp_server):
                 return await state.apple_connector.update_campaign_status(
                     token, account_id, campaign_id, status
                 )
+            elif action == "update_campaign_budget":
+                if not campaign_id or daily_budget_usd is None:
+                    return {
+                        "error": True,
+                        "message": "campaign_id and daily_budget_usd are required for update_campaign_budget",
+                    }
+                return await state.apple_connector.update_campaign_budget(
+                    token, account_id, campaign_id, daily_budget_usd
+                )
             return {
                 "error": True,
-                "message": f"Unknown action '{action}' for Apple Ads write. Supported: update_campaign_status",
+                "message": f"Unknown action '{action}' for Apple Ads write. Supported: create_campaign, update_campaign_status, update_campaign_budget",
             }
         elif platform == "marketo":
             if not user or not getattr(user, "has_adobe_marketo", False):

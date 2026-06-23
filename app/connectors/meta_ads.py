@@ -441,3 +441,32 @@ class MetaAdsConnector:
             "new_status": status.upper(),
             "updated": True,
         }
+
+    @friendly_errors("Meta Ads")
+    async def update_campaign_budget(
+        self,
+        access_token: str,
+        campaign_id: str,
+        daily_budget: float,
+    ) -> dict:
+        """
+        Updates a Meta campaign's daily budget.
+        daily_budget: in account currency (converted to cents internally).
+        """
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{_GRAPH_BASE}/{campaign_id}",
+                data={
+                    "daily_budget": int(daily_budget * 100),
+                    "access_token": access_token,
+                },
+            )
+
+        if resp.status_code != 200:
+            return {"error": True, "message": f"Meta API error: {resp.text}"}
+
+        return {
+            "campaign_id": campaign_id,
+            "new_daily_budget": daily_budget,
+            "updated": True,
+        }

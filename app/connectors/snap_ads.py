@@ -487,3 +487,51 @@ class SnapAdsConnector:
             "new_daily_budget_usd": round(daily_budget_micro / 1_000_000, 2),
             "updated": True,
         }
+
+    @friendly_errors("Snap Ads")
+    async def create_campaign(
+        self,
+        access_token: str,
+        account_id: str,
+        name: str,
+        status: str = "PAUSED",
+        daily_budget: float | None = None,
+        start_date: str | None = None,
+        objective: str = "APP_INSTALL",
+    ) -> dict:
+        """
+        Creates a new Snap campaign.
+        status: ACTIVE | PAUSED
+        daily_budget: in account currency (converted to micro-USD)
+        start_date: YYYY-MM-DD
+        objective: APP_INSTALL | AWARENESS | etc.
+        """
+        campaign_body = {
+            "name": name,
+            "status": status.upper(),
+            "objective": objective,
+        }
+        if daily_budget is not None:
+            campaign_body["daily_budget_micro"] = int(daily_budget * 1_000_000)
+        if start_date:
+            campaign_body["start_date"] = start_date
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{_BASE}/adaccounts/{account_id}/campaigns",
+                headers=self._headers(access_token),
+                json={"campaigns": [{"campaign": campaign_body}]},
+            )
+
+        err = self._check(resp, "create_campaign")
+        if err:
+            return err
+
+        created = resp.json().get("campaigns", [{}])[0].get("campaign", {})
+        return {
+            "campaign_id": created.get("id"),
+            "campaign_name": name,
+            "status": status.upper(),
+            "account_id": account_id,
+            "updated": True,
+        }
