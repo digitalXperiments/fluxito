@@ -390,9 +390,10 @@ class _StubWriteConnector:
         self.calls.append(("create_campaign", kwargs))
         return {"campaign_id": "new_camp_001", "updated": True}
 
-    async def update_campaign_budget(self, **kwargs):
-        self.calls.append(("update_campaign_budget", kwargs))
-        return {"campaign_id": kwargs.get("campaign_id"), "updated": True}
+    async def update_campaign_budget(self, *args, **kwargs):
+        campaign_id = kwargs.get("campaign_id") or (args[2] if len(args) > 2 else None)
+        self.calls.append(("update_campaign_budget", {"args": args, "kwargs": kwargs}))
+        return {"campaign_id": campaign_id, "updated": True}
 
     async def update_campaign_status(self, **kwargs):
         self.calls.append(("update_campaign_status", kwargs))

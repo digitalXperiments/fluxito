@@ -1235,11 +1235,10 @@ def register_marketing_tools(mcp_server):
                 return _unauthorized_response("tiktok")
 
             if action == "create_campaign":
-                missing = [f for f in ["campaign_name"] if locals()[f] is None]
-                if missing:
+                if campaign_name is None:
                     return {
                         "error": True,
-                        "message": f"Missing required fields for TikTok create_campaign: {missing}. Requires campaign_name, advertising_channel_type (as objective_type: TRAFFIC|CONVERSIONS|REACH|VIDEO_VIEWS), daily_budget_usd.",
+                        "message": "Missing required fields for TikTok create_campaign: ['campaign_name']. Requires campaign_name, advertising_channel_type (as objective_type: TRAFFIC|CONVERSIONS|REACH|VIDEO_VIEWS), daily_budget_usd.",
                     }
                 obj_type = advertising_channel_type or (payload or {}).get("objective_type", "TRAFFIC")
                 b_mode = (payload or {}).get("budget_mode", "BUDGET_MODE_DAY")
@@ -1284,11 +1283,10 @@ def register_marketing_tools(mcp_server):
                 return _unauthorized_response("snap")
 
             if action == "create_campaign":
-                missing = [f for f in ["campaign_name"] if locals()[f] is None]
-                if missing:
+                if campaign_name is None:
                     return {
                         "error": True,
-                        "message": f"Missing required fields for Snap create_campaign: {missing}. Requires campaign_name.",
+                        "message": "Missing required fields for Snap create_campaign: ['campaign_name']. Requires campaign_name.",
                     }
                 return await state.snap_connector.create_campaign(
                     access_token=token,
@@ -1329,11 +1327,10 @@ def register_marketing_tools(mcp_server):
                 return _unauthorized_response("linkedin")
             linkedin = state.linkedin_connector
             if action == "create_campaign":
-                missing = [f for f in ["campaign_name"] if locals()[f] is None]
-                if missing:
+                if campaign_name is None:
                     return {
                         "error": True,
-                        "message": f"Missing required fields for LinkedIn create_campaign: {missing}. Requires campaign_name.",
+                        "message": "Missing required fields for LinkedIn create_campaign: ['campaign_name']. Requires campaign_name.",
                     }
                 return await linkedin.create_campaign(
                     access_token=token,
@@ -1369,11 +1366,10 @@ def register_marketing_tools(mcp_server):
                 return _unauthorized_response("pinterest")
             pinterest = state.pinterest_connector
             if action == "create_campaign":
-                missing = [f for f in ["campaign_name"] if locals()[f] is None]
-                if missing:
+                if campaign_name is None:
                     return {
                         "error": True,
-                        "message": f"Missing required fields for Pinterest create_campaign: {missing}. Requires campaign_name.",
+                        "message": "Missing required fields for Pinterest create_campaign: ['campaign_name']. Requires campaign_name.",
                     }
                 return await pinterest.create_campaign(
                     access_token=token,
@@ -1419,11 +1415,10 @@ def register_marketing_tools(mcp_server):
             x_token = XOAuth1Token(token=oauth1_tokens[0], token_secret=oauth1_tokens[1])
 
             if action == "create_campaign":
-                missing = [f for f in ["campaign_name"] if locals()[f] is None]
-                if missing:
+                if campaign_name is None:
                     return {
                         "error": True,
-                        "message": f"Missing required fields for X create_campaign: {missing}. Requires campaign_name, daily_budget_usd, advertising_channel_type (as objective).",
+                        "message": "Missing required fields for X create_campaign: ['campaign_name']. Requires campaign_name, daily_budget_usd, advertising_channel_type (as objective).",
                     }
                 return await x_ads.create_campaign(
                     token=x_token,
@@ -1469,11 +1464,10 @@ def register_marketing_tools(mcp_server):
                 return _unauthorized_response("reddit")
             reddit = state.reddit_connector
             if action == "create_campaign":
-                missing = [f for f in ["campaign_name"] if locals()[f] is None]
-                if missing:
+                if campaign_name is None:
                     return {
                         "error": True,
-                        "message": f"Missing required fields for Reddit create_campaign: {missing}. Requires campaign_name, daily_budget_usd.",
+                        "message": "Missing required fields for Reddit create_campaign: ['campaign_name']. Requires campaign_name, daily_budget_usd.",
                     }
                 return await reddit.create_campaign(
                     access_token=token,
@@ -1506,11 +1500,10 @@ def register_marketing_tools(mcp_server):
             if not token:
                 return _unauthorized_response("apple")
             if action == "create_campaign":
-                missing = [f for f in ["campaign_name"] if locals()[f] is None]
-                if missing:
+                if campaign_name is None:
                     return {
                         "error": True,
-                        "message": f"Missing required fields for Apple create_campaign: {missing}. Requires campaign_name.",
+                        "message": "Missing required fields for Apple create_campaign: ['campaign_name']. Requires campaign_name.",
                     }
                 return await state.apple_connector.create_campaign(
                     access_token=token,
