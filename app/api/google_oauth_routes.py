@@ -44,6 +44,8 @@ from app.models.credential_connection import (
     AppsFlyerConnection,
     BranchConnection,
     MarketoConnection,
+    MixpanelConnection,
+    PostHogConnection,
     RedshiftConnection,
     SnowflakeConnection,
 )
@@ -87,6 +89,8 @@ GRANULAR_CONNECTOR_CATALOG: list[tuple[str, str, tuple[str, ...]]] = [
     ("branch", "Branch", ("has_branch",)),
     ("appsflyer", "AppsFlyer", ("has_appsflyer",)),
     ("adjust", "Adjust", ("has_adjust",)),
+    ("mixpanel", "Mixpanel", ("has_mixpanel",)),
+    ("posthog", "PostHog", ("has_posthog",)),
     ("adobe", "Adobe", ("has_adobe_analytics", "has_adobe_launch")),
     # Ad platforms
     ("meta", "Meta Ads", ("has_meta",)),
@@ -422,6 +426,20 @@ async def home(request: Request):
                 amp_stmt = amp_stmt.where(AmplitudeConnection.project_id == active_pid_uuid)
             amp_conns = (await db.execute(amp_stmt)).scalars().all()
 
+            mixpanel_stmt = select(MixpanelConnection).where(
+                MixpanelConnection.user_id == uid, MixpanelConnection.is_active == True
+            )
+            if active_pid_uuid:
+                mixpanel_stmt = mixpanel_stmt.where(MixpanelConnection.project_id == active_pid_uuid)
+            mixpanel_conns = (await db.execute(mixpanel_stmt)).scalars().all()
+
+            posthog_stmt = select(PostHogConnection).where(
+                PostHogConnection.user_id == uid, PostHogConnection.is_active == True
+            )
+            if active_pid_uuid:
+                posthog_stmt = posthog_stmt.where(PostHogConnection.project_id == active_pid_uuid)
+            posthog_conns = (await db.execute(posthog_stmt)).scalars().all()
+
             adobe_stmt = select(AdobeConnection).where(
                 AdobeConnection.user_id == uid, AdobeConnection.is_active == True
             )
@@ -489,6 +507,8 @@ async def home(request: Request):
         has_redshift=bool(rs_conns),
         has_snowflake=bool(sf_conns),
         has_amplitude=bool(amp_conns),
+        has_mixpanel=bool(mixpanel_conns),
+        has_posthog=bool(posthog_conns),
         has_adobe_analytics=bool(adobe_conns),
         has_adobe_launch=bool(adobe_conns),
         has_meta=bool(meta_conns),
@@ -993,6 +1013,8 @@ async def connect_page(request: Request):
     branch_count = 0
     appsflyer_count = 0
     adjust_count = 0
+    mixpanel_count = 0
+    posthog_count = 0
     adobe_count = 0
     marketo_count = 0
     redshift_count = 0
@@ -1014,6 +1036,8 @@ async def connect_page(request: Request):
     branch_rows = []
     appsflyer_rows = []
     adjust_rows = []
+    mixpanel_rows = []
+    posthog_rows = []
     if user_ctx is not None:
         try:
             db_session = app_state.db_session_factory()
@@ -1080,6 +1104,27 @@ async def connect_page(request: Request):
                 adjust_result = await db.execute(adjust_stmt)
                 adjust_rows = list(adjust_result.scalars().all())
                 adjust_count = len(adjust_rows)
+
+                # Mixpanel / PostHog (product analytics credential connections) — filtered by project
+                mixpanel_stmt = select(MixpanelConnection).where(
+                    MixpanelConnection.user_id == uuid.UUID(user_ctx.user_id),
+                    MixpanelConnection.is_active == True,
+                )
+                if active_pid_uuid:
+                    mixpanel_stmt = mixpanel_stmt.where(MixpanelConnection.project_id == active_pid_uuid)
+                mixpanel_result = await db.execute(mixpanel_stmt)
+                mixpanel_rows = list(mixpanel_result.scalars().all())
+                mixpanel_count = len(mixpanel_rows)
+
+                posthog_stmt = select(PostHogConnection).where(
+                    PostHogConnection.user_id == uuid.UUID(user_ctx.user_id),
+                    PostHogConnection.is_active == True,
+                )
+                if active_pid_uuid:
+                    posthog_stmt = posthog_stmt.where(PostHogConnection.project_id == active_pid_uuid)
+                posthog_result = await db.execute(posthog_stmt)
+                posthog_rows = list(posthog_result.scalars().all())
+                posthog_count = len(posthog_rows)
 
                 adobe_stmt = select(AdobeConnection).where(
                     AdobeConnection.user_id == uuid.UUID(user_ctx.user_id),
@@ -1317,6 +1362,38 @@ async def connect_page(request: Request):
                 }
             )
 
+        # ── Mixpanel connections ──
+        for mpx in mixpanel_rows:
+            connections_view.append(
+                {
+                    "id": str(mpx.id),
+                    "provider": "mixpanel",
+                    "platform_name": "Mixpanel",
+                    "label": mpx.display_name or "Mixpanel",
+                    "detail": f"Project: {mpx.project_name}" if mpx.project_name else "Product analytics",
+                    "icon": "🎯",
+                    "is_active": mpx.connection_status == "active",
+                    "delete_url": f"/api/connections/mixpanel/{mpx.id}",
+                    "edit_url": f"/connect/mixpanel?edit={mpx.id}",
+                }
+            )
+
+        # ── PostHog connections ──
+        for ph in posthog_rows:
+            connections_view.append(
+                {
+                    "id": str(ph.id),
+                    "provider": "posthog",
+                    "platform_name": "PostHog",
+                    "label": ph.display_name or "PostHog",
+                    "detail": ph.project_host or "Product analytics",
+                    "icon": "🦔",
+                    "is_active": ph.connection_status == "active",
+                    "delete_url": f"/api/connections/posthog/{ph.id}",
+                    "edit_url": f"/connect/posthog?edit={ph.id}",
+                }
+            )
+
         # ── Adobe connections ──
         for adc in adobe_rows:
             products = []
@@ -1442,6 +1519,24 @@ async def connect_page(request: Request):
             "desc": "Mobile attribution",
             "url": "/connect/adjust",
             "count": adjust_count,
+            "primary": False,
+        },
+        {
+            "slug": "mixpanel",
+            "name": "Mixpanel",
+            "icon": "🎯",
+            "desc": "Product analytics",
+            "url": "/connect/mixpanel",
+            "count": mixpanel_count,
+            "primary": False,
+        },
+        {
+            "slug": "posthog",
+            "name": "PostHog",
+            "icon": "🦔",
+            "desc": "Product analytics (Cloud or self-hosted)",
+            "url": "/connect/posthog",
+            "count": posthog_count,
             "primary": False,
         },
         {
@@ -1614,6 +1709,8 @@ async def connect_page(request: Request):
         has_redshift=bool(redshift_count),
         has_snowflake=bool(snowflake_count),
         has_amplitude=bool(amplitude_count),
+        has_mixpanel=bool(mixpanel_count),
+        has_posthog=bool(posthog_count),
         has_adobe_analytics=bool(adobe_count),
         has_adobe_launch=bool(adobe_count),
         has_meta=bool(meta_count),
@@ -3933,6 +4030,324 @@ async def disconnect_adjust_connection(conn_id: str, request: Request):
             .where(
                 AdjustConnection.id == uuid.UUID(conn_id),
                 AdjustConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(is_active=False, connection_status="disconnected")
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "disconnected"}
+
+
+# ---------------------------------------------------------------------------
+# Mixpanel Routes (Credential-based connection)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/connect/mixpanel", response_class=HTMLResponse)
+async def connect_mixpanel_page(request: Request):
+    """Mixpanel API secret connect page (supports ?edit=<id>)."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/mixpanel", status_code=302)
+    user_view = await _load_user_view(user_ctx)
+
+    editing = None
+    edit_id = request.query_params.get("edit")
+    if edit_id and user_ctx:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            row = (
+                await db.execute(
+                    select(MixpanelConnection).where(
+                        MixpanelConnection.id == uuid.UUID(edit_id),
+                        MixpanelConnection.user_id == uuid.UUID(user_ctx.user_id),
+                        MixpanelConnection.is_active == True,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row:
+                editing = {
+                    "id": str(row.id),
+                    "display_name": row.display_name,
+                    "api_key": _decrypt(row.api_key_encrypted),
+                }
+
+    return render(
+        request,
+        "connect/mixpanel.html",
+        {
+            "user": user_view,
+            "platform_name": "Mixpanel",
+            "platform_icon": "🎯",
+            "platform_desc": "Connect your Mixpanel project for product analytics insights and event data.",
+            "editing": editing,
+        },
+    )
+
+
+class MixpanelUploadRequest(BaseModel):
+    display_name: str
+    api_key: str
+    secret_key: str
+
+
+@router.post("/api/connections/mixpanel")
+async def add_mixpanel_connection(payload: MixpanelUploadRequest, request: Request):
+    """Securely stores Mixpanel API credentials."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    encrypted_api_key = _encrypt(payload.api_key)
+    encrypted_secret_key = _encrypt(payload.secret_key)
+
+    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        new_conn = MixpanelConnection(
+            user_id=uuid.UUID(user_ctx.user_id),
+            project_id=active_project_id,
+            display_name=payload.display_name,
+            api_key_encrypted=encrypted_api_key,
+            secret_key_encrypted=encrypted_secret_key,
+            connection_status="active",
+            is_active=True,
+        )
+        db.add(new_conn)
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "success", "connection_id": str(new_conn.id)}
+
+
+@router.put("/api/connections/mixpanel/{conn_id}")
+async def update_mixpanel_connection(conn_id: str, payload: MixpanelUploadRequest, request: Request):
+    """Updates an existing Mixpanel connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    values: dict = {
+        "display_name": payload.display_name,
+        "api_key_encrypted": _encrypt(payload.api_key),
+    }
+    if payload.secret_key:
+        values["secret_key_encrypted"] = _encrypt(payload.secret_key)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(MixpanelConnection)
+            .where(
+                MixpanelConnection.id == uuid.UUID(conn_id),
+                MixpanelConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(**values)
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "updated"}
+
+
+@router.delete("/api/connections/mixpanel/{conn_id}")
+async def disconnect_mixpanel_connection(conn_id: str, request: Request):
+    """Deactivates a Mixpanel connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(MixpanelConnection)
+            .where(
+                MixpanelConnection.id == uuid.UUID(conn_id),
+                MixpanelConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(is_active=False, connection_status="disconnected")
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "disconnected"}
+
+
+# ---------------------------------------------------------------------------
+# PostHog Routes (Credential-based connection)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/connect/posthog", response_class=HTMLResponse)
+async def connect_posthog_page(request: Request):
+    """PostHog API key connect page (supports ?edit=<id>)."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/posthog", status_code=302)
+    user_view = await _load_user_view(user_ctx)
+
+    editing = None
+    edit_id = request.query_params.get("edit")
+    if edit_id and user_ctx:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            row = (
+                await db.execute(
+                    select(PostHogConnection).where(
+                        PostHogConnection.id == uuid.UUID(edit_id),
+                        PostHogConnection.user_id == uuid.UUID(user_ctx.user_id),
+                        PostHogConnection.is_active == True,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row:
+                editing = {
+                    "id": str(row.id),
+                    "display_name": row.display_name,
+                    "project_host": row.project_host,
+                    "external_project_id": row.external_project_id,
+                    "api_key": _decrypt(row.api_key_encrypted),
+                }
+
+    return render(
+        request,
+        "connect/posthog.html",
+        {
+            "user": user_view,
+            "platform_name": "PostHog",
+            "platform_icon": "🦔",
+            "platform_desc": "Connect your PostHog project (Cloud or self-hosted) for product analytics insights and event data.",
+            "editing": editing,
+        },
+    )
+
+
+class PostHogUploadRequest(BaseModel):
+    display_name: str
+    api_key: str
+    project_host: str
+    external_project_id: str
+
+
+@router.post("/api/connections/posthog")
+async def add_posthog_connection(payload: PostHogUploadRequest, request: Request):
+    """Securely stores PostHog API credentials."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    encrypted_api_key = _encrypt(payload.api_key)
+
+    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        new_conn = PostHogConnection(
+            user_id=uuid.UUID(user_ctx.user_id),
+            project_id=active_project_id,
+            display_name=payload.display_name,
+            project_host=payload.project_host,
+            external_project_id=payload.external_project_id,
+            api_key_encrypted=encrypted_api_key,
+            connection_status="active",
+            is_active=True,
+        )
+        db.add(new_conn)
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "success", "connection_id": str(new_conn.id)}
+
+
+@router.put("/api/connections/posthog/{conn_id}")
+async def update_posthog_connection(conn_id: str, payload: PostHogUploadRequest, request: Request):
+    """Updates an existing PostHog connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    values: dict = {
+        "display_name": payload.display_name,
+        "project_host": payload.project_host,
+        "external_project_id": payload.external_project_id,
+    }
+    if payload.api_key:
+        values["api_key_encrypted"] = _encrypt(payload.api_key)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(PostHogConnection)
+            .where(
+                PostHogConnection.id == uuid.UUID(conn_id),
+                PostHogConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(**values)
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "updated"}
+
+
+@router.delete("/api/connections/posthog/{conn_id}")
+async def disconnect_posthog_connection(conn_id: str, request: Request):
+    """Deactivates a PostHog connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(PostHogConnection)
+            .where(
+                PostHogConnection.id == uuid.UUID(conn_id),
+                PostHogConnection.user_id == uuid.UUID(user_ctx.user_id),
             )
             .values(is_active=False, connection_status="disconnected")
         )

@@ -639,6 +639,8 @@ _SCOPE_PLATFORM_RESOURCE_KEY = {
     "snowflake": "connection_id",
     "warehouse": "connection_id",
     "amplitude": "connection_id",
+    "mixpanel": "connection_id",
+    "posthog": "connection_id",
     "adobe_analytics": "connection_id",
     "meta": "ad_account_id",
     "tiktok": "advertiser_id",
@@ -675,7 +677,7 @@ async def _available_resources_for_project(project_id) -> list[dict]:
     scope entry of the right shape.
     """
     from app.models.connection import OAuthConnection
-    from app.models.credential_connection import AmplitudeConnection
+    from app.models.credential_connection import AmplitudeConnection, MixpanelConnection, PostHogConnection
     from app.models.token import GA4Property, GoogleAdsAccount, SearchConsoleSite
 
     out: list[dict] = []
@@ -743,6 +745,40 @@ async def _available_resources_for_project(project_id) -> list[dict]:
                     "label": amp.display_name or f"Amplitude ({amp.id})",
                     "resource_key": "connection_id",
                     "resource_value": str(amp.id),
+                }
+            )
+
+        # Mixpanel — one entry per connection
+        mp_rows = await db.execute(
+            select(MixpanelConnection).where(
+                MixpanelConnection.project_id == project_id,
+                MixpanelConnection.is_active.is_(True),
+            )
+        )
+        for mp in mp_rows.scalars().all():
+            out.append(
+                {
+                    "platform": "mixpanel",
+                    "label": mp.display_name or f"Mixpanel ({mp.id})",
+                    "resource_key": "connection_id",
+                    "resource_value": str(mp.id),
+                }
+            )
+
+        # PostHog — one entry per connection
+        ph_rows = await db.execute(
+            select(PostHogConnection).where(
+                PostHogConnection.project_id == project_id,
+                PostHogConnection.is_active.is_(True),
+            )
+        )
+        for ph in ph_rows.scalars().all():
+            out.append(
+                {
+                    "platform": "posthog",
+                    "label": ph.display_name or f"PostHog ({ph.id})",
+                    "resource_key": "connection_id",
+                    "resource_value": str(ph.id),
                 }
             )
 

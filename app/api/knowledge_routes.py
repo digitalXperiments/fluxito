@@ -97,6 +97,8 @@ _SUPPORTED_SOURCES = {
     "google_ads",
     "search_console",
     "amplitude",
+    "mixpanel",
+    "posthog",
     "adobe_analytics",
     "meta_ads",
     "tiktok_ads",

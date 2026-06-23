@@ -867,6 +867,8 @@ def register_all_tools(mcp_server):
             u.has_branch = project_ctx.has_branch
             u.has_appsflyer = project_ctx.has_appsflyer
             u.has_adjust = project_ctx.has_adjust
+            u.has_mixpanel = project_ctx.has_mixpanel
+            u.has_posthog = project_ctx.has_posthog
             u.has_adobe_analytics = project_ctx.has_adobe_analytics
             u.has_adobe_launch = project_ctx.has_adobe_launch
             u.has_adobe_marketo = project_ctx.has_adobe_marketo
@@ -895,6 +897,8 @@ def register_all_tools(mcp_server):
                     ("Branch", project_ctx.has_branch),
                     ("AppsFlyer", project_ctx.has_appsflyer),
                     ("Adjust", project_ctx.has_adjust),
+                    ("Mixpanel", project_ctx.has_mixpanel),
+                    ("PostHog", project_ctx.has_posthog),
                     ("Adobe Analytics", project_ctx.has_adobe_analytics),
                     ("Adobe Launch", project_ctx.has_adobe_launch),
                     ("Adobe Marketo Engage", project_ctx.has_adobe_marketo),

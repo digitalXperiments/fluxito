@@ -44,10 +44,10 @@ logger = logging.getLogger(__name__)
 # legacy_action_value = None means the legacy tool does NOT take `action` kwarg.
 # ---------------------------------------------------------------------------
 
-# analytics_read: GA4 + Amplitude + Adobe Analytics + Mixpanel
+# analytics_read: GA4 + Amplitude + Mixpanel + PostHog + Adobe Analytics
 # NOTE: Audit actions live in run_audit; cross-platform blends live in run_analysis.
 ANALYTICS_READ_ROUTES: dict[str, tuple[str, str | None]] = {
-    # GA4 + Amplitude + Adobe Analytics read actions (from analytics_read)
+    # GA4 + Amplitude + Mixpanel + PostHog + Adobe Analytics read actions (from analytics_read)
     "run_report": ("analytics_read", "run_report"),
     "compare_date_ranges": ("analytics_read", "compare_date_ranges"),
     "list_properties": ("analytics_read", "list_properties"),
@@ -92,6 +92,10 @@ ANALYTICS_WRITE_ROUTES: dict[str, tuple[str, str | None]] = {
     "create_segment": ("analytics_write", "create_segment"),
     "delete_segment": ("analytics_write", "delete_segment"),
     "delete_calculated_metric": ("analytics_write", "delete_calculated_metric"),
+    # Amplitude / Mixpanel / PostHog event-type CRUD
+    "create_event_type": ("analytics_write", "create_event_type"),
+    "update_event_type": ("analytics_write", "update_event_type"),
+    "delete_event_type": ("analytics_write", "delete_event_type"),
 }
 
 # tagmanager_read (GTM + Adobe Launch) — catalog only.
@@ -352,7 +356,7 @@ AUTOMATION_WRITE_ROUTES: dict[str, tuple[str, str | None]] = {
 # have been removed — add them back here ONLY when the corresponding handler
 # lands in analytics_audit / tagmanager_audit.
 AUDIT_ROUTES: dict[str, tuple] = {
-    # ── Product analytics (GA4, Amplitude, Adobe Analytics) ────────────
+    # ── Product analytics (GA4, Amplitude, Mixpanel, PostHog, Adobe Analytics) ────
     # Routes below all map to (legacy_tool, legacy_action, extra_kwargs?) and
     # were verified against the action handlers in analytics_audit.
     "ga4_audit_data_streams": ("analytics_audit", "audit_data_streams", {"platform": "ga4"}),
@@ -370,6 +374,26 @@ AUDIT_ROUTES: dict[str, tuple] = {
         "analytics_audit",
         "check_event_volume_anomalies",
         {"platform": "amplitude"},
+    ),
+    "mixpanel_check_taxonomy_health": (
+        "analytics_audit",
+        "check_taxonomy_health",
+        {"platform": "mixpanel"},
+    ),
+    "mixpanel_check_event_volume_anomalies": (
+        "analytics_audit",
+        "check_event_volume_anomalies",
+        {"platform": "mixpanel"},
+    ),
+    "posthog_check_taxonomy_health": (
+        "analytics_audit",
+        "check_taxonomy_health",
+        {"platform": "posthog"},
+    ),
+    "posthog_check_event_volume_anomalies": (
+        "analytics_audit",
+        "check_event_volume_anomalies",
+        {"platform": "posthog"},
     ),
     "adobe_audit_report_suite": ("analytics_audit", "audit_report_suite", {"platform": "adobe_analytics"}),
     "adobe_check_data_quality": ("analytics_audit", "check_data_quality", {"platform": "adobe_analytics"}),
@@ -479,9 +503,9 @@ ANALYSIS_ROUTES: dict[str, tuple[str, str | None]] = {
 # ---------------------------------------------------------------------------
 
 ANALYTICS_READ_DOC = """
-Read product / web analytics data across GA4, Amplitude, Adobe Analytics.
+Read product / web analytics data across GA4, Amplitude, Mixpanel, PostHog, Adobe Analytics.
 
-REQUIRED: always pass `platform` ('ga4', 'amplitude', or 'adobe_analytics') inside `params`.
+REQUIRED: always pass `platform` ('ga4', 'amplitude', 'mixpanel', 'posthog', or 'adobe_analytics') inside `params`.
 Also pass `metrics` and `dimensions` as plain strings (e.g. ["sessions", "users"]),
 NOT as GA4 API objects like [{"name": "sessions"}].
 
@@ -497,7 +521,7 @@ Actions (pass via `action`, required params inside `params`):
                         dimension_filter, limit.
     compare_date_ranges — Run a date-range comparison report (GA4 only).
     get_realtime      — Real-time event stream.
-    query_events      — Event query (Amplitude).
+    query_events      — Event query (Amplitude, Mixpanel, PostHog).
     get_active_users  — DAU/WAU/MAU.
     get_retention     — Retention analysis.
     get_funnel        — Funnel conversion.
@@ -517,7 +541,7 @@ Return shape: {rows/data/items: [...], ...} or {error, error_type, message}.
 ANALYTICS_WRITE_DOC = """
 Mutate product/web analytics configuration. Requires analytics_write scope.
 
-REQUIRED params for every action: platform ('ga4', 'amplitude', or 'adobe_analytics'),
+REQUIRED params for every action: platform ('ga4', 'amplitude', 'mixpanel', 'posthog', or 'adobe_analytics'),
 property_id, and config (dict of action-specific keys).
 
 Actions:
@@ -530,6 +554,9 @@ Actions:
   update_segment             — params: platform, property_id, config={segment_id, updates}
   delete_segment             — params: platform, property_id, config={segment_id}
   delete_calculated_metric   — params: platform, property_id, config={metric_id}
+  create_event_type          — params: platform (amplitude|mixpanel|posthog), config={event_type, description?, category?}
+  update_event_type          — params: platform (amplitude|mixpanel|posthog), config={event_type, new_name?, description?, category?}
+  delete_event_type          — params: platform (amplitude|mixpanel|posthog), config={event_type}
 """
 
 TAGMANAGER_READ_DOC = """
@@ -886,11 +913,13 @@ reference including required params.
 
 Actions (grouped):
 
-  PRODUCT ANALYTICS (GA4 + Amplitude + Adobe Analytics)
+  PRODUCT ANALYTICS (GA4 + Amplitude + Mixpanel + PostHog + Adobe Analytics)
     ga4_audit_data_streams, ga4_audit_conversion_events,
     ga4_audit_custom_definitions, ga4_audit_ecommerce,
     ga4_schema_validator, ga4_check_data_anomalies,
     amplitude_check_taxonomy_health, amplitude_check_event_volume_anomalies,
+    mixpanel_check_taxonomy_health, mixpanel_check_event_volume_anomalies,
+    posthog_check_taxonomy_health, posthog_check_event_volume_anomalies,
     adobe_audit_report_suite, adobe_check_data_quality
 
   TAG MANAGER (GTM + Adobe Launch)
@@ -1356,6 +1385,8 @@ def rewire_unified_surface(mcp_server) -> None:
             ("Apple Ads", getattr(p, "has_apple", False), f"{base}/connect/apple"),
             ("Bing Webmaster Tools", getattr(p, "has_bing", False), f"{base}/connect/bing"),
             ("Amplitude", p.has_amplitude, f"{base}/connect/amplitude"),
+            ("Mixpanel", p.has_mixpanel, f"{base}/connect/mixpanel"),
+            ("PostHog", p.has_posthog, f"{base}/connect/posthog"),
             ("Adobe Analytics", p.has_adobe_analytics, f"{base}/connect/adobe"),
             ("Adobe Launch", p.has_adobe_launch, f"{base}/connect/adobe"),
             ("Redshift", p.has_redshift, f"{base}/connect/redshift"),

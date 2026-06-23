@@ -9,6 +9,8 @@
 {%- set s = (slug or '')|lower -%}
 {%- if s in ['ga4', 'google-analytics', 'google_analytics'] -%}ga4
 {%- elif s == 'amplitude' -%}amp
+{%- elif s == 'mixpanel' -%}mp
+{%- elif s == 'posthog' -%}ph
 {%- elif s in ['adobe-analytics', 'adobe_analytics', 'adobe'] -%}aa
 {%- elif s in ['marketo', 'adobe-marketo', 'adobe_marketo'] -%}marketo
 {%- elif s == 'gtm' -%}gtm

@@ -214,7 +214,7 @@
   {
     "tool": "run_analysis",
     "action": "revenue_attribution",
-    "summary": "Multi-touch revenue attribution: fetches ad spend in parallel, resolves a revenue source (warehouse>ga4>adobe>amplitude>self_reported>spend_only), distributes channel credit per the chosen model, and returns per-channel spend/attributed_revenue/ROAS/CAC. IMPLEMENTED (handler present) \u2014 the docstring warning that it 'may not be registered' is FALSE.",
+    "summary": "Multi-touch revenue attribution: fetches ad spend in parallel, resolves a revenue source (warehouse>ga4>adobe>amplitude>self_reported>spend_only), distributes channel credit per the chosen model, and returns per-channel spend/attributed_revenue/ROAS/CAC. IMPLEMENTED (handler present) — the docstring warning that it 'may not be registered' is FALSE.",
     "group": "",
     "params": [
       {
@@ -239,6 +239,8 @@
           "warehouse",
           "ga4",
           "amplitude",
+          "mixpanel",
+          "posthog",
           "adobe_analytics",
           "ad_platforms_self_reported",
           "spend_only",
@@ -366,6 +368,8 @@
       "snap",
       "ga4",
       "amplitude",
+      "mixpanel",
+      "posthog",
       "adobe_analytics",
       "bigquery",
       "redshift",
@@ -400,7 +404,7 @@
         "type": "integer",
         "required": false,
         "example": 10,
-        "doc": "Row cap. Real param name is 'limit' \u2014 docs/tool_docs say 'n', which is IGNORED."
+        "doc": "Row cap. Real param name is 'limit' — docs/tool_docs say 'n', which is IGNORED."
       },
       {
         "name": "date_range_start",

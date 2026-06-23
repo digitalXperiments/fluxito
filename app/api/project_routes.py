@@ -757,6 +757,8 @@ async def remove_member(request: Request, slug: str, member_id: str):
         from app.models.credential_connection import (
             AdobeConnection,
             AmplitudeConnection,
+            MixpanelConnection,
+            PostHogConnection,
             RedshiftConnection,
             SnowflakeConnection,
         )
@@ -772,7 +774,14 @@ async def remove_member(request: Request, slug: str, member_id: str):
         for cred_conn in bq_result.scalars().all():
             cred_conn.connection_status = "disconnected"
 
-        for model in [AmplitudeConnection, AdobeConnection, RedshiftConnection, SnowflakeConnection]:
+        for model in [
+            AmplitudeConnection,
+            MixpanelConnection,
+            PostHogConnection,
+            AdobeConnection,
+            RedshiftConnection,
+            SnowflakeConnection,
+        ]:
             cred_result = await db.execute(
                 select(model).where(
                     model.project_id == project.id,

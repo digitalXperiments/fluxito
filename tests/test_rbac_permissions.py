@@ -34,6 +34,8 @@ def test_full_permissions_allow_everything():
     eff = EffectivePermissions(full=True)
     assert eff.allows_tool("marketing_write") is True
     assert eff.allows_provider("amplitude") is True
+    assert eff.allows_provider("mixpanel") is True
+    assert eff.allows_provider("posthog") is True
 
 
 def test_scoped_permissions_allow_only_granted():
@@ -51,6 +53,8 @@ def test_scoped_permissions_allow_only_granted():
     assert eff.allows_tool("set_active_project") is True
     assert eff.allows_provider("ga4") is True
     assert eff.allows_provider("amplitude") is False
+    assert eff.allows_provider("mixpanel") is False
+    assert eff.allows_provider("posthog") is False
 
 
 def test_tracking_plan_action_mapping():
@@ -135,6 +139,13 @@ def test_normalize_rejects_unknown_domain_and_provider():
         normalize_permissions({"tools": {"nope": ["read"]}})
     with pytest.raises(PermissionValidationError):
         normalize_permissions({"providers": ["myspace"]})
+
+
+def test_mixpanel_posthog_in_providers_list():
+    from app.auth.permissions import PROVIDERS
+
+    assert "mixpanel" in PROVIDERS
+    assert "posthog" in PROVIDERS
 
 
 def test_union_roles_builds_effective():

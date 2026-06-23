@@ -40,7 +40,7 @@
         "type": "string",
         "required": false,
         "example": "Acme revenue digest",
-        "doc": "Human task label; falls back to default_task_name, then '<title> \u2014 <project>'."
+        "doc": "Human task label; falls back to default_task_name, then '<title> — <project>'."
       }
     ],
     "platforms": [
@@ -54,6 +54,8 @@
       "pinterest",
       "bigquery",
       "amplitude",
+      "mixpanel",
+      "posthog",
       "adobe_analytics",
       "adobe_launch",
       "adobe_marketo",
@@ -180,6 +182,8 @@
       "pinterest",
       "bigquery",
       "amplitude",
+      "mixpanel",
+      "posthog",
       "adobe_analytics",
       "adobe_launch",
       "adobe_marketo",

@@ -95,6 +95,8 @@ No OAuth app required.
 | [amplitude.md](amplitude.md) | API Key and Secret Key per project; multi-project setup. | ~5 min |
 | [appsflyer.md](appsflyer.md) | V2.0 API Token authentication; installs, events and partner reports. | ~5 min |
 | [branch.md](branch.md) | Branch Key + Branch Secret authentication; app config and daily exports. | ~5 min |
+| [mixpanel.md](mixpanel.md) | API Secret and Service Token per project; multi-project setup. | ~5 min |
+| [posthog.md](posthog.md) | Personal API Key, host URL, and Project ID; Cloud or self-hosted. | ~5 min |
 | [adobe-analytics.md](adobe-analytics.md) | Adobe Developer Console project, OAuth Server-to-Server credential, Admin Console product profile grant. | ~25 min |
 | [adobe-launch.md](adobe-launch.md) | Reuse or create Adobe I/O project for Experience Platform Tags; product profile rights. | ~15 min (~5 min if reusing Analytics project) |
 | [adobe-marketo.md](adobe-marketo.md) | Marketo LaunchPoint custom service (API-only user + role), Client ID/Secret, REST endpoint. Own credentials — not Adobe IMS. | ~15 min |

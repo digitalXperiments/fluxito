@@ -67,6 +67,8 @@ Warehouse connectors usually use credentials, not a marketing OAuth app.
 | [Amplitude](amplitude.md) | Product analytics event queries |
 | [AppsFlyer](appsflyer.md) | Installs, in-app events and partner reports |
 | [Branch](branch.md) | App config and daily data exports |
+| [Mixpanel](mixpanel.md) | Product analytics event query |
+| [PostHog](posthog.md) | Product analytics (Cloud or self-hosted) |
 | [Adobe Analytics](adobe-analytics.md) | Adobe report suites |
 | [Adobe Launch](adobe-launch.md) | Adobe Experience Platform Tags properties |
 | [Adobe Marketo Engage](adobe-marketo.md) | Marketo leads, campaigns & automation |

@@ -118,7 +118,9 @@
       }
     ],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
     "returns": "Amplitude check_event_volume_anomalies findings dict | {error,message}",
     "scope": "run_audit"
@@ -130,7 +132,9 @@
     "group": "PRODUCT ANALYTICS",
     "params": [],
     "platforms": [
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
     "returns": "Amplitude check_taxonomy_health findings dict | {error,message}",
     "scope": "run_audit"
@@ -138,7 +142,7 @@
   {
     "tool": "run_audit",
     "action": "audit_score_history",
-    "summary": "run_audit route \u2192 save_audit_result(get_score_history). Score trend over N days. (Underlying handler has a broken SQL bind \u2014 see defects.)",
+    "summary": "run_audit route → save_audit_result(get_score_history). Score trend over N days. (Underlying handler has a broken SQL bind — see defects.)",
     "group": "AUDIT PERSISTENCE (save / fetch results)",
     "params": [
       {
@@ -146,7 +150,7 @@
         "type": "integer",
         "required": false,
         "example": 30,
-        "doc": "Lookback window (non-functional \u2014 see defect)."
+        "doc": "Lookback window (non-functional — see defect)."
       }
     ],
     "returns": "{ history:[{audit_type, data_points:[{score, date}]}], days }",
@@ -155,7 +159,7 @@
   {
     "tool": "run_audit",
     "action": "audit_score_summary",
-    "summary": "run_audit route \u2192 save_audit_result(get_score_summary). Latest score per audit_type.",
+    "summary": "run_audit route → save_audit_result(get_score_summary). Latest score per audit_type.",
     "group": "AUDIT PERSISTENCE (save / fetch results)",
     "params": [],
     "returns": "{ domains:[{audit_type, score, critical, warning, last_run}], project_id }",
@@ -345,7 +349,7 @@
   {
     "tool": "run_audit",
     "action": "get_audit_run",
-    "summary": "run_audit route \u2192 save_audit_result(get_run). params.run_id required.",
+    "summary": "run_audit route → save_audit_result(get_run). params.run_id required.",
     "group": "AUDIT PERSISTENCE (save / fetch results)",
     "params": [
       {
@@ -480,7 +484,7 @@
   {
     "tool": "run_audit",
     "action": "gtm_dependency_map",
-    "summary": "Tag\u2192trigger edge list (each edge {tag, fires_on:<resolved trigger name>}).",
+    "summary": "Tag→trigger edge list (each edge {tag, fires_on:<resolved trigger name>}).",
     "group": "TAG MANAGER",
     "params": [
       {
@@ -718,7 +722,7 @@
   {
     "tool": "run_audit",
     "action": "list_audit_runs",
-    "summary": "run_audit route \u2192 save_audit_result(list_runs). Paginated runs for the project.",
+    "summary": "run_audit route → save_audit_result(list_runs). Paginated runs for the project.",
     "group": "AUDIT PERSISTENCE (save / fetch results)",
     "params": [
       {
@@ -749,7 +753,7 @@
   {
     "tool": "run_audit",
     "action": "live_tag_analyze_captures",
-    "summary": "run_audit route \u2192 live_tag_test(analyze_captures). params.network_captures required; session_id optional.",
+    "summary": "run_audit route → live_tag_test(analyze_captures). params.network_captures required; session_id optional.",
     "group": "LIVE TAG TEST (browser, computer-use)",
     "params": [
       {
@@ -776,7 +780,7 @@
         "type": "string",
         "required": false,
         "example": "ltt_abc123",
-        "doc": "Optional \u2014 enables SDR gap-check + session persistence."
+        "doc": "Optional — enables SDR gap-check + session persistence."
       }
     ],
     "platforms": [
@@ -784,7 +788,9 @@
       "facebook_pixel",
       "tiktok_pixel",
       "snap_pixel",
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
     "returns": "{ session_id, overall_score, critical, warning, info, passed, sdr_gaps, unmatched_requests, platforms_detected, per_platform, findings, save_hint }",
     "scope": "analysis:read"
@@ -792,7 +798,7 @@
   {
     "tool": "run_audit",
     "action": "live_tag_finish_session",
-    "summary": "run_audit route \u2192 live_tag_test(finish_session). params.session_id required; notes optional.",
+    "summary": "run_audit route → live_tag_test(finish_session). params.session_id required; notes optional.",
     "group": "LIVE TAG TEST (browser, computer-use)",
     "params": [
       {
@@ -817,7 +823,7 @@
   {
     "tool": "run_audit",
     "action": "live_tag_get_plan",
-    "summary": "run_audit route \u2192 live_tag_test(get_test_plan). params.url required.",
+    "summary": "run_audit route → live_tag_test(get_test_plan). params.url required.",
     "group": "LIVE TAG TEST (browser, computer-use)",
     "params": [
       {
@@ -833,7 +839,9 @@
       "facebook_pixel",
       "tiktok_pixel",
       "snap_pixel",
-      "amplitude"
+      "amplitude",
+      "mixpanel",
+      "posthog"
     ],
     "returns": "{ session_id, url, sdr_context, rule_books_active, sdr_platforms, pre_conditions, capture_instructions, interaction_steps, next_step }",
     "scope": "analysis:read"
@@ -841,7 +849,7 @@
   {
     "tool": "run_audit",
     "action": "live_tag_get_sdr_context",
-    "summary": "run_audit route \u2192 live_tag_test(get_sdr_context). params.url optional.",
+    "summary": "run_audit route → live_tag_test(get_sdr_context). params.url optional.",
     "group": "LIVE TAG TEST (browser, computer-use)",
     "params": [
       {
@@ -858,7 +866,7 @@
   {
     "tool": "run_audit",
     "action": "live_tag_list_plans",
-    "summary": "run_audit route \u2192 live_tag_test(list_test_plans). Requires active project (soft note otherwise).",
+    "summary": "run_audit route → live_tag_test(list_test_plans). Requires active project (soft note otherwise).",
     "group": "LIVE TAG TEST (browser, computer-use)",
     "params": [],
     "returns": "{ plans:[...], count } | {plans:[], count:0, note} | {plans:[], count:0, error}",
@@ -867,7 +875,7 @@
   {
     "tool": "run_audit",
     "action": "live_tag_save_plan",
-    "summary": "run_audit route \u2192 live_tag_test(save_test_plan). INSERT a reusable test plan. A WRITE via run_audit under read scope.",
+    "summary": "run_audit route → live_tag_test(save_test_plan). INSERT a reusable test plan. A WRITE via run_audit under read scope.",
     "group": "LIVE TAG TEST (browser, computer-use)",
     "params": [
       {
@@ -887,7 +895,7 @@
             "ga4"
           ]
         },
-        "doc": "Plan dict (all keys optional; empty {} \u2192 'Untitled Plan')."
+        "doc": "Plan dict (all keys optional; empty {} → 'Untitled Plan')."
       }
     ],
     "returns": "{ success:true, message:'Test plan saved.' } | {error_type:'db_error', message}",
@@ -897,7 +905,7 @@
   {
     "tool": "run_audit",
     "action": "live_tag_start_session",
-    "summary": "run_audit route \u2192 live_tag_test(start_session). params.url required.",
+    "summary": "run_audit route → live_tag_test(start_session). params.url required.",
     "group": "LIVE TAG TEST (browser, computer-use)",
     "params": [
       {
@@ -933,7 +941,7 @@
           "google"
         ],
         "example": "google",
-        "doc": "Required in params \u2014 the AUDIT_ROUTES entry has NO extra_kwargs, so platform defaults to None and marketing_audit returns missing_required_param unless the caller supplies it."
+        "doc": "Required in params — the AUDIT_ROUTES entry has NO extra_kwargs, so platform defaults to None and marketing_audit returns missing_required_param unless the caller supplies it."
       },
       {
         "name": "date_range_start",
@@ -969,7 +977,7 @@
           "google"
         ],
         "example": "google",
-        "doc": "Required in params \u2014 route injects no platform. Must be 'google'."
+        "doc": "Required in params — route injects no platform. Must be 'google'."
       },
       {
         "name": "account_id",
@@ -983,7 +991,7 @@
         "type": "string",
         "required": false,
         "example": "987654321",
-        "doc": "Optional \u2014 restrict the quality-score audit to one campaign."
+        "doc": "Optional — restrict the quality-score audit to one campaign."
       }
     ],
     "platforms": [
@@ -1016,7 +1024,7 @@
   {
     "tool": "run_audit",
     "action": "save_audit_result",
-    "summary": "run_audit route \u2192 save_audit_result(save). Persist an AuditRun + findings to the Fluxito UI. A DB WRITE reachable via run_audit under the analysis:READ scope. params.audit_type required.",
+    "summary": "run_audit route → save_audit_result(save). Persist an AuditRun + findings to the Fluxito UI. A DB WRITE reachable via run_audit under the analysis:READ scope. params.audit_type required.",
     "group": "AUDIT PERSISTENCE (save / fetch results)",
     "params": [
       {
@@ -1133,7 +1141,7 @@
           "page"
         ],
         "example": "query",
-        "doc": "query|page \u2014 actually used here as both the GSC fetch dimension and the output key."
+        "doc": "query|page — actually used here as both the GSC fetch dimension and the output key."
       },
       {
         "name": "min_impressions",
@@ -1275,7 +1283,7 @@
           "page"
         ],
         "example": "query",
-        "doc": "In the shared signature but IGNORED by striking_distance \u2014 the query is hardcoded to dimensions=['query']."
+        "doc": "In the shared signature but IGNORED by striking_distance — the query is hardcoded to dimensions=['query']."
       }
     ],
     "platforms": [
@@ -1348,7 +1356,7 @@
         "type": "integer",
         "required": false,
         "example": 100,
-        "doc": "Accepted by the tool signature but UNUSED by top_movers \u2014 no impressions filter is applied here."
+        "doc": "Accepted by the tool signature but UNUSED by top_movers — no impressions filter is applied here."
       }
     ],
     "platforms": [
@@ -1360,7 +1368,7 @@
   {
     "tool": "run_audit",
     "action": "tag_audit_rulebooks",
-    "summary": "run_audit route \u2192 tag_rulebook(audit_against_rulebooks). Bulk-validate a list of GTM tags. params.tags required.",
+    "summary": "run_audit route → tag_rulebook(audit_against_rulebooks). Bulk-validate a list of GTM tags. params.tags required.",
     "group": "TAG RULE BOOK (connector-independent)",
     "params": [
       {
@@ -1396,7 +1404,7 @@
   {
     "tool": "run_audit",
     "action": "tag_delete_custom_rule",
-    "summary": "run_audit route \u2192 tag_rulebook(delete_custom_rule). Soft-delete (is_active=FALSE) a custom rule. A destructive WRITE via run_audit under read scope.",
+    "summary": "run_audit route → tag_rulebook(delete_custom_rule). Soft-delete (is_active=FALSE) a custom rule. A destructive WRITE via run_audit under read scope.",
     "group": "TAG RULE BOOK (connector-independent)",
     "params": [
       {
@@ -1414,7 +1422,7 @@
   {
     "tool": "run_audit",
     "action": "tag_get_event_spec",
-    "summary": "run_audit route \u2192 tag_rulebook(get_event_spec). params.platform + params.event_name required.",
+    "summary": "run_audit route → tag_rulebook(get_event_spec). params.platform + params.event_name required.",
     "group": "TAG RULE BOOK (connector-independent)",
     "params": [
       {
@@ -1443,7 +1451,7 @@
   {
     "tool": "run_audit",
     "action": "tag_get_platform_spec",
-    "summary": "run_audit route \u2192 tag_rulebook(get_platform_spec). params.platform required.",
+    "summary": "run_audit route → tag_rulebook(get_platform_spec). params.platform required.",
     "group": "TAG RULE BOOK (connector-independent)",
     "params": [
       {
@@ -1459,6 +1467,8 @@
       "facebook_pixel",
       "adobe_analytics",
       "amplitude",
+      "mixpanel",
+      "posthog",
       "tiktok_pixel"
     ],
     "returns": "rb.serialize(include_events=True) | not_found error",
@@ -1467,7 +1477,7 @@
   {
     "tool": "run_audit",
     "action": "tag_identify_type",
-    "summary": "run_audit route \u2192 tag_rulebook(identify_tag_type). NOTE the public run_audit action is 'tag_identify_type' but the legacy action is 'identify_tag_type' (word order differs).",
+    "summary": "run_audit route → tag_rulebook(identify_tag_type). NOTE the public run_audit action is 'tag_identify_type' but the legacy action is 'identify_tag_type' (word order differs).",
     "group": "TAG RULE BOOK (connector-independent)",
     "params": [
       {
@@ -1487,7 +1497,7 @@
   {
     "tool": "run_audit",
     "action": "tag_list_custom_rules",
-    "summary": "run_audit route \u2192 tag_rulebook(list_custom_rules). Requires active project.",
+    "summary": "run_audit route → tag_rulebook(list_custom_rules). Requires active project.",
     "group": "TAG RULE BOOK (connector-independent)",
     "params": [],
     "returns": "{ custom_rules:[...], count, hint }",
@@ -1496,7 +1506,7 @@
   {
     "tool": "run_audit",
     "action": "tag_list_platforms",
-    "summary": "run_audit route \u2192 tag_rulebook(list_platforms). Identical handler to the direct tag_rulebook tool; reachable under analysis:read scope.",
+    "summary": "run_audit route → tag_rulebook(list_platforms). Identical handler to the direct tag_rulebook tool; reachable under analysis:read scope.",
     "group": "TAG RULE BOOK (connector-independent)",
     "params": [],
     "platforms": [
@@ -1527,7 +1537,7 @@
   {
     "tool": "run_audit",
     "action": "tag_save_custom_rule",
-    "summary": "run_audit route \u2192 tag_rulebook(save_custom_rule). UPSERT a custom rule. A WRITE exposed through a tool named run_audit under read scope.",
+    "summary": "run_audit route → tag_rulebook(save_custom_rule). UPSERT a custom rule. A WRITE exposed through a tool named run_audit under read scope.",
     "group": "TAG RULE BOOK (connector-independent)",
     "params": [
       {
@@ -1549,7 +1559,7 @@
   {
     "tool": "run_audit",
     "action": "tag_validate_payload",
-    "summary": "run_audit route \u2192 tag_rulebook(validate_payload). params.platform + event_name + payload required.",
+    "summary": "run_audit route → tag_rulebook(validate_payload). params.platform + event_name + payload required.",
     "group": "TAG RULE BOOK (connector-independent)",
     "params": [
       {
@@ -1839,5 +1849,69 @@
       "snowflake"
     ],
     "returns": "BQ: { dataset_id, days_stale_threshold, stale_table_count, stale_tables:[{table_id,last_modified,num_rows}] }. RS/SF: connector-shaped result."
+  },
+  {
+    "tool": "run_audit",
+    "action": "mixpanel_check_taxonomy_health",
+    "summary": "Mixpanel taxonomy-health audit (cached 300s). No params beyond connection.",
+    "group": "PRODUCT ANALYTICS",
+    "params": [],
+    "platforms": [
+      "mixpanel"
+    ],
+    "returns": "Mixpanel check_taxonomy_health findings dict | {error,message}",
+    "scope": "run_audit"
+  },
+  {
+    "tool": "run_audit",
+    "action": "mixpanel_check_event_volume_anomalies",
+    "summary": "Mixpanel event-volume anomaly check over a lookback window. days_back optional (default 30).",
+    "group": "PRODUCT ANALYTICS",
+    "params": [
+      {
+        "name": "days_back",
+        "type": "integer",
+        "required": false,
+        "example": 30,
+        "doc": "Lookback window in days. Defaults 30."
+      }
+    ],
+    "platforms": [
+      "mixpanel"
+    ],
+    "returns": "Mixpanel check_event_volume_anomalies findings dict | {error,message}",
+    "scope": "run_audit"
+  },
+  {
+    "tool": "run_audit",
+    "action": "posthog_check_taxonomy_health",
+    "summary": "PostHog taxonomy-health audit (cached 300s). No params beyond connection.",
+    "group": "PRODUCT ANALYTICS",
+    "params": [],
+    "platforms": [
+      "posthog"
+    ],
+    "returns": "PostHog check_taxonomy_health findings dict | {error,message}",
+    "scope": "run_audit"
+  },
+  {
+    "tool": "run_audit",
+    "action": "posthog_check_event_volume_anomalies",
+    "summary": "PostHog event-volume anomaly check over a lookback window. days_back optional (default 30).",
+    "group": "PRODUCT ANALYTICS",
+    "params": [
+      {
+        "name": "days_back",
+        "type": "integer",
+        "required": false,
+        "example": 30,
+        "doc": "Lookback window in days. Defaults 30."
+      }
+    ],
+    "platforms": [
+      "posthog"
+    ],
+    "returns": "PostHog check_event_volume_anomalies findings dict | {error,message}",
+    "scope": "run_audit"
   }
 ]

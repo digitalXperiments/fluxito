@@ -113,6 +113,8 @@ async def _project_connected_platforms(project_id: uuid.UUID) -> list[str]:
     from app.models.credential_connection import (
         AdobeConnection,
         AmplitudeConnection,
+        MixpanelConnection,
+        PostHogConnection,
         RedshiftConnection,
         SnowflakeConnection,
     )
@@ -127,10 +129,12 @@ async def _project_connected_platforms(project_id: uuid.UUID) -> list[str]:
                 return rows[:1]
             return rows
 
-    oauth_rows, bq_rows, amp_rows, rs_rows, sf_rows, adobe_rows = await asyncio.gather(
+    oauth_rows, bq_rows, amp_rows, mp_rows, ph_rows, rs_rows, sf_rows, adobe_rows = await asyncio.gather(
         _fetch_all(OAuthConnection, OAuthConnection.project_id),
         _fetch_all(BQConnection, BQConnection.fluxito_project_id, include_first_only=True),
         _fetch_all(AmplitudeConnection, AmplitudeConnection.project_id, include_first_only=True),
+        _fetch_all(MixpanelConnection, MixpanelConnection.project_id, include_first_only=True),
+        _fetch_all(PostHogConnection, PostHogConnection.project_id, include_first_only=True),
         _fetch_all(RedshiftConnection, RedshiftConnection.project_id, include_first_only=True),
         _fetch_all(SnowflakeConnection, SnowflakeConnection.project_id, include_first_only=True),
         _fetch_all(AdobeConnection, AdobeConnection.project_id),
@@ -160,6 +164,10 @@ async def _project_connected_platforms(project_id: uuid.UUID) -> list[str]:
         connected.append("bigquery")
     if amp_rows:
         connected.append("amplitude")
+    if mp_rows:
+        connected.append("mixpanel")
+    if ph_rows:
+        connected.append("posthog")
     if rs_rows:
         connected.append("redshift")
     if sf_rows:
@@ -445,6 +453,8 @@ async def automation_author_page(request: Request):
                 "snap",
                 "bigquery",
                 "amplitude",
+                "mixpanel",
+                "posthog",
                 "adobe_analytics",
                 "adobe_launch",
                 "redshift",

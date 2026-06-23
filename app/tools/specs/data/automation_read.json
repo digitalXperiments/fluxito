@@ -62,6 +62,8 @@
       "pinterest",
       "bigquery",
       "amplitude",
+      "mixpanel",
+      "posthog",
       "adobe_analytics",
       "adobe_launch",
       "adobe_marketo",
