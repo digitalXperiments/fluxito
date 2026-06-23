@@ -39,7 +39,10 @@ from app.models.bq_connection import BQConnection
 from app.models.connection import OAuthConnection
 from app.models.credential_connection import (
     AdobeConnection,
+    AdjustConnection,
     AmplitudeConnection,
+    AppsFlyerConnection,
+    BranchConnection,
     MarketoConnection,
     RedshiftConnection,
     SnowflakeConnection,
@@ -81,6 +84,9 @@ GRANULAR_CONNECTOR_CATALOG: list[tuple[str, str, tuple[str, ...]]] = [
     ("snowflake", "Snowflake", ("has_snowflake",)),
     # Product analytics
     ("amplitude", "Amplitude", ("has_amplitude",)),
+    ("branch", "Branch", ("has_branch",)),
+    ("appsflyer", "AppsFlyer", ("has_appsflyer",)),
+    ("adjust", "Adjust", ("has_adjust",)),
     ("adobe", "Adobe", ("has_adobe_analytics", "has_adobe_launch")),
     # Ad platforms
     ("meta", "Meta Ads", ("has_meta",)),
@@ -984,6 +990,9 @@ async def connect_page(request: Request):
     # Build uniform connections_view + count per platform
     bq_count = 0
     amplitude_count = 0
+    branch_count = 0
+    appsflyer_count = 0
+    adjust_count = 0
     adobe_count = 0
     marketo_count = 0
     redshift_count = 0
@@ -1002,6 +1011,9 @@ async def connect_page(request: Request):
     bq_rows = []
     oauth_rows = []
     marketo_rows = []
+    branch_rows = []
+    appsflyer_rows = []
+    adjust_rows = []
     if user_ctx is not None:
         try:
             db_session = app_state.db_session_factory()
@@ -1037,6 +1049,37 @@ async def connect_page(request: Request):
                 amp_result = await db.execute(amp_stmt)
                 amplitude_rows = list(amp_result.scalars().all())
                 amplitude_count = len(amplitude_rows)
+
+                # Branch / AppsFlyer / Adjust (MMP credential connections) — filtered by project
+                branch_stmt = select(BranchConnection).where(
+                    BranchConnection.user_id == uuid.UUID(user_ctx.user_id),
+                    BranchConnection.is_active == True,
+                )
+                if active_pid_uuid:
+                    branch_stmt = branch_stmt.where(BranchConnection.project_id == active_pid_uuid)
+                branch_result = await db.execute(branch_stmt)
+                branch_rows = list(branch_result.scalars().all())
+                branch_count = len(branch_rows)
+
+                appsflyer_stmt = select(AppsFlyerConnection).where(
+                    AppsFlyerConnection.user_id == uuid.UUID(user_ctx.user_id),
+                    AppsFlyerConnection.is_active == True,
+                )
+                if active_pid_uuid:
+                    appsflyer_stmt = appsflyer_stmt.where(AppsFlyerConnection.project_id == active_pid_uuid)
+                appsflyer_result = await db.execute(appsflyer_stmt)
+                appsflyer_rows = list(appsflyer_result.scalars().all())
+                appsflyer_count = len(appsflyer_rows)
+
+                adjust_stmt = select(AdjustConnection).where(
+                    AdjustConnection.user_id == uuid.UUID(user_ctx.user_id),
+                    AdjustConnection.is_active == True,
+                )
+                if active_pid_uuid:
+                    adjust_stmt = adjust_stmt.where(AdjustConnection.project_id == active_pid_uuid)
+                adjust_result = await db.execute(adjust_stmt)
+                adjust_rows = list(adjust_result.scalars().all())
+                adjust_count = len(adjust_rows)
 
                 adobe_stmt = select(AdobeConnection).where(
                     AdobeConnection.user_id == uuid.UUID(user_ctx.user_id),
@@ -1091,6 +1134,7 @@ async def connect_page(request: Request):
         reddit_count = len([c for c in oauth_rows if c.provider == "reddit"])
         bing_count = len([c for c in oauth_rows if c.provider == "bing"])
         apple_count = len([c for c in oauth_rows if c.provider == "apple"])
+        # MMP credential counts are already computed from the credential fetch block above (branch_count etc.)
 
         name_map = {
             "google": "Google Suite",
@@ -1225,6 +1269,54 @@ async def connect_page(request: Request):
                 }
             )
 
+        # ── Branch connections ──
+        for br in branch_rows:
+            connections_view.append(
+                {
+                    "id": str(br.id),
+                    "provider": "branch",
+                    "platform_name": "Branch",
+                    "label": br.display_name or "Branch",
+                    "detail": f"Project: {br.project_name}" if br.project_name else "Mobile attribution",
+                    "icon": "🌿",
+                    "is_active": br.connection_status == "active",
+                    "delete_url": f"/api/connections/branch/{br.id}",
+                    "edit_url": f"/connect/branch?edit={br.id}",
+                }
+            )
+
+        # ── AppsFlyer connections ──
+        for af in appsflyer_rows:
+            connections_view.append(
+                {
+                    "id": str(af.id),
+                    "provider": "appsflyer",
+                    "platform_name": "AppsFlyer",
+                    "label": af.display_name or "AppsFlyer",
+                    "detail": f"Project: {af.project_name}" if af.project_name else "Mobile attribution",
+                    "icon": "🚀",
+                    "is_active": af.connection_status == "active",
+                    "delete_url": f"/api/connections/appsflyer/{af.id}",
+                    "edit_url": f"/connect/appsflyer?edit={af.id}",
+                }
+            )
+
+        # ── Adjust connections ──
+        for adj in adjust_rows:
+            connections_view.append(
+                {
+                    "id": str(adj.id),
+                    "provider": "adjust",
+                    "platform_name": "Adjust",
+                    "label": adj.display_name or "Adjust",
+                    "detail": f"Project: {adj.project_name}" if adj.project_name else "Mobile attribution",
+                    "icon": "🎯",
+                    "is_active": adj.connection_status == "active",
+                    "delete_url": f"/api/connections/adjust/{adj.id}",
+                    "edit_url": f"/connect/adjust?edit={adj.id}",
+                }
+            )
+
         # ── Adobe connections ──
         for adc in adobe_rows:
             products = []
@@ -1323,6 +1415,33 @@ async def connect_page(request: Request):
             "desc": "Product analytics",
             "url": "/connect/amplitude",
             "count": amplitude_count,
+            "primary": False,
+        },
+        {
+            "slug": "branch",
+            "name": "Branch",
+            "icon": "🌿",
+            "desc": "Mobile attribution",
+            "url": "/connect/branch",
+            "count": branch_count,
+            "primary": False,
+        },
+        {
+            "slug": "appsflyer",
+            "name": "AppsFlyer",
+            "icon": "🚀",
+            "desc": "Mobile attribution",
+            "url": "/connect/appsflyer",
+            "count": appsflyer_count,
+            "primary": False,
+        },
+        {
+            "slug": "adjust",
+            "name": "Adjust",
+            "icon": "🎯",
+            "desc": "Mobile attribution",
+            "url": "/connect/adjust",
+            "count": adjust_count,
             "primary": False,
         },
         {
@@ -3257,6 +3376,132 @@ async def connect_amplitude_page(request: Request):
     )
 
 
+@router.get("/connect/branch", response_class=HTMLResponse)
+async def connect_branch_page(request: Request):
+    """Branch API key connect page (supports ?edit=<id>)."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/branch", status_code=302)
+    user_view = await _load_user_view(user_ctx)
+
+    editing = None
+    edit_id = request.query_params.get("edit")
+    if edit_id and user_ctx:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            row = (
+                await db.execute(
+                    select(BranchConnection).where(
+                        BranchConnection.id == uuid.UUID(edit_id),
+                        BranchConnection.user_id == uuid.UUID(user_ctx.user_id),
+                        BranchConnection.is_active == True,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row:
+                editing = {
+                    "id": str(row.id),
+                    "display_name": row.display_name,
+                    "api_key": _decrypt(row.api_key_encrypted),
+                }
+
+    return render(
+        request,
+        "connect/branch.html",
+        {
+            "user": user_view,
+            "platform_name": "Branch",
+            "platform_icon": "🌿",
+            "platform_desc": "Connect your Branch account for mobile attribution and deep linking data.",
+            "editing": editing,
+        },
+    )
+
+
+@router.get("/connect/appsflyer", response_class=HTMLResponse)
+async def connect_appsflyer_page(request: Request):
+    """AppsFlyer API key connect page (supports ?edit=<id>)."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/appsflyer", status_code=302)
+    user_view = await _load_user_view(user_ctx)
+
+    editing = None
+    edit_id = request.query_params.get("edit")
+    if edit_id and user_ctx:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            row = (
+                await db.execute(
+                    select(AppsFlyerConnection).where(
+                        AppsFlyerConnection.id == uuid.UUID(edit_id),
+                        AppsFlyerConnection.user_id == uuid.UUID(user_ctx.user_id),
+                        AppsFlyerConnection.is_active == True,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row:
+                editing = {
+                    "id": str(row.id),
+                    "display_name": row.display_name,
+                    "api_key": _decrypt(row.api_key_encrypted),
+                }
+
+    return render(
+        request,
+        "connect/appsflyer.html",
+        {
+            "user": user_view,
+            "platform_name": "AppsFlyer",
+            "platform_icon": "🚀",
+            "platform_desc": "Connect your AppsFlyer account for mobile attribution and analytics.",
+            "editing": editing,
+        },
+    )
+
+
+@router.get("/connect/adjust", response_class=HTMLResponse)
+async def connect_adjust_page(request: Request):
+    """Adjust API key connect page (supports ?edit=<id>)."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/adjust", status_code=302)
+    user_view = await _load_user_view(user_ctx)
+
+    editing = None
+    edit_id = request.query_params.get("edit")
+    if edit_id and user_ctx:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            row = (
+                await db.execute(
+                    select(AdjustConnection).where(
+                        AdjustConnection.id == uuid.UUID(edit_id),
+                        AdjustConnection.user_id == uuid.UUID(user_ctx.user_id),
+                        AdjustConnection.is_active == True,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row:
+                editing = {
+                    "id": str(row.id),
+                    "display_name": row.display_name,
+                    "api_key": _decrypt(row.api_key_encrypted),
+                }
+
+    return render(
+        request,
+        "connect/adjust.html",
+        {
+            "user": user_view,
+            "platform_name": "Adjust",
+            "platform_icon": "🎯",
+            "platform_desc": "Connect your Adjust account for mobile measurement and attribution.",
+            "editing": editing,
+        },
+    )
+
+
 class AmplitudeUploadRequest(BaseModel):
     display_name: str
     api_key: str
@@ -3358,6 +3603,336 @@ async def disconnect_amplitude_connection(conn_id: str, request: Request):
             .where(
                 AmplitudeConnection.id == uuid.UUID(conn_id),
                 AmplitudeConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(is_active=False, connection_status="disconnected")
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "disconnected"}
+
+
+class BranchUploadRequest(BaseModel):
+    display_name: str
+    api_key: str
+    secret_key: str
+
+
+@router.post("/api/connections/branch")
+async def add_branch_connection(payload: BranchUploadRequest, request: Request):
+    """Securely stores Branch API credentials."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    encrypted_api_key = _encrypt(payload.api_key)
+    encrypted_secret_key = _encrypt(payload.secret_key or "")
+
+    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        new_conn = BranchConnection(
+            user_id=uuid.UUID(user_ctx.user_id),
+            project_id=active_project_id,
+            display_name=payload.display_name,
+            api_key_encrypted=encrypted_api_key,
+            secret_key_encrypted=encrypted_secret_key,
+            connection_status="active",
+            is_active=True,
+        )
+        db.add(new_conn)
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "success", "connection_id": str(new_conn.id)}
+
+
+@router.put("/api/connections/branch/{conn_id}")
+async def update_branch_connection(conn_id: str, payload: BranchUploadRequest, request: Request):
+    """Updates an existing Branch connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    values: dict = {
+        "display_name": payload.display_name,
+        "api_key_encrypted": _encrypt(payload.api_key),
+    }
+    if payload.secret_key:
+        values["secret_key_encrypted"] = _encrypt(payload.secret_key)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(BranchConnection)
+            .where(
+                BranchConnection.id == uuid.UUID(conn_id),
+                BranchConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(**values)
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "updated"}
+
+
+@router.delete("/api/connections/branch/{conn_id}")
+async def disconnect_branch_connection(conn_id: str, request: Request):
+    """Deactivates a Branch connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(BranchConnection)
+            .where(
+                BranchConnection.id == uuid.UUID(conn_id),
+                BranchConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(is_active=False, connection_status="disconnected")
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "disconnected"}
+
+
+class AppsFlyerUploadRequest(BaseModel):
+    display_name: str
+    api_key: str
+    secret_key: str | None = None
+
+
+@router.post("/api/connections/appsflyer")
+async def add_appsflyer_connection(payload: AppsFlyerUploadRequest, request: Request):
+    """Securely stores AppsFlyer API credentials."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    encrypted_api_key = _encrypt(payload.api_key)
+    encrypted_secret_key = _encrypt(payload.secret_key or "")
+
+    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        new_conn = AppsFlyerConnection(
+            user_id=uuid.UUID(user_ctx.user_id),
+            project_id=active_project_id,
+            display_name=payload.display_name,
+            api_key_encrypted=encrypted_api_key,
+            secret_key_encrypted=encrypted_secret_key,
+            connection_status="active",
+            is_active=True,
+        )
+        db.add(new_conn)
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "success", "connection_id": str(new_conn.id)}
+
+
+@router.put("/api/connections/appsflyer/{conn_id}")
+async def update_appsflyer_connection(conn_id: str, payload: AppsFlyerUploadRequest, request: Request):
+    """Updates an existing AppsFlyer connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    values: dict = {
+        "display_name": payload.display_name,
+        "api_key_encrypted": _encrypt(payload.api_key),
+    }
+    if payload.secret_key:
+        values["secret_key_encrypted"] = _encrypt(payload.secret_key)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(AppsFlyerConnection)
+            .where(
+                AppsFlyerConnection.id == uuid.UUID(conn_id),
+                AppsFlyerConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(**values)
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "updated"}
+
+
+@router.delete("/api/connections/appsflyer/{conn_id}")
+async def disconnect_appsflyer_connection(conn_id: str, request: Request):
+    """Deactivates an AppsFlyer connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(AppsFlyerConnection)
+            .where(
+                AppsFlyerConnection.id == uuid.UUID(conn_id),
+                AppsFlyerConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(is_active=False, connection_status="disconnected")
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "disconnected"}
+
+
+class AdjustUploadRequest(BaseModel):
+    display_name: str
+    api_key: str
+    secret_key: str | None = None
+
+
+@router.post("/api/connections/adjust")
+async def add_adjust_connection(payload: AdjustUploadRequest, request: Request):
+    """Securely stores Adjust API credentials."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    encrypted_api_key = _encrypt(payload.api_key)
+    encrypted_secret_key = _encrypt(payload.secret_key or "")
+
+    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        new_conn = AdjustConnection(
+            user_id=uuid.UUID(user_ctx.user_id),
+            project_id=active_project_id,
+            display_name=payload.display_name,
+            api_key_encrypted=encrypted_api_key,
+            secret_key_encrypted=encrypted_secret_key,
+            connection_status="active",
+            is_active=True,
+        )
+        db.add(new_conn)
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "success", "connection_id": str(new_conn.id)}
+
+
+@router.put("/api/connections/adjust/{conn_id}")
+async def update_adjust_connection(conn_id: str, payload: AdjustUploadRequest, request: Request):
+    """Updates an existing Adjust connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    values: dict = {
+        "display_name": payload.display_name,
+        "api_key_encrypted": _encrypt(payload.api_key),
+    }
+    if payload.secret_key:
+        values["secret_key_encrypted"] = _encrypt(payload.secret_key)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(AdjustConnection)
+            .where(
+                AdjustConnection.id == uuid.UUID(conn_id),
+                AdjustConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(**values)
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "updated"}
+
+
+@router.delete("/api/connections/adjust/{conn_id}")
+async def disconnect_adjust_connection(conn_id: str, request: Request):
+    """Deactivates an Adjust connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(AdjustConnection)
+            .where(
+                AdjustConnection.id == uuid.UUID(conn_id),
+                AdjustConnection.user_id == uuid.UUID(user_ctx.user_id),
             )
             .values(is_active=False, connection_status="disconnected")
         )

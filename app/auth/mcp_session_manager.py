@@ -33,8 +33,11 @@ import app.app_state as app_state
 from app.models.bq_connection import BQConnection
 from app.models.connection import OAuthConnection
 from app.models.credential_connection import (
+    AdjustConnection,
     AdobeConnection,
     AmplitudeConnection,
+    AppsFlyerConnection,
+    BranchConnection,
     MarketoConnection,
     RedshiftConnection,
     SnowflakeConnection,
@@ -164,6 +167,9 @@ class UserContext:
     has_bing: bool = False
     has_apple: bool = False
     has_amplitude: bool = False
+    has_branch: bool = False
+    has_appsflyer: bool = False
+    has_adjust: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
     has_adobe_marketo: bool = False
@@ -222,6 +228,9 @@ class ProjectContext:
     has_bing: bool = False
     has_apple: bool = False
     has_amplitude: bool = False
+    has_branch: bool = False
+    has_appsflyer: bool = False
+    has_adjust: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
     has_adobe_marketo: bool = False
@@ -568,6 +577,17 @@ async def _load_connections_and_resources(
     bool,
     bool,
     bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
     list,
     list,
     list,
@@ -579,7 +599,8 @@ async def _load_connections_and_resources(
 
     Returns: (
         all_connections_orm, google_connections,
-        has_bq, has_amplitude, has_adobe_analytics, has_adobe_launch,
+        has_bq, has_amplitude, has_branch, has_appsflyer, has_adjust,
+        has_adobe_analytics, has_adobe_launch,
         has_adobe_marketo, has_redshift, has_snowflake, has_meta, has_tiktok, has_snap,
         has_linkedin, has_pinterest, has_x, has_reddit, has_bing, has_apple,
         has_ga4, has_gtm, has_ads, has_gsc,
@@ -636,6 +657,27 @@ async def _load_connections_and_resources(
         .limit(1)
     )
     has_amplitude = result.scalar_one_or_none() is not None
+
+    result = await db.execute(
+        select(BranchConnection)
+        .where(_cred_scope(BranchConnection), BranchConnection.is_active == True)
+        .limit(1)
+    )
+    has_branch = result.scalar_one_or_none() is not None
+
+    result = await db.execute(
+        select(AppsFlyerConnection)
+        .where(_cred_scope(AppsFlyerConnection), AppsFlyerConnection.is_active == True)
+        .limit(1)
+    )
+    has_appsflyer = result.scalar_one_or_none() is not None
+
+    result = await db.execute(
+        select(AdjustConnection)
+        .where(_cred_scope(AdjustConnection), AdjustConnection.is_active == True)
+        .limit(1)
+    )
+    has_adjust = result.scalar_one_or_none() is not None
 
     result = await db.execute(
         select(AdobeConnection).where(_cred_scope(AdobeConnection), AdobeConnection.is_active == True)
@@ -754,6 +796,9 @@ async def _load_connections_and_resources(
         google_connections,
         has_bq,
         has_amplitude,
+        has_branch,
+        has_appsflyer,
+        has_adjust,
         has_adobe_analytics,
         has_adobe_launch,
         has_adobe_marketo,
@@ -859,6 +904,9 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             _google_connections,
             has_bq,
             has_amplitude,
+            has_branch,
+            has_appsflyer,
+            has_adjust,
             has_adobe_analytics,
             has_adobe_launch,
             has_adobe_marketo,
@@ -916,6 +964,9 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             has_bing=has_bing,
             has_apple=has_apple,
             has_amplitude=has_amplitude,
+            has_branch=has_branch,
+            has_appsflyer=has_appsflyer,
+            has_adjust=has_adjust,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
             has_adobe_marketo=has_adobe_marketo,
@@ -977,6 +1028,9 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             _google_connections,
             has_bq,
             has_amplitude,
+            has_branch,
+            has_appsflyer,
+            has_adjust,
             has_adobe_analytics,
             has_adobe_launch,
             has_adobe_marketo,
@@ -1031,6 +1085,9 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             # Gate credential-based flags by provider grant
             has_bq = has_bq and eff.allows_provider("bigquery")
             has_amplitude = has_amplitude and eff.allows_provider("amplitude")
+            has_branch = has_branch and eff.allows_provider("branch")
+            has_appsflyer = has_appsflyer and eff.allows_provider("appsflyer")
+            has_adjust = has_adjust and eff.allows_provider("adjust")
             has_adobe_analytics = has_adobe_analytics and eff.allows_provider("adobe_analytics")
             has_adobe_launch = has_adobe_launch and eff.allows_provider("adobe_launch")
             has_adobe_marketo = has_adobe_marketo and eff.allows_provider("adobe_marketo")
@@ -1079,6 +1136,9 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             has_bing=has_bing,
             has_apple=has_apple,
             has_amplitude=has_amplitude,
+            has_branch=has_branch,
+            has_appsflyer=has_appsflyer,
+            has_adjust=has_adjust,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
             has_adobe_marketo=has_adobe_marketo,
@@ -1208,6 +1268,9 @@ _PROJECT_FLAG_ATTRS = (
     "has_bing",
     "has_apple",
     "has_amplitude",
+    "has_branch",
+    "has_appsflyer",
+    "has_adjust",
     "has_adobe_analytics",
     "has_adobe_launch",
     "has_adobe_marketo",
@@ -1381,6 +1444,18 @@ def no_bing_response(base_url: str) -> dict:
 
 def no_amplitude_response(base_url: str) -> dict:
     return _no_connection(base_url, "No Amplitude connection found.", "/connect/amplitude")
+
+
+def no_branch_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Branch connection found.", "/connect/branch")
+
+
+def no_appsflyer_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No AppsFlyer connection found.", "/connect/appsflyer")
+
+
+def no_adjust_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Adjust connection found.", "/connect/adjust")
 
 
 def no_adobe_analytics_response(base_url: str) -> dict:

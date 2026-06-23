@@ -8,8 +8,11 @@ from app.models.bq_connection import BQConnection
 from app.models.connection import MCPClient, OAuthConnection
 from app.models.conversation import AIProviderKey, ChatMessage, Conversation
 from app.models.credential_connection import (
+    AdjustConnection,
     AdobeConnection,
     AmplitudeConnection,
+    AppsFlyerConnection,
+    BranchConnection,
     RedshiftConnection,
     SnowflakeConnection,
 )
@@ -62,14 +65,17 @@ __all__ = [
     "AIProviderKey",
     "AccessRequest",
     "ActivityEvent",
+    "AdjustConnection",
     "AdobeConnection",
     "AmplitudeConnection",
     "AppSetting",
+    "AppsFlyerConnection",
     "AuditFinding",
     "AuditRun",
     "Automation",
     "AutomationInstallation",
     "BQConnection",
+    "BranchConnection",
     "BusinessContext",
     "ChatMessage",
     "Conversation",

@@ -167,13 +167,16 @@ async def lifespan(app: FastAPI):
     )
 
     from app.auth.google_token_manager import GoogleTokenManager
+    from app.connectors.adjust import AdjustConnector
     from app.connectors.adobe_analytics import AdobeAnalyticsConnector
     from app.connectors.adobe_launch import AdobeLaunchConnector
     from app.connectors.adobe_marketo import AdobeMarketoConnector
     from app.connectors.amplitude import AmplitudeConnector
     from app.connectors.apple_ads import AppleAdsConnector
+    from app.connectors.appsflyer import AppsFlyerConnector
     from app.connectors.bigquery import BigQueryConnector
     from app.connectors.bing_webmaster import BingWebmasterConnector
+    from app.connectors.branch import BranchConnector
     from app.connectors.ga4 import GA4Connector
     from app.connectors.google_ads import GoogleAdsConnector
     from app.connectors.gtm import GTMConnector
@@ -210,6 +213,9 @@ async def lifespan(app: FastAPI):
     app_state.adobe_analytics_connector = AdobeAnalyticsConnector()
     app_state.adobe_launch_connector = AdobeLaunchConnector()
     app_state.adobe_marketo_connector = AdobeMarketoConnector()
+    app_state.branch_connector = BranchConnector()
+    app_state.appsflyer_connector = AppsFlyerConnector()
+    app_state.adjust_connector = AdjustConnector()
 
     await _init_sentry_from_runtime_settings()
     app_state.redshift_connector = RedshiftConnector()

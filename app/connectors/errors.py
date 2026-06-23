@@ -16,8 +16,8 @@ The decorator catches exceptions, logs the raw error, and re-raises
 a ConnectorError with a clean, user-facing message.
 """
 
-import asyncio
 import functools
+import inspect
 import logging
 
 logger = logging.getLogger(__name__)
@@ -265,7 +265,7 @@ def friendly_errors(platform: str):
                 )
                 raise _classify_error(exc, platform) from exc
 
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
             return async_wrapper
         return sync_wrapper
 

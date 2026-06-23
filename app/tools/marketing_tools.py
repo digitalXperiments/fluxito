@@ -15,7 +15,9 @@ from typing import Literal
 import app.app_state as state
 from app.cache import cached_tool_response
 from app.tools.shared_helpers import (
+    decrypt_field,
     get_current_user,
+    get_encrypted_credential_conn,
     get_google_conn_id,
     get_provider_oauth1_tokens,
     get_provider_token,
@@ -67,6 +69,74 @@ def _no_marketo() -> dict:
     }
 
 
+def _no_branch() -> dict:
+    from app.auth.mcp_session_manager import no_branch_response
+    from app.config import settings
+
+    return no_branch_response(settings.APP_BASE_URL)
+
+
+def _no_appsflyer() -> dict:
+    from app.auth.mcp_session_manager import no_appsflyer_response
+    from app.config import settings
+
+    return no_appsflyer_response(settings.APP_BASE_URL)
+
+
+def _no_adjust() -> dict:
+    from app.auth.mcp_session_manager import no_adjust_response
+    from app.config import settings
+
+    return no_adjust_response(settings.APP_BASE_URL)
+
+
+async def _get_branch_conn(user_id: str):
+    """Fetch the active Branch connection and decrypt credentials.
+
+    Returns (conn_id, api_key, secret_key) or (None, None, None).
+    """
+    from app.models.credential_connection import BranchConnection
+
+    conn = await get_encrypted_credential_conn(BranchConnection, user_id)
+    if not conn:
+        return None, None, None
+    api_key = decrypt_field(conn.api_key_encrypted)
+    secret_key = decrypt_field(conn.secret_key_encrypted)
+    return str(conn.id), api_key, secret_key
+
+
+async def _get_appsflyer_conn(user_id: str):
+    """Fetch the active AppsFlyer connection and decrypt credentials.
+
+    Returns (conn_id, api_key, secret_key) or (None, None, None).
+    secret_key may be empty for AppsFlyer.
+    """
+    from app.models.credential_connection import AppsFlyerConnection
+
+    conn = await get_encrypted_credential_conn(AppsFlyerConnection, user_id)
+    if not conn:
+        return None, None, None
+    api_key = decrypt_field(conn.api_key_encrypted)
+    secret_key = decrypt_field(conn.secret_key_encrypted) if conn.secret_key_encrypted else ""
+    return str(conn.id), api_key, secret_key or ""
+
+
+async def _get_adjust_conn(user_id: str):
+    """Fetch the active Adjust connection and decrypt credentials.
+
+    Returns (conn_id, api_key, secret_key) or (None, None, None).
+    secret_key may be empty for Adjust.
+    """
+    from app.models.credential_connection import AdjustConnection
+
+    conn = await get_encrypted_credential_conn(AdjustConnection, user_id)
+    if not conn:
+        return None, None, None
+    api_key = decrypt_field(conn.api_key_encrypted)
+    secret_key = decrypt_field(conn.secret_key_encrypted) if conn.secret_key_encrypted else ""
+    return str(conn.id), api_key, secret_key or ""
+
+
 def _unauthorized_response(platform: str):
     from app.auth.mcp_session_manager import no_ads_response
     from app.config import settings
@@ -86,7 +156,19 @@ def register_marketing_tools(mcp_server):
     @mcp_server.tool("marketing_read")
     async def marketing_read(
         platform: Literal[
-            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "apple", "marketo"
+            "google",
+            "meta",
+            "tiktok",
+            "snap",
+            "linkedin",
+            "pinterest",
+            "x",
+            "reddit",
+            "apple",
+            "marketo",
+            "branch",
+            "appsflyer",
+            "adjust",
         ]
         | None = None,
         action: str = "",
@@ -98,10 +180,17 @@ def register_marketing_tools(mcp_server):
         limit: int = 50,
         resource_id: str | None = None,
         filters: dict | None = None,
+        app_id: str | None = None,
+        export_id: str | None = None,
+        export_type: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        source_id: str | None = None,
+        payload: dict | None = None,
     ) -> dict:
         """Reads ad platform data. Use marketing_audit for health checks, marketing_write for changes.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo. Dates: YYYY-MM-DD.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo | branch | appsflyer | adjust. Dates: YYYY-MM-DD.
 
         All platforms: list_accounts, get_campaign_performance(account_id+dates)
         Google only: get_ad_group_performance(+dates,campaign_id?), get_conversion_actions(account_id), get_keyword_performance(+dates,campaign_id?)
@@ -109,12 +198,15 @@ def register_marketing_tools(mcp_server):
         TikTok: get_adgroup_performance(+dates,campaign_id?)
         Snap: get_adsquad_performance(+dates,campaign_id?)
         Marketo actions: get_leads, get_lead_by_id, list_lead_lists, get_list_leads, get_lead_activities, list_campaigns, list_programs, get_program, list_emails, list_landing_pages, list_forms
+        Branch: get_app
+        AppsFlyer: list_apps, get_installs_report(app_id, dates), get_in_app_events_report(app_id, dates), get_partners_report(app_id, dates)
+        Adjust: list_apps, get_report(dimensions, metrics, date_period, ...), get_pivot_report(dimensions, metrics, date_period, index, ...), list_events, list_app_automation_apps, get_partner_links(app_token)
         """
         if not platform:
             return {
                 "error": True,
                 "error_type": "missing_required_param",
-                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', 'linkedin', 'pinterest', 'x', 'reddit', 'apple', or 'marketo' in params.",
+                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', 'linkedin', 'pinterest', 'x', 'reddit', 'apple', 'marketo', 'branch', 'appsflyer', or 'adjust' in params.",
             }
         user = _get_user()
 
@@ -147,6 +239,23 @@ def register_marketing_tools(mcp_server):
                 "list_emails",
                 "list_landing_pages",
                 "list_forms",
+            },
+            "branch": {
+                "get_app",
+            },
+            "appsflyer": {
+                "list_apps",
+                "get_installs_report",
+                "get_in_app_events_report",
+                "get_partners_report",
+            },
+            "adjust": {
+                "list_apps",
+                "get_report",
+                "get_pivot_report",
+                "list_events",
+                "list_app_automation_apps",
+                "get_partner_links",
             },
         }
         valid_actions = _VALID_MARKETING_READ_ACTIONS.get(platform, set())
@@ -623,6 +732,157 @@ def register_marketing_tools(mcp_server):
             if action == "list_forms":
                 return await mk.list_forms(*creds, limit=limit)
 
+        elif platform == "branch":
+            if not user or not getattr(user, "has_branch", False):
+                return _no_branch()
+            conn_id, api_key, secret_key = await _get_branch_conn(user.user_id)
+            if not api_key:
+                return _no_branch()
+            br = state.branch_connector
+
+            if action == "get_app":
+                return await cached_tool_response(
+                    f"cache:branch:app:{conn_id}",
+                    300,
+                    br.get_app,
+                    api_key,
+                    secret_key,
+                )
+            # request_daily_export is a write action (see marketing_write)
+
+            return {"error": True, "message": f"Unknown action '{action}' for Branch marketing_read"}
+
+        elif platform == "appsflyer":
+            if not user or not getattr(user, "has_appsflyer", False):
+                return _no_appsflyer()
+            conn_id, api_key, secret_key = await _get_appsflyer_conn(user.user_id)
+            if not api_key:
+                return _no_appsflyer()
+            af = state.appsflyer_connector
+
+            if action == "list_apps":
+                return await cached_tool_response(
+                    f"cache:appsflyer:apps:{conn_id}",
+                    300,
+                    af.list_apps,
+                    api_key,
+                )
+            if not app_id:
+                return {"error": True, "message": "app_id is required for this AppsFlyer action"}
+            elif action == "get_installs_report":
+                if not start_date or not end_date:
+                    return {"error": True, "message": "start_date and end_date are required"}
+                return await cached_tool_response(
+                    f"cache:appsflyer:installs:{conn_id}:{app_id}:{start_date}:{end_date}",
+                    300,
+                    af.get_installs_report,
+                    api_key,
+                    app_id,
+                    start_date,
+                    end_date,
+                )
+            elif action == "get_in_app_events_report":
+                if not start_date or not end_date:
+                    return {"error": True, "message": "start_date and end_date are required"}
+                return await cached_tool_response(
+                    f"cache:appsflyer:events:{conn_id}:{app_id}:{start_date}:{end_date}",
+                    300,
+                    af.get_in_app_events_report,
+                    api_key,
+                    app_id,
+                    start_date,
+                    end_date,
+                )
+            elif action == "get_partners_report":
+                if not start_date or not end_date:
+                    return {"error": True, "message": "start_date and end_date are required"}
+                return await cached_tool_response(
+                    f"cache:appsflyer:partners:{conn_id}:{app_id}:{start_date}:{end_date}",
+                    300,
+                    af.get_partners_report,
+                    api_key,
+                    app_id,
+                    start_date,
+                    end_date,
+                )
+
+            return {"error": True, "message": f"Unknown action '{action}' for AppsFlyer marketing_read"}
+
+        elif platform == "adjust":
+            if not user or not getattr(user, "has_adjust", False):
+                return _no_adjust()
+            conn_id, api_key, secret_key = await _get_adjust_conn(user.user_id)
+            if not api_key:
+                return _no_adjust()
+            adj = state.adjust_connector
+
+            if action == "list_apps":
+                return await cached_tool_response(
+                    f"cache:adjust:apps:{conn_id}",
+                    300,
+                    adj.list_apps,
+                    api_key,
+                )
+            elif action == "get_report":
+                if not date_range_start or not date_range_end:
+                    return {
+                        "error": True,
+                        "message": "date_range_start and date_range_end are required for get_report",
+                    }
+                # dimensions/metrics/date_period are passed as top-level args (not inside payload)
+                # filters may contain app_token etc.
+                f = filters or {}
+                dims = f.get("dimensions") or "app,tracker"
+                mets = f.get("metrics") or "installs,clicks"
+                period = f.get("date_period") or f"{date_range_start}:{date_range_end}"
+                # remove internal keys so only real filter params remain
+                extra = {k: v for k, v in f.items() if k not in ("dimensions", "metrics", "date_period")}
+                return await adj.get_report(api_key, dims, mets, period, **extra)
+            elif action == "get_pivot_report":
+                if not date_range_start or not date_range_end:
+                    return {
+                        "error": True,
+                        "message": "date_range_start and date_range_end are required for get_pivot_report",
+                    }
+                f = filters or {}
+                dims = f.get("dimensions") or "app,tracker"
+                mets = f.get("metrics") or "installs,clicks"
+                period = f.get("date_period") or f"{date_range_start}:{date_range_end}"
+                idx = f.get("index") or "tracker"
+                extra = {
+                    k: v for k, v in f.items() if k not in ("dimensions", "metrics", "date_period", "index")
+                }
+                return await adj.get_pivot_report(api_key, dims, mets, period, idx, **extra)
+            elif action == "list_events":
+                return await cached_tool_response(
+                    f"cache:adjust:events:{conn_id}",
+                    300,
+                    adj.list_events,
+                    api_key,
+                )
+            elif action == "list_app_automation_apps":
+                return await cached_tool_response(
+                    f"cache:adjust:automation_apps:{conn_id}",
+                    300,
+                    adj.list_app_automation_apps,
+                    api_key,
+                )
+            elif action == "get_partner_links":
+                if not resource_id:
+                    return {
+                        "error": True,
+                        "message": "resource_id (app_token) is required for get_partner_links",
+                    }
+                return await cached_tool_response(
+                    f"cache:adjust:partner_links:{conn_id}:{resource_id}",
+                    300,
+                    adj.get_partner_links,
+                    api_key,
+                    resource_id,
+                )
+
+            return {"error": True, "message": f"Unknown action '{action}' for Adjust marketing_read"}
+
         return {"error": True, "message": f"Unknown platform: {platform}"}
 
     @mcp_server.tool("marketing_audit")
@@ -639,7 +899,7 @@ def register_marketing_tools(mcp_server):
     ) -> dict:
         """Audits marketing health: tracking, budgets, quality scores.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple. All: audit_tracking_setup(account_id).
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo | branch | appsflyer | adjust. All: audit_tracking_setup(account_id or app_id/source_id).
         Google only: audit_budget_utilization(account_id+dates), audit_quality_scores(account_id,campaign_id?)
         """
         if not platform:
@@ -649,7 +909,7 @@ def register_marketing_tools(mcp_server):
                 "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', etc. in params.",
             }
         user = _get_user()
-        if platform != "marketo" and not account_id:
+        if platform not in ("marketo", "branch", "appsflyer", "adjust") and not account_id:
             return {
                 "error": True,
                 "error_type": "bad_request",
@@ -796,6 +1056,33 @@ def register_marketing_tools(mcp_server):
                 return await mk.check_data_quality(*creds)
             return {"error": True, "message": f"Unknown marketo audit action: {action}"}
 
+        elif platform == "branch":
+            if not user or not getattr(user, "has_branch", False):
+                return _no_branch()
+            # Branch does not expose audit_tracking_setup in the real API
+            return {
+                "error": True,
+                "message": "Unknown action for Branch marketing_audit. No audit actions are supported.",
+            }
+
+        elif platform == "appsflyer":
+            if not user or not getattr(user, "has_appsflyer", False):
+                return _no_appsflyer()
+            # AppsFlyer does not expose audit_tracking_setup in the real API
+            return {
+                "error": True,
+                "message": "Unknown action for AppsFlyer marketing_audit. No audit actions are supported.",
+            }
+
+        elif platform == "adjust":
+            if not user or not getattr(user, "has_adjust", False):
+                return _no_adjust()
+            # Adjust does not expose audit_tracking_setup in the real API
+            return {
+                "error": True,
+                "message": "Unknown action for Adjust marketing_audit. No audit actions are supported.",
+            }
+
         return {"error": True, "message": f"Unknown platform: {platform}"}
 
     @mcp_server.tool("marketing_write")
@@ -816,14 +1103,16 @@ def register_marketing_tools(mcp_server):
         bidding_strategy_type: str | None = None,
         resource_id: str | None = None,
         payload: dict | None = None,
+        export_date: str | None = None,
     ) -> dict:
         """Write operations for ad platforms. Google requires 'full' tier.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo | branch | appsflyer | adjust.
         create_campaign: campaign_name, advertising_channel_type(SEARCH|DISPLAY|SHOPPING|VIDEO|PERFORMANCE_MAX), daily_budget_usd, start_date
         update_campaign_status: campaign_id, status(ENABLED|PAUSED)
         update_campaign_budget: campaign_id, daily_budget_usd
         Marketo actions: create_or_update_leads, add_leads_to_list, remove_leads_from_list, request_campaign, schedule_campaign
+        Branch: request_daily_export(export_date) — requests a daily data export
         """
         if not platform:
             return {
@@ -832,7 +1121,7 @@ def register_marketing_tools(mcp_server):
                 "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', etc. in params.",
             }
         user = _get_user()
-        if platform != "marketo" and not account_id:
+        if platform not in ("marketo", "branch", "appsflyer", "adjust") and not account_id:
             return {
                 "error": True,
                 "error_type": "bad_request",
@@ -1161,5 +1450,36 @@ def register_marketing_tools(mcp_server):
                     *creds, campaign_id=resource_id, run_at=p.get("run_at"), tokens=p.get("tokens")
                 )
             return {"error": True, "message": f"Unknown marketo write action: {action}"}
+
+        elif platform == "branch":
+            if not user or not getattr(user, "has_branch", False):
+                return _no_branch()
+            conn_id, api_key, secret_key = await _get_branch_conn(user.user_id)
+            if not api_key:
+                return _no_branch()
+            br = state.branch_connector
+            if action == "request_daily_export":
+                if not export_date:
+                    return {
+                        "error": True,
+                        "message": "export_date (YYYY-MM-DD) is required for Branch request_daily_export",
+                    }
+                return await br.request_daily_export(api_key, secret_key, export_date)
+            return {
+                "error": True,
+                "message": "Branch write ops not supported (only request_daily_export via marketing_write is allowed)",
+            }
+
+        elif platform == "appsflyer":
+            if not user or not getattr(user, "has_appsflyer", False):
+                return _no_appsflyer()
+            # AppsFlyer has no real write ops exposed here
+            return {"error": True, "message": "AppsFlyer write ops not supported"}
+
+        elif platform == "adjust":
+            if not user or not getattr(user, "has_adjust", False):
+                return _no_adjust()
+            # Adjust has no write ops
+            return {"error": True, "message": "Adjust write ops not supported"}
 
         return {"error": True, "message": f"Unknown platform: {platform}"}

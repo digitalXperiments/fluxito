@@ -695,6 +695,81 @@ CATALOG: tuple[Connector, ...] = (
         ),
         confidence=HIGH,
     ),
+    # ── Branch ────────────────────────────────────────────────────────────
+    Connector(
+        key="branch",
+        name="Branch",
+        category=CAT_ADVERTISING,
+        docs_url="https://help.branch.io/using-branch/docs/branch-dashboard-api",
+        flags=("has_branch",),
+        headline="~50 req/min · 1 concurrent export per app",
+        usage="≈1 call per card",
+        limits=(
+            Limit("Dashboard REST", "~50 req/min", "per minute", "per account"),
+            Limit("Exports concurrency", "1 concurrent", "concurrent", "per app"),
+            Limit("Webhook delivery", "100/s", "per second", "per account"),
+        ),
+        error_behavior=(
+            "Rate limit returns 429. Export requests beyond 1 concurrent queue or reject. "
+            "Use backoff on 429."
+        ),
+        headers="—",
+        calls_per_card="1",
+        consumption_note=(
+            "Each Branch card makes one Dashboard REST call. Exports are queued 1-at-a-time per app; "
+            "heavy card usage hits the 50/min limit before export concurrency."
+        ),
+        confidence=HIGH,
+    ),
+    # ── AppsFlyer ─────────────────────────────────────────────────────────
+    Connector(
+        key="appsflyer",
+        name="AppsFlyer",
+        category=CAT_ADVERTISING,
+        docs_url="https://dev.appsflyer.com/hc/en-us/articles/207034356",
+        flags=("has_appsflyer",),
+        headline="100 req/min (master) · 60 reports/day (pull)",
+        usage="≈1 call per card",
+        limits=(
+            Limit("Master API", "100 req/min", "per minute", "per account"),
+            Limit("Pull API reports", "60 reports/day", "per day", "per account"),
+            Limit("Raw data reports", "1 active report", "concurrent", "per app"),
+        ),
+        error_behavior=(
+            "Master API 429 on rate; Pull API returns quota headers. Raw reports queue when "
+            "1-per-app is busy."
+        ),
+        headers="X-RateLimit-Remaining, X-RateLimit-Reset",
+        calls_per_card="1",
+        consumption_note=(
+            "Each AppsFlyer card is one Master API call. Pull API reports are expensive (60/day); "
+            "avoid per-card raw pulls."
+        ),
+        confidence=HIGH,
+    ),
+    # ── Adjust ────────────────────────────────────────────────────────────
+    Connector(
+        key="adjust",
+        name="Adjust",
+        category=CAT_ADVERTISING,
+        docs_url="https://help.adjust.com/en/article/reports-service-api",
+        flags=("has_adjust",),
+        headline="~170 req/min · 1 concurrent pivot",
+        usage="≈1 call per card",
+        limits=(
+            Limit("Report Service", "~170 req/min", "per minute", "per token"),
+            Limit("Pivot reports", "1 concurrent", "concurrent", "per token"),
+            Limit("CSV export size", "100K rows", "per request", "per request"),
+        ),
+        error_behavior=("429 on rate limit. Pivot concurrency returns 409/429; queue or reduce concurrency."),
+        headers="—",
+        calls_per_card="1",
+        consumption_note=(
+            "Each Adjust card is one Report Service call. Pivot cards consume the single concurrent "
+            "slot; CSV exports are large but infrequent."
+        ),
+        confidence=HIGH,
+    ),
     # ── Amazon Redshift ───────────────────────────────────────────────────
     Connector(
         key="redshift",
