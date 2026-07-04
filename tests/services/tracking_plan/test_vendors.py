@@ -38,12 +38,13 @@ def test_slugs_are_unique():
     assert len(slugs) == len(set(slugs)), f"Duplicate slugs found: {sorted(slugs)}"
 
 
-def test_moengage_present_as_curated():
-    """MoEngage is in the curated tail."""
+def test_moengage_present_as_connector():
+    """MoEngage is present in the vendor catalog with source='connector'."""
     catalog = get_vendor_catalog()
     slugs_by_name = {e["slug"]: e for e in catalog["destinations"]}
     assert "moengage" in slugs_by_name, "moengage not found in vendor catalog"
-    assert slugs_by_name["moengage"]["source"] == "curated"
+    # MoEngage is now a first-class connector registered in rate_limits.CATALOG
+    assert slugs_by_name["moengage"]["source"] == "connector"
 
 
 def test_ga4_present():

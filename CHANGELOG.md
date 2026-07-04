@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.6] — 2026-07-05
+
+### Added
+- **Braze connector.** Full REST API integration for customer engagement:
+  campaigns, Canvases, and segments (list + details), user data operations
+  (track attributes/events/purchases, alias, identify, merge, delete), and
+  messaging (immediate sends, API-triggered campaign/Canvas sends, send-ID
+  creation for tracking). Auth is a static Bearer API key against a
+  cluster-specific REST endpoint (e.g. `https://rest.iad-01.braze.com`).
+  Read actions are cached for 5 minutes to stay well within Braze's
+  250,000 requests/hour quota.
+- **MoEngage connector.** REST API integration for user profiles (create,
+  update, fetch), device tracking, campaign search/details, and
+  transactional messaging (push, email, SMS via the Inform API). Handles
+  MoEngage's two distinct auth schemes — HTTP Basic for Data/Inform APIs,
+  and a body-embedded SHA-256 signature for the Push transactional API —
+  and its per-data-center base URLs. Read actions are cached for 5 minutes.
+- **Connect pages, tutorials, and rate-limit catalog entries** for both
+  platforms, following the existing credential-connector pattern (API key
+  encrypted at rest, connection scoped per project).
+
+### Fixed
+- **Type-safety cleanup in the MoEngage connector's core request handler**
+  to match the existing convention used by sibling connectors.
+
 ## [1.2.4] — 2026-06-23
 
 ### Fixed

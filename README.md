@@ -8,7 +8,7 @@
 [![MCP](https://img.shields.io/badge/MCP-compatible-6f42c1.svg)](https://modelcontextprotocol.io)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](Dockerfile)
 [![Deploy: self-hosted](https://img.shields.io/badge/deploy-self--hosted-0f766e.svg)](docker-compose.yml)
-[![Platforms: 25](https://img.shields.io/badge/platforms-25-orange.svg)](#connecting-your-platforms)
+[![Platforms: 27](https://img.shields.io/badge/platforms-27-orange.svg)](#connecting-your-platforms)
 [![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC.svg)](pyproject.toml)
 [![Code style: Ruff](https://img.shields.io/badge/code_style-Ruff-D7FF64.svg)](pyproject.toml)
 [![Release](https://img.shields.io/github/v/release/digitalXperiments/fluxito?label=release&color=2F5BF4)](https://github.com/digitalXperiments/fluxito/releases/latest)
@@ -28,7 +28,7 @@ Each step is slow, error-prone, and out of sync with the others. Tracking plans 
 
 Fluxito collapses all four into a single conversation with your AI. **The AI is the operator; Fluxito gives it the hands.** It speaks the [Model Context Protocol](https://modelcontextprotocol.io) — an open standard — so it works with Claude, GPT, Cursor, Windsurf, or any other MCP-compatible client.
 
-Right now it gives your AI real, authenticated access across **25 platforms**:
+Right now it gives your AI real, authenticated access across **27 platforms**:
 
 | Stage | Platforms |
 |---|---|
@@ -36,7 +36,7 @@ Right now it gives your AI real, authenticated access across **25 platforms**:
 | **Implement** | Google Tag Manager (full create/update/delete of tags, triggers, variables with workspace support). Adobe Launch (read + some write). |
 | **Measure** | Google Analytics 4, Adobe Analytics, Amplitude, Mixpanel, PostHog, Adjust, AppsFlyer, Branch, Search Console, Bing Webmaster Tools |
 | **Acquire** | Google Ads, Meta Ads, TikTok Ads, Snap Ads, LinkedIn Ads, Pinterest Ads, X Ads, Reddit Ads, Apple Search Ads |
-| **Nurture** | Adobe Marketo Engage (read + some write) |
+| **Nurture** | Adobe Marketo Engage, Braze, MoEngage (read + some write) |
 | **Warehouse** | BigQuery, Snowflake, Redshift (query + some transformation) |
 | **Report** | Build native dashboards (JSON cards, filterable, signed public links), scheduled email/Slack reports, automations |
 
@@ -290,6 +290,8 @@ Each tutorial is a clear, marketer-friendly walkthrough for registering the OAut
 | Adjust | [adjust.md](docs/tutorials/adjust.md) |
 | AppsFlyer | [appsflyer.md](docs/tutorials/appsflyer.md) |
 | Branch | [branch.md](docs/tutorials/branch.md) |
+| Braze | [braze.md](docs/tutorials/braze.md) |
+| MoEngage | [moengage.md](docs/tutorials/moengage.md) |
 
 All credentials are stored in the database and encrypted at rest. After the first admin exists, everything is configured in the web UI under **Settings → Integrations**. No `.env` files for platform credentials.
 

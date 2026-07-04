@@ -38,8 +38,10 @@ from app.models.credential_connection import (
     AmplitudeConnection,
     AppsFlyerConnection,
     BranchConnection,
+    BrazeConnection,
     MarketoConnection,
     MixpanelConnection,
+    MoengageConnection,
     PostHogConnection,
     RedshiftConnection,
     SnowflakeConnection,
@@ -174,6 +176,8 @@ class UserContext:
     has_adjust: bool = False
     has_mixpanel: bool = False
     has_posthog: bool = False
+    has_braze: bool = False
+    has_moengage: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
     has_adobe_marketo: bool = False
@@ -237,6 +241,8 @@ class ProjectContext:
     has_adjust: bool = False
     has_mixpanel: bool = False
     has_posthog: bool = False
+    has_braze: bool = False
+    has_moengage: bool = False
     has_adobe_analytics: bool = False
     has_adobe_launch: bool = False
     has_adobe_marketo: bool = False
@@ -595,6 +601,10 @@ async def _load_connections_and_resources(
     bool,
     bool,
     bool,
+    bool,
+    bool,
+    bool,
+    bool,
     list,
     list,
     list,
@@ -608,6 +618,7 @@ async def _load_connections_and_resources(
         all_connections_orm, google_connections,
         has_bq, has_amplitude, has_branch, has_appsflyer, has_adjust,
         has_mixpanel, has_posthog,
+        has_braze, has_moengage,
         has_adobe_analytics, has_adobe_launch,
         has_adobe_marketo, has_redshift, has_snowflake, has_meta, has_tiktok, has_snap,
         has_linkedin, has_pinterest, has_x, has_reddit, has_bing, has_apple,
@@ -729,6 +740,20 @@ async def _load_connections_and_resources(
     )
     has_posthog = result.scalar_one_or_none() is not None
 
+    result = await db.execute(
+        select(BrazeConnection)
+        .where(_cred_scope(BrazeConnection), BrazeConnection.is_active == True)
+        .limit(1)
+    )
+    has_braze = result.scalar_one_or_none() is not None
+
+    result = await db.execute(
+        select(MoengageConnection)
+        .where(_cred_scope(MoengageConnection), MoengageConnection.is_active == True)
+        .limit(1)
+    )
+    has_moengage = result.scalar_one_or_none() is not None
+
     # Filter to Google connections for scope-checking and resource loading
     google_connections = [c for c in all_connections_orm if (c.provider or "google") == "google"]
 
@@ -823,6 +848,8 @@ async def _load_connections_and_resources(
         has_adjust,
         has_mixpanel,
         has_posthog,
+        has_braze,
+        has_moengage,
         has_adobe_analytics,
         has_adobe_launch,
         has_adobe_marketo,
@@ -933,6 +960,8 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             has_adjust,
             has_mixpanel,
             has_posthog,
+            has_braze,
+            has_moengage,
             has_adobe_analytics,
             has_adobe_launch,
             has_adobe_marketo,
@@ -995,6 +1024,8 @@ async def build_user_context(user_id: str, request: Request = None) -> UserConte
             has_adjust=has_adjust,
             has_mixpanel=has_mixpanel,
             has_posthog=has_posthog,
+            has_braze=has_braze,
+            has_moengage=has_moengage,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
             has_adobe_marketo=has_adobe_marketo,
@@ -1061,6 +1092,8 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             has_adjust,
             has_mixpanel,
             has_posthog,
+            has_braze,
+            has_moengage,
             has_adobe_analytics,
             has_adobe_launch,
             has_adobe_marketo,
@@ -1120,6 +1153,8 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             has_adjust = has_adjust and eff.allows_provider("adjust")
             has_mixpanel = has_mixpanel and eff.allows_provider("mixpanel")
             has_posthog = has_posthog and eff.allows_provider("posthog")
+            has_braze = has_braze and eff.allows_provider("braze")
+            has_moengage = has_moengage and eff.allows_provider("moengage")
             has_adobe_analytics = has_adobe_analytics and eff.allows_provider("adobe_analytics")
             has_adobe_launch = has_adobe_launch and eff.allows_provider("adobe_launch")
             has_adobe_marketo = has_adobe_marketo and eff.allows_provider("adobe_marketo")
@@ -1173,6 +1208,8 @@ async def build_project_context(project_id: str, user_id: str) -> ProjectContext
             has_adjust=has_adjust,
             has_mixpanel=has_mixpanel,
             has_posthog=has_posthog,
+            has_braze=has_braze,
+            has_moengage=has_moengage,
             has_adobe_analytics=has_adobe_analytics,
             has_adobe_launch=has_adobe_launch,
             has_adobe_marketo=has_adobe_marketo,
@@ -1307,6 +1344,8 @@ _PROJECT_FLAG_ATTRS = (
     "has_adjust",
     "has_mixpanel",
     "has_posthog",
+    "has_braze",
+    "has_moengage",
     "has_adobe_analytics",
     "has_adobe_launch",
     "has_adobe_marketo",
@@ -1500,6 +1539,14 @@ def no_mixpanel_response(base_url: str) -> dict:
 
 def no_posthog_response(base_url: str) -> dict:
     return _no_connection(base_url, "No PostHog connection found.", "/connect/posthog")
+
+
+def no_braze_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No Braze connection found.", "/connect/braze")
+
+
+def no_moengage_response(base_url: str) -> dict:
+    return _no_connection(base_url, "No MoEngage connection found.", "/connect/moengage")
 
 
 def no_adobe_analytics_response(base_url: str) -> dict:

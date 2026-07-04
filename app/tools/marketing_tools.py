@@ -16,9 +16,11 @@ import app.app_state as state
 from app.cache import cached_tool_response
 from app.tools.shared_helpers import (
     decrypt_field,
+    get_braze_creds,
     get_current_user,
     get_encrypted_credential_conn,
     get_google_conn_id,
+    get_moengage_creds,
     get_provider_oauth1_tokens,
     get_provider_token,
 )
@@ -88,6 +90,24 @@ def _no_adjust() -> dict:
     from app.config import settings
 
     return no_adjust_response(settings.APP_BASE_URL)
+
+
+_BRAZE_CACHE_TTL = 300
+_MOENGAGE_CACHE_TTL = 300
+
+
+def _no_braze() -> dict:
+    from app.auth.mcp_session_manager import no_braze_response
+    from app.config import settings
+
+    return no_braze_response(settings.APP_BASE_URL)
+
+
+def _no_moengage() -> dict:
+    from app.auth.mcp_session_manager import no_moengage_response
+    from app.config import settings
+
+    return no_moengage_response(settings.APP_BASE_URL)
 
 
 async def _get_branch_conn(user_id: str):
@@ -169,6 +189,8 @@ def register_marketing_tools(mcp_server):
             "branch",
             "appsflyer",
             "adjust",
+            "braze",
+            "moengage",
         ]
         | None = None,
         action: str = "",
@@ -184,7 +206,7 @@ def register_marketing_tools(mcp_server):
     ) -> dict:
         """Reads ad platform data. Use marketing_audit for health checks, marketing_write for changes.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo | branch | appsflyer | adjust. Dates (YYYY-MM-DD) via date_range_start / date_range_end.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo | branch | appsflyer | adjust | braze | moengage. Dates (YYYY-MM-DD) via date_range_start / date_range_end.
 
         All platforms: list_accounts, get_campaign_performance(account_id+dates)
         Google only: get_ad_group_performance(+dates,campaign_id?), get_conversion_actions(account_id), get_keyword_performance(+dates,campaign_id?)
@@ -195,12 +217,14 @@ def register_marketing_tools(mcp_server):
         Branch: get_app
         AppsFlyer: list_apps, get_installs_report(app_id, date_range_start, date_range_end), get_in_app_events_report(app_id, date_range_start, date_range_end), get_partners_report(app_id, date_range_start, date_range_end)
         Adjust: list_apps, get_report(dimensions, metrics, date_period, ...), get_pivot_report(dimensions, metrics, date_period, index, ...), list_events, list_app_automation_apps, get_partner_links(app_token)
+        Braze: list_campaigns(pass filters), get_campaign_details(campaign_id), list_canvases, get_canvas_details(canvas_id), list_segments, get_segment_details(segment_id)
+        MoEngage: get_user_info(customer_id), list_campaigns(channel, limit), get_campaign_details(campaign_id, campaign_name)
         """
         if not platform:
             return {
                 "error": True,
                 "error_type": "missing_required_param",
-                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', 'linkedin', 'pinterest', 'x', 'reddit', 'apple', 'marketo', 'branch', 'appsflyer', or 'adjust' in params.",
+                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', 'linkedin', 'pinterest', 'x', 'reddit', 'apple', 'marketo', 'branch', 'appsflyer', 'adjust', 'braze', or 'moengage' in params.",
             }
         user = _get_user()
 
@@ -250,6 +274,19 @@ def register_marketing_tools(mcp_server):
                 "list_events",
                 "list_app_automation_apps",
                 "get_partner_links",
+            },
+            "braze": {
+                "list_campaigns",
+                "get_campaign_details",
+                "list_canvases",
+                "get_canvas_details",
+                "list_segments",
+                "get_segment_details",
+            },
+            "moengage": {
+                "get_user_info",
+                "list_campaigns",
+                "get_campaign_details",
             },
         }
         valid_actions = _VALID_MARKETING_READ_ACTIONS.get(platform, set())
@@ -877,12 +914,176 @@ def register_marketing_tools(mcp_server):
 
             return {"error": True, "message": f"Unknown action '{action}' for Adjust marketing_read"}
 
+        elif platform == "braze":
+            if not user or not getattr(user, "has_braze", False):
+                return _no_braze()
+            creds = await get_braze_creds(user.user_id)
+            if not creds:
+                return _no_braze()
+            brz = state.braze_connector
+            rest_url = creds["rest_endpoint_url"]
+            api_key_braze = creds["api_key"]
+            p = filters or {}
+
+            if action == "list_campaigns":
+                page = p.get("page", 0)
+                include_archived = p.get("include_archived", False)
+                sort_direction = p.get("sort_direction")
+                modified_after = p.get("modified_after")
+                return await cached_tool_response(
+                    f"cache:braze:campaigns:{creds['connection_id']}:{page}:{include_archived}:{sort_direction}:{modified_after}",
+                    _BRAZE_CACHE_TTL,
+                    brz.list_campaigns,
+                    rest_url,
+                    api_key_braze,
+                    page=page,
+                    include_archived=include_archived,
+                    sort_direction=sort_direction,
+                    modified_after=modified_after,
+                )
+            elif action == "get_campaign_details":
+                cid = campaign_id or p.get("campaign_id")
+                if not cid:
+                    return {"error": True, "message": "campaign_id is required for get_campaign_details"}
+                return await cached_tool_response(
+                    f"cache:braze:campaign_details:{creds['connection_id']}:{cid}",
+                    _BRAZE_CACHE_TTL,
+                    brz.get_campaign_details,
+                    rest_url,
+                    api_key_braze,
+                    cid,
+                )
+            elif action == "list_canvases":
+                page = p.get("page", 0)
+                include_archived = p.get("include_archived", False)
+                sort_direction = p.get("sort_direction")
+                modified_after = p.get("modified_after")
+                return await cached_tool_response(
+                    f"cache:braze:canvases:{creds['connection_id']}:{page}:{include_archived}:{sort_direction}:{modified_after}",
+                    _BRAZE_CACHE_TTL,
+                    brz.list_canvases,
+                    rest_url,
+                    api_key_braze,
+                    page=page,
+                    include_archived=include_archived,
+                    sort_direction=sort_direction,
+                    modified_after=modified_after,
+                )
+            elif action == "get_canvas_details":
+                cid = p.get("canvas_id") or resource_id
+                if not cid:
+                    return {"error": True, "message": "canvas_id is required for get_canvas_details"}
+                return await cached_tool_response(
+                    f"cache:braze:canvas_details:{creds['connection_id']}:{cid}",
+                    _BRAZE_CACHE_TTL,
+                    brz.get_canvas_details,
+                    rest_url,
+                    api_key_braze,
+                    cid,
+                )
+            elif action == "list_segments":
+                page = p.get("page", 0)
+                sort_direction = p.get("sort_direction")
+                return await cached_tool_response(
+                    f"cache:braze:segments:{creds['connection_id']}:{page}:{sort_direction}",
+                    _BRAZE_CACHE_TTL,
+                    brz.list_segments,
+                    rest_url,
+                    api_key_braze,
+                    page=page,
+                    sort_direction=sort_direction,
+                )
+            elif action == "get_segment_details":
+                sid = p.get("segment_id") or resource_id
+                if not sid:
+                    return {"error": True, "message": "segment_id is required for get_segment_details"}
+                return await cached_tool_response(
+                    f"cache:braze:segment_details:{creds['connection_id']}:{sid}",
+                    _BRAZE_CACHE_TTL,
+                    brz.get_segment_details,
+                    rest_url,
+                    api_key_braze,
+                    sid,
+                )
+
+            return {"error": True, "message": f"Unknown action '{action}' for Braze marketing_read"}
+
+        elif platform == "moengage":
+            if not user or not getattr(user, "has_moengage", False):
+                return _no_moengage()
+            creds = await get_moengage_creds(user.user_id)
+            if not creds:
+                return _no_moengage()
+            moe = state.moengage_connector
+            dc = creds["data_center"]
+            app_id_moe = creds["app_id"]
+            api_key_moe = creds["api_key"]
+            p = filters or {}
+
+            if action == "get_user_info":
+                customer_id = p.get("customer_id")
+                moengage_id = p.get("moengage_id")
+                user_fields = p.get("user_fields_to_export")
+                return await cached_tool_response(
+                    f"cache:moengage:user_info:{creds['connection_id']}:{customer_id}:{moengage_id}:{user_fields}",
+                    _MOENGAGE_CACHE_TTL,
+                    moe.get_user_info,
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    customer_id=customer_id,
+                    moengage_id=moengage_id,
+                    user_fields_to_export=user_fields,
+                )
+            elif action == "list_campaigns":
+                channel = p.get("channel")
+                lmt = p.get("limit", limit)
+                return await cached_tool_response(
+                    f"cache:moengage:campaigns:{creds['connection_id']}:{channel}:{lmt}",
+                    _MOENGAGE_CACHE_TTL,
+                    moe.list_campaigns,
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    channel=channel,
+                    limit=lmt,
+                )
+            elif action == "get_campaign_details":
+                camp_id = p.get("campaign_id")
+                camp_name = p.get("campaign_name")
+                return await cached_tool_response(
+                    f"cache:moengage:campaign_details:{creds['connection_id']}:{camp_id}:{camp_name}",
+                    _MOENGAGE_CACHE_TTL,
+                    moe.get_campaign_details,
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    campaign_id=camp_id,
+                    campaign_name=camp_name,
+                )
+
+            return {"error": True, "message": f"Unknown action '{action}' for MoEngage marketing_read"}
+
         return {"error": True, "message": f"Unknown platform: {platform}"}
 
     @mcp_server.tool("marketing_audit")
     async def marketing_audit(
         platform: Literal[
-            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "apple", "marketo"
+            "google",
+            "meta",
+            "tiktok",
+            "snap",
+            "linkedin",
+            "pinterest",
+            "x",
+            "reddit",
+            "apple",
+            "marketo",
+            "branch",
+            "appsflyer",
+            "adjust",
+            "braze",
+            "moengage",
         ]
         | None = None,
         action: str = "",
@@ -900,10 +1101,13 @@ def register_marketing_tools(mcp_server):
             return {
                 "error": True,
                 "error_type": "missing_required_param",
-                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', etc. in params.",
+                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', 'linkedin', 'pinterest', 'x', 'reddit', 'apple', 'marketo', 'branch', 'appsflyer', 'adjust', 'braze', or 'moengage' in params.",
             }
         user = _get_user()
-        if platform not in ("marketo", "branch", "appsflyer", "adjust") and not account_id:
+        if (
+            platform not in ("marketo", "branch", "appsflyer", "adjust", "braze", "moengage")
+            and not account_id
+        ):
             return {
                 "error": True,
                 "error_type": "bad_request",
@@ -1077,12 +1281,44 @@ def register_marketing_tools(mcp_server):
                 "message": "Unknown action for Adjust marketing_audit. No audit actions are supported.",
             }
 
+        elif platform == "braze":
+            if not user or not getattr(user, "has_braze", False):
+                return _no_braze()
+            # Braze does not expose audit_tracking_setup in the real API
+            return {
+                "error": True,
+                "message": "Unknown action for Braze marketing_audit. No audit actions are supported.",
+            }
+
+        elif platform == "moengage":
+            if not user or not getattr(user, "has_moengage", False):
+                return _no_moengage()
+            # MoEngage does not expose audit_tracking_setup in the real API
+            return {
+                "error": True,
+                "message": "Unknown action for MoEngage marketing_audit. No audit actions are supported.",
+            }
+
         return {"error": True, "message": f"Unknown platform: {platform}"}
 
     @mcp_server.tool("marketing_write")
     async def marketing_write(
         platform: Literal[
-            "google", "meta", "tiktok", "snap", "linkedin", "pinterest", "x", "reddit", "apple", "marketo"
+            "google",
+            "meta",
+            "tiktok",
+            "snap",
+            "linkedin",
+            "pinterest",
+            "x",
+            "reddit",
+            "apple",
+            "marketo",
+            "branch",
+            "appsflyer",
+            "adjust",
+            "braze",
+            "moengage",
         ]
         | None = None,
         action: str = "",
@@ -1101,21 +1337,26 @@ def register_marketing_tools(mcp_server):
     ) -> dict:
         """Write operations for ad platforms. Google requires 'full' tier.
 
-        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo | branch | appsflyer | adjust.
+        platform: google | meta | tiktok | snap | linkedin | pinterest | x | reddit | apple | marketo | branch | appsflyer | adjust | braze | moengage.
         create_campaign: campaign_name, advertising_channel_type(SEARCH|DISPLAY|SHOPPING|VIDEO|PERFORMANCE_MAX), daily_budget_usd, start_date
         update_campaign_status: campaign_id, status(ENABLED|PAUSED)
         update_campaign_budget: campaign_id, daily_budget_usd
         Marketo actions: create_or_update_leads, add_leads_to_list, remove_leads_from_list, request_campaign, schedule_campaign
         Branch: request_daily_export(export_date) — requests a daily data export
+        Braze: track_users(payload.attributes, payload.events, payload.purchases), send_message(payload.broadcast, payload.messages), trigger_campaign(payload), trigger_canvas(payload), delete_users(payload)
+        MoEngage: create_user(customer_id, payload.attributes), update_user(customer_id, payload.attributes), send_push(payload), send_email(payload), send_sms(payload)
         """
         if not platform:
             return {
                 "error": True,
                 "error_type": "missing_required_param",
-                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', etc. in params.",
+                "message": "platform is required. Pass platform='google', 'meta', 'tiktok', 'snap', 'linkedin', 'pinterest', 'x', 'reddit', 'apple', 'marketo', 'branch', 'appsflyer', 'adjust', 'braze', or 'moengage' in params.",
             }
         user = _get_user()
-        if platform not in ("marketo", "branch", "appsflyer", "adjust") and not account_id:
+        if (
+            platform not in ("marketo", "branch", "appsflyer", "adjust", "braze", "moengage")
+            and not account_id
+        ):
             return {
                 "error": True,
                 "error_type": "bad_request",
@@ -1617,5 +1858,145 @@ def register_marketing_tools(mcp_server):
                 return _no_adjust()
             # Adjust has no write ops
             return {"error": True, "message": "Adjust write ops not supported"}
+
+        elif platform == "braze":
+            if not user or not getattr(user, "has_braze", False):
+                return _no_braze()
+            creds = await get_braze_creds(user.user_id)
+            if not creds:
+                return _no_braze()
+            brz = state.braze_connector
+            rest_url = creds["rest_endpoint_url"]
+            api_key_braze = creds["api_key"]
+            p = payload or {}
+
+            if action == "track_users":
+                return await brz.track_users(
+                    rest_url,
+                    api_key_braze,
+                    attributes=p.get("attributes"),
+                    events=p.get("events"),
+                    purchases=p.get("purchases"),
+                )
+            elif action == "send_message":
+                return await brz.send_message(
+                    rest_url,
+                    api_key_braze,
+                    broadcast=p.get("broadcast", False),
+                    messages=p.get("messages"),
+                    external_user_ids=p.get("external_user_ids"),
+                    segment_id=p.get("segment_id"),
+                )
+            elif action == "trigger_campaign":
+                campaign_id_braze = p.get("campaign_id")
+                if not campaign_id_braze:
+                    return {"error": True, "message": "payload.campaign_id is required for trigger_campaign"}
+                return await brz.trigger_campaign(
+                    rest_url,
+                    api_key_braze,
+                    campaign_id_braze,
+                    broadcast=p.get("broadcast", False),
+                    recipients=p.get("recipients"),
+                    audience=p.get("audience"),
+                    trigger_properties=p.get("trigger_properties"),
+                )
+            elif action == "trigger_canvas":
+                canvas_id_braze = p.get("canvas_id")
+                if not canvas_id_braze:
+                    return {"error": True, "message": "payload.canvas_id is required for trigger_canvas"}
+                return await brz.trigger_canvas(
+                    rest_url,
+                    api_key_braze,
+                    canvas_id_braze,
+                    broadcast=p.get("broadcast", False),
+                    recipients=p.get("recipients"),
+                    audience=p.get("audience"),
+                )
+            elif action == "delete_users":
+                return await brz.delete_users(
+                    rest_url,
+                    api_key_braze,
+                    external_ids=p.get("external_ids"),
+                    braze_ids=p.get("braze_ids"),
+                )
+
+            return {"error": True, "message": f"Unknown action '{action}' for Braze marketing_write"}
+
+        elif platform == "moengage":
+            if not user or not getattr(user, "has_moengage", False):
+                return _no_moengage()
+            creds = await get_moengage_creds(user.user_id)
+            if not creds:
+                return _no_moengage()
+            moe = state.moengage_connector
+            dc = creds["data_center"]
+            app_id_moe = creds["app_id"]
+            api_key_moe = creds["api_key"]
+            p = payload or {}
+
+            if action == "create_user":
+                customer_id = p.get("customer_id")
+                if not customer_id:
+                    return {"error": True, "message": "payload.customer_id is required for create_user"}
+                return await moe.create_user(
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    customer_id=customer_id,
+                    attributes=p.get("attributes"),
+                    platforms=p.get("platforms"),
+                    update_existing_only=p.get("update_existing_only", False),
+                )
+            elif action == "update_user":
+                customer_id = p.get("customer_id")
+                if not customer_id:
+                    return {"error": True, "message": "payload.customer_id is required for update_user"}
+                return await moe.update_user(
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    customer_id=customer_id,
+                    attributes=p.get("attributes"),
+                    platforms=p.get("platforms"),
+                )
+            elif action == "send_push":
+                return await moe.send_push(
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    campaign_name=p.get("campaign_name", ""),
+                    target_platform=p.get("target_platform", []),
+                    target_audience=p.get("target_audience", "All Users"),
+                    payload=p.get("payload", {}),
+                    target_user_attributes=p.get("target_user_attributes"),
+                    custom_segment_name=p.get("custom_segment_name"),
+                    campaign_delivery=p.get("campaign_delivery"),
+                    advanced_settings=p.get("advanced_settings"),
+                    campaign_tags=p.get("campaign_tags"),
+                )
+            elif action == "send_email":
+                return await moe.send_email(
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    transaction_id=p.get("transaction_id", ""),
+                    recipients=p.get("recipients", {}),
+                    alert_id=p.get("alert_id"),
+                    alert_reference_name=p.get("alert_reference_name"),
+                    personalization=p.get("personalization"),
+                )
+            elif action == "send_sms":
+                return await moe.send_sms(
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    transaction_id=p.get("transaction_id", ""),
+                    recipients=p.get("recipients", {}),
+                    alert_id=p.get("alert_id"),
+                    alert_reference_name=p.get("alert_reference_name"),
+                    personalization=p.get("personalization"),
+                )
+
+            return {"error": True, "message": f"Unknown action '{action}' for MoEngage marketing_write"}
 
         return {"error": True, "message": f"Unknown platform: {platform}"}

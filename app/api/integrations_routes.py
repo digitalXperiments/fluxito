@@ -358,6 +358,8 @@ TUTORIAL_CATEGORIES = [
             ("adjust", "Adjust", "~5 min", "Adjust API token"),
             ("mixpanel", "Mixpanel", "~5 min", "API secret + service token"),
             ("posthog", "PostHog", "~5 min", "API key + project host"),
+            ("braze", "Braze", "~5 min", "API key + REST endpoint"),
+            ("moengage", "MoEngage", "~5 min", "App ID + API key + data center"),
             ("adobe-analytics", "Adobe Analytics", "~25 min", "Adobe I/O project"),
             ("adobe-launch", "Adobe Launch", "~15 min", "Shares Adobe I/O credentials"),
             ("adobe-marketo", "Adobe Marketo Engage", "~15 min", "Marketo LaunchPoint service"),

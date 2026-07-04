@@ -31,6 +31,8 @@
 {%- elif slug == 'branch' -%}branch
 {%- elif slug == 'appsflyer' -%}appsflyer
 {%- elif slug == 'adjust' -%}adjust
+{%- elif slug == 'braze' -%}braze
+{%- elif slug == 'moengage' -%}moengage
 {%- else -%}ghost
 {%- endif -%}
 {%- endmacro %}
@@ -39,6 +41,8 @@
 {%- if slug == 'branch' -%}{{ platform_icon('branch', 22) }}
 {%- elif slug == 'appsflyer' -%}{{ platform_icon('appsflyer', 22) }}
 {%- elif slug == 'adjust' -%}{{ platform_icon('adjust', 22) }}
+{%- elif slug == 'braze' -%}{{ platform_icon('braze', 22) }}
+{%- elif slug == 'moengage' -%}{{ platform_icon('moengage', 22) }}
 {%- else -%}
   <span class="pbadge {{ platform_badge(slug) }}"><span>{{ (slug.split('-')|map('first')|join('')|upper)[:2] }}</span></span>
 {%- endif -%}

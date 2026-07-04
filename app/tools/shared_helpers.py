@@ -12,6 +12,7 @@ from typing import Any
 
 import app.app_state as state
 from app.config import settings
+from app.models.credential_connection import BrazeConnection, MoengageConnection
 
 # ---------------------------------------------------------------------------
 # User / project / connection helpers
@@ -294,3 +295,38 @@ async def get_posthog_creds(
         return None, None, None, None
     api_key = decrypt_field(conn.api_key_encrypted)
     return str(conn.id), api_key, conn.project_host, conn.external_project_id
+
+
+async def get_braze_creds(user_id: str) -> dict[str, Any] | None:
+    """
+    Fetch user's active Braze connection and return connection details.
+    Returns None if no active connection.
+    """
+    conn = await get_encrypted_credential_conn(BrazeConnection, user_id)
+    if not conn:
+        return None
+    api_key = decrypt_field(conn.api_key_encrypted)
+    return {
+        "connection_id": str(conn.id),
+        "display_name": conn.display_name,
+        "rest_endpoint_url": conn.rest_endpoint_url,
+        "api_key": api_key,
+    }
+
+
+async def get_moengage_creds(user_id: str) -> dict[str, Any] | None:
+    """
+    Fetch user's active MoEngage connection and return connection details.
+    Returns None if no active connection.
+    """
+    conn = await get_encrypted_credential_conn(MoengageConnection, user_id)
+    if not conn:
+        return None
+    api_key = decrypt_field(conn.api_key_encrypted)
+    return {
+        "connection_id": str(conn.id),
+        "display_name": conn.display_name,
+        "data_center": conn.data_center,
+        "app_id": conn.app_id,
+        "api_key": api_key,
+    }

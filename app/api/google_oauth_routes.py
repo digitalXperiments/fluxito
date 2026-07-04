@@ -42,9 +42,11 @@ from app.models.credential_connection import (
     AdjustConnection,
     AmplitudeConnection,
     AppsFlyerConnection,
+    BrazeConnection,
     BranchConnection,
     MarketoConnection,
     MixpanelConnection,
+    MoengageConnection,
     PostHogConnection,
     RedshiftConnection,
     SnowflakeConnection,
@@ -91,6 +93,8 @@ GRANULAR_CONNECTOR_CATALOG: list[tuple[str, str, tuple[str, ...]]] = [
     ("adjust", "Adjust", ("has_adjust",)),
     ("mixpanel", "Mixpanel", ("has_mixpanel",)),
     ("posthog", "PostHog", ("has_posthog",)),
+    ("braze", "Braze", ("has_braze",)),
+    ("moengage", "MoEngage", ("has_moengage",)),
     ("adobe", "Adobe", ("has_adobe_analytics", "has_adobe_launch")),
     # Ad platforms
     ("meta", "Meta Ads", ("has_meta",)),
@@ -389,6 +393,8 @@ async def home(request: Request):
     from app.models.credential_connection import (
         AdobeConnection,
         AmplitudeConnection,
+        BrazeConnection,
+        MoengageConnection,
         RedshiftConnection,
         SnowflakeConnection,
     )
@@ -439,6 +445,20 @@ async def home(request: Request):
             if active_pid_uuid:
                 posthog_stmt = posthog_stmt.where(PostHogConnection.project_id == active_pid_uuid)
             posthog_conns = (await db.execute(posthog_stmt)).scalars().all()
+
+            braze_stmt = select(BrazeConnection).where(
+                BrazeConnection.user_id == uid, BrazeConnection.is_active == True
+            )
+            if active_pid_uuid:
+                braze_stmt = braze_stmt.where(BrazeConnection.project_id == active_pid_uuid)
+            braze_conns = (await db.execute(braze_stmt)).scalars().all()
+
+            moengage_stmt = select(MoengageConnection).where(
+                MoengageConnection.user_id == uid, MoengageConnection.is_active == True
+            )
+            if active_pid_uuid:
+                moengage_stmt = moengage_stmt.where(MoengageConnection.project_id == active_pid_uuid)
+            moengage_conns = (await db.execute(moengage_stmt)).scalars().all()
 
             adobe_stmt = select(AdobeConnection).where(
                 AdobeConnection.user_id == uid, AdobeConnection.is_active == True
@@ -509,6 +529,8 @@ async def home(request: Request):
         has_amplitude=bool(amp_conns),
         has_mixpanel=bool(mixpanel_conns),
         has_posthog=bool(posthog_conns),
+        has_braze=bool(braze_conns),
+        has_moengage=bool(moengage_conns),
         has_adobe_analytics=bool(adobe_conns),
         has_adobe_launch=bool(adobe_conns),
         has_meta=bool(meta_conns),
@@ -1015,6 +1037,8 @@ async def connect_page(request: Request):
     adjust_count = 0
     mixpanel_count = 0
     posthog_count = 0
+    braze_count = 0
+    moengage_count = 0
     adobe_count = 0
     marketo_count = 0
     redshift_count = 0
@@ -1038,6 +1062,8 @@ async def connect_page(request: Request):
     adjust_rows = []
     mixpanel_rows = []
     posthog_rows = []
+    braze_rows = []
+    moengage_rows = []
     if user_ctx is not None:
         try:
             db_session = app_state.db_session_factory()
@@ -1125,6 +1151,27 @@ async def connect_page(request: Request):
                 posthog_result = await db.execute(posthog_stmt)
                 posthog_rows = list(posthog_result.scalars().all())
                 posthog_count = len(posthog_rows)
+
+                # Braze / MoEngage (engagement platforms) — filtered by project
+                braze_stmt = select(BrazeConnection).where(
+                    BrazeConnection.user_id == uuid.UUID(user_ctx.user_id),
+                    BrazeConnection.is_active == True,
+                )
+                if active_pid_uuid:
+                    braze_stmt = braze_stmt.where(BrazeConnection.project_id == active_pid_uuid)
+                braze_result = await db.execute(braze_stmt)
+                braze_rows = list(braze_result.scalars().all())
+                braze_count = len(braze_rows)
+
+                moengage_stmt = select(MoengageConnection).where(
+                    MoengageConnection.user_id == uuid.UUID(user_ctx.user_id),
+                    MoengageConnection.is_active == True,
+                )
+                if active_pid_uuid:
+                    moengage_stmt = moengage_stmt.where(MoengageConnection.project_id == active_pid_uuid)
+                moengage_result = await db.execute(moengage_stmt)
+                moengage_rows = list(moengage_result.scalars().all())
+                moengage_count = len(moengage_rows)
 
                 adobe_stmt = select(AdobeConnection).where(
                     AdobeConnection.user_id == uuid.UUID(user_ctx.user_id),
@@ -1394,6 +1441,38 @@ async def connect_page(request: Request):
                 }
             )
 
+        # ── Braze connections ──
+        for bz in braze_rows:
+            connections_view.append(
+                {
+                    "id": str(bz.id),
+                    "provider": "braze",
+                    "platform_name": "Braze",
+                    "label": bz.display_name or "Braze",
+                    "detail": bz.rest_endpoint_url or "Customer engagement",
+                    "icon": "📨",
+                    "is_active": bz.connection_status == "active",
+                    "delete_url": f"/api/connections/braze/{bz.id}",
+                    "edit_url": f"/connect/braze?edit={bz.id}",
+                }
+            )
+
+        # ── MoEngage connections ──
+        for me in moengage_rows:
+            connections_view.append(
+                {
+                    "id": str(me.id),
+                    "provider": "moengage",
+                    "platform_name": "MoEngage",
+                    "label": me.display_name or "MoEngage",
+                    "detail": f"Data center {me.data_center}" if me.data_center else "Customer engagement",
+                    "icon": "📧",
+                    "is_active": me.connection_status == "active",
+                    "delete_url": f"/api/connections/moengage/{me.id}",
+                    "edit_url": f"/connect/moengage?edit={me.id}",
+                }
+            )
+
         # ── Adobe connections ──
         for adc in adobe_rows:
             products = []
@@ -1537,6 +1616,24 @@ async def connect_page(request: Request):
             "desc": "Product analytics (Cloud or self-hosted)",
             "url": "/connect/posthog",
             "count": posthog_count,
+            "primary": False,
+        },
+        {
+            "slug": "braze",
+            "name": "Braze",
+            "icon": "📨",
+            "desc": "Customer engagement platform",
+            "url": "/connect/braze",
+            "count": braze_count,
+            "primary": False,
+        },
+        {
+            "slug": "moengage",
+            "name": "MoEngage",
+            "icon": "📧",
+            "desc": "Customer engagement platform",
+            "url": "/connect/moengage",
+            "count": moengage_count,
             "primary": False,
         },
         {
@@ -1711,6 +1808,8 @@ async def connect_page(request: Request):
         has_amplitude=bool(amplitude_count),
         has_mixpanel=bool(mixpanel_count),
         has_posthog=bool(posthog_count),
+        has_braze=bool(braze_count),
+        has_moengage=bool(moengage_count),
         has_adobe_analytics=bool(adobe_count),
         has_adobe_launch=bool(adobe_count),
         has_meta=bool(meta_count),
@@ -4348,6 +4447,322 @@ async def disconnect_posthog_connection(conn_id: str, request: Request):
             .where(
                 PostHogConnection.id == uuid.UUID(conn_id),
                 PostHogConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(is_active=False, connection_status="disconnected")
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "disconnected"}
+
+
+# ---------------------------------------------------------------------------
+# Braze Routes (Credential-based connection)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/connect/braze", response_class=HTMLResponse)
+async def connect_braze_page(request: Request):
+    """Braze API key connect page (supports ?edit=<id>)."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/braze", status_code=302)
+    user_view = await _load_user_view(user_ctx)
+
+    editing = None
+    edit_id = request.query_params.get("edit")
+    if edit_id and user_ctx:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            row = (
+                await db.execute(
+                    select(BrazeConnection).where(
+                        BrazeConnection.id == uuid.UUID(edit_id),
+                        BrazeConnection.user_id == uuid.UUID(user_ctx.user_id),
+                        BrazeConnection.is_active == True,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row:
+                editing = {
+                    "id": str(row.id),
+                    "display_name": row.display_name,
+                    "api_key": _decrypt(row.api_key_encrypted),
+                    "rest_endpoint_url": row.rest_endpoint_url,
+                }
+
+    return render(
+        request,
+        "connect/braze.html",
+        {
+            "user": user_view,
+            "platform_name": "Braze",
+            "platform_icon": "📨",
+            "platform_desc": "Connect your Braze account for customer engagement analytics, campaigns, and event data.",
+            "editing": editing,
+        },
+    )
+
+
+class BrazeUploadRequest(BaseModel):
+    display_name: str
+    api_key: str
+    rest_endpoint_url: str
+
+
+@router.post("/api/connections/braze")
+async def add_braze_connection(payload: BrazeUploadRequest, request: Request):
+    """Securely stores Braze API credentials."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    encrypted_api_key = _encrypt(payload.api_key)
+
+    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        new_conn = BrazeConnection(
+            user_id=uuid.UUID(user_ctx.user_id),
+            project_id=active_project_id,
+            display_name=payload.display_name,
+            api_key_encrypted=encrypted_api_key,
+            rest_endpoint_url=payload.rest_endpoint_url.rstrip("/"),
+            connection_status="active",
+            is_active=True,
+        )
+        db.add(new_conn)
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "success", "connection_id": str(new_conn.id)}
+
+
+@router.put("/api/connections/braze/{conn_id}")
+async def update_braze_connection(conn_id: str, payload: BrazeUploadRequest, request: Request):
+    """Updates an existing Braze connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    values: dict = {
+        "display_name": payload.display_name,
+        "api_key_encrypted": _encrypt(payload.api_key),
+        "rest_endpoint_url": payload.rest_endpoint_url.rstrip("/"),
+    }
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(BrazeConnection)
+            .where(
+                BrazeConnection.id == uuid.UUID(conn_id),
+                BrazeConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(**values)
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "updated"}
+
+
+@router.delete("/api/connections/braze/{conn_id}")
+async def disconnect_braze_connection(conn_id: str, request: Request):
+    """Deactivates a Braze connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(BrazeConnection)
+            .where(
+                BrazeConnection.id == uuid.UUID(conn_id),
+                BrazeConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(is_active=False, connection_status="disconnected")
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "disconnected"}
+
+
+# ---------------------------------------------------------------------------
+# MoEngage Routes (Credential-based connection)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/connect/moengage", response_class=HTMLResponse)
+async def connect_moengage_page(request: Request):
+    """MoEngage API key connect page (supports ?edit=<id>)."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/connect/moengage", status_code=302)
+    user_view = await _load_user_view(user_ctx)
+
+    editing = None
+    edit_id = request.query_params.get("edit")
+    if edit_id and user_ctx:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            row = (
+                await db.execute(
+                    select(MoengageConnection).where(
+                        MoengageConnection.id == uuid.UUID(edit_id),
+                        MoengageConnection.user_id == uuid.UUID(user_ctx.user_id),
+                        MoengageConnection.is_active == True,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row:
+                editing = {
+                    "id": str(row.id),
+                    "display_name": row.display_name,
+                    "app_id": row.app_id,
+                    "api_key": _decrypt(row.api_key_encrypted),
+                    "data_center": row.data_center,
+                }
+
+    return render(
+        request,
+        "connect/moengage.html",
+        {
+            "user": user_view,
+            "platform_name": "MoEngage",
+            "platform_icon": "📧",
+            "platform_desc": "Connect your MoEngage account for customer engagement analytics, campaigns, and event data.",
+            "editing": editing,
+        },
+    )
+
+
+class MoengageUploadRequest(BaseModel):
+    display_name: str
+    app_id: str
+    api_key: str
+    data_center: str
+
+
+@router.post("/api/connections/moengage")
+async def add_moengage_connection(payload: MoengageUploadRequest, request: Request):
+    """Securely stores MoEngage API credentials."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    encrypted_api_key = _encrypt(payload.api_key)
+
+    active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        new_conn = MoengageConnection(
+            user_id=uuid.UUID(user_ctx.user_id),
+            project_id=active_project_id,
+            display_name=payload.display_name,
+            app_id=payload.app_id,
+            api_key_encrypted=encrypted_api_key,
+            data_center=payload.data_center,
+            connection_status="active",
+            is_active=True,
+        )
+        db.add(new_conn)
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "success", "connection_id": str(new_conn.id)}
+
+
+@router.put("/api/connections/moengage/{conn_id}")
+async def update_moengage_connection(conn_id: str, payload: MoengageUploadRequest, request: Request):
+    """Updates an existing MoEngage connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    values: dict = {
+        "display_name": payload.display_name,
+        "app_id": payload.app_id,
+        "api_key_encrypted": _encrypt(payload.api_key),
+        "data_center": payload.data_center,
+    }
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(MoengageConnection)
+            .where(
+                MoengageConnection.id == uuid.UUID(conn_id),
+                MoengageConnection.user_id == uuid.UUID(user_ctx.user_id),
+            )
+            .values(**values)
+        )
+        await db.commit()
+
+    asyncio.create_task(invalidate_user_context_cache(str(user_ctx.user_id)))
+    return {"status": "updated"}
+
+
+@router.delete("/api/connections/moengage/{conn_id}")
+async def disconnect_moengage_connection(conn_id: str, request: Request):
+    """Deactivates a MoEngage connection."""
+    user_ctx = None
+    try:
+        user_ctx = await require_valid_mcp_token(request)
+    except Exception:
+        uid = get_uid_from_request(request)
+        if uid:
+            user_ctx = await build_user_context(uid, request)
+
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    db_session = app_state.db_session_factory()
+    async with db_session as db:
+        await db.execute(
+            update(MoengageConnection)
+            .where(
+                MoengageConnection.id == uuid.UUID(conn_id),
+                MoengageConnection.user_id == uuid.UUID(user_ctx.user_id),
             )
             .values(is_active=False, connection_status="disconnected")
         )

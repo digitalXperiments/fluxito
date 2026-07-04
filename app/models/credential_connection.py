@@ -303,3 +303,70 @@ class AdjustConnection(Base):
 
     def __repr__(self) -> str:
         return f"<AdjustConnection(display_name={self.display_name}, is_active={self.is_active})>"
+
+
+class BrazeConnection(Base):
+    """Braze REST API key connection scoped to a project.
+
+    Stores the Braze REST API key (encrypted) and the cluster-specific REST
+    endpoint URL (plaintext) used to reach the Braze API.
+    """
+
+    __tablename__ = "braze_connections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Braze REST API key (encrypted at rest by the app's Fernet layer).
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    # Cluster-specific hostname, e.g. https://rest.iad-01.braze.com (not secret).
+    rest_endpoint_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    connection_status: Mapped[str] = mapped_column(String(50), default=CONNECTION_STATUS_ACTIVE, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("idx_braze_project_user_active", project_id, user_id, is_active),)
+
+    def __repr__(self) -> str:
+        return f"<BrazeConnection(display_name={self.display_name}, is_active={self.is_active})>"
+
+
+class MoengageConnection(Base):
+    """MoEngage REST API connection scoped to a project.
+
+    Stores the MoEngage App ID (plaintext, used as Basic-auth username), the
+    REST API key (encrypted), and the data-center code (plaintext) used to
+    construct the correct API base URL.
+    """
+
+    __tablename__ = "moengage_connections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # MoEngage App ID (not secret, used as Basic-auth username).
+    app_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    # MoEngage REST API key (encrypted at rest by the app's Fernet layer).
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    # MoEngage data-center code, e.g. "01", "02", "03" (not secret).
+    data_center: Mapped[str] = mapped_column(String(32), nullable=False)
+    connection_status: Mapped[str] = mapped_column(String(50), default=CONNECTION_STATUS_ACTIVE, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("idx_moengage_project_user_active", project_id, user_id, is_active),)
+
+    def __repr__(self) -> str:
+        return f"<MoengageConnection(display_name={self.display_name}, is_active={self.is_active})>"

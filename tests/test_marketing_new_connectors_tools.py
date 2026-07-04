@@ -605,3 +605,273 @@ async def test_marketing_write_unknown_action_returns_error(monkeypatch):
         account_id="acc1",
     )
     assert result.get("error") is True
+
+
+# ── Braze ───────────────────────────────────────────────────────────
+
+
+class _StubBrazeConnector:
+    def __init__(self):
+        self.calls = []
+
+    async def list_campaigns(self, rest_url, api_key, **kwargs):
+        self.calls.append(("list_campaigns", rest_url, api_key, kwargs))
+        return {"campaigns": [], "total": 0}
+
+    async def get_campaign_details(self, rest_url, api_key, campaign_id):
+        self.calls.append(("get_campaign_details", rest_url, api_key, campaign_id))
+        return {"campaign_id": campaign_id, "name": "Test Campaign"}
+
+    async def track_users(self, rest_url, api_key, **kwargs):
+        self.calls.append(("track_users", rest_url, api_key, kwargs))
+        return {"success": True}
+
+    async def trigger_campaign(self, rest_url, api_key, campaign_id, **kwargs):
+        self.calls.append(("trigger_campaign", rest_url, api_key, campaign_id, kwargs))
+        return {"success": True, "campaign_id": campaign_id}
+
+
+class _BrazeUser:
+    user_id = "u1"
+    has_braze = True
+    has_branch = False
+    has_appsflyer = False
+    has_adjust = False
+    has_moengage = False
+    has_marketo = False
+
+
+@pytest.fixture
+def braze_wired(monkeypatch):
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+
+    conn = _StubBrazeConnector()
+    monkeypatch.setattr(state, "braze_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _BrazeUser())
+
+    async def fake_braze_creds(user_id):
+        return {
+            "rest_endpoint_url": "https://rest.iad-01.braze.com",
+            "api_key": "braze-api-key",
+            "connection_id": "conn-1",
+            "display_name": "Braze",
+        }
+
+    monkeypatch.setattr(marketing_tools, "get_braze_creds", fake_braze_creds)
+    return mcp, conn
+
+
+# Braze marketing_read
+
+
+@pytest.mark.asyncio
+async def test_marketing_read_braze_list_campaigns(braze_wired):
+    mcp, conn = braze_wired
+    result = await mcp.tools["marketing_read"](platform="braze", action="list_campaigns", filters={"page": 1})
+    assert conn.calls[0][0] == "list_campaigns"
+    assert conn.calls[0][3]["page"] == 1
+    assert result["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_marketing_read_braze_get_campaign_details(braze_wired):
+    mcp, conn = braze_wired
+    result = await mcp.tools["marketing_read"](
+        platform="braze", action="get_campaign_details", campaign_id="camp-123"
+    )
+    assert conn.calls[0][0] == "get_campaign_details"
+    assert conn.calls[0][3] == "camp-123"
+    assert result["campaign_id"] == "camp-123"
+
+
+@pytest.mark.asyncio
+async def test_marketing_read_braze_no_connection_returns_error(braze_wired, monkeypatch):
+    mcp, conn = braze_wired
+
+    async def no_creds(user_id):
+        return None
+
+    monkeypatch.setattr(marketing_tools, "get_braze_creds", no_creds)
+    result = await mcp.tools["marketing_read"](platform="braze", action="list_campaigns")
+    assert result.get("error") is True
+
+
+# Braze marketing_write
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_braze_track_users(braze_wired):
+    mcp, conn = braze_wired
+    result = await mcp.tools["marketing_write"](
+        platform="braze",
+        action="track_users",
+        payload={"attributes": [{"external_id": "u1", "first_name": "Alice"}]},
+    )
+    assert conn.calls[0][0] == "track_users"
+    assert conn.calls[0][3]["attributes"] == [{"external_id": "u1", "first_name": "Alice"}]
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_braze_trigger_campaign(braze_wired):
+    mcp, conn = braze_wired
+    result = await mcp.tools["marketing_write"](
+        platform="braze",
+        action="trigger_campaign",
+        payload={"campaign_id": "camp-456", "broadcast": True},
+    )
+    assert conn.calls[0][0] == "trigger_campaign"
+    assert conn.calls[0][3] == "camp-456"
+    assert conn.calls[0][4]["broadcast"] is True
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_braze_no_connection_returns_error(braze_wired, monkeypatch):
+    mcp, conn = braze_wired
+
+    async def no_creds(user_id):
+        return None
+
+    monkeypatch.setattr(marketing_tools, "get_braze_creds", no_creds)
+    result = await mcp.tools["marketing_write"](platform="braze", action="track_users", payload={})
+    assert result.get("error") is True
+
+
+# ── MoEngage ────────────────────────────────────────────────────────
+
+
+class _StubMoengageConnector:
+    def __init__(self):
+        self.calls = []
+
+    async def get_user_info(self, dc, app_id, api_key, **kwargs):
+        self.calls.append(("get_user_info", dc, app_id, api_key, kwargs))
+        return {"user": {"customer_id": kwargs.get("customer_id")}}
+
+    async def list_campaigns(self, dc, app_id, api_key, **kwargs):
+        self.calls.append(("list_campaigns", dc, app_id, api_key, kwargs))
+        return {"campaigns": [], "total": 0}
+
+    async def create_user(self, dc, app_id, api_key, **kwargs):
+        self.calls.append(("create_user", dc, app_id, api_key, kwargs))
+        return {"success": True}
+
+    async def send_push(self, dc, app_id, api_key, **kwargs):
+        self.calls.append(("send_push", dc, app_id, api_key, kwargs))
+        return {"success": True}
+
+
+class _MoengageUser:
+    user_id = "u1"
+    has_moengage = True
+    has_branch = False
+    has_appsflyer = False
+    has_adjust = False
+    has_braze = False
+    has_marketo = False
+
+
+@pytest.fixture
+def moengage_wired(monkeypatch):
+    mcp = _StubMCP()
+    marketing_tools.register_marketing_tools(mcp)
+
+    conn = _StubMoengageConnector()
+    monkeypatch.setattr(state, "moengage_connector", conn, raising=False)
+    monkeypatch.setattr(marketing_tools, "_get_user", lambda: _MoengageUser())
+
+    async def fake_moengage_creds(user_id):
+        return {
+            "data_center": "01",
+            "app_id": "moengage-app",
+            "api_key": "moengage-api-key",
+            "connection_id": "conn-1",
+            "display_name": "MoEngage",
+        }
+
+    monkeypatch.setattr(marketing_tools, "get_moengage_creds", fake_moengage_creds)
+    return mcp, conn
+
+
+# MoEngage marketing_read
+
+
+@pytest.mark.asyncio
+async def test_marketing_read_moengage_get_user_info(moengage_wired):
+    mcp, conn = moengage_wired
+    result = await mcp.tools["marketing_read"](
+        platform="moengage",
+        action="get_user_info",
+        filters={"customer_id": "cust-001"},
+    )
+    assert conn.calls[0][0] == "get_user_info"
+    assert conn.calls[0][4]["customer_id"] == "cust-001"
+    assert result["user"]["customer_id"] == "cust-001"
+
+
+@pytest.mark.asyncio
+async def test_marketing_read_moengage_list_campaigns(moengage_wired):
+    mcp, conn = moengage_wired
+    result = await mcp.tools["marketing_read"](
+        platform="moengage",
+        action="list_campaigns",
+        filters={"channel": "push"},
+    )
+    assert conn.calls[0][0] == "list_campaigns"
+    assert conn.calls[0][4]["channel"] == "push"
+    assert result["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_marketing_read_moengage_no_connection_returns_error(moengage_wired, monkeypatch):
+    mcp, conn = moengage_wired
+
+    async def no_creds(user_id):
+        return None
+
+    monkeypatch.setattr(marketing_tools, "get_moengage_creds", no_creds)
+    result = await mcp.tools["marketing_read"](platform="moengage", action="get_user_info")
+    assert result.get("error") is True
+
+
+# MoEngage marketing_write
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_moengage_create_user(moengage_wired):
+    mcp, conn = moengage_wired
+    result = await mcp.tools["marketing_write"](
+        platform="moengage",
+        action="create_user",
+        payload={"customer_id": "cust-002", "attributes": {"name": "Bob"}},
+    )
+    assert conn.calls[0][0] == "create_user"
+    assert conn.calls[0][4]["customer_id"] == "cust-002"
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_moengage_send_push(moengage_wired):
+    mcp, conn = moengage_wired
+    result = await mcp.tools["marketing_write"](
+        platform="moengage",
+        action="send_push",
+        payload={"campaign_name": "Test Push", "target_platform": ["android"]},
+    )
+    assert conn.calls[0][0] == "send_push"
+    assert conn.calls[0][4]["campaign_name"] == "Test Push"
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_moengage_no_connection_returns_error(moengage_wired, monkeypatch):
+    mcp, conn = moengage_wired
+
+    async def no_creds(user_id):
+        return None
+
+    monkeypatch.setattr(marketing_tools, "get_moengage_creds", no_creds)
+    result = await mcp.tools["marketing_write"](platform="moengage", action="create_user", payload={})
+    assert result.get("error") is True

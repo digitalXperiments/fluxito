@@ -659,6 +659,79 @@ CATALOG: tuple[Connector, ...] = (
         ),
         confidence=HIGH,
     ),
+    # ── Braze ─────────────────────────────────────────────────────────────
+    Connector(
+        key="braze",
+        name="Braze",
+        category=CAT_MARKETING,
+        docs_url="https://www.braze.com/docs/api/overview/",
+        flags=("has_braze",),
+        headline="250,000 requests/hour (default) · ~10 req/s burst",
+        usage="≈1 call per card",
+        limits=(
+            Limit(
+                "REST API hourly quota",
+                "250,000",
+                "per hour",
+                "per dashboard cluster",
+                "default; higher on request; resets on the hour",
+            ),
+            Limit(
+                "Burst rate",
+                "~10 req/s",
+                "per second",
+                "per dashboard cluster",
+                "soft ceiling; 429 beyond sustainable rate",
+            ),
+        ),
+        error_behavior=(
+            "HTTP 429 Too Many Requests; Retry-After header returned. The hourly quota resets at "
+            "the top of each hour."
+        ),
+        headers="Retry-After, X-RateLimit-*",
+        calls_per_card="1",
+        consumption_note=(
+            "Each Braze card is one REST API call. The 250,000/hour cluster-wide pool is generous, "
+            "but bursts exceeding ~10/s also trigger 429s. Dashboard usage is typically well within "
+            "these limits."
+        ),
+        confidence=HIGH,
+    ),
+    # ── Moengage ───────────────────────────────────────────────────────────
+    Connector(
+        key="moengage",
+        name="Moengage",
+        category=CAT_MARKETING,
+        docs_url="https://docs.moengage.com/",
+        flags=("has_moengage",),
+        headline="1,000 req/min · 1,000,000 req/day (default)",
+        usage="≈1 call per card",
+        limits=(
+            Limit(
+                "REST API rate",
+                "1,000 req/min",
+                "per minute",
+                "per app",
+                "plan-dependent; some plans allow more",
+            ),
+            Limit(
+                "Daily quota",
+                "1,000,000 req/day",
+                "per day",
+                "per app",
+                "default; lower on Starter plans",
+            ),
+        ),
+        error_behavior=("HTTP 429 Too Many Requests with Retry-After; respect per-minute and daily caps."),
+        headers="Retry-After, X-RateLimit-Remaining",
+        calls_per_card="1",
+        consumption_note=(
+            "Each MoEngage card is one REST API call. The 1,000/min rate limit is the binding "
+            "constraint under parallel dashboards; the 1,000,000/day quota is rarely hit by "
+            "dashboard usage alone."
+        ),
+        confidence=MEDIUM,
+    ),
     # ── Amplitude ─────────────────────────────────────────────────────────
     Connector(
         key="amplitude",

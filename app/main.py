@@ -177,12 +177,14 @@ async def lifespan(app: FastAPI):
     from app.connectors.bigquery import BigQueryConnector
     from app.connectors.bing_webmaster import BingWebmasterConnector
     from app.connectors.branch import BranchConnector
+    from app.connectors.braze import BrazeConnector
     from app.connectors.ga4 import GA4Connector
     from app.connectors.google_ads import GoogleAdsConnector
     from app.connectors.gtm import GTMConnector
     from app.connectors.linkedin_ads import LinkedInAdsConnector
     from app.connectors.meta_ads import MetaAdsConnector
     from app.connectors.mixpanel import MixpanelConnector
+    from app.connectors.moengage import MoengageConnector
     from app.connectors.pinterest_ads import PinterestAdsConnector
     from app.connectors.posthog import PostHogConnector
     from app.connectors.reddit_ads import RedditAdsConnector
@@ -220,6 +222,8 @@ async def lifespan(app: FastAPI):
     app_state.branch_connector = BranchConnector()
     app_state.appsflyer_connector = AppsFlyerConnector()
     app_state.adjust_connector = AdjustConnector()
+    app_state.braze_connector = BrazeConnector()
+    app_state.moengage_connector = MoengageConnector()
 
     await _init_sentry_from_runtime_settings()
     app_state.redshift_connector = RedshiftConnector()
@@ -880,6 +884,8 @@ def _sync_user_ctx_flags(user_ctx, pctx) -> None:
         "has_adobe_marketo",
         "has_redshift",
         "has_snowflake",
+        "has_braze",
+        "has_moengage",
         "connections",
         "ga4_properties",
         "gtm_containers",

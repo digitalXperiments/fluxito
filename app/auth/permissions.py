@@ -123,6 +123,8 @@ PROVIDERS: list[str] = [
     "amplitude",
     "mixpanel",
     "posthog",
+    "braze",
+    "moengage",
     "adobe_analytics",
     "adobe_launch",
     "adobe_marketo",

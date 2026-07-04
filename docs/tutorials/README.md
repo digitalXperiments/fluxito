@@ -95,6 +95,8 @@ No OAuth app required.
 | [amplitude.md](amplitude.md) | API Key and Secret Key per project; multi-project setup. | ~5 min |
 | [appsflyer.md](appsflyer.md) | V2.0 API Token authentication; installs, events and partner reports. | ~5 min |
 | [branch.md](branch.md) | Branch Key + Branch Secret authentication; app config and daily exports. | ~5 min |
+| [braze.md](braze.md) | Braze API Key + REST endpoint; campaigns, canvases, segments, and user tracking. | ~5 min |
+| [moengage.md](moengage.md) | App ID + REST API Key + Data Center; users, campaigns, events, and messaging. | ~5 min |
 | [mixpanel.md](mixpanel.md) | API Secret and Service Token per project; multi-project setup. | ~5 min |
 | [posthog.md](posthog.md) | Personal API Key, host URL, and Project ID; Cloud or self-hosted. | ~5 min |
 | [adobe-analytics.md](adobe-analytics.md) | Adobe Developer Console project, OAuth Server-to-Server credential, Admin Console product profile grant. | ~25 min |
