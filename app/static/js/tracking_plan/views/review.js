@@ -1,286 +1,312 @@
 // app/static/js/tracking_plan/views/review.js
-// Branch-review screen (§5.10): diff viewer + review panel + merge & publish.
-// Pure gating predicates are in tp/util/review_gating (Node-testable separately).
+// Review screen — rebuilt to the approved mockup ("Flux - TP Review.dc.html"):
+// a Flux recommendation card, per-change cards tagged +ADD / ~RENAME / ~CHANGE /
+// -DEPRECATE, each independently pending|accepted|rejected, and a dark publish
+// bar with live counts.
 //
-// Design system: refined to the approved mockup. The review header reads like an
-// editor head (.tp-ed-head spirit) — a kicker, the mono branch→main identifier,
-// a semantic review-status pill, and the action buttons (.btn variants). The
-// change-list is the shared .tp-diff renderer; the side panel sections
-// (Reviewers / Activity / Discussion) use refined .tp-review-section markup.
-
+// ---------------------------------------------------------------------------
+// HOW THE REVIEW STATE MACHINE IS PERSISTED (read this before changing flow)
+// ---------------------------------------------------------------------------
+// The backend's branch model has no per-change accept/reject concept: a branch
+// is diffed as a whole (GET /diff) and merged as a whole (merge_branch, which
+// squashes the entire branch into a new published version). There is no
+// endpoint to publish a subset of a branch's changes.
+//
+// So the pending|accepted|rejected decision for EACH change is tracked
+// entirely client-side, in tp/state (state.reviewDecisions), keyed by branch
+// name + a stable change key (tp/util/diff.changeKey). "Save draft" persists
+// those decisions to localStorage (keyed by branch id) purely so a reload
+// doesn't lose your review progress — it is NOT sent to the server.
+//
+// Publishing is gated on every change being resolved (accepted or rejected),
+// matching the design's enabled-state rule for the Publish button — but the
+// actual publish call is the EXISTING merge_branch action, which merges the
+// WHOLE branch. In other words: rejecting a change marks it as excluded in
+// the UI and blocks nothing from being included in the merge — there is no
+// backend support today for dropping a single rejected change from a branch
+// before merge. This is a known, documented limitation of this pass; doing
+// selective/partial branch merges would require real backend surgery
+// (per-change apply, not just per-branch) that's out of scope here.
 import { h, mount } from "tp/render";
 import * as state from "tp/state";
 import * as api from "tp/api";
-import { groupDiff } from "tp/util/diff";
-import { initials, relativeTime } from "tp/util/format";
-import { mountDrawer } from "tp/comments";
-import { renderChangeList } from "tp/views/_changelist";
-import { canMerge, reviewActionsFor } from "tp/util/review_gating";
-
-// Re-export for any legacy import sites (none expected after refactor).
-export { canMerge, reviewActionsFor };
+import { groupDiff, changeKey } from "tp/util/diff";
 
 const BASE_BRANCH = "main";
+const DRAFT_KEY_PREFIX = "tp-review-draft:";
+// Branches whose saved localStorage draft has already been restored into
+// state this session — restoreDraft is a no-op after the first call per
+// branch, both to avoid clobbering in-session choices AND to avoid the
+// notify → re-render → reload loop a repeated restore would cause (paint()
+// re-enters loadAndPaint() on every state change while this view is mounted).
+const restoredBranches = new Set();
+// Cache the loaded diff's flattened change list per branch name — accept/
+// reject/undo clicks only flip a decision in state (which re-renders this
+// view), they never change the diff itself, so there's no need to refetch on
+// every click. Invalidated on branch switch (different name) or publish.
+let cachedBranchName = null;
+let cachedChanges = null;
 
-// ---------------------------------------------------------------------------
-// Contract entry point — SYNC; returns a cleanup function.
-// ---------------------------------------------------------------------------
 export function mountView(container) {
-  let _drawer = null;
-
-  function render() {
-    // Destroy any lingering drawer from the previous render cycle.
-    if (_drawer) { _drawer.destroy(); _drawer = null; }
-    paint(container, (d) => { _drawer = d; });
-  }
-
+  function render() { paint(container); }
   const unsub = state.subscribe(render);
   render();
-
-  return () => { unsub(); if (_drawer) _drawer.destroy(); };
+  return () => { unsub(); };
 }
 
-// ---------------------------------------------------------------------------
-// paint — called sync; kicks off async data loads independently.
-// ---------------------------------------------------------------------------
-function paint(container, onDrawer) {
+function targetBranch(st) {
+  // Prefer the branch the user is actually on if it's a feature branch;
+  // otherwise fall back to whatever state.reload() found as the review target
+  // (the first non-main branch) — this is how the rail can show a pending
+  // count and land here even while sitting on main.
+  const cur = (st.branches || []).find((b) => b.name === st.branch);
+  if (cur && !cur.is_main) return cur;
+  const name = st.reviewTargetBranch;
+  if (name) return (st.branches || []).find((b) => b.name === name) || null;
+  return null;
+}
+
+function paint(container) {
   const st = state.getState();
-  // state.branch is always a branch NAME string (e.g. "main" or "feat/x").
-  const branchName = st.branch || BASE_BRANCH;
-  // Look up the full branch object from the loaded branches list.
-  const branchObj = (st.branches || []).find((b) => b.name === branchName) || null;
-  const isMain = !branchName || branchName === BASE_BRANCH ||
-    (branchObj && branchObj.is_main);
+  const branch = targetBranch(st);
 
-  // On main: show empty state, no review actions.
-  if (isMain) {
-    mount(container, h("div", { class: "tp-empty" },
-      h("div", {}, "Branch review is available on a feature branch."),
-      h("div", { class: "tp-muted" },
-        "Create a branch from the switcher to open a pull-request style review.")));
+  if (!branch) {
+    mount(container, h("div", { class: "tp-review-screen" },
+      h("div", { class: "tp-review-scroll" },
+        h("div", { class: "tp-review-inner" },
+          h("div", { class: "tp-review-kicker" }, "Review"),
+          h("h1", { class: "tp-review-h1" }, "Nothing to ", h("em", {}, "review.")),
+          h("p", { class: "tp-review-lede" },
+            "There's no draft branch with pending changes. Flux opens one here automatically after a drift scan finds something to propose, or you can start one from the branch switcher."),
+        ))));
     return;
   }
 
-  // Build shell synchronously so the page isn't blank while data loads.
-  // Use the real review_status from the looked-up branch object; fall back to
-  // "draft" only when branches haven't loaded yet (branchObj === null).
-  const reviewStatus = branchObj?.review_status || "draft";
-  const role = resolveRole();
-  // Synthetic fallback used only for rendering while branches are still loading.
-  const effectiveBranch = branchObj || { name: branchName, review_status: reviewStatus };
-
-  const head = h("div", { class: "tp-review-head" },
-    h("div", { class: "tp-review-id" },
-      h("div", { class: "tp-ed-kicker" }, "Branch review"),
-      h("div", { class: "tp-review-title" },
-        h("span", { class: "tp-mono" }, branchName),
-        h("span", { class: "tp-review-arrow" }, "→"),
-        h("span", { class: "tp-mono" }, BASE_BRANCH),
-        h("span", { class: "tp-review-pill", dataset: { s: reviewStatus } },
-          reviewStatus.replace(/_/g, " ")))),
-    h("div", { class: "tp-review-actions" },
-      ...buildActionButtons(effectiveBranch, role)));
-
-  const changesCol = h("div", { class: "tp-review-changes" },
-    h("div", { class: "tp-muted" }, "Loading changes…"));
-  const panelCol = h("div", { class: "tp-review-panel" });
-
-  mount(container, h("div", { class: "tp-review-screen" },
-    head,
-    h("div", { class: "tp-review-body" }, changesCol, panelCol)));
-
-  // Async data fills — fire-and-forget; each catches its own errors.
-  fillChanges(changesCol, effectiveBranch);
-  fillPanel(panelCol, effectiveBranch, onDrawer);
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function resolveRole() {
-  const el = document.getElementById("tp-app");
-  if (el && el.dataset.admin === "true") return "admin";
-  return "editor";
-}
-
-function buildActionButtons(branch, role) {
-  const actions = reviewActionsFor(branch.review_status || "draft", role, !!branch.is_main);
-  return actions.map((a) => {
-    const attrs = { class: "btn btn-" + a.kind + " btn-sm" };
-    if (a.disabled) {
-      attrs.disabled = "disabled";
-      attrs.title = "Branch must be approved before merging";
-    }
-    const btn = h("button", attrs, a.label);
-    if (!a.disabled) {
-      btn.addEventListener("click", () => {
-        if (a.id === "merge") {
-          doMerge(branch);
-        } else {
-          doSetReview(branch, a.status);
-        }
-      });
-    }
-    return btn;
-  });
-}
-
-async function doSetReview(branch, status) {
-  // Guard: branch.id must be present (real branch object from state.branches).
-  if (!branch.id) {
-    showBanner("Branch not loaded yet — please try again.", "err");
+  if (cachedBranchName === branch.name && cachedChanges) {
+    paintScreen(container, branch, cachedChanges);
     return;
   }
-  try {
-    await api.doAction("set_review_status", { branch_id: branch.id, review_status: status }, branch.name);
-    await state.reload();
-  } catch (e) {
-    showBanner((e.errorType || "error") + ": " + e.message, "err");
-  }
+
+  loadAndPaint(container, branch);
 }
 
-async function doMerge(branch) {
-  // Guard: branch.id must be present (real branch object from state.branches).
-  if (!branch.id) {
-    showBanner("Branch not loaded yet — please try again.", "err");
-    return;
-  }
-  // merge_branch auto-publishes; its changelog becomes the published version's changelog.
-  const note = window.prompt("Changelog for the merged version:", "Merged " + branch.name);
-  if (note === null) return; // user cancelled
-  try {
-    const r = await api.doAction("merge_branch", { branch_id: branch.id, changelog: note }, branch.name);
-    showBanner("Merged → published " + (r.version_number || "") + ".", "ok");
-    state.setBranch(BASE_BRANCH);
-    state.setView("overview");
-    await state.reload();
-  } catch (e) {
-    showBanner((e.errorType || "error") + ": " + e.message, "err");
-  }
-}
-
-async function fillChanges(col, branch) {
+async function loadAndPaint(container, branch) {
   let diffResp;
   try {
     diffResp = await api.diff(branch.name, BASE_BRANCH);
   } catch (e) {
-    mount(col, h("div", { class: "tp-empty" },
-      "Could not load diff: " + (e.message || String(e))));
+    mount(container, h("div", { class: "tp-empty" }, "Could not load changes: " + (e.message || String(e))));
     return;
   }
 
+  restoreDraft(branch.name);
+
   const grouped = groupDiff(diffResp);
-  const counts = await fetchCommentCounts(branch);
-
-  // Replace loading placeholder — use DOM methods, not innerHTML, to avoid XSS.
-  col.textContent = "";
-  col.appendChild(renderChangeList(grouped, {
-    summary: diffResp.summary,
-    commentCounts: counts,
-    onToggleInline: (change, _rowEl, bodyEl) => {
-      const slot = h("div", { class: "tp-inline-comments" });
-      bodyEl.appendChild(slot);
-      mountDrawer(slot, {
-        entityType: change.entityType,
-        entityId: change.id,
-        branch: branch.name,
-      });
-    },
-  }));
+  const changes = grouped.flatMap((g) => g.changes);
+  cachedBranchName = branch.name;
+  cachedChanges = changes;
+  paintScreen(container, branch, changes);
 }
 
-async function fetchCommentCounts(branch) {
+function paintScreen(container, branch, changes) {
+  const decisions = state.getReviewDecisions(branch.name);
+  const counts = tallyDecisions(changes, decisions);
+
+  const inner = h("div", { class: "tp-review-inner" },
+    h("div", { class: "tp-review-kicker" }, `Review · ${branch.name}`),
+    h("h1", { class: "tp-review-h1" },
+      "Flux proposes ", h("em", {}, `${changes.length} change${changes.length === 1 ? "" : "s"}.`)),
+    h("p", { class: "tp-review-lede" },
+      "From the latest diff against main. Accept or reject each — accepted changes are what publishes when you're done."),
+    fluxSummaryCard(changes, counts),
+    h("div", { class: "tp-review-cards" },
+      ...(changes.length
+        ? changes.map((c) => changeCard(branch, c, decisions[changeKey(c)] || "pending"))
+        : [h("div", { class: "tp-empty" }, "No differences between this branch and main.")])));
+
+  const screen = h("div", { class: "tp-review-screen" },
+    h("div", { class: "tp-review-scroll" }, inner, publishBar(branch, changes, counts)));
+  mount(container, screen);
+}
+
+function tallyDecisions(changes, decisions) {
+  let accepted = 0; let rejected = 0;
+  for (const c of changes) {
+    const d = decisions[changeKey(c)];
+    if (d === "accepted") accepted += 1;
+    else if (d === "rejected") rejected += 1;
+  }
+  return { accepted, rejected, pending: changes.length - accepted - rejected, total: changes.length };
+}
+
+// Real names, not just tallies (design: TP Review — Flux's card names each
+// change). We don't have per-change trade-off reasoning (that's fabricated
+// narrative in the mockup), so this stays a specific-but-honest summary: it
+// names the actual changed entities and gives the same "review each below"
+// steer as before.
+function listNames(list) {
+  const names = list.slice(0, 3).map((c) => `"${c.name}"`);
+  const extra = list.length - names.length;
+  return names.join(", ") + (extra > 0 ? ` +${extra} more` : "");
+}
+
+function fluxSummaryCard(changes, counts) {
+  const parts = [];
+  if (counts.total === 0) {
+    parts.push("No differences to review right now.");
+  } else {
+    const adds = changes.filter((c) => c.marker === "+");
+    const chgs = changes.filter((c) => c.marker === "~");
+    const rems = changes.filter((c) => c.marker === "-");
+    const bits = [];
+    if (adds.length) bits.push(`adopt ${listNames(adds)}`);
+    if (chgs.length) bits.push(`review the update${chgs.length === 1 ? "" : "s"} to ${listNames(chgs)}`);
+    if (rems.length) bits.push(`confirm the removal of ${listNames(rems)}`);
+    parts.push(`My read: ${bits.join("; ")}. `);
+    parts.push("Accept the ones you want and reject the rest — publishing merges the whole branch into main as a new version.");
+  }
+  return h("div", { class: "tp-review-flux-card" },
+    h("span", { class: "tp-review-flux-mark" }, "F"),
+    h("div", { class: "tp-review-flux-text" }, parts.join("")));
+}
+
+// ---- entity/description helpers (derived from real diff data, not fabricated) ----
+function tagFor(c) {
+  if (c.marker === "+") return { label: "+ ADD", cls: "add" };
+  if (c.marker === "-") return { label: "− DEPRECATE", cls: "rem" };
+  const isRename = (c.fields || []).some((f) => f.key === "name");
+  return isRename ? { label: "~ RENAME", cls: "chg" } : { label: "~ CHANGE", cls: "chg" };
+}
+
+// Returns an array of text/node children for the card body — mixes the
+// generic sentence with a real inline-code metadata chip (design: TP Review
+// card body — e.g. `string · "paypal" | "stripe" | "apple_pay"`), sourced
+// from tp/util/diff's real, derived c.description (never fabricated).
+function describe(c) {
+  const kind = c.entityType || "item";
+  if (c.marker === "+") {
+    const parts = [`New ${kind} — adopt it into the plan.`];
+    if (c.description) parts.push(" ", h("span", { class: "tp-inlinecode" }, c.description));
+    return parts;
+  }
+  if (c.marker === "-") {
+    const parts = ["No longer present in the diff base — remove it from the plan."];
+    if (c.description) parts.push(" ", h("span", { class: "tp-inlinecode" }, c.description));
+    return parts;
+  }
+  const nameField = (c.fields || []).find((f) => f.key === "name");
+  if (nameField) return [`Rename: ${nameField.was} → ${nameField.now}.`];
+  const others = (c.fields || []).filter((f) => f.key !== "name");
+  if (!others.length) return [`${kind} changed.`];
+  return ["Changed ", h("span", { class: "tp-inlinecode" }, others.map((f) => `${f.key}: ${f.was} → ${f.now}`).join(", ")), "."];
+}
+
+function changeCard(branch, c, decision) {
+  const tag = tagFor(c);
+  const stateLabel = decision === "accepted" ? "✓ ACCEPTED" : decision === "rejected" ? "✗ REJECTED" : "PENDING";
+
+  const head = h("div", { class: "tp-review-card-head" },
+    h("span", { class: "tp-review-tag " + tag.cls }, tag.label),
+    h("span", { class: "tp-review-card-name" }, String(c.name)),
+    h("span", { class: "tp-review-card-state " + decision }, stateLabel));
+
+  const body = h("div", { class: "tp-review-card-body" }, ...describe(c));
+
+  const actions = h("div", { class: "tp-review-card-actions" });
+  const key = changeKey(c);
+  if (decision === "pending") {
+    actions.appendChild(h("button", {
+      class: "tp-review-accept",
+      onClick: () => decide(branch, key, "accepted"),
+    }, "Accept"));
+    actions.appendChild(h("button", {
+      class: "tp-review-reject",
+      onClick: () => decide(branch, key, "rejected"),
+    }, "Reject"));
+    actions.appendChild(h("a", {
+      class: "tp-review-discuss",
+      href: "/ask?q=" + encodeURIComponent(`Tell me more about the "${c.name}" ${c.entityType} change on branch "${branch.name}".`),
+    }, "Discuss with Flux"));
+  } else if (decision === "accepted") {
+    actions.appendChild(h("span", { class: "tp-review-chip accepted" }, "Accepted"));
+    actions.appendChild(h("button", { class: "tp-review-undo", onClick: () => decide(branch, key, null) }, "Undo"));
+  } else {
+    actions.appendChild(h("span", { class: "tp-review-chip rejected" }, "Rejected"));
+    actions.appendChild(h("button", { class: "tp-review-undo", onClick: () => decide(branch, key, null) }, "Undo"));
+  }
+
+  return h("div", { class: "tp-review-card" }, head, body, actions);
+}
+
+function decide(branch, key, decision) {
+  state.setReviewDecision(branch.name, key, decision);
+}
+
+function publishBar(branch, changes, counts) {
+  const canPublish = counts.total > 0 && counts.pending === 0;
+  return h("div", { class: "tp-review-publishbar" },
+    h("div", { style: { flex: "1" } },
+      h("div", { class: "tp-review-publish-title" }, `Publish ${branch.name} → ${BASE_BRANCH}`),
+      h("div", { class: "tp-review-publish-counts" },
+        `${counts.accepted} ACCEPTED · ${counts.rejected} REJECTED · ${counts.pending} PENDING`)),
+    h("button", { class: "tp-review-savedraft", onClick: () => saveDraft(branch.name) }, "Save draft"),
+    h("button", {
+      class: "tp-review-publish",
+      disabled: canPublish ? undefined : "disabled",
+      onClick: canPublish ? () => doPublish(branch) : undefined,
+    }, "Publish"));
+}
+
+async function doPublish(branch) {
+  const note = window.prompt("Changelog for this version:", `Merged ${branch.name}`);
+  if (note === null) return;
   try {
-    // api.listComments is positional: (entityType, entityId, branch)
-    const resp = await api.listComments(null, null, branch.name);
-    const comments = resp.comments || [];
-    const out = {};
-    for (const c of comments) {
-      if (!c.entity_type || !c.entity_id) continue;
-      const k = c.entity_type + ":" + c.entity_id;
-      out[k] = (out[k] || 0) + 1;
-    }
-    return out;
-  } catch {
-    return {};
+    const r = await api.doAction("merge_branch", { branch_id: branch.id, changelog: note }, branch.name);
+    clearDraft(branch.name);
+    state.clearReviewDecisions(branch.name);
+    if (cachedBranchName === branch.name) { cachedBranchName = null; cachedChanges = null; }
+    banner(`Merged → published ${r.version_number || ""}.`, "ok");
+    state.setBranch(BASE_BRANCH);
+    state.setView("versions");
+    await state.reload();
+  } catch (e) {
+    banner((e.errorType || "error") + ": " + e.message, "err");
   }
 }
 
-async function fillPanel(col, branch, onDrawer) {
-  col.textContent = "";
+// ---- localStorage "Save draft" (UI-only persistence of the review decisions) ----
+function draftStorageKey(branchName) { return DRAFT_KEY_PREFIX + branchName; }
 
-  // --- Reviewers section ---
-  const reviewersSection = h("div", { class: "tp-review-section" },
-    h("h4", {}, "Reviewers"));
-
-  // --- Activity timeline section ---
-  const timelineSection = h("div", { class: "tp-review-section" },
-    h("h4", {}, "Activity"));
-  const tlBody = h("div", { class: "tp-activity-timeline" },
-    h("div", { class: "tp-muted" }, "Loading…"));
-  timelineSection.appendChild(tlBody);
-
-  // --- Discussion section ---
-  const discussSection = h("div", { class: "tp-review-section" },
-    h("h4", {}, "Discussion"));
-  const discSlot = h("div", {});
-  discussSection.appendChild(discSlot);
-
-  col.appendChild(reviewersSection);
-  col.appendChild(timelineSection);
-  col.appendChild(discussSection);
-
-  // Mount the general-discussion drawer immediately (branch entity).
-  const drawer = mountDrawer(discSlot, {
-    entityType: "branch",
-    entityId: branch.id || branch.name,
-    branch: branch.name,
-  });
-  if (onDrawer) onDrawer(drawer);
-
-  // Fill reviewers + activity timeline from the branch activity feed.
+function saveDraft(branchName) {
   try {
-    // api.listActivity is positional: (entityType, entityId, branch)
-    const resp = await api.listActivity(null, null, branch.name);
-    const activity = resp.activity || [];
-
-    tlBody.textContent = "";
-    if (!activity.length) {
-      tlBody.appendChild(h("div", { class: "tp-muted" }, "No activity yet."));
-    }
-
-    const seen = new Set();
-    for (const a of activity) {
-      tlBody.appendChild(h("div", { class: "tp-activity-row" },
-        h("span", { class: "tp-avatar" }, initials(a.actor_id || "?")),
-        h("div", { class: "tp-activity-main" },
-          h("div", { class: "tp-activity-summary" }, String(a.summary || a.action || "")),
-          h("div", { class: "tp-activity-when" }, relativeTime(a.created_at)))));
-
-      // Per-person review status: last set_review_status event per actor.
-      if (a.action === "set_review_status" && a.actor_id && !seen.has(a.actor_id)) {
-        seen.add(a.actor_id);
-        const statusLabel = String(a.summary || "reviewed").replace(/^.*?branch\s*/i, "");
-        reviewersSection.appendChild(h("div", { class: "tp-reviewer-row" },
-          h("span", { class: "tp-avatar" }, initials(a.actor_id)),
-          h("span", { class: "tp-mono" }, (a.actor_id || "").slice(0, 8)),
-          h("span", { class: "tp-status", dataset: { s: "implemented" } }, statusLabel)));
-      }
-    }
-
-    // If no reviewer rows were added, show a placeholder (the h4 is childElementCount === 1).
-    if (reviewersSection.childElementCount === 1) {
-      reviewersSection.appendChild(h("div", { class: "tp-muted" }, "No review actions yet."));
-    }
+    const decisions = state.getReviewDecisions(branchName);
+    window.localStorage.setItem(draftStorageKey(branchName), JSON.stringify(decisions));
+    banner("Draft saved on this device.", "ok");
   } catch {
-    tlBody.textContent = "";
-    tlBody.appendChild(h("div", { class: "tp-muted" }, "Activity unavailable."));
+    banner("Could not save draft (storage unavailable).", "err");
   }
 }
 
-// Lightweight banner — reuses #tp-banner if the TP shell provides it.
-function showBanner(msg, kind) {
+function restoreDraft(branchName) {
+  if (restoredBranches.has(branchName)) return;
+  restoredBranches.add(branchName);
+  // Only restore into a branch that has no in-memory decisions yet, so we never
+  // clobber choices the user already made this session.
+  if (Object.keys(state.getReviewDecisions(branchName)).length) return;
+  try {
+    const raw = window.localStorage.getItem(draftStorageKey(branchName));
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (saved && Object.keys(saved).length) state.setReviewDecisions(branchName, saved);
+  } catch { /* corrupt/missing draft — ignore */ }
+}
+
+function clearDraft(branchName) {
+  restoredBranches.delete(branchName);
+  try { window.localStorage.removeItem(draftStorageKey(branchName)); } catch { /* ignore */ }
+}
+
+function banner(msg, kind) {
   const b = document.getElementById("tp-banner");
   if (!b) {
     if (kind === "err") console.error(msg);

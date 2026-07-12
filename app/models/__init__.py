@@ -19,6 +19,7 @@ from app.models.credential_connection import (
     SnowflakeConnection,
 )
 from app.models.dashboard import Dashboard, DashboardCard
+from app.models.flux_draft import FluxDraft
 from app.models.knowledge import KPI, BusinessContext, KPIInput
 from app.models.mcp_auth_code import MCPAuthCode
 from app.models.mcp_session import MCPSession
@@ -33,6 +34,7 @@ from app.models.scheduled_report import (
     ReportSchedule,
 )
 from app.models.template import Template
+from app.models.test_flows import AuditVendor, TestFlow, TestFlowRun
 from app.models.token import (
     GA4Property,
     GoogleAdsAccount,
@@ -48,11 +50,14 @@ from app.models.tracking_plan import (
     TPCategory,
     TPComment,
     TPDestination,
+    TPDriftConfig,
     TPEvent,
     TPEventDestination,
+    TPEventDrift,
     TPEventProperty,
     TPEventSource,
     TPMetric,
+    TPParamObservation,
     TPPlan,
     TPProperty,
     TPPropertyBundle,
@@ -74,6 +79,7 @@ __all__ = [
     "AppsFlyerConnection",
     "AuditFinding",
     "AuditRun",
+    "AuditVendor",
     "Automation",
     "AutomationInstallation",
     "BQConnection",
@@ -83,6 +89,7 @@ __all__ = [
     "Conversation",
     "Dashboard",
     "DashboardCard",
+    "FluxDraft",
     "GA4Property",
     "GTMContainer",
     "GoogleAdsAccount",
@@ -114,11 +121,14 @@ __all__ = [
     "TPCategory",
     "TPComment",
     "TPDestination",
+    "TPDriftConfig",
     "TPEvent",
     "TPEventDestination",
+    "TPEventDrift",
     "TPEventProperty",
     "TPEventSource",
     "TPMetric",
+    "TPParamObservation",
     "TPPlan",
     "TPProperty",
     "TPPropertyBundle",
@@ -127,6 +137,8 @@ __all__ = [
     "TPVersion",
     "TagCustomRule",
     "Template",
+    "TestFlow",
+    "TestFlowRun",
     "TikTokAdsAccount",
     "ToolCallAudit",
     "User",

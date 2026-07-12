@@ -499,6 +499,7 @@ async def project_settings_page(request: Request, slug: str):
                 "owner_id": str(project.owner_id),
                 "dashboard_style_config": project.dashboard_style_config,
                 "rbac_enabled": project.rbac_enabled,
+                "created_label": project.created_at.strftime("%b %Y") if project.created_at else None,
             },
             "members": members,
             "connections": connections,
@@ -666,6 +667,7 @@ async def invite_member(request: Request, slug: str):
                         project_name=project.name,
                         project_slug=project.slug,
                         inviter_email=user["email"],
+                        inviter_name=user.get("display_name"),
                         role=invite_role,
                     )
                 )
@@ -694,6 +696,7 @@ async def invite_member(request: Request, slug: str):
             project_name=project.name,
             project_slug=project.slug,
             inviter_email=user["email"],
+            inviter_name=user.get("display_name"),
             role=invite_role,
         )
     )

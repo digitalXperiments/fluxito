@@ -205,6 +205,10 @@ async def templates_page(
     active_pid = get_active_project_id(request) if uid else None
     show_mine = mine == "1" and active_pid is not None
 
+    # Connected platforms — drives the gallery's install-state badges
+    # (installed / installable / requirements-not-met).
+    connected_platforms = await _get_connected_platforms(uid, project_id=active_pid) if uid else []
+
     async with app_state.db_session_factory() as db:
         # Base query — active templates only
         query = select(Template).where(Template.is_active == True)
@@ -259,7 +263,26 @@ async def templates_page(
     # Categories for filter (from visible templates)
     categories = sorted(set(t.category for t in templates if t.category))
 
-    items = [_format_template(t) for t in templates]
+    # Deployed-dashboard titles for the active project — used as a lightweight
+    # "already installed" signal for the gallery cards (deploy creates a
+    # dashboard whose title defaults to the template's title; there is no
+    # dedicated template->dashboard link on the Dashboard model).
+    installed_titles: set[str] = set()
+    if active_pid:
+        async with app_state.db_session_factory() as db:
+            dash_result = await db.execute(
+                select(Dashboard.title).where(Dashboard.project_id == uuid.UUID(active_pid))
+            )
+            installed_titles = {row[0] for row in dash_result.all()}
+
+    items = []
+    for t in templates:
+        item = _format_template(t)
+        required = item["required_platforms"]
+        item["installed"] = item["title"] in installed_titles
+        item["installable"] = all(p in connected_platforms for p in required)
+        item["missing_platforms"] = [p for p in required if p not in connected_platforms]
+        items.append(item)
 
     return render(
         request,
@@ -273,6 +296,7 @@ async def templates_page(
             "show_mine": show_mine,
             "system_count": system_count,
             "user_count": user_count,
+            "connected_platforms": connected_platforms,
         },
     )
 

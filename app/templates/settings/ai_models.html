@@ -6,21 +6,21 @@
 <main class="app-main">
   <div class="page-head" style="margin-bottom:1.25rem;">
     <h1 style="font-size:1.2rem;margin:0 0 0.25rem;">AI model catalog</h1>
-    <p style="margin:0;color:var(--text-muted,#71717a);font-size:0.82rem;">
+    <p style="margin:0;color:var(--muted);font-size:0.82rem;">
       Extra model names added here show up in every provider's model dropdown for all users.
     </p>
   </div>
 
   <div id="catalog-list" class="catalog-list">
-    <span style="color:var(--text-muted,#71717a);font-size:0.82rem;padding:0.75rem 1rem;display:block;">Loading…</span>
+    <span style="color:var(--muted);font-size:0.82rem;padding:0.75rem 1rem;display:block;">Loading…</span>
   </div>
   <div id="catalog-status" class="catalog-status" aria-live="polite"></div>
 </main>
 
 <style>
 .catalog-list {
-  border: 1px solid var(--border, #27272a);
-  border-radius: var(--r-lg, 12px);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
   overflow: hidden;
 }
 .catalog-row {
@@ -29,38 +29,38 @@
   gap: 0.85rem;
   align-items: flex-start;
   padding: 0.65rem 0.9rem;
-  border-bottom: 1px solid var(--border, #27272a);
+  border-bottom: 1px solid var(--line-2);
 }
 .catalog-row:last-child { border-bottom: none; }
 .catalog-row-label {
-  font-size: 0.82rem; font-weight: 600; color: var(--text, #fafafa);
+  font-size: 0.82rem; font-weight: 600; color: var(--ink);
   padding-top: 0.3rem; white-space: nowrap;
 }
 .catalog-row-body { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
 .catalog-chip {
   display: inline-flex; align-items: center; gap: 0.25rem;
-  padding: 0.12rem 0.45rem; background: var(--surface-3, #27272a);
-  border: 1px solid var(--border, #27272a); border-radius: var(--r-full, 999px);
-  font-size: 0.74rem; color: var(--text, #fafafa); font-family: var(--font-mono, monospace);
+  padding: 0.12rem 0.45rem; background: var(--card-well);
+  border: 1px solid var(--line-2); border-radius: var(--r-full);
+  font-size: 0.74rem; color: var(--ink); font-family: var(--mono);
 }
 .catalog-chip-remove {
-  background: none; border: none; cursor: pointer; color: var(--text-muted, #71717a);
+  background: none; border: none; cursor: pointer; color: var(--muted);
   padding: 0; line-height: 1; font-size: 0.85rem;
 }
-.catalog-chip-remove:hover { color: var(--danger, #f87171); }
-.catalog-empty { color: var(--text-muted, #71717a); font-size: 0.74rem; padding-top: 0.32rem; }
+.catalog-chip-remove:hover { color: var(--danger); }
+.catalog-empty { color: var(--muted); font-size: 0.74rem; padding-top: 0.32rem; }
 .catalog-add { display: inline-flex; gap: 0.3rem; align-items: center; }
 .catalog-add input {
   width: 150px; padding: 0.22rem 0.5rem; font-size: 0.76rem;
-  background: var(--surface, #131316); color: var(--text, #fafafa);
-  border: 1px solid var(--border, #27272a); border-radius: var(--r-sm, 6px);
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
 }
 .catalog-add button {
   padding: 0.22rem 0.6rem; font-size: 0.76rem; cursor: pointer;
-  background: var(--surface-3, #27272a); color: var(--text, #fafafa);
-  border: 1px solid var(--border, #27272a); border-radius: var(--r-sm, 6px);
+  background: var(--card-well); color: var(--ink);
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
 }
-.catalog-add button:hover { border-color: var(--border-strong, #3f3f46); }
+.catalog-add button:hover { border-color: var(--line-strong); }
 .catalog-status { font-size: 0.78rem; min-height: 1rem; margin-top: 0.5rem; }
 </style>
 
@@ -85,7 +85,7 @@
   function setStatus(msg, color) {
     if (!statusEl) return;
     statusEl.textContent = msg || "";
-    statusEl.style.color = color || "var(--text-muted,#71717a)";
+    statusEl.style.color = color || "var(--muted)";
   }
 
   function render(extras) {
@@ -160,7 +160,7 @@
   }
 
   function save(provider, models) {
-    setStatus("Saving…", "var(--text-muted,#71717a)");
+    setStatus("Saving…", "var(--muted)");
     fetch("/api/ask/admin/models", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
@@ -170,13 +170,13 @@
       .then(function (result) {
         if (result.ok) {
           render(result.data);
-          setStatus("Saved.", "var(--success,#4ade80)");
+          setStatus("Saved.", "var(--good)");
           setTimeout(function () { setStatus(""); }, 1800);
         } else {
-          setStatus((result.data && result.data.error) || "Save failed.", "var(--danger,#f87171)");
+          setStatus((result.data && result.data.error) || "Save failed.", "var(--danger)");
         }
       })
-      .catch(function () { setStatus("Network error.", "var(--danger,#f87171)"); });
+      .catch(function () { setStatus("Network error.", "var(--danger)"); });
   }
 
   fetch("/api/ask/admin/models")
@@ -184,7 +184,7 @@
     .then(render)
     .catch(function () {
       document.getElementById("catalog-list").innerHTML =
-        '<span style="color:var(--danger,#f87171);font-size:0.82rem;padding:0.75rem 1rem;display:block;">Failed to load model catalog.</span>';
+        '<span style="color:var(--danger);font-size:0.82rem;padding:0.75rem 1rem;display:block;">Failed to load model catalog.</span>';
     });
 })();
 </script>

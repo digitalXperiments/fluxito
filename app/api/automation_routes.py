@@ -210,6 +210,27 @@ async def _project_channel_options(project_id: uuid.UUID) -> dict:
 _VAR_PATTERN = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 
 
+def _cron_to_text(cron_expression: str) -> str:
+    """Best-effort human label for a cron string; falls back to the raw value.
+
+    Kept as a small local copy (mirrors ``google_oauth_routes._cron_to_text``)
+    rather than importing across modules for a one-line helper.
+    """
+    parts = (cron_expression or "").split()
+    if len(parts) != 5:
+        return cron_expression or ""
+    minute, hour, dom, month, dow = parts
+    if dom == "*" and month == "*" and dow == "*" and minute.isdigit() and hour.isdigit():
+        return f"Every day {int(hour):02d}:{int(minute):02d}"
+    if dom == "*" and month == "*" and dow.isdigit() and minute.isdigit() and hour.isdigit():
+        days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        try:
+            return f"Every {days[int(dow) % 7]} {int(hour):02d}:{int(minute):02d}"
+        except (ValueError, IndexError):
+            return cron_expression
+    return cron_expression
+
+
 def _render_prompt(template_text: str, values: dict) -> str:
     out = template_text or ""
     for key, val in (values or {}).items():
@@ -321,8 +342,25 @@ async def automations_page(
     request: Request,
     theme: str | None = None,
     mine: str | None = None,
+    view: str | None = None,
 ):
-    """Library browse page."""
+    """Automation library, filtered to a theme.
+
+    Post-Phase-5 the standing "Flux's tasks" list lives on Home. The library
+    is now a themed browse surface reached from section entry points (audits,
+    reports, …), so a bare ``/automations`` with no ``theme`` (and not the
+    "mine" view) redirects to the Home tasks section. ``theme`` accepts a
+    comma-separated list — any valid themes are OR-ed together. ``view=all``
+    is the explicit "unfiltered curated library" surface reached from the
+    in-page "All themes" / "Curated" affordances — it shows the full curated
+    list without redirecting.
+    """
+    show_mine = mine == "1"
+    show_all = view == "all"
+    theme_keys = [t.strip() for t in (theme or "").split(",") if t.strip() in VALID_THEMES]
+    if not theme_keys and not show_mine and not show_all:
+        return RedirectResponse("/home#tasks", status_code=302)
+
     user_ctx = await _resolve_user_ctx(request)
     if not user_ctx:
         return RedirectResponse("/signin?next=/automations", status_code=302)
@@ -340,7 +378,6 @@ async def automations_page(
 
     project = await _project_for(project_id)
     connected_platforms = await _project_connected_platforms(project_id)
-    show_mine = mine == "1"
 
     async with app_state.db_session_factory() as db:
         query = select(Automation).where(Automation.is_active == True)
@@ -353,8 +390,8 @@ async def automations_page(
             query = query.where(
                 (Automation.playbook_type == AUTOMATION_TYPE_SYSTEM) | (Automation.project_id == project_id)
             )
-        if theme and theme in VALID_THEMES:
-            query = query.where(Automation.theme == theme)
+        if theme_keys:
+            query = query.where(Automation.theme.in_(theme_keys))
         query = query.order_by(
             Automation.is_featured.desc(),
             Automation.use_count.desc(),
@@ -393,6 +430,35 @@ async def automations_page(
         ]
         items.append(item)
 
+    # ── "Scheduled" section — every real install (active or paused) across
+    # the whole project, regardless of which automation created it. This is
+    # the only genuinely live state Fluxito holds for "Flux's tasks" (installs
+    # are Cowork-scheduled recipes we don't execute ourselves — see
+    # app/models/automation.py — so there is no per-run progress to show).
+    async with app_state.db_session_factory() as db:
+        install_rows = await db.execute(
+            select(AutomationInstallation, Automation.title, Automation.slug)
+            .join(Automation, AutomationInstallation.playbook_id == Automation.id)
+            .where(
+                AutomationInstallation.project_id == project_id,
+                AutomationInstallation.status != INSTALL_STATUS_REMOVED,
+            )
+            .order_by(AutomationInstallation.status.asc(), AutomationInstallation.installed_at.desc())
+        )
+        scheduled_tasks = [
+            {
+                "id": str(inst.id),
+                "title": inst.task_name,
+                "automation_title": auto_title,
+                "slug": auto_slug,
+                "cadence": _cron_to_text(inst.cron_expression),
+                "destination": inst.channel_summary or "—",
+                "status": inst.status,
+                "is_on": inst.status == INSTALL_STATUS_ACTIVE,
+            }
+            for inst, auto_title, auto_slug in install_rows.all()
+        ]
+
     response = render(
         request,
         "automations.html",
@@ -411,6 +477,13 @@ async def automations_page(
                 "plan": getattr(project, "plan", "free"),
             },
             "connected_platforms": connected_platforms,
+            "scheduled_tasks": scheduled_tasks,
+            # No backend source yet for live agentic-run progress or a
+            # completed-task activity feed (tracked separately — see
+            # docs/plans/ledger-revamp-completion-plan.md Phase 1.1 / "Activity
+            # Log"). Rendered as empty-state sections rather than fabricated.
+            "in_progress_tasks": [],
+            "done_tasks": [],
         },
     )
     set_active_project_cookie(response, project_id_str)

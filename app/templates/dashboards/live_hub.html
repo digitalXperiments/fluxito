@@ -1,18 +1,53 @@
 {% extends "base.html" %}
-{% block title %}Live dashboards — Fluxito{% endblock %}
+{% from "partials/page_header.html" import page_header %}
+{% block title %}Dashboards — Fluxito{% endblock %}
 {% set active = 'live' %}
 {% set dashboards_section = 'live' %}
 
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/report_schedules.css?v={{ asset_hash('css/report_schedules.css') }}"/>
+{% endblock %}
+
 {% block main %}
 <main class="app-main">
-  {% include "partials/dashboards_tabs.html" %}
 
-  <div class="page-head">
-    <div>
-      <span class="label">Live surface · refreshes on open</span>
-      <h1>Your live <em class="serif-italic">dashboards.</em></h1>
-      <p>Real-time marketing data across every connected platform. Your AI deploys them; you open, share, or retire them here.</p>
-    </div>
+  {{ page_header('Report', '<em>Dashboards.</em>', 'Start from a template or ask Flux to build one — every live dashboard and its scheduled deliveries, in one place.') }}
+
+  {# ── In-page tabs (hash-driven): Dashboards | Scheduled reports ── #}
+  <div class="sub-tabs" id="lhTabs">
+    <a class="sub-tab is-active" href="#dashboards" data-tab="dashboards">Dashboards</a>
+    <a class="sub-tab" href="#schedules" data-tab="schedules">Scheduled reports</a>
+  </div>
+
+  {# ════════════ TAB: Dashboards ════════════ #}
+  <div data-lh-tab="dashboards">
+
+  {# ── Templates strip (Google Docs style) ── #}
+  {% if gallery_templates %}
+  <div class="lh-tpl-strip-head">
+    <span class="lh-tpl-strip-title">Start from a template</span>
+    <a href="/templates" class="lh-tpl-browse">Browse all templates →</a>
+  </div>
+  <div class="lh-tpl-strip">
+    {% for t in gallery_templates %}
+    <a class="lh-tpl-card" href="/templates/{{ t.slug }}">
+      <span class="lh-tpl-cat t-cat-{{ t.category }}">{{ t.category | replace('_',' ') | title }}</span>
+      <span class="lh-tpl-name">{{ t.title }}</span>
+      <span class="lh-tpl-desc">{{ t.description | truncate(90) }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form id="lh-composer-form" class="lh-composer" autocomplete="off">
+    <span class="lh-composer-badge" aria-hidden="true">F</span>
+    <input type="text" id="lh-composer-input" class="lh-composer-input"
+           placeholder='Describe a dashboard — &quot;checkout funnel with paid ROAS by channel, weekly to Slack&quot;…'>
+    <button type="submit" class="btn-accent lh-composer-btn">Build it</button>
+  </form>
+
+  <div class="lh-grid-head">
+    <span class="lh-tpl-strip-title">Your dashboards</span>
   </div>
 
   {% if deployed_dashboards %}
@@ -71,6 +106,43 @@
   </div>
   {% endif %}
 
+  </div>{# /tab: dashboards #}
+
+  {# ════════════ TAB: Scheduled reports ════════════ #}
+  <div data-lh-tab="schedules" hidden>
+    <div class="rs-head-actions" style="margin-bottom:14px">
+      <a href="/automations?theme=daily_digest" class="btn ghost sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Automations
+      </a>
+    </div>
+
+    <div class="rs-table-wrap">
+      <table class="rs-table" id="rs-table" hidden>
+        <thead>
+          <tr>
+            <th>Report</th>
+            <th>Cadence</th>
+            <th>Channels</th>
+            <th>Last run</th>
+            <th>Next run</th>
+            <th class="rs-col-enabled">Enabled</th>
+            <th class="rs-col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="rs-tbody"></tbody>
+      </table>
+
+      <div class="rs-empty" id="rs-empty" hidden>
+        <div class="rs-empty-title">No scheduled reports yet</div>
+        <div class="rs-empty-sub">Open a dashboard and choose “Schedule” to have Flux email or Slack it on a cadence.</div>
+        <a href="#dashboards" class="btn primary sm">Go to dashboards</a>
+      </div>
+
+      <div class="rs-loading" id="rs-loading">Loading schedules…</div>
+    </div>
+  </div>{# /tab: schedules #}
+
 <!-- Full-page loading overlay — shown when a dashboard link is clicked -->
 <div id="dashLoadingOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:16px;">
   <div style="width:36px;height:36px;border:3px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:spin .8s linear infinite;"></div>
@@ -80,6 +152,60 @@
 
 <style>
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Tabs: hidden panes must stay hidden regardless of display rules */
+[data-lh-tab][hidden] { display: none !important; }
+
+/* Templates strip (Google Docs style) */
+.lh-tpl-strip-head, .lh-grid-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin: 4px 0 10px;
+}
+.lh-grid-head { margin-top: 26px; }
+.lh-tpl-strip-title {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.lh-tpl-browse { font-size: 12.5px; color: var(--accent-hover); text-decoration: none; }
+.lh-tpl-browse:hover { text-decoration: underline; }
+.lh-tpl-strip {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 230px;
+  gap: 12px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 18px;
+  scrollbar-width: thin;
+}
+.lh-tpl-card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-l);
+  background: var(--card); text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.lh-tpl-card:hover { border-color: var(--ink); transform: translateY(-1px); }
+.lh-tpl-cat {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+}
+.lh-tpl-name { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+.lh-tpl-desc { font-size: 12px; color: var(--ink-soft); line-height: 1.45; }
+
+/* Ask-to-build composer */
+.lh-composer {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--r-lg);
+  padding: 13px 15px; box-shadow: 0 10px 28px rgba(50,40,20,0.08);
+  margin-bottom: 26px;
+}
+.lh-composer-badge {
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+  background: var(--ink); color: var(--paper);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-style: italic; font-size: 13px;
+}
+.lh-composer-input {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-family: var(--sans); font-size: 14px; color: var(--ink);
+}
+.lh-composer-input::placeholder { color: var(--muted-2); }
+.lh-composer-btn { padding: 9px 17px; font-size: 13px; }
 
 /* Live dashboard hub grid */
 .lh-grid {
@@ -144,10 +270,44 @@
 @media (max-width: 680px) {
   .lh-grid { grid-template-columns: 1fr; }
   .lh-foot { flex-direction: column; align-items: flex-start; }
+  .lh-composer { flex-wrap: wrap; }
 }
 </style>
 
 <script>
+// ── Tab controller (hash-driven): #dashboards | #schedules ──
+(function(){
+  var TABS = ['dashboards', 'schedules'];
+  var schedulesLoaded = false;
+  function activate(){
+    var tab = (location.hash || '').replace('#', '');
+    if (TABS.indexOf(tab) === -1) tab = 'dashboards';
+    document.querySelectorAll('[data-lh-tab]').forEach(function(el){
+      el.hidden = el.getAttribute('data-lh-tab') !== tab;
+    });
+    document.querySelectorAll('#lhTabs .sub-tab').forEach(function(a){
+      a.classList.toggle('is-active', a.getAttribute('data-tab') === tab);
+    });
+    if (tab === 'schedules' && !schedulesLoaded) {
+      schedulesLoaded = true;
+      window.__loadSchedules && window.__loadSchedules();
+    }
+  }
+  window.addEventListener('hashchange', activate);
+  activate();
+})();
+
+(function(){
+  var form = document.getElementById('lh-composer-form');
+  var input = document.getElementById('lh-composer-input');
+  if (!form || !input) return;
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var q = (input.value || '').trim();
+    window.location.href = q ? '/ask?q=' + encodeURIComponent(q) : '/ask?q=' + encodeURIComponent('Help me build a dashboard for my key marketing metrics');
+  });
+})();
+
 // Intercept dashboard open links and show overlay
 var _overlayFallbackTimer = null;
 function hideOverlay() {
@@ -208,5 +368,119 @@ async function toggleDashVisibility(id, makePublic, btn) {
     btn.setAttribute('onclick', "toggleDashVisibility('" + id + "', true, this)");
   }
 }
+
+// ── Scheduled reports tab (lazy-loaded on first open via window.__loadSchedules) ──
+(function(){
+  var tbody = document.getElementById('rs-tbody');
+  var table = document.getElementById('rs-table');
+  var empty = document.getElementById('rs-empty');
+  var loading = document.getElementById('rs-loading');
+  if (!tbody) return;
+
+  function esc(s){ var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+  function fmtDate(iso){
+    if (!iso) return '—';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
+           d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function channelSummary(channels){
+    if (!channels || !channels.length) return '—';
+    var counts = {};
+    channels.forEach(function(c){ counts[c.type] = (counts[c.type] || 0) + 1; });
+    return Object.keys(counts).map(function(k){
+      var n = counts[k];
+      return n + ' ' + k + (n > 1 ? 's' : '');
+    }).join(', ');
+  }
+
+  function cadenceLabel(s){
+    if (s.cadence && s.cadence !== 'custom_cron') {
+      return s.cadence.charAt(0).toUpperCase() + s.cadence.slice(1);
+    }
+    return s.cron_expression || 'Custom';
+  }
+
+  function statusPill(s){
+    var st = s.last_status;
+    if (!st) return '<span class="rs-status is-none">Never run</span>';
+    return '<span class="rs-status is-' + esc(st) + '">' + esc(st) + '</span>';
+  }
+
+  function rowHtml(s){
+    var editUrl = s.dashboard_slug ? '/live-dashboards/' + encodeURIComponent(s.dashboard_slug) : '';
+    var lastRun = s.last_run_at ? (fmtDate(s.last_run_at) + ' ') : '';
+    return '' +
+      '<tr data-id="' + esc(s.id) + '" data-dash="' + esc(s.dashboard_id) + '"' + (s.enabled ? '' : ' class="is-disabled"') + '>' +
+        '<td class="rs-name"><div class="rs-name-main">' + esc(s.name) + '</div>' +
+          '<div class="rs-name-sub">' + esc(s.dashboard_title) + ' · ' + esc((s.format || '').toUpperCase()) + '</div></td>' +
+        '<td>' + esc(cadenceLabel(s)) + '<div class="rs-tz">' + esc(s.timezone || 'UTC') + '</div></td>' +
+        '<td>' + esc(channelSummary(s.channels)) + '</td>' +
+        '<td>' + lastRun + statusPill(s) + '</td>' +
+        '<td>' + esc(fmtDate(s.next_run_at)) + '</td>' +
+        '<td class="rs-col-enabled">' +
+          '<label class="rs-toggle"><input type="checkbox" data-act="toggle"' + (s.enabled ? ' checked' : '') + '><span class="rs-toggle-track"></span></label>' +
+        '</td>' +
+        '<td class="rs-col-actions">' +
+          '<button class="rs-btn" data-act="run" title="Run now">Run</button>' +
+          (editUrl ? '<a class="rs-btn" href="' + esc(editUrl) + '" title="Edit on dashboard">Edit</a>' : '') +
+          '<button class="rs-btn rs-btn-danger" data-act="delete" title="Delete">Delete</button>' +
+        '</td>' +
+      '</tr>';
+  }
+
+  function apiBase(tr){ return '/api/dashboards/' + tr.getAttribute('data-dash') + '/schedules/' + tr.getAttribute('data-id'); }
+
+  function load(){
+    loading.hidden = false;
+    fetch('/api/reports/schedules', { headers: { 'Accept': 'application/json' } })
+      .then(function(r){ return r.ok ? r.json() : { schedules: [] }; })
+      .then(function(data){
+        loading.hidden = true;
+        var items = (data && data.schedules) || [];
+        if (!items.length) { empty.hidden = false; return; }
+        tbody.innerHTML = items.map(rowHtml).join('');
+        table.hidden = false;
+      })
+      .catch(function(){ loading.textContent = 'Could not load schedules.'; });
+  }
+  window.__loadSchedules = load;
+
+  tbody.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    var act = btn.getAttribute('data-act');
+    var tr = btn.closest('tr');
+    if (act === 'run') {
+      btn.disabled = true; btn.textContent = '…';
+      fetch(apiBase(tr) + '/run', { method: 'POST' })
+        .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ return { ok: r.ok, j: j }; }); })
+        .then(function(res){ btn.disabled = false; btn.textContent = res.ok ? 'Sent' : 'Failed'; if (res.ok) setTimeout(load, 800); })
+        .catch(function(){ btn.disabled = false; btn.textContent = 'Failed'; });
+    } else if (act === 'delete') {
+      if (!confirm('Delete this scheduled report? This cannot be undone.')) return;
+      fetch(apiBase(tr), { method: 'DELETE' })
+        .then(function(r){ if (r.ok) { tr.remove(); if (!tbody.children.length) { table.hidden = true; empty.hidden = false; } } else { alert('Delete failed'); } })
+        .catch(function(){ alert('Delete failed'); });
+    }
+  });
+
+  tbody.addEventListener('change', function(e){
+    var input = e.target.closest('[data-act="toggle"]');
+    if (!input) return;
+    var tr = input.closest('tr');
+    var enabled = input.checked;
+    fetch(apiBase(tr), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: enabled })
+    })
+      .then(function(r){ if (!r.ok) { input.checked = !enabled; alert('Update failed'); return; } tr.classList.toggle('is-disabled', !enabled); })
+      .catch(function(){ input.checked = !enabled; alert('Update failed'); });
+  });
+})();
 </script>
 {% endblock %}

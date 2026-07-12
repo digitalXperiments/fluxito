@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -46,7 +47,23 @@ class _Service(Protocol):
         message: LLMMessage,
         *,
         token_usage: dict | None = ...,
-    ) -> None: ...
+    ) -> Any: ...
+
+
+class _Drafts(Protocol):
+    async def create(
+        self,
+        *,
+        project_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        message_id: uuid.UUID | None,
+        created_by: uuid.UUID | None,
+        kind: str,
+        title: str,
+        payload: dict[str, Any],
+    ) -> Any: ...
+
+    async def attach_message(self, draft_id: uuid.UUID, message_id: uuid.UUID) -> None: ...
 
 
 @dataclass
@@ -59,6 +76,11 @@ class HarnessDeps:
     system: str
     history: list[LLMMessage] | None = None
     max_tokens: int = 4096
+    # Draft wiring — only set when a write-capable section (e.g. `implement`)
+    # is active. When drafts is None, no FluxDraft is ever created.
+    drafts: _Drafts | None = None
+    project_id: uuid.UUID | None = None
+    created_by: uuid.UUID | None = None
 
 
 class _PendingTool:
@@ -86,6 +108,10 @@ class Harness:
         # Accumulated token usage across all iterations.
         total_input: int = 0
         total_output: int = 0
+
+        # Drafts created mid-turn (e.g. a proposed GTM change) whose message_id
+        # isn't known until the follow-up assistant answer is persisted.
+        unattached_drafts: list[uuid.UUID] = []
 
         for _ in range(self._max_iter):
             assistant_blocks: list[Any] = []
@@ -148,7 +174,15 @@ class Harness:
                 tu = dict(usage or {})
                 tu["model"] = d.model
                 tu["provider"] = d.provider.name
-                await d.service.append(d.conversation_id, assistant_msg, token_usage=tu)
+                msg_id = await d.service.append(d.conversation_id, assistant_msg, token_usage=tu)
+                # Link any mid-turn drafts to this assistant answer once it's
+                # persisted. Drafts are created *after* their tool-call assistant
+                # message is stored, so this only ever binds them to the follow-up
+                # answer message (the card renders there on history reload).
+                if unattached_drafts and text_buf and d.drafts is not None and msg_id is not None:
+                    for did in unattached_drafts:
+                        await d.drafts.attach_message(did, msg_id)
+                    unattached_drafts.clear()
 
             if stop == StopReason.TOOL_USE and order:
                 # Execute all tool calls concurrently, preserving order.
@@ -163,6 +197,25 @@ class Harness:
                 tool_msg = LLMMessage(role="tool", content=tool_blocks)
                 messages.append(tool_msg)
                 await d.service.append(d.conversation_id, tool_msg)
+
+                # Turn any successful GTM propose_change into a pending FluxDraft
+                # and stream a `draft` frame so the client renders the diff card.
+                if d.drafts is not None:
+                    for i, tid in enumerate(order):
+                        content, is_err = results[i]
+                        if is_err or pending[tid].name != "tagmanager_write":
+                            continue
+                        if parsed_args[i].get("action") != "propose_change":
+                            continue
+                        result = _safe_json(content)
+                        if result.get("error"):
+                            continue
+                        draft = await self._create_gtm_draft(result)
+                        if draft is None:
+                            continue
+                        unattached_drafts.append(draft.id)
+                        yield StreamEvent(type="draft", draft=_draft_payload(draft))
+
                 continue  # next iteration: feed results back to the model
 
             # Terminal frame: use summed token totals.
@@ -191,6 +244,72 @@ class Harness:
             error=f"Stopped after {self._max_iter} tool-use rounds without finishing.",
         )
         yield StreamEvent(type="message_done", stop_reason=StopReason.MAX_TOKENS)
+
+    async def _create_gtm_draft(self, result: dict[str, Any]) -> Any:
+        """Persist a FluxDraft from a tagmanager_write propose_change result.
+        Returns the created draft, or None if we can't (no drafts service /
+        project). Never raises — a draft failure must not break the chat turn."""
+        d = self._d
+        if d.drafts is None or d.project_id is None:
+            return None
+        try:
+            title, payload = _gtm_draft_from_propose(result)
+            return await d.drafts.create(
+                project_id=d.project_id,
+                conversation_id=d.conversation_id,
+                message_id=None,  # attached to the follow-up answer once persisted
+                created_by=d.created_by,
+                kind="gtm_workspace_change",
+                title=title,
+                payload=payload,
+            )
+        except Exception:
+            return None
+
+
+def _draft_payload(draft: Any) -> dict[str, Any]:
+    from app.ask.drafts import draft_to_stream_payload
+
+    return draft_to_stream_payload(draft)
+
+
+def _gtm_draft_from_propose(result: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Shape a FluxDraft (title, payload) from a propose_change tool result.
+
+    The payload carries both the display fields the client renders (workspace
+    label, target, diff lines) and, under ``gtm``, the identifiers
+    DraftService.approve needs to run the real publish. Any identifier may be
+    None (legacy / underspecified proposal) — approve() falls back to a mock
+    version when they're missing.
+    """
+    entity_type = str(result.get("entity_type") or "entity")
+    entity_name = str(result.get("entity_name") or "change")
+    change_type = str(result.get("change_type") or "update")
+    proposal = str(result.get("proposal") or "")
+
+    title = f"{change_type.capitalize()} {entity_type} '{entity_name}'"
+    diff = [{"kind": "context", "text": line} for line in proposal.splitlines() if line.strip()]
+    gtm = {
+        "connection_id": result.get("connection_id"),
+        "account_id": result.get("account_id"),
+        "container_id": result.get("container_id"),
+        "workspace_id": result.get("workspace_id"),
+    }
+    container_id = gtm["container_id"]
+    workspace_id = gtm["workspace_id"]
+    ws_bits = " · ".join(b for b in (container_id, f"workspace: {workspace_id}" if workspace_id else "") if b)
+    payload: dict[str, Any] = {
+        "workspace_label": ws_bits or "GTM workspace",
+        "target": f"{entity_type.upper()}: {entity_name}",
+        "diff": diff,
+        "proposal": proposal,
+        "proposed_config": result.get("proposed_config"),
+        "change_type": change_type,
+        "entity_type": entity_type,
+        "entity_name": entity_name,
+        "gtm": gtm,
+    }
+    return title, payload
 
 
 def _safe_json(s: str) -> dict[str, Any]:

@@ -6,46 +6,45 @@
 <link rel="stylesheet" href="/static/css/tutorials.css?v={{ asset_hash('css/tutorials.css') }}"/>
 {% endblock %}
 
-{% macro guide_badge(slug) -%}
-{%- if slug == 'projects-and-connections' -%}PR
-{%- elif slug == 'connect-ai-mcp' -%}AI
-{%- elif slug == 'platform-setup-guides' -%}PF
-{%- elif slug == 'business-context' -%}BC
-{%- elif slug == 'kpi-library' -%}KP
-{%- elif slug == 'sdr-generation' -%}SD
-{%- elif slug == 'dashboards-and-templates' -%}DB
-{%- elif slug == 'automations' -%}AU
-{%- elif slug == 'audits-and-activity' -%}AD
-{%- else -%}GD
-{%- endif -%}
-{%- endmacro %}
+{% set featured = tutorials[:2] %}
+{% set rest = tutorials[2:] %}
 
 {% block main %}
 <main class="app-main tut-main">
   <div class="page-head">
     <div>
-      <span class="label">Docs</span>
-      <h1>Tutorials.</h1>
-      <p>Feature walkthroughs and platform setup guides for running Fluxito with an MCP-compatible AI.</p>
-    </div>
-    <div class="tut-head-meta" aria-label="Tutorial count">
-      <span>{{ tutorial_count }}</span>
-      <small>Guides</small>
+      <span class="label">Tutorials</span>
+      <h1>Learn to work with <em class="serif-italic">Flux.</em></h1>
+      <p>Short, practical guides — most are five minutes and end with something real in your workspace.</p>
     </div>
   </div>
 
-  <div class="tut-grid tut-grid-flat">
-    {% for slug, name, time, note in tutorials %}
-    <a href="/tutorials/{{ slug }}" class="tut-card">
-      <div class="tut-card-head">
-        <span class="tut-guide-badge"><span>{{ guide_badge(slug) }}</span></span>
-        <span class="status-pill">{{ time }}</span>
-      </div>
-      <h2>{{ name }}</h2>
-      <p>{{ note }}</p>
-      <span class="tut-card-action">Read guide <span>→</span></span>
+  <div class="tut-section-label">Start here</div>
+  <div class="tut-feature-grid">
+    {% for t in featured %}
+    <a href="/tutorials/{{ t[0] }}" class="tut-feature-card{% if t[4] %} tut-feature-card-dark{% endif %}">
+      <span class="tut-feature-badge">{{ t[2] }}{% if t[4] %} · INTERACTIVE{% endif %}</span>
+      <h2>{{ t[1] }}</h2>
+      <p>{{ t[3] }}</p>
+      <span class="tut-feature-cta">Start <span>→</span></span>
     </a>
     {% endfor %}
   </div>
+
+  {% if rest %}
+  <div class="tut-section-label tut-section-label-spaced">By workflow</div>
+  <div class="tut-workflow-list">
+    {% for t in rest %}
+    <a href="/tutorials/{{ t[0] }}" class="tut-workflow-row">
+      <div class="tut-workflow-body">
+        <div class="tut-workflow-title">{{ t[1] }}</div>
+        <div class="tut-workflow-note">{{ t[3] }}</div>
+      </div>
+      <span class="tut-workflow-time">{{ t[2] }}</span>
+      <span class="tut-workflow-arrow">→</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
 </main>
 {% endblock %}

@@ -5,13 +5,20 @@ SETTINGS_TEMPLATE = Path("app/templates/projects/settings.html")
 
 def test_settings_tabs_are_text_only_and_ordered():
     source = SETTINGS_TEMPLATE.read_text()
-    tabs = source[source.index('<div class="ps-tabs"') : source.index("{# ── MEMBERS TAB")]
-
-    assert "ps-tab-n" not in tabs
-    assert tabs.index(">Users</button>") < tabs.index(">User Roles</button>")
-    assert tabs.index(">User Roles</button>") < tabs.index(">Connections</button>")
-    assert tabs.index(">Connections</button>") < tabs.index(">Notifications</button>")
-    assert tabs.index(">Notifications</button>") < tabs.index(">General</button>")
+    # The revamp replaced the tab bar with a single editorial scroll; sections
+    # keep stable ids and appear in reading order.
+    assert 'class="ps-tabs"' not in source
+    assert "ps-tab-n" not in source
+    order = [
+        'id="general"',
+        'id="members"',
+        'id="roles"',
+        'id="connections"',
+        'id="limits"',
+        'id="notifications"',
+    ]
+    positions = [source.index(marker) for marker in order]
+    assert positions == sorted(positions)
 
 
 def test_role_editor_uses_guided_sections_and_preserves_hooks():
@@ -36,13 +43,13 @@ def test_user_facing_role_copy_uses_users_label():
 
     assert "Members tab" not in source
     assert "Manage members" not in source
-    assert "Users tab" in source
     assert "Manage users" in source
+    assert "your users need" in source
 
 
 def test_user_roles_prioritizes_custom_roles_and_collapses_reference():
     source = SETTINGS_TEMPLATE.read_text()
-    roles_panel = source[source.index('data-panel="roles"') : source.index("{# ── Member roles popover")]
+    roles_panel = source[source.index('id="roles"') : source.index("{# ── Member roles popover")]
 
     assert roles_panel.index('id="rolesListCard"') < roles_panel.index('class="ps-built-in-roles"')
     assert '<details class="ps-built-in-roles">' in roles_panel

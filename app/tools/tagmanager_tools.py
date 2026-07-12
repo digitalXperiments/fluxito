@@ -2062,6 +2062,13 @@ def register_tagmanager_tools(mcp_server):
                     "entity_name": entity_name,
                     "is_live": False,
                     "requires_publish": True,
+                    # GTM identifiers so a caller (e.g. Ask Fluxito's draft flow)
+                    # can later publish the workspace this proposal targets. Any
+                    # may be None if the caller didn't supply them.
+                    "connection_id": _conn(),
+                    "account_id": account_id,
+                    "container_id": container_id,
+                    "workspace_id": workspace_id,
                 }
 
             # All other write actions need the edit.containers scope

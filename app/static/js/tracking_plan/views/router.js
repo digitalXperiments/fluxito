@@ -3,7 +3,6 @@
 // previous view (each mountView returns a cleanup fn).
 
 import * as state from 'tp/state';
-import * as overview from 'tp/views/overview';
 import * as events from 'tp/views/events';
 import * as properties from 'tp/views/properties';
 import * as categories from 'tp/views/categories';
@@ -14,7 +13,6 @@ import * as versions from 'tp/views/versions';
 import * as issues from 'tp/views/issues';
 
 const VIEWS = {
-  overview: overview.mountView,
   events: events.mountView,
   properties: properties.mountView,
   categories: categories.mountView,

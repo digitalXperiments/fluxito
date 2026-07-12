@@ -15,21 +15,13 @@
   }
 }
 </script>
+{% if print_mode %}
 <script>
-// Dark mode: auto-detect system preference, persist in localStorage.
-(function() {
-  {% if print_mode %}
-  // PDF render path: force light theme and the print layout (hides nav, the
-  // toolbar, the back link and the footer) so the export reads like a report.
-  document.documentElement.classList.add('print-mode');
-  document.documentElement.setAttribute('data-theme', 'light');
-  {% else %}
-  var saved = localStorage.getItem('theme');
-  var preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  document.documentElement.setAttribute('data-theme', saved || preferred);
-  {% endif %}
-})();
+// PDF render path: the print layout hides nav, the toolbar, the back link
+// and the footer so the export reads like a report.
+document.documentElement.classList.add('print-mode');
 </script>
+{% endif %}
 <style>
   .lv-toolbar {
     display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
@@ -70,32 +62,53 @@
   .lv-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
   .card-chart { width: 100%; height: 260px; }
-  .big-metric .metric-value { font-size: 34px; line-height: 1.1; }
+  .big-metric .metric-value { font-family: var(--mono); font-size: 34px; font-weight: 600; line-height: 1.1; }
   .metric-kpi-grid {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 14px; width: 100%;
   }
   .metric-kpi {
-    position: relative; padding: 18px 18px 16px;
-    background: var(--bg-2); border: 1px solid var(--line);
-    border-radius: var(--r-m); overflow: hidden;
+    position: relative; padding: 18px 20px;
+    background: var(--card); border: 1px solid var(--line-2);
+    border-radius: var(--r-lg); overflow: hidden;
     transition: border-color 0.15s, transform 0.15s;
-  }
-  .metric-kpi::before {
-    content: ""; position: absolute; left: 0; top: 0; bottom: 0;
-    width: 3px; background: var(--ink); opacity: 0.9;
   }
   .metric-kpi:hover { border-color: var(--ink); transform: translateY(-1px); }
   .metric-kpi .l {
-    font-size: 10.5px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px;
+    font-size: 10px; font-weight: 400; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted-2);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     font-family: var(--mono);
   }
   .metric-kpi .v {
-    font-size: 30px; font-weight: 600; letter-spacing: -0.02em;
+    font-family: var(--mono);
+    font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin-top: 6px;
     line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--ink);
   }
+
+  /* Flux narrative header — mirrors "Flux - Dashboard View" design's
+     narrative callout: ink badge + a short written summary. Renders only
+     when the backend has movers/insights to show (data.insights). */
+  .flux-narrative {
+    display: none;
+    gap: 14px;
+    padding: 17px 20px;
+    background: var(--card);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-lg);
+    margin: 0 0 20px;
+    align-items: flex-start;
+  }
+  .flux-narrative-badge {
+    width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0;
+    background: var(--ink); color: var(--paper);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-style: italic; font-size: 14px;
+  }
+  .flux-narrative-body {
+    font-size: 14px; color: var(--ink-2); line-height: 1.65;
+  }
+  .flux-narrative-body strong { color: var(--ink); }
 
   .skeleton {
     background: linear-gradient(90deg, var(--line) 0%, var(--bg-2) 50%, var(--line) 100%);
@@ -261,11 +274,6 @@
         </div>
       </div>
       <div class="lv-head-actions">
-        <button class="btn sm" id="btnDarkMode" title="Toggle dark mode" aria-label="Toggle dark mode">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-          </svg>
-        </button>
         <button class="btn sm" id="btnSharePdf" type="button" title="Download a PDF of the current view">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
           Share PDF
@@ -321,8 +329,15 @@
     <button class="dash-filter-chip" id="clearAllFilters" title="Reset all filters">Clear all</button>
   </div>
 
-  <div id="insightBanner" style="display:none;margin:10px 0 0;padding:8px 12px;border:1px solid var(--border);border-radius:var(--r-sm,6px);background:var(--surface-2,#fafafa);font-size:13px;"></div>
-  <div id="freshnessBanner" style="display:none;margin:8px 0 0;font-size:12px;color:var(--text-subtle);"></div>
+  {# Flux narrative — the ink "F" badge + a short written summary, per the
+     "Flux - Dashboard View" design. Populated client-side from data.insights
+     (biggest movers) when the backend has something to report; stays hidden
+     otherwise, so this never shows an empty card. #}
+  <div class="flux-narrative" id="insightBanner">
+    <span class="flux-narrative-badge" aria-hidden="true">F</span>
+    <div class="flux-narrative-body" id="insightBannerBody"></div>
+  </div>
+  <div id="freshnessBanner" class="lv-meta-line" style="display:none;margin:0 0 14px;"></div>
 
   <div id="cardGrid" class="grid grid-cards">
     <!-- cards are rendered client-side from initialCards, then updated on Apply -->
@@ -478,16 +493,6 @@
   };
 
   // ── Dark mode toggle ──────────────────────────────────────────────────
-  const btnDarkMode = document.getElementById('btnDarkMode');
-  if (btnDarkMode) {
-    btnDarkMode.addEventListener('click', function() {
-      const current = document.documentElement.getAttribute('data-theme');
-      const next = current === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('theme', next);
-    });
-  }
-
   if (filterBar) {
     // ── Date range chips ─────────────────────────────────────────────────
     filterBar.querySelectorAll('.dash-filter-chip[data-range-start]').forEach(function(chip) {
@@ -620,7 +625,7 @@
         `[live-refresh] card "${card.title}" (${card.id}) failed:`,
         {error_type: le.error_type, message: le.message, detail: le.detail, platform: card.platform}
       );
-      const notice = '<div class="lv-card-error" style="margin:0 0 8px;padding:6px 10px;border:1px solid var(--danger,#dc2626);border-radius:6px;background:var(--danger-soft,#fee2e2);color:var(--danger,#b91c1c);font-size:12px;">⚠️ '
+      const notice = '<div class="lv-card-error" style="margin:0 0 8px;padding:6px 10px;border:1px solid var(--danger);border-radius:6px;background:var(--danger-soft);color:var(--danger);font-size:12px;">⚠️ '
         + Fluxito.esc(le.message || 'Could not refresh this card') + ' · <a href="#" class="lv-retry" style="text-decoration:underline;color:inherit;">Retry</a></div>';
       html = html.replace('<div class="card-body">', '<div class="card-body">' + notice);
     }
@@ -726,17 +731,20 @@
       });
       renderAll(cards);
 
-      // Insight banner (biggest movers when compare is on)
+      // Flux narrative (biggest movers when compare is on) — the ink-badge
+      // callout at the top of the dashboard. Only the body text swaps; the
+      // badge is static markup so re-render never wipes it out.
       const ib = document.getElementById('insightBanner');
-      if (ib) {
+      const ibBody = document.getElementById('insightBannerBody');
+      if (ib && ibBody) {
         if (data.insights && data.insights.length) {
           const esc = (window.Fluxito && Fluxito.esc) ? Fluxito.esc : function(s){ return s; };
-          let html = '💡 ' + data.insights.map(esc).join('  ·  ');
+          let html = '<strong>The week in one line:</strong> ' + data.insights.map(esc).join('  ·  ');
           if (data.compare && data.compare.start) {
-            html += ' <span style="color:var(--text-subtle)">vs ' + esc(data.compare.start) + ' – ' + esc(data.compare.end) + '</span>';
+            html += ' <span style="color:var(--muted)">vs ' + esc(data.compare.start) + ' – ' + esc(data.compare.end) + '</span>';
           }
-          ib.innerHTML = html; ib.style.display = '';
-        } else { ib.style.display = 'none'; ib.innerHTML = ''; }
+          ibBody.innerHTML = html; ib.style.display = 'flex';
+        } else { ib.style.display = 'none'; ibBody.innerHTML = ''; }
       }
 
       // Freshness banner ("Cached data from <ts>" / "Live as of <ts>")

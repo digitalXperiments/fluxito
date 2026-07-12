@@ -1,6 +1,8 @@
 {% extends "base.html" %}
+{% from "partials/page_header.html" import page_header %}
 {% block title %}{{ page_title }}{% endblock %}
 {% set active = 'audits' %}
+{% set audit_tab = 'runs' %}
 
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/auditing.css?v=1"/>
@@ -10,25 +12,66 @@
 <div class="app-main">
 
   {# ── Page header ── #}
-  <div class="page-head">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap">
-      <div style="flex:1;min-width:280px">
-        <span class="label">Powered by Rule Books + AI</span>
-        <h1>Auditing <em class="serif-italic">intelligence.</em></h1>
-        <p>Continuous tag auditing, live tag testing, and data quality monitoring — all in one place. Your AI analyses your tracking stack against 183+ rules across 20 platforms.</p>
+  {% call page_header('Tag auditing', 'Catch it before <em>finance does.</em>', 'Flux loads your pages in a real browser and checks every tag against ' ~ (platforms_summary | length) ~ ' platform rule books — duplicates, dead conversions, consent gaps, plan drift.') %}
+    <div class="audit-hero-actions">
+      <a href="/automations?theme=tag_health,launch_monitor" class="btn ghost sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Automations
+      </a>
+      <a href="/tracking-plan" class="btn ghost sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
+        View Tracking Plan
+      </a>
+      <button class="btn primary sm" id="runAuditBtn">
+        <span class="audit-run-mark">F</span>
+        Run a live audit
+      </button>
+    </div>
+  {% endcall %}
+
+  {% include "partials/audit_tabs.html" %}
+
+  {# ── Live / in-progress run card ──────────────────────────
+     Guarded on `active_run`, populated by the /audits route from the
+     most recent AuditRun with status='running'. Only `title`/`status`
+     are real today — there's no progress-telemetry surface yet, so
+     progress_pct/found_so_far/checking_current stay unset and these
+     sub-sections render their built-in fallbacks (indeterminate sweep
+     bar, no found/checking columns). See TODO in auditing_routes.py
+     for what a fuller live-progress feed would need. Expected shape:
+       active_run.title, active_run.progress_pct (0-100),
+       active_run.progress_label, active_run.found_so_far
+         (list of {severity, message}), active_run.checking_current,
+       active_run.checking_next #}
+  {% if active_run %}
+  <div class="audit-live-card is-visible" id="activeRunCard">
+    <div class="alc-head">
+      <span class="alc-dot"></span>
+      <span class="alc-title">{{ active_run.title or 'Audit running' }}</span>
+      <span class="alc-status">{{ active_run.progress_label or ((active_run.progress_pct ~ '%') if active_run.progress_pct is defined else 'Running') }}</span>
+    </div>
+    <div class="alc-bar-track"><div class="alc-bar-fill" style="{% if active_run.progress_pct is defined %}width:{{ active_run.progress_pct }}%;animation:none;left:0;{% endif %}"></div></div>
+    <div class="alc-cols">
+      {% if active_run.found_so_far %}
+      <div class="alc-col">
+        <div class="alc-col-label">Found so far</div>
+        {% for item in active_run.found_so_far %}
+        <div class="alc-found-row"><span class="alc-found-mark alc-found-mark--{{ item.severity }}">{{ '✕' if item.severity == 'critical' else '⚠' }}</span>{{ item.message }}</div>
+        {% endfor %}
       </div>
-      <div class="audit-hero-actions">
-        <a href="/tracking-plan" class="btn ghost sm">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
-          View Tracking Plan
-        </a>
-        <button class="btn primary sm" id="runAuditBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          Run Audit
-        </button>
+      {% endif %}
+      {% if active_run.checking_current %}
+      <div class="alc-col">
+        <div class="alc-col-label">Currently checking</div>
+        <div class="alc-checking">
+          <div>{{ active_run.checking_current }}</div>
+          {% if active_run.checking_next %}<div class="alc-checking-next">next: {{ active_run.checking_next }}</div>{% endif %}
+        </div>
       </div>
+      {% endif %}
     </div>
   </div>
+  {% endif %}
 
   {# ── Score summary cards ── #}
   {% if score_summary %}
@@ -116,53 +159,66 @@
   </div>
   {% endif %}
 
-  {# ── Tabs: Recent Runs | Rule Books | Custom Rules ── #}
+  {# ── Rule Books + Custom Rules moved into the Vendors section (site
+        revamp) — each vendor now carries its rule book and custom rules. #}
   <div class="audit-tabs" id="auditTabs">
     <button class="audit-tab is-active" data-tab="runs">Recent Runs</button>
-    <button class="audit-tab" data-tab="rulebooks">Rule Books <span class="t-seg-count">{{ platforms_summary | length }}</span></button>
-    <button class="audit-tab" data-tab="custom">Custom Rules</button>
+    <a class="audit-tab audit-tab-link" href="/audits/vendors">Rule books &amp; custom rules → Vendors</a>
   </div>
 
   {# ── Tab: Recent Runs ── #}
   <div class="audit-tab-panel is-active" id="tab-runs">
     {% if runs %}
-    <div class="audit-runs-list">
+    <div class="audit-section-label">Past runs</div>
+    <div class="apr-table">
+      <div class="apr-head-row">
+        <span>Scope</span><span>When</span><span>Pages</span><span>Findings</span><span></span>
+      </div>
       {% for run in runs %}
-      {% set score = run.score or 0 %}
-      {% set tier = 'excellent' if score >= 90 else ('good' if score >= 70 else ('fair' if score >= 50 else 'poor')) %}
-      <a href="/audits/run/{{ run.id }}" class="audit-run-row">
-        <div class="arr-left">
-          <div class="arr-score arr-score--{{ tier }}">{{ score }}</div>
+      <a href="/audits/run/{{ run.id }}" class="apr-row">
+        <div>
+          <div class="apr-scope-name">{{ run.title or 'Audit Run' }}</div>
+          <div class="apr-scope-sub">{{ audit_type_labels.get(run.audit_type, run.audit_type) }}{% if run.url_tested %} · {{ run.url_tested[:48] }}{% endif %}</div>
         </div>
-        <div class="arr-body">
-          <div class="arr-title">{{ run.title or 'Audit Run' }}</div>
-          <div class="arr-meta">
-            <span class="arr-type-pill">{{ audit_type_labels.get(run.audit_type, run.audit_type) }}</span>
-            {% if run.url_tested %}
-            <span class="arr-url">{{ run.url_tested[:60] }}</span>
-            {% endif %}
-          </div>
-        </div>
-        <div class="arr-right">
-          <div class="arr-findings">
-            {% if run.critical > 0 %}
-            <span class="arr-badge critical">{{ run.critical }}C</span>
-            {% endif %}
-            {% if run.warning > 0 %}
-            <span class="arr-badge warning">{{ run.warning }}W</span>
-            {% endif %}
-            {% if run.passed > 0 %}
-            <span class="arr-badge pass">{{ run.passed }}P</span>
-            {% endif %}
-          </div>
-          <div class="arr-date">{{ run.created_at[:10] if run.created_at else '—' }}</div>
-        </div>
-        <div class="arr-chevron">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
+        <span class="apr-when">{{ run.created_at | fmt_date('%b %d') if run.created_at else '—' }}</span>
+        <span class="apr-pages">{{ run.pages_tested if run.pages_tested is not none else '—' }}</span>
+        <span class="apr-findings">
+          <span class="f-crit">{{ run.critical or 0 }}</span><span class="f-sep">·</span><span class="f-warn">{{ run.warning or 0 }}</span><span class="f-sep">·</span><span class="f-pass">{{ run.passed or 0 }}✓</span>
+        </span>
+        <span class="apr-report">Report →</span>
       </a>
       {% endfor %}
     </div>
+
+    {# ── Open findings ──────────────────────────────────────
+       Guarded on `open_findings`, populated by the /audits route
+       from the latest run's AuditFinding rows where passed=false,
+       ordered by severity (critical first). #}
+    <div class="audit-section-label">Open findings{% if open_findings %} · {{ open_findings | length }}{% endif %}</div>
+    {% if open_findings %}
+    <div class="audit-findings-open" id="openFindingsList">
+      {% for f in open_findings[:3] %}
+      <div class="aof-row" data-severity="{{ f.severity or 'info' }}">
+        <div class="aof-body">
+          <div class="aof-title">{{ f.title or f.message }}</div>
+          {% if f.description or f.remediation %}
+          <div class="aof-desc">{{ f.description or f.remediation }}</div>
+          {% endif %}
+        </div>
+        {% if f.severity == 'critical' %}
+        <a class="aof-action aof-action--primary" href="/ask?q={{ ('Fix this finding: ' ~ (f.title or f.message)) | urlencode }}">Ask Flux to fix</a>
+        {% else %}
+        <a class="aof-action aof-action--ghost" href="/audits/run/{{ f.run_id }}">Details</a>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% if open_findings | length > 3 %}
+      <a href="#" class="aof-more-link">Show {{ open_findings | length - 3 }} more findings →</a>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="aof-empty-hint">No standalone findings feed yet — open a run below to see its full findings list.</div>
+    {% endif %}
     {% else %}
     <div class="audit-empty">
       <div class="audit-empty-icon">
@@ -175,86 +231,6 @@
     {% endif %}
   </div>
 
-  {# ── Tab: Rule Books ── #}
-  <div class="audit-tab-panel" id="tab-rulebooks">
-    <div class="rb-intro">
-      <p>Rule Books define <strong>{{ platforms_summary | sum(attribute='event_count') }}+ validation rules</strong> across {{ platforms_summary | length }} platforms. Your AI uses these to validate every tag payload — no connector required.</p>
-    </div>
-
-    <div class="rb-search-row">
-      <input type="text" class="rb-search" id="rbSearch" placeholder="Search platforms…" autocomplete="off">
-    </div>
-
-    <div class="rb-grid" id="rbGrid">
-      {% for rb in platforms_summary %}
-      <div class="rb-card" data-platform="{{ rb.platform }}" data-name="{{ rb.display_name | lower }}">
-        <div class="rb-card-header">
-          <div class="rb-platform-icon">
-            {% if 'google' in rb.platform or 'ga4' in rb.platform or 'gtm' in rb.platform %}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-            {% elif 'meta' in rb.platform or 'facebook' in rb.platform %}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
-            {% elif 'tiktok' in rb.platform %}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg>
-            {% elif 'amplitude' in rb.platform or 'segment' in rb.platform or 'mixpanel' in rb.platform %}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            {% else %}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-            {% endif %}
-          </div>
-          <div class="rb-card-name">{{ rb.display_name }}</div>
-        </div>
-        <div class="rb-stats">
-          <div class="rb-stat">
-            <span class="rb-stat-val">{{ rb.event_count }}</span>
-            <span class="rb-stat-label">events</span>
-          </div>
-          <div class="rb-stat">
-            <span class="rb-stat-val">{{ rb.global_rule_count }}</span>
-            <span class="rb-stat-label">global rules</span>
-          </div>
-          {% if rb.spec_version %}
-          <div class="rb-stat">
-            <span class="rb-stat-val" style="font-size:10px">{{ rb.spec_version }}</span>
-            <span class="rb-stat-label">spec</span>
-          </div>
-          {% endif %}
-        </div>
-        <div class="rb-card-footer">
-          <a href="{{ rb.docs_url }}" target="_blank" rel="noopener" class="rb-docs-link" title="Official docs">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-            Docs
-          </a>
-          <button class="rb-view-btn" data-platform="{{ rb.platform }}" title="View full spec">
-            View rules
-          </button>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-
-  {# ── Tab: Custom Rules ── #}
-  <div class="audit-tab-panel" id="tab-custom">
-    <div class="cr-toolbar">
-      <div>
-        <h3 style="margin:0 0 4px;font-size:15px;font-weight:600">Custom Rules</h3>
-        <p style="margin:0;color:var(--muted);font-size:13px">Add project-specific validation rules on top of the built-in Rule Books.</p>
-      </div>
-      <button class="btn primary sm" id="addRuleBtn">+ Add Rule</button>
-    </div>
-
-    <div id="customRulesList" class="cr-list">
-      <div class="audit-empty" style="padding:48px 24px">
-        <div class="audit-empty-icon">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-        </div>
-        <h3>No custom rules</h3>
-        <p>Create custom rules to enforce business-specific requirements on top of the built-in Rule Books.</p>
-      </div>
-    </div>
-  </div>
-
   {# ── AI prompt tip ── #}
   <div class="audit-tip">
     <strong>How auditing works —</strong>
@@ -264,76 +240,7 @@
 
 </div>{# /app-main #}
 
-{# ── Rule spec modal ── #}
-<div class="modal-backdrop" id="rbModal" role="dialog" aria-modal="true" aria-labelledby="rbModalTitle">
-  <div class="modal rb-modal-box">
-    <div class="modal-header row-between">
-      <h2 class="modal-title" id="rbModalTitle">Rule Book</h2>
-      <button class="btn sm" type="button" id="rbModalClose" aria-label="Close">✕</button>
-    </div>
-    <div class="modal-body" id="rbModalBody">
-      <div class="spinner-center"><div class="spinner"></div></div>
-    </div>
-  </div>
-</div>
-
-{# ── Add custom rule drawer ── #}
-<div class="modal-backdrop" id="crModal" role="dialog" aria-modal="true" aria-labelledby="crModalTitle">
-  <div class="modal">
-    <div class="modal-header row-between">
-      <h2 class="modal-title" id="crModalTitle">Add Custom Rule</h2>
-      <button class="btn sm" type="button" id="crModalClose" aria-label="Close">✕</button>
-    </div>
-    <div class="modal-body">
-      <form id="crForm">
-        <div class="form-row">
-          <label class="form-label">Rule Name <span class="req">*</span></label>
-          <input type="text" name="name" class="form-input" placeholder="e.g. Require consent_mode param" required>
-        </div>
-        <div class="form-row two-col">
-          <div>
-            <label class="form-label">Platform</label>
-            <input type="text" name="platform" class="form-input" value="*" placeholder="ga4, facebook_pixel, * for all">
-          </div>
-          <div>
-            <label class="form-label">Event</label>
-            <input type="text" name="event" class="form-input" value="*" placeholder="purchase, * for all">
-          </div>
-        </div>
-        <div class="form-row two-col">
-          <div>
-            <label class="form-label">Severity</label>
-            <select name="severity" class="form-select">
-              <option value="critical">Critical</option>
-              <option value="warning" selected>Warning</option>
-              <option value="info">Info</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <label class="form-label">Required Parameters (comma-separated)</label>
-          <input type="text" name="required_params_csv" class="form-input" placeholder="consent_mode, client_id">
-        </div>
-        <div class="form-row">
-          <label class="form-label">Forbidden Parameters (comma-separated)</label>
-          <input type="text" name="forbidden_params_csv" class="form-input" placeholder="test_event_code">
-        </div>
-        <div class="form-row">
-          <label class="form-label">Description</label>
-          <textarea name="description" class="form-input" rows="2" placeholder="Explain what this rule checks…"></textarea>
-        </div>
-        <div class="form-row">
-          <label class="form-label">Remediation</label>
-          <input type="text" name="remediation" class="form-input" placeholder="How to fix this if it fails">
-        </div>
-        <div class="form-actions">
-          <button type="button" class="btn ghost" id="crCancelBtn">Cancel</button>
-          <button type="submit" class="btn primary" id="crSaveBtn">Save Rule</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
+{# Rule-book / custom-rule modals moved to the Vendors section. #}
 
 <script src="/static/js/auditing.js?v=1" defer></script>
 {% endblock %}

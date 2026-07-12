@@ -53,7 +53,8 @@ async def publish_branch(
         .first()
     )
 
-    snapshot = await plan_to_dict(session, plan, branch)
+    # Snapshots are immutable plan definition — exclude volatile live drift data.
+    snapshot = await plan_to_dict(session, plan, branch, include_drift=False)
     version_number = _next_version_number(latest)
     snapshot["__version__"] = version_number
     version = TPVersion(

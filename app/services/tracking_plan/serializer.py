@@ -7,9 +7,10 @@ reads, the UI, markdown/xlsx export, and tp_versions snapshots."""
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.auditing import AuditRun
 from app.models.tracking_plan import (
     TPBranch,
     TPBundleProperty,
@@ -17,9 +18,11 @@ from app.models.tracking_plan import (
     TPDestination,
     TPEvent,
     TPEventDestination,
+    TPEventDrift,
     TPEventProperty,
     TPEventSource,
     TPMetric,
+    TPParamObservation,
     TPPlan,
     TPProperty,
     TPPropertyBundle,
@@ -28,11 +31,25 @@ from app.models.tracking_plan import (
     TPSourceDestination,
 )
 
+
+def _num(v) -> float | None:
+    """Coerce a SQL Numeric/Decimal to a JSON-safe float (or None)."""
+    return float(v) if v is not None else None
+
+
 # Maximum recursion depth when building the members tree inside _property_dict.
 _MEMBERS_MAX_DEPTH = 6
 
 
-async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) -> dict:
+async def plan_to_dict(
+    session: AsyncSession, plan: TPPlan, branch: TPBranch, *, include_drift: bool = True
+) -> dict:
+    """Serialize a plan/branch to the canonical read dict.
+
+    ``include_drift`` folds live-vs-plan drift into the event/property payload.
+    Publish passes ``False`` so immutable version snapshots stay pure plan
+    definition (no volatile live data, no drift noise in version diffs).
+    """
     bid = branch.id
 
     async def rows(model):
@@ -135,6 +152,45 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
     for r in sd_rows:
         routes_by_source.setdefault(r.source_id, []).append(r.destination_id)
 
+    # Drift is plan-scoped and keyed by event NAME (live data speaks names, not our
+    # branch-scoped UUIDs). Loaded here and folded into the event/property payload.
+    # Skipped for version snapshots (include_drift=False) so published versions stay
+    # pure plan definition.
+    drift_by_name: dict[str, TPEventDrift] = {}
+    obs_by_event: dict[str, list[TPParamObservation]] = {}
+    unplanned_params: dict[str, list[dict]] = {}
+    last_audit_at = None
+    if include_drift:
+        drift_rows = (
+            (await session.execute(select(TPEventDrift).where(TPEventDrift.plan_id == plan.id)))
+            .scalars()
+            .all()
+        )
+        drift_by_name = {d.event_name: d for d in drift_rows}
+
+        obs_rows = (
+            (await session.execute(select(TPParamObservation).where(TPParamObservation.plan_id == plan.id)))
+            .scalars()
+            .all()
+        )
+        for o in obs_rows:
+            obs_by_event.setdefault(o.event_name, []).append(o)
+            if o.is_unplanned:
+                # Parameters seen live on an event but absent from the plan.
+                unplanned_params.setdefault(o.event_name, []).append(
+                    {
+                        "param_key": o.param_key,
+                        "sample_value": o.sample_value,
+                        "present_pct": _num(o.present_pct),
+                    }
+                )
+
+        last_audit_at = (
+            await session.execute(
+                select(func.max(AuditRun.created_at)).where(AuditRun.project_id == plan.project_id)
+            )
+        ).scalar_one_or_none()
+
     def _build_members_tree(
         prop_id: uuid.UUID,
         visited: set[uuid.UUID],
@@ -223,11 +279,14 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
             ep_by_event.get(e.id, []), key=lambda link: (link.sort_order, str(link.property_id))
         )
 
+        event_obs = {o.param_key: o for o in obs_by_event.get(e.name, [])}
+
         def _attached_prop_dict(link) -> dict:
             p = prop_by_id[link.property_id]
             members: list[dict] = []
             if p.data_type == "object":
                 members = _build_members_tree(p.id, visited={p.id}, depth=0)
+            obs = event_obs.get(p.name)
             return {
                 "property_id": str(p.id),
                 "name": p.name,
@@ -237,11 +296,33 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
                 "example": link.example,
                 "override_description": link.override_description,
                 "members": members,
+                # Live observation (BigQuery) for this param on this event, or None.
+                "observation": (
+                    {
+                        "present_pct": _num(obs.present_pct),
+                        "sample_value": obs.sample_value,
+                        "data_type_observed": obs.data_type_observed,
+                    }
+                    if obs is not None
+                    else None
+                ),
             }
 
+        drift = drift_by_name.get(e.name)
         return {
             "id": str(e.id),
             "name": e.name,
+            "drift": (
+                {
+                    "status": drift.status,
+                    "volume_7d": drift.volume_7d,
+                    "param_coverage_pct": _num(drift.param_coverage_pct),
+                    "last_seen_at": drift.last_seen_at.isoformat() if drift.last_seen_at else None,
+                    "detail": drift.detail,
+                }
+                if drift is not None
+                else None
+            ),
             "display_name": e.display_name,
             "description": e.description,
             "category": cat_by_id[e.category_id].name if e.category_id in cat_by_id else None,
@@ -338,4 +419,8 @@ async def plan_to_dict(session: AsyncSession, plan: TPPlan, branch: TPBranch) ->
         ],
         "metrics": [_metric_dict(m) for m in sorted(metrics, key=lambda x: x.name)],
         "bundles": [_bundle_dict(b) for b in sorted(bundles, key=lambda x: x.name)],
+        # Drift read-model: params seen live but not in the plan, and when live data
+        # was last verified. Both empty/None when no drift has been computed.
+        "unplanned_params": unplanned_params,
+        "last_audit_at": last_audit_at.isoformat() if last_audit_at else None,
     }

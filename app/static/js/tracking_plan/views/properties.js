@@ -109,9 +109,11 @@ export function mountView(container) {
   // ---- MASTER -------------------------------------------------------------
   function renderList() {
     const head = h('div', { class: 'tp-master-head' },
-      h('div', { class: 'tp-search' },
+      // Neither the Events nor Properties mockups show a search icon — plain
+      // unadorned input (see .tp-search.no-icon in the CSS).
+      h('div', { class: 'tp-search no-icon' },
         h('input', {
-          class: 'input', placeholder: 'Search properties', value: search,
+          class: 'input', placeholder: 'Filter properties…', value: search,
           onInput: (e) => { search = e.target.value; renderListBody(listBody); },
         })),
       h('button', { class: 'btn btn-primary btn-sm btn-block', onClick: newProperty }, '+ New property'));
@@ -136,19 +138,70 @@ export function mountView(container) {
       any = true;
       nodes.push(h('div', { class: 'tp-grp' }, `${label} properties`));
       items.forEach((p) => {
+        const attachments = propertyAttachments(plan(), p);
+        const glyph = listGlyph(p, attachments);
         nodes.push(h('div', {
           class: 'tp-ev' + (sel.type === 'property' && sel.id === p.id ? ' is-active' : ''),
           onClick: () => selectProperty(p.id),
         },
-          h('span', { class: 'tp-sd' + (p.is_pii ? ' amber' : ' grey') }),
           h('div', { class: 'tp-ev-main' },
-            h('div', { class: 'tp-ev-name' }, p.name),
-            h('div', { class: 'tp-ev-sub' }, p.description || '—')),
-          h('span', { class: 'tp-ev-meta' }, typeBadge(p.data_type, p.is_list))));
+            h('div', { class: 'tp-ev2-toprow' },
+              h('div', { class: 'tp-ev-name' }, p.name),
+              glyph ? h('span', { class: 'tp-ev2-glyph', style: { color: glyph.color } }, glyph.label) : null),
+            h('div', { class: 'tp-ev-sub' }, propertySubtitle(p, attachments)))));
       });
     });
     if (!any) nodes.push(h('div', { class: 'tp-row-empty' }, q ? 'No matches' : 'No properties yet'));
     mountAll(listBody, nodes);
+  }
+
+  // ---- real per-property signal, derived from event-property attachments --
+  // A library property carries no coverage/required/example itself — those
+  // live on the per-event attachment (event.properties[]). Gather every
+  // event that attaches this property (by name) so the list glyph, the
+  // Definition grid, "Used by", and the destination-mapping card can all
+  // read real, already-loaded data (no extra fetch, no fabrication).
+  function propertyAttachments(pl, p) {
+    if (!pl || !p || p.kind !== 'event') return [];
+    return (pl.events || [])
+      .map((e) => {
+        const ep = (e.properties || []).find((x) => x.name === p.name);
+        return ep ? { event: e, required: !!ep.required, example: ep.example || '', observation: ep.observation || null } : null;
+      })
+      .filter(Boolean);
+  }
+
+  // Worst (lowest) live present_pct across all attachments that have observation
+  // data, or null when there's no observation data at all (never fabricated).
+  function worstCoverage(attachments) {
+    let worst = null;
+    attachments.forEach((a) => {
+      if (a.observation && a.observation.present_pct != null) {
+        if (worst == null || a.observation.present_pct < worst.pct) worst = { pct: a.observation.present_pct, event: a.event };
+      }
+    });
+    return worst;
+  }
+
+  // List-row status glyph vocabulary (design: TP Properties list) — ✓ green
+  // when every attachment is well-covered, ⚠ N% red for the worst offender.
+  // ("NEW" is skipped: unlike events, there's no per-property "unplanned, seen
+  // live" record in the data model — only per-event unplanned PARAMS.)
+  function listGlyph(p, attachments) {
+    const worst = worstCoverage(attachments);
+    if (!worst) return null;
+    if (worst.pct >= 90) return { label: '✓', color: 'var(--tp-green)' };
+    return { label: `⚠ ${worst.pct}%`, color: 'var(--tp-red)' };
+  }
+
+  // "number · used by 6 events" (design: TP Properties list row subtitle).
+  function propertySubtitle(p, attachments) {
+    const typeStr = typeBadge(p.data_type, p.is_list);
+    if (p.kind === 'event') {
+      const n = attachments.length;
+      return `${typeStr} · used by ${n} event${n === 1 ? '' : 's'}`;
+    }
+    return typeStr;
   }
 
   function selectProperty(id) {
@@ -215,15 +268,19 @@ export function mountView(container) {
     const regexValid = isValidRegex((draft.constraints && draft.constraints.regex) || '');
     const inner = h('div', { class: 'tp-detail-inner' });
     inner.appendChild(header(p, regexValid));
+    const callout = coverageCallout(p);
+    if (callout) inner.appendChild(callout);
+    inner.appendChild(definitionGrid(p));
     inner.appendChild(typeFlagsCard(p));
     inner.appendChild(constraintsCard(p));
     inner.appendChild(membersCard(p));
     inner.appendChild(usedByCard(p));
+    inner.appendChild(destinationMappingCard(p));
     mountAll(detail, [inner]);
     syncDirty();
   }
 
-  // ---- editor header: kicker + mono name + chips + Comments/Delete + save ----
+  // ---- editor header: mono name + chips + Comments/Delete + save ----
   function header(p, regexValid) {
     const kindLabel = (KINDS.find(([k]) => k === draft.kind) || [null, draft.kind])[1];
     const chips = [
@@ -235,7 +292,8 @@ export function mountView(container) {
     const delBtn = h('button', { class: 'btn btn-danger btn-sm', onClick: () => confirmDelete(p) }, 'Delete');
 
     const head = editorHead({
-      kicker: 'Property',
+      // No 'Property' kicker/eyebrow — the design puts the mono h1 directly at
+      // the top of the panel (matches the Event detail treatment).
       name: draft.name || p.name,
       chips,
       actions: [cmtBtn, delBtn],
@@ -246,11 +304,117 @@ export function mountView(container) {
       onSave: regexValid ? () => doSave(p) : undefined,
       onDiscard: () => { draft = clone(server); repaint(); },
     });
+    // Read-only description subline under the title (design: TP Properties detail).
+    const idBlock = head.querySelector('.tp-ed-id');
+    if (idBlock) {
+      idBlock.appendChild(h('div', { class: 'tp-ed2-subline' }, draft.description || 'No description yet'));
+    }
     if (!regexValid) {
       const sb = head.querySelector('.tp-savecluster .btn-primary');
       if (sb) { sb.disabled = true; sb.title = 'Fix the invalid regex to save'; }
     }
     return head;
+  }
+
+  // ---- coverage/Flux callout (design: TP Properties detail) — only rendered
+  // when a real observation shows a live coverage gap on an attached event. ----
+  function coverageCallout(p) {
+    const worst = worstCoverage(propertyAttachments(plan(), p));
+    if (!worst || worst.pct >= 90) return null;
+    const missingPct = Math.round((100 - worst.pct) * 10) / 10;
+    return h('div', { class: 'tp-pd-callout' },
+      h('span', { class: 'tp-ed2-callout-badge' }, 'F'),
+      h('div', { class: 'tp-pd-callout-body' },
+        'Missing on ', h('strong', {}, `${missingPct}% of ${worst.event.name} hits`), '.'),
+      h('a', {
+        class: 'tp-pd-callout-action',
+        href: '/ask?q=' + encodeURIComponent(
+          `Investigate why "${p.name}" is missing on ${missingPct}% of ${worst.event.name} hits and draft a fix.`),
+      }, 'Ask Flux to investigate'));
+  }
+
+  // ---- Definition read grid: TYPE / REQUIRED / EXAMPLE / OWNER (design: TP
+  // Properties detail). TYPE/constraints reflect the live draft (so editing
+  // Type & flags / Constraints below updates this at-a-glance summary
+  // immediately); REQUIRED/EXAMPLE are read from real per-event attachments.
+  // OWNER has no backing field on TPProperty — shown as '—', never fabricated. ----
+  function definitionGrid(p) {
+    const attachments = propertyAttachments(plan(), p);
+    const typeStr = typeBadge(draft.data_type, draft.is_list);
+    const c = draft.constraints || {};
+    const bits = [typeStr];
+    if (c.allowed_values && c.allowed_values.length) bits.push(c.allowed_values.join(' | '));
+    if (c.min != null) bits.push(`≥ ${c.min}`);
+    if (c.max != null) bits.push(`≤ ${c.max}`);
+    if (c.regex) bits.push(`matches /${c.regex}/`);
+
+    let requiredValue = '—';
+    if (attachments.length) {
+      const reqCount = attachments.filter((a) => a.required).length;
+      requiredValue = reqCount === 0
+        ? 'Optional everywhere'
+        : reqCount === attachments.length
+          ? `Required on all ${attachments.length} event${attachments.length === 1 ? '' : 's'}`
+          : `Required on ${reqCount} of ${attachments.length} events`;
+    }
+
+    const exampleHit = attachments.find((a) => a.example);
+    const exampleValue = exampleHit ? exampleHit.example : '—';
+
+    return h('div', { class: 'tp-pd-section' },
+      h('div', { class: 'tp-pd-eyebrow' }, 'Definition'),
+      h('div', { class: 'tp-pd-defgrid' },
+        defCell('TYPE', bits.join(' · ')),
+        defCell('REQUIRED', requiredValue),
+        defCell('EXAMPLE', exampleValue),
+        defCell('OWNER', '—', true)));
+  }
+  function defCell(label, value, sans) {
+    return h('div', { class: 'tp-pd-defcell' },
+      h('div', { class: 'tp-pd-deflabel' }, label),
+      h('div', { class: 'tp-pd-defvalue' + (sans ? ' sans' : '') }, value));
+  }
+
+  // ---- Destination mapping (design: TP Properties detail) — derived from the
+  // real destinations of every event this property is attached to (there is no
+  // per-property destination-transformation field in the data model, so we
+  // surface the honest signal we do have: which destinations this property
+  // reaches, and through which events). ----
+  function destinationMappingCard(p) {
+    const attachments = propertyAttachments(plan(), p);
+    const map = {}; // destination name -> Set(event names)
+    attachments.forEach((a) => {
+      (a.event.destinations || []).filter((d) => d.enabled !== false).forEach((d) => {
+        (map[d.destination] ||= new Set()).add(a.event.name);
+      });
+    });
+    const names = Object.keys(map).sort();
+    const body = names.length
+      ? names.map((name) => destMapRow(name, map[name]))
+      : [h('div', { class: 'tp-pd-empty' }, 'Not mapped to any destination through its attached events.')];
+    return h('div', { class: 'tp-pd-section' },
+      h('div', { class: 'tp-pd-eyebrow' }, 'Destination mapping'),
+      h('div', { class: 'tp-pd-card' }, ...body));
+  }
+  function destMapRow(name, eventNameSet) {
+    const slug = destLogoSlug(name);
+    const names = Array.from(eventNameSet);
+    const via = names.slice(0, 3).join(', ') + (names.length > 3 ? ` +${names.length - 3} more` : '');
+    return h('div', { class: 'tp-pd-destrow' },
+      h('span', { class: 'tp-pd-dest-name' },
+        h('img', { src: `/static/img/logos/${slug}.svg`, alt: '', class: 'tp-pd-dest-logo' }), name),
+      h('span', { class: 'tp-pd-dest-map' }, `via ${via}`));
+  }
+
+  // Resolve a destination's logo slug (mirrors events.js destLogoSlug — kept
+  // local since it's the only other view needing it).
+  function destLogoSlug(name) {
+    const vendors = (state.getState().vendors && state.getState().vendors.destinations) || [];
+    const hit = vendors.find((v) => (v.display_name || '').toLowerCase() === (name || '').toLowerCase());
+    if (hit && hit.slug) return hit.slug;
+    const n = (name || '').trim();
+    if (n.toLowerCase() === 'google ads') return 'google-ads';
+    return n.toLowerCase().replace(/\s+/g, '_');
   }
 
   // ---- card: Type & flags ----
@@ -659,28 +823,41 @@ export function mountView(container) {
     } catch (err) { /* persist already surfaced the error banner */ }
   }
 
-  // ---- card: Used by N events ----
+  // ---- Used by N events (design: TP Properties detail) — read table with
+  // mono event-name links, REQUIRED/OPTIONAL, and live coverage %. ----
   function usedByCard(p) {
-    const events = usedByEvents(plan(), p);
-    if (!events.length) {
-      return card('Used by 0 events', null,
-        h('div', { class: 'tp-card-b' },
-          h('div', { class: 'tp-muted', style: { fontSize: '13px' } }, 'Not attached to any event.')));
+    const attachments = propertyAttachments(plan(), p);
+    if (!attachments.length) {
+      return h('div', { class: 'tp-pd-section' },
+        h('div', { class: 'tp-pd-eyebrow' }, 'Used by · 0 events'),
+        h('div', { class: 'tp-pd-card' }, h('div', { class: 'tp-pd-empty' }, 'Not attached to any event.')));
     }
-    const wrap = h('div', { class: 'tp-usedby' });
-    events.forEach((e) => {
-      wrap.appendChild(h('button', {
-        class: 'tp-usedby-chip',
-        onClick: () => {
+    const rows = attachments
+      .slice()
+      .sort((a, b) => a.event.name.localeCompare(b.event.name))
+      .map((a) => usedByRow(a));
+    return h('div', { class: 'tp-pd-section' },
+      h('div', { class: 'tp-pd-eyebrow' }, `Used by · ${attachments.length} event${attachments.length === 1 ? '' : 's'}`),
+      h('div', { class: 'tp-pd-card' }, ...rows));
+  }
+  function usedByRow(a) {
+    const cov = a.observation && a.observation.present_pct != null ? a.observation.present_pct : null;
+    const covNode = cov == null
+      ? h('span', { class: 'tp-pd-row-cov' }, '—')
+      : h('span', { class: 'tp-pd-row-cov ' + (cov >= 90 ? 'good' : 'bad') }, `${cov}%${cov < 90 ? ' ⚠' : ''}`);
+    return h('div', { class: 'tp-pd-row' },
+      h('a', {
+        class: 'tp-pd-row-name', href: '#',
+        onClick: (ev) => {
+          ev.preventDefault();
           if (dirty() && !confirm('Discard unsaved changes?')) return;
           state.setDirty(false);
           state.setView('events');
-          state.select('event', e.id);
+          state.select('event', a.event.id);
         },
-      }, e.name));
-    });
-    return card(`Used by ${events.length} event${events.length === 1 ? '' : 's'}`, null,
-      h('div', { class: 'tp-card-b' }, wrap));
+      }, a.event.name),
+      h('span', { class: 'tp-pd-row-req' }, a.required ? 'REQUIRED' : 'OPTIONAL'),
+      covNode);
   }
 
   // ---- commit (buffered save): make server match draft ----

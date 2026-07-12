@@ -9,10 +9,58 @@
 // Writes go through persist() so the banner and error handling are consistent.
 
 import { getState, subscribe, select, setView } from "tp/state";
-import { doAction, validate as apiValidate } from "tp/api";
+import { doAction, validate as apiValidate, getPid } from "tp/api";
 import { h, mountAll } from "tp/render";
 import { persist } from "tp/util/persist";
 import { titleCase } from "tp/util/format";
+
+// ---- Snooze/Dismiss — CLIENT-SIDE ONLY (see note at buildFindingRow) --------
+// Findings come from a live rule scan (tp/api validate()) and have no stable
+// server-side row/id — there is no per-finding table to attach a snooze or
+// dismiss flag to. We derive a stable key from rule_id + entity + code (stable
+// as long as the underlying issue is unchanged) and persist snooze-until /
+// dismissed sets in localStorage, scoped per project. TODO: if findings ever
+// get a real persisted identity (e.g. a findings table written by the scan
+// job), move this to a backend column/table + action so it survives devices.
+function findingStoreKey() { return `tp-issues-state:${getPid()}`; }
+
+function findingKey(f) {
+  return [f.rule_id || "", f.code || "", f.entity_type || "", f.entity_id || "", f.message || ""].join("|");
+}
+
+function loadFindingStore() {
+  try {
+    const raw = window.localStorage.getItem(findingStoreKey());
+    const parsed = raw ? JSON.parse(raw) : {};
+    return { snoozed: parsed.snoozed || {}, dismissed: parsed.dismissed || {} };
+  } catch {
+    return { snoozed: {}, dismissed: {} };
+  }
+}
+
+function saveFindingStore(store) {
+  try { window.localStorage.setItem(findingStoreKey(), JSON.stringify(store)); } catch { /* storage unavailable */ }
+}
+
+function snoozeFinding(key) {
+  const store = loadFindingStore();
+  const until = Date.now() + 7 * 24 * 60 * 60 * 1000;
+  store.snoozed[key] = until;
+  saveFindingStore(store);
+}
+
+function dismissFinding(key) {
+  const store = loadFindingStore();
+  store.dismissed[key] = true;
+  saveFindingStore(store);
+}
+
+function isFindingHidden(store, key) {
+  if (store.dismissed[key]) return true;
+  const until = store.snoozed[key];
+  if (until && until > Date.now()) return true;
+  return false;
+}
 
 // ---- severity ordering + color keys -----------------------------------------
 
@@ -120,6 +168,15 @@ export function mountView(container) {
   function render() {
     const inner = h("div", { class: "tp-issues-wrap" });
 
+    // Page header (design: TP Issues — kicker/h1/lede, same treatment as
+    // Review/Versions) — was missing entirely.
+    inner.appendChild(
+      h("div", { class: "tp-issues-head" },
+        h("div", { class: "tp-review-kicker" }, "Issues"),
+        h("h1", { class: "tp-review-h1" }, "Where plan and reality ", h("em", {}, "disagree.")),
+        h("p", { class: "tp-review-lede" }, "Flux re-checks these rules on every scan. Fix them, snooze them, or turn the rule off.")),
+    );
+
     // Sub-tab bar
     inner.appendChild(buildSubtabs());
 
@@ -152,18 +209,13 @@ export function mountView(container) {
 
   function buildSubtabs() {
     const findings = (report && report.findings) || [];
-    const errCount = findings.filter((f) => f.severity === "error").length;
-    const warnCount = findings.filter((f) => f.severity === "warning").length;
-    const infoCount = findings.filter((f) => f.severity === "info").length;
     const totalCount = findings.length;
 
-    const issueLabel =
-      report
-        ? `Issues (${totalCount}${errCount ? " · " + errCount + " error" + (errCount !== 1 ? "s" : "") : ""}${warnCount ? " · " + warnCount + " warning" + (warnCount !== 1 ? "s" : "") : ""}${infoCount && !errCount && !warnCount ? " · " + infoCount + " info" : ""})`
-        : "Issues";
-
-    const rulesCount = (report && report.rules) ? report.rules.length : "";
-    const rulesLabel = rulesCount ? `Rules (${rulesCount})` : "Rules";
+    // Compact "ISSUES · 6" / "RULES · 18" pills (design: TP Issues tabs) — the
+    // CSS uppercases via text-transform, so the JS strings stay sentence-case.
+    const issueLabel = report ? `Issues · ${totalCount}` : "Issues";
+    const rulesCount = (report && report.rules) ? report.rules.length : null;
+    const rulesLabel = rulesCount != null ? `Rules · ${rulesCount}` : "Rules";
 
     return h(
       "div",
@@ -199,7 +251,10 @@ export function mountView(container) {
   // ---- Issues tab -------------------------------------------------------------
 
   function buildIssuesTab() {
-    const findings = (report && report.findings) || [];
+    const allFindings = (report && report.findings) || [];
+    const store = loadFindingStore();
+    const snoozedOrDismissedCount = allFindings.filter((f) => isFindingHidden(store, findingKey(f))).length;
+    const findings = allFindings.filter((f) => !isFindingHidden(store, findingKey(f)));
     const rules = (report && report.rules) || [];
     const plan = getState().plan || {};
     const categories = plan.categories || [];
@@ -213,7 +268,8 @@ export function mountView(container) {
         "div",
         {
           class: "tp-banner " + (pub ? "ok" : (findings.some((f) => f.severity === "error") ? "err" : "warn")),
-          style: { margin: "0 0 0 0", borderRadius: "0", borderLeft: "none", borderRight: "none", borderTop: "none" },
+          // No margin here — .tp-issues-tab > * centers it in the page column.
+          style: { borderRadius: "0", borderLeft: "none", borderRight: "none", borderTop: "none" },
         },
         pub ? "✓ Publishable — no blocking errors" : (findings.some((f) => f.severity === "error") ? "✗ Resolve errors before publishing" : "⚠ Warnings present — plan can still be published"),
       ),
@@ -288,7 +344,21 @@ export function mountView(container) {
       );
     }
     wrap.appendChild(list);
+    wrap.appendChild(scanFooter(rules.length, snoozedOrDismissedCount));
     return wrap;
+  }
+
+  // Scan footer line (design: "LAST FULL SCAN … · N RULES · NEXT SCAN IN …").
+  // We don't have a scan-cadence/timestamp backend field, so this shows the
+  // real, available numbers only: active rule count + how many findings are
+  // currently hidden by a snooze/dismiss.
+  function scanFooter(ruleCount, hiddenCount) {
+    const bits = [`${ruleCount} RULE${ruleCount === 1 ? "" : "S"}`];
+    if (hiddenCount) bits.push(`${hiddenCount} SNOOZED/DISMISSED`);
+    return h("div", { class: "tp-issues-scanfooter" },
+      h("span", { class: "tp-issues-scanfooter-line" }),
+      h("span", { class: "tp-issues-scanfooter-text" }, bits.join(" · ")),
+      h("span", { class: "tp-issues-scanfooter-line" }));
   }
 
   function buildIssueFilters(findings, rules, categories) {
@@ -331,36 +401,47 @@ export function mountView(container) {
   function buildFindingRow(f, ruleLookup) {
     const canLink = f.entity_type && f.entity_id;
     const rLabel = f.rule_id ? ruleLookup(f.rule_id) : null;
+    const key = findingKey(f);
 
-    const row = h(
+    // Two-line finding (design: TP Issues row) — bold title + a descriptive
+    // sentence below it. Real findings only carry one message + an optional
+    // suggested_fix (no separate short-title field), so the title stays the
+    // message and the description line surfaces suggested_fix when present —
+    // real data, using the previously-dead .tp-issue-msg class.
+    const body = h(
       "div",
-      { class: "tp-issue-row" + (canLink ? " tp-issue-row-link" : "") },
-      h("span", { class: "tp-badge " + sevClass(f.severity || "info") }, f.severity || "info"),
-      h(
-        "div",
-        { class: "tp-issue-body" },
-        h("div", { class: "tp-issue-msg" }, String(f.message || f.code || "")),
-        rLabel
-          ? h("div", { class: "tp-issue-rule" }, rLabel)
-          : null,
-        f.suggested_fix
-          ? h("div", { class: "tp-issue-fix" }, "Fix: " + f.suggested_fix)
-          : null,
-      ),
-      canLink
-        ? h(
-            "span",
-            { class: "tp-issue-link-arrow tp-muted" },
-            "→",
-          )
-        : null,
+      { class: "tp-issue-body", onClick: canLink ? () => openEntity(f) : null, style: canLink ? { cursor: "pointer" } : null },
+      h("div", { class: "tp-issue-head" },
+        h("span", { class: "tp-issue-title" }, String(f.message || f.code || "")),
+        rLabel ? h("span", { class: "tp-issue-rulechip" }, "RULE: " + rLabel.toUpperCase()) : null),
+      f.suggested_fix ? h("div", { class: "tp-issue-msg" }, f.suggested_fix) : null,
+      canLink ? h("div", { class: "tp-issue-rule" }, "Click to open →") : null,
     );
 
-    if (canLink) {
-      row.onclick = () => openEntity(f);
-    }
+    // Primary action: "Ask Flux to fix" (pre-seeds a Conversation with the
+    // finding — no direct fix endpoint exists, this is the same pattern used
+    // elsewhere in the app for Flux hand-off) when there's something to fix;
+    // otherwise "Open" to jump straight to the offending entity.
+    const askText = `Fix this tracking-plan issue: ${f.message || f.code || ""}`
+      + (f.suggested_fix ? ` Suggested fix: ${f.suggested_fix}` : "");
+    const primaryBtn = h("a", {
+      class: "tp-issue-act-primary",
+      href: "/ask?q=" + encodeURIComponent(askText),
+      onClick: (e) => e.stopPropagation(),
+    }, "Ask Flux to fix");
 
-    return row;
+    const snoozeBtn = h("button", {
+      class: "tp-issue-act-secondary",
+      onClick: (e) => { e.stopPropagation(); snoozeFinding(key); render(); },
+    }, "Snooze");
+    const dismissBtn = h("button", {
+      class: "tp-issue-act-secondary",
+      onClick: (e) => { e.stopPropagation(); dismissFinding(key); render(); },
+    }, "Dismiss");
+
+    const actions = h("div", { class: "tp-issue-actions" }, primaryBtn, snoozeBtn, dismissBtn);
+
+    return h("div", { class: "tp-issue-row", dataset: { sev: f.severity || "info" } }, body, actions);
   }
 
   function openEntity(f) {

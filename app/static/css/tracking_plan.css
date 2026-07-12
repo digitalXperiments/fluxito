@@ -1,47 +1,53 @@
 /* ============================================================================
-   Tracking Plan — refined analytics-console design system.
+   Tracking Plan — Ledger design system (warm paper editorial).
 
-   Reproduces the approved mockup (/tmp/tp_redesign_mockup.html): Inter Tight
-   sans for everything human, JetBrains Mono ONLY for identifiers (event /
-   property names, IDs, @handles, example values). Indigo accent, hairline
-   borders, soft surfaces, refined radii + shadows.
+   Archivo sans for everything human, IBM Plex Mono ONLY for identifiers (event /
+   property names, IDs, example values). Terracotta accent, hairline borders,
+   flat warm surfaces.
 
    EVERYTHING is scoped under `.tp-workspace` so it never leaks into the rest
-   of the app. Mockup tokens live as --tp-* vars on .tp-workspace; dark mode
-   re-maps those vars (referencing app.css dark tokens where it helps).
+   of the app. Ledger tokens live as --tp-* vars on .tp-workspace, aliased to
+   the global Ledger tokens (app.css) so a future palette change here stays in
+   sync automatically. Light-only — no dark theme (see app.css / README).
    ========================================================================== */
 
 /* ---------------------------------------------------------------------------
-   Tokens (mockup) — scoped to the workspace root.
+   Tokens — scoped to the workspace root, aliased to the global Ledger palette.
    --------------------------------------------------------------------------- */
 .tp-workspace {
-  --tp-canvas:#f6f6f7;
-  --tp-surface:#ffffff;
-  --tp-surface-2:#fafafa;
-  --tp-surface-3:#f1f1f3;
-  --tp-border:#ececef;
-  --tp-border-strong:#dededf;
-  --tp-border-2:#e4e4e7;
-  --tp-text:#1b1b1f;
-  --tp-text-2:#52525b;
-  --tp-text-3:#8b8b94;
-  --tp-text-4:#a8a8b0;
-  --tp-accent:#4f46e5;
-  --tp-accent-hover:#4338ca;
-  --tp-accent-press:#3730a3;
-  --tp-accent-soft:#eef0ff;
-  --tp-accent-border:#c9cdf7;
-  --tp-green:#15924f;       --tp-green-soft:#e3f6ea;
-  --tp-amber:#b6730c;       --tp-amber-soft:#fbf0db;
-  --tp-red:#cf3b3b;         --tp-red-soft:#fae6e6;
-  --tp-sky:#1f6fd6;         --tp-sky-soft:#e4eefb;
-  --tp-r-sm:7px; --tp-r:9px; --tp-r-lg:13px; --tp-r-full:999px;
-  --tp-sh-xs:0 1px 2px rgba(20,20,30,.05);
-  --tp-sh-sm:0 1px 3px rgba(20,20,30,.07),0 1px 2px rgba(20,20,30,.04);
-  --tp-sh-md:0 6px 20px -6px rgba(20,20,30,.16),0 2px 6px -2px rgba(20,20,30,.08);
-  --tp-mono: var(--font-mono);
-  --tp-sans: var(--font-sans);
-  --tp-head-blur: rgba(255,255,255,.86);
+  --tp-canvas: var(--paper);
+  --tp-surface: var(--card);
+  --tp-surface-2: var(--paper-2);
+  --tp-surface-3: #EAE2D2;
+  --tp-border: var(--line);
+  --tp-border-strong: var(--line-strong);
+  --tp-border-2: var(--line-2);
+  --tp-text: var(--ink);
+  --tp-text-2: var(--ink-soft);
+  --tp-text-3: var(--muted);
+  --tp-text-4: var(--muted-2);
+  --tp-accent: var(--accent);
+  --tp-accent-hover: var(--accent-hover);
+  --tp-accent-press: var(--accent-hover);
+  --tp-accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --tp-accent-border: color-mix(in srgb, var(--accent) 30%, transparent);
+  --tp-green: var(--good);       --tp-green-soft: color-mix(in srgb, var(--good) 14%, transparent);
+  --tp-amber: var(--warn);       --tp-amber-soft: color-mix(in srgb, var(--warn) 14%, transparent);
+  --tp-red: var(--bad);          --tp-red-soft: color-mix(in srgb, var(--bad) 14%, transparent);
+  --tp-sky: var(--ink-soft);     --tp-sky-soft: var(--card-well);
+  --tp-r-sm:7px; --tp-r:9px; --tp-r-lg:14px; --tp-r-full:999px;
+  --tp-sh-xs: 0 1px 2px rgba(50,40,20,.05);
+  --tp-sh-sm: 0 1px 3px rgba(50,40,20,.08),0 1px 2px rgba(50,40,20,.04);
+  --tp-sh-md: 0 6px 20px -6px rgba(50,40,20,.18),0 2px 6px -2px rgba(50,40,20,.10);
+  --tp-mono: var(--mono);
+  --tp-sans: var(--sans);
+  --tp-serif: var(--serif);
+  --tp-head-blur: rgba(246,241,232,.86);
+
+  /* Single content-column width shared by EVERY full-page screen (overview,
+     detail editors, sources, review, versions, diff, issues) so pages stop
+     landing at random widths/offsets. Always paired with margin: 0 auto. */
+  --tp-page-w: 1040px;
 
   height: 100%;
   font-family: var(--tp-sans);
@@ -51,36 +57,7 @@
   color: var(--tp-text);
   background: var(--tp-canvas);
 }
-.tp-workspace ::selection { background: var(--tp-accent-soft); }
-
-/* Dark mode — remap mockup vars onto refined dark neutrals + indigo that
-   reads on dark. References app.css dark surface where it helps cohesion. */
-[data-theme="dark"] .tp-workspace {
-  --tp-canvas:#0e0e11;
-  --tp-surface:#16161a;
-  --tp-surface-2:#1b1b20;
-  --tp-surface-3:#26262c;
-  --tp-border:#26262c;
-  --tp-border-strong:#36363d;
-  --tp-border-2:#2e2e35;
-  --tp-text:#f4f4f6;
-  --tp-text-2:#b6b6bf;
-  --tp-text-3:#8a8a93;
-  --tp-text-4:#6b6b74;
-  --tp-accent:#7c79ff;
-  --tp-accent-hover:#928fff;
-  --tp-accent-press:#6b67f5;
-  --tp-accent-soft:rgba(124,121,255,.14);
-  --tp-accent-border:rgba(124,121,255,.34);
-  --tp-green:#46c07e; --tp-green-soft:rgba(70,192,126,.14);
-  --tp-amber:#d99a3c; --tp-amber-soft:rgba(217,154,60,.15);
-  --tp-red:#e5706f;   --tp-red-soft:rgba(229,112,111,.15);
-  --tp-sky:#5fa0ee;   --tp-sky-soft:rgba(95,160,238,.15);
-  --tp-sh-xs:0 1px 2px rgba(0,0,0,.4);
-  --tp-sh-sm:0 1px 3px rgba(0,0,0,.5);
-  --tp-sh-md:0 6px 20px -6px rgba(0,0,0,.6),0 2px 6px -2px rgba(0,0,0,.4);
-  --tp-head-blur: rgba(22,22,26,.82);
-}
+.tp-workspace ::selection { background: var(--tp-accent); color: #FFF9EF; }
 
 /* ============================================================================
    Shell: nav rail + topbar + view host
@@ -89,10 +66,10 @@
 .tp-ws-body { display: flex; height: 100%; min-height: 0; }
 
 .tp-nav {
-  width: 220px; flex: none;
-  background: var(--tp-surface); border-right: 1px solid var(--tp-border);
+  width: 190px; flex: none;
+  background: var(--tp-canvas); border-right: 1px solid var(--tp-border);
   display: flex; flex-direction: column; gap: 2px;
-  padding: 14px 10px; overflow-y: auto;
+  padding: 26px 12px; overflow-y: auto;
 }
 .tp-ws-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
@@ -104,32 +81,68 @@
 }
 .tp-nav-item {
   display: flex; align-items: center; gap: 9px;
-  text-align: left; border: none; background: transparent; font: inherit;
-  font-size: 13px; font-weight: 450; color: var(--tp-text-2);
-  padding: 7px 10px; border-radius: var(--tp-r-sm); cursor: pointer;
+  text-align: left; text-decoration: none; border: none; background: transparent; font: inherit;
+  font-size: 13px; font-weight: 400; color: var(--tp-text-2);
+  padding: 9px 11px; border-radius: var(--tp-r-sm); cursor: pointer;
   transition: background .1s, color .1s;
 }
 .tp-nav-item .ic, .tp-nav-item svg { width: 16px; height: 16px; flex: none; color: var(--tp-text-3); }
 .tp-nav-item:hover { background: var(--tp-surface-3); color: var(--tp-text); }
-.tp-nav-item.is-active { background: var(--tp-accent-soft); color: var(--tp-accent); font-weight: 550; }
-.tp-nav-item.is-active .ic, .tp-nav-item.is-active svg { color: var(--tp-accent); }
-.tp-nav-review { margin-top: 6px; }
+.tp-nav-item.is-active { background: var(--tp-surface-3); color: var(--tp-text); font-weight: 600; }
+.tp-nav-item.is-active .ic, .tp-nav-item.is-active svg { color: var(--tp-text); }
+/* Review rail item — always accent-colored/weight-600, regardless of selection
+   (design: TP Event Detail / TP Review / TP Versions / TP Issues rail). Beats
+   the generic .tp-nav-item / .tp-nav-item.is-active color rules via the extra
+   class on the selector. */
+.tp-nav-review { margin-top: 6px; color: var(--tp-accent-hover); font-weight: 600; }
+.tp-nav-review:hover { background: var(--tp-surface-3); color: var(--tp-accent-hover); }
+.tp-nav-item.is-active.tp-nav-review,
+.tp-nav-item.is-active.tp-nav-review:hover { color: var(--tp-accent-hover); }
 .tp-nav-spacer { flex: 1; }
-.tp-nav-sep { height: 1px; background: var(--tp-border); margin: 6px 10px; }
+.tp-nav-sep, .tp-nav-divider { height: 1px; background: var(--tp-border); margin: 12px 8px; }
+.tp-nav-count {
+  margin-left: auto; font-family: var(--tp-mono); font-size: 10.5px; color: var(--tp-text-3);
+}
+.tp-nav-item.is-active .tp-nav-count { color: var(--tp-text-3); }
+/* Review rail count pill (design: TP Review) — accent bg, replaces the old
+   status dot. Rendered only when there are pending (undecided) changes. */
+.tp-nav-review-pill {
+  margin-left: auto; font-family: var(--tp-mono); font-size: 10px; line-height: 1;
+  background: var(--tp-accent); color: #FFF9EF; padding: 3px 7px; border-radius: var(--tp-r-full);
+}
 
-/* branch picker (sidebar) */
-.tp-branchpick { position: relative; margin: 2px 4px 12px; }
+/* Ask Flux — pinned at the bottom of the sub-rail */
+.tp-ask-flux {
+  margin-top: auto; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px; background: var(--tp-text); color: var(--tp-canvas); border-radius: var(--tp-r);
+  font-size: 12.5px; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.tp-ask-flux:hover { background: var(--tp-text-2); color: var(--tp-canvas); }
+.tp-flux-mark-tiny { font-family: var(--tp-serif); font-style: italic; }
+
+/* Accent CTA override — the one important action per screen (Publish / Merge & publish) */
+.tp-workspace .btn-primary.tp-btn-accent {
+  background: var(--tp-accent); color: #FFF9EF;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--tp-accent) 30%, transparent);
+}
+.tp-workspace .btn-primary.tp-btn-accent:hover { background: var(--tp-accent-hover); color: #FFF9EF; }
+
+/* branch picker (eyebrow that doubles as a switcher) */
+.tp-branchpick { position: relative; margin: 0 2px 18px; }
 .tp-branchpick > .tp-branch-btn,
 .tp-branchpick > button {
   width: 100%; display: flex; align-items: center; gap: 7px;
-  border: 1px solid var(--tp-border-2); border-radius: var(--tp-r);
-  padding: 7px 10px; background: var(--tp-surface-2); color: var(--tp-text);
-  cursor: pointer; font: inherit; font-size: 13px;
-  transition: border-color .12s, background .12s;
+  border: none; border-radius: var(--tp-r);
+  padding: 0 11px 8px; background: transparent; color: var(--tp-text-4);
+  cursor: pointer; font: inherit; font-family: var(--tp-mono); font-size: 10px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  transition: color .12s;
 }
 .tp-branchpick > .tp-branch-btn:hover,
-.tp-branchpick > button:hover { border-color: var(--tp-border-strong); }
+.tp-branchpick > button:hover { color: var(--tp-text-3); }
 .tp-branchpick .tp-branch-ico, .tp-branchpick .gi { width: 13px; height: 13px; color: var(--tp-text-3); flex: none; }
+.tp-branch-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tp-branch-label b { font-weight: 600; color: var(--tp-text-3); text-transform: none; letter-spacing: 0; }
 .tp-branchpick b { font-family: var(--tp-mono); font-weight: 500; font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tp-branchpick .tp-caret, .tp-branchpick .caret { color: var(--tp-text-3); font-size: 10px; margin-left: auto; }
 
@@ -188,11 +201,13 @@
 .tp-workspace .btn.btn-block { width: 100%; }
 
 .tp-workspace .btn-primary {
-  background: var(--tp-accent); color: #fff; border-color: transparent;
-  box-shadow: 0 1px 2px rgba(79,70,229,.35);
+  /* Ink primary (Ledger convention) — terracotta is reserved for the one
+     accent CTA per screen (Publish / Merge & publish use .tp-btn-accent). */
+  background: var(--tp-text); color: var(--tp-canvas); border-color: transparent;
+  box-shadow: none;
 }
-.tp-workspace .btn-primary:hover { background: var(--tp-accent-hover); color: #fff; }
-.tp-workspace .btn-primary:active { background: var(--tp-accent-press); }
+.tp-workspace .btn-primary:hover { background: var(--tp-text-2); color: var(--tp-canvas); }
+.tp-workspace .btn-primary:active { background: var(--tp-text-2); }
 .tp-workspace .btn-primary:disabled,
 .tp-workspace .btn-primary[disabled] {
   background: var(--tp-surface-3); color: var(--tp-text-4);
@@ -256,7 +271,7 @@
 .tp-pane.is-active { display: flex; }
 
 .tp-master {
-  width: 296px; flex: none; min-width: 260px;
+  width: 300px; flex: none; min-width: 260px;
   border-right: 1px solid var(--tp-border); background: var(--tp-surface);
   display: flex; flex-direction: column;
 }
@@ -272,19 +287,23 @@
 .tp-search input,
 .tp-search .input {
   width: 100%; height: 32px; padding: 0 10px 0 30px; min-height: 32px;
-  border: 1px solid var(--tp-border-2); border-radius: var(--tp-r);
-  background: var(--tp-surface-2); font: inherit; font-size: 12.5px; color: var(--tp-text);
+  border: 1px solid var(--tp-border-strong); border-radius: var(--tp-r);
+  background: var(--tp-surface); font: inherit; font-size: 12.5px; color: var(--tp-text);
 }
 .tp-search input::placeholder { color: var(--tp-text-4); }
 .tp-search input:focus {
   outline: none; border-color: var(--tp-accent-border);
   box-shadow: 0 0 0 3px var(--tp-accent-soft); background: var(--tp-surface);
 }
+/* Neither Events nor Properties mockups show a search icon (plain unadorned
+   input) — used where no .tp-search svg icon is rendered, to drop the icon's
+   reserved left gutter. */
+.tp-search.no-icon input { padding-left: 10px; }
 
-/* group label */
+/* group label — mono eyebrow (design: TP Tracking Plan / TP Properties) */
 .tp-grp, .tp-cat-label {
-  font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
-  color: var(--tp-text-4); padding: 11px 10px 5px;
+  font-family: var(--tp-mono); font-size: 10px; font-weight: 400; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--tp-text-4); padding: 11px 10px 5px;
 }
 
 /* list rows — NEW vocabulary (.tp-ev) and legacy (.tp-row) share the look */
@@ -294,7 +313,9 @@
   transition: background .1s;
 }
 .tp-ev:hover, .tp-row:hover { background: var(--tp-surface-3); }
-.tp-ev.is-active, .tp-row.is-active { background: var(--tp-accent-soft); }
+/* Selected state (design: TP Properties list row, TP Tracking Plan category
+   rows) — card surface + accent border, same pattern as .tp-ev2.is-active. */
+.tp-ev.is-active, .tp-row.is-active { background: var(--tp-surface); border-color: var(--tp-accent); }
 .tp-ev .tp-sd, .tp-sd { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--tp-text-4); }
 .tp-sd.green { background: var(--tp-green); }
 .tp-sd.amber { background: var(--tp-amber); }
@@ -325,7 +346,7 @@
    Detail pane + sticky editor header
    ========================================================================== */
 .tp-detail { flex: 1; min-width: 0; overflow-y: auto; background: var(--tp-canvas); }
-.tp-detail-inner, .tp-ed-body { max-width: 1240px; padding: 22px 24px 60px; margin: 0; }
+.tp-detail-inner, .tp-ed-body { max-width: var(--tp-page-w); padding: 22px 24px 60px; margin: 0 auto; }
 .tp-detail-inner > * { animation: tpFade .16s ease both; }
 .tp-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -333,12 +354,104 @@
 }
 .tp-empty svg { width: 34px; height: 34px; color: var(--tp-text-4); }
 
+/* ============================================================================
+   Overview (events view, no selection) — stats strip, Flux callout, category
+   pills, full-width table. Real data only: see events.js renderOverview().
+   ========================================================================== */
+.tp-ov2 { max-width: var(--tp-page-w); margin: 0 auto; padding: 34px 40px 60px; }
+.tp-ov2-head { margin-bottom: 8px; }
+/* Eyebrow is accent-hover here (design: TP Tracking Plan) — .tp-ed-kicker is
+   shared with other editor heads (Property/Category/Bundle) that stay muted,
+   so scope the accent color to this screen only. */
+.tp-ov2-head .tp-ed-kicker { color: var(--tp-accent-hover); }
+.tp-ov2-h1 { margin: 0; font-family: var(--tp-serif); font-size: 34px; font-weight: 500; line-height: 1.1; color: var(--tp-text); }
+.tp-ov2-h1 em { color: var(--tp-accent-hover); font-style: italic; }
+
+.tp-ov2-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--tp-border-2);
+  border-radius: var(--tp-r-lg); background: var(--tp-surface); overflow: hidden; margin: 20px 0 18px;
+}
+.tp-ov2-stat { padding: 18px 22px; border-right: 1px solid var(--tp-border-2); }
+.tp-ov2-stat:last-child { border-right: none; }
+.tp-ov2-stat-v { font-family: var(--tp-mono); font-size: 24px; font-weight: 600; color: var(--tp-text); }
+.tp-ov2-stat-v.good { color: var(--tp-green); }
+.tp-ov2-stat-v.warn { color: var(--tp-amber); }
+.tp-ov2-stat-v.bad { color: var(--tp-red); }
+.tp-ov2-stat-l { font-size: 12px; color: var(--tp-text-3); margin-top: 2px; }
+
+/* Table footer row (design: "Showing 7 of 128" · "Version history (v1 → v3) →") */
+.tp-ov2-footer { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-family: var(--tp-mono); font-size: 11.5px; color: var(--tp-text-3); }
+.tp-ov2-footer .tp-link { margin-left: auto; color: var(--tp-accent-hover); }
+
+.tp-ov2-callout {
+  display: flex; align-items: center; gap: 14px; padding: 15px 18px;
+  background: var(--tp-surface); border: 1px solid var(--tp-border-2); border-left: 4px solid var(--tp-amber);
+  border-radius: var(--tp-r-lg); margin-bottom: 20px;
+}
+.tp-ov2-callout.good { border-left-color: var(--tp-green); }
+.tp-ov2-callout-body { flex: 1; font-size: 13.5px; color: var(--tp-text-2); line-height: 1.55; }
+.tp-ov2-callout-action {
+  padding: 9px 16px; background: var(--tp-accent); color: #FFF9EF; font-size: 12.5px; font-weight: 600;
+  border-radius: 7px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.tp-ov2-callout-action:hover { background: var(--tp-accent-hover); }
+.tp-flux-badge {
+  width: 28px; height: 28px; border-radius: 7px; background: var(--tp-text); color: var(--tp-canvas);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;
+}
+
+.tp-ov2-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.tp-ov2-pill {
+  padding: 7px 14px; border: 1px solid var(--tp-border-strong); font-size: 12.5px; color: var(--tp-text-2);
+  border-radius: 999px; cursor: pointer; transition: border-color .12s, color .12s;
+}
+.tp-ov2-pill:hover { border-color: var(--tp-text); color: var(--tp-text); }
+.tp-ov2-pill.is-active { background: var(--tp-text); color: var(--tp-canvas); border-color: var(--tp-text); }
+.tp-ov2-pill.is-warn { border-color: var(--tp-amber); color: var(--tp-amber); }
+.tp-ov2-pill.is-warn.is-active { background: var(--tp-amber); color: #FFF9EF; border-color: var(--tp-amber); }
+.tp-ov2-pill.is-bad { border-color: var(--tp-red); color: var(--tp-red); }
+.tp-ov2-pill.is-bad.is-active { background: var(--tp-red); color: #FFF9EF; border-color: var(--tp-red); }
+
+.tp-ov2-table { border: 1px solid var(--tp-border-2); border-radius: var(--tp-r-lg); background: var(--tp-surface); overflow: hidden; }
+.tp-ov2-row {
+  display: grid; grid-template-columns: 1.5fr 90px 1.2fr 130px 110px; gap: 14px; align-items: center;
+  padding: 13px 18px; border-bottom: 1px solid var(--tp-border-2);
+}
+.tp-ov2-row:last-child { border-bottom: none; }
+.tp-ov2-row:not(.tp-ov2-row-head) { cursor: pointer; }
+.tp-ov2-row:not(.tp-ov2-row-head):hover { background: var(--tp-surface-2); }
+.tp-ov2-row-head {
+  font-family: var(--tp-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--tp-text-4); padding-top: 11px; padding-bottom: 11px;
+}
+.tp-ov2-ev-name { font-family: var(--tp-mono); font-size: 13px; font-weight: 600; color: var(--tp-text); }
+.tp-ov2-ev-sub { font-size: 11.5px; color: var(--tp-text-3); margin-top: 1px; }
+.tp-ov2-dest { font-size: 12.5px; color: var(--tp-text-2); }
+.tp-ov2-status { font-family: var(--tp-mono); font-size: 10px; letter-spacing: 0.04em; }
+.tp-ov2-status.verified { color: var(--tp-green); }
+.tp-ov2-status.implemented { color: var(--tp-amber); }
+.tp-ov2-status.planned { color: var(--tp-text-3); }
+.tp-ov2-status.has-issue { color: var(--tp-red); }
+
+/* Real per-event/property finding callout, shown atop the editor when the
+   tracking-plan's own validate() rules flag the selected entity. */
+.tp-ed-callout {
+  display: flex; align-items: center; gap: 13px; padding: 14px 17px; margin: 16px 24px 0;
+  background: var(--tp-surface); border: 1px solid var(--tp-border-2); border-left: 4px solid var(--tp-amber);
+  border-radius: var(--tp-r-lg);
+}
+.tp-ed-callout.bad { border-left-color: var(--tp-red); }
+
 /* sticky editor head: id block (kicker + mono name) + chips + actions */
 .tp-ed-head {
   position: sticky; top: 0; z-index: 5;
   background: var(--tp-head-blur); backdrop-filter: saturate(1.4) blur(8px);
   border-bottom: 1px solid var(--tp-border); padding: 14px 24px;
 }
+/* The sticky bar spans the full pane, but .tp-ed-body below it is a centered
+   --tp-page-w column — cap the bar's content to the same column (minus the
+   body's 24px side padding) so the title lines up with the cards below. */
+.tp-ed-head .tp-ed-id-row { max-width: calc(var(--tp-page-w) - 48px); margin: 0 auto; }
 .tp-ed-id-row, .tp-d-head { display: flex; align-items: center; gap: 12px; }
 .tp-ed-id { min-width: 0; }
 .tp-ed-kicker {
@@ -346,12 +459,12 @@
   color: var(--tp-text-4);
 }
 .tp-ed-name {
-  font-family: var(--tp-mono); font-size: 17px; font-weight: 600; color: var(--tp-text);
+  font-family: var(--tp-mono); font-size: 28px; font-weight: 600; color: var(--tp-text);
   letter-spacing: -0.01em;
 }
 /* editable title field variant of the editor name */
 .tp-titlefield, .tp-d-title input.tp-titlefield {
-  font-family: var(--tp-mono); font-size: 17px; font-weight: 600; letter-spacing: -0.01em;
+  font-family: var(--tp-mono); font-size: 28px; font-weight: 600; letter-spacing: -0.01em;
   border: 1px solid transparent; background: transparent; color: var(--tp-text); width: 100%;
   padding: 3px 7px; margin: -3px -7px; border-radius: var(--tp-r-sm);
 }
@@ -744,6 +857,69 @@
 }
 
 /* ============================================================================
+   Property detail — read-first cards (design: TP Properties)
+   Definition grid (TYPE/REQUIRED/EXAMPLE/OWNER), coverage/Flux callout,
+   used-by rows (with required/coverage), destination mapping. See
+   views/properties.js for the render code.
+   ========================================================================== */
+.tp-pd-section { margin-bottom: 22px; }
+.tp-pd-eyebrow {
+  font-family: var(--tp-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--tp-text-3); margin-bottom: 10px;
+}
+.tp-pd-defgrid {
+  display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--tp-border-2); border-radius: var(--tp-r-lg);
+  background: var(--tp-surface); overflow: hidden;
+}
+.tp-pd-defcell { padding: 13px 16px; border-right: 1px solid var(--line-3); border-bottom: 1px solid var(--line-3); }
+.tp-pd-defcell:nth-child(2n) { border-right: none; }
+.tp-pd-defcell:nth-last-child(-n+2) { border-bottom: none; }
+.tp-pd-deflabel { font-family: var(--tp-mono); font-size: 10px; color: var(--tp-text-4); letter-spacing: .06em; }
+.tp-pd-defvalue { font-family: var(--tp-mono); font-size: 13px; margin-top: 3px; color: var(--tp-text); }
+.tp-pd-defvalue.sans { font-family: var(--tp-sans); }
+
+.tp-pd-card { border: 1px solid var(--tp-border-2); border-radius: var(--tp-r-lg); background: var(--tp-surface); overflow: hidden; }
+.tp-pd-empty { padding: 14px 16px; color: var(--tp-text-3); font-size: 13px; }
+
+.tp-pd-row {
+  display: grid; grid-template-columns: 1.2fr 110px 110px; gap: 12px; align-items: center;
+  padding: 11px 16px; border-bottom: 1px solid var(--line-3);
+}
+.tp-pd-row:last-child { border-bottom: none; }
+.tp-pd-row-name {
+  font-family: var(--tp-mono); font-size: 12.5px; font-weight: 600; color: var(--tp-text);
+  text-decoration: none; cursor: pointer;
+}
+.tp-pd-row-name:hover { color: var(--tp-accent-hover); }
+.tp-pd-row-req { font-family: var(--tp-mono); font-size: 11px; color: var(--tp-text-3); }
+.tp-pd-row-cov { font-family: var(--tp-mono); font-size: 11px; color: var(--tp-text-3); }
+.tp-pd-row-cov.good { color: var(--tp-green); }
+.tp-pd-row-cov.bad { color: var(--tp-red); }
+
+.tp-pd-destrow {
+  display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: center;
+  padding: 11px 16px; border-bottom: 1px solid var(--line-3);
+}
+.tp-pd-destrow:last-child { border-bottom: none; }
+.tp-pd-dest-name { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--tp-text); }
+.tp-pd-dest-logo { width: 16px; height: 16px; flex: none; }
+.tp-pd-dest-map { font-family: var(--tp-mono); font-size: 11.5px; color: var(--tp-text-2); }
+
+/* coverage/Flux callout — red left border (worse than the generic amber
+   .tp-ed-callout, since a coverage gap is a hard miss, not just a nudge). */
+.tp-pd-callout {
+  display: flex; gap: 13px; align-items: center; padding: 14px 17px; margin: 20px 0;
+  background: var(--tp-surface); border: 1px solid var(--tp-border-2); border-left: 4px solid var(--tp-red);
+  border-radius: var(--tp-r-lg);
+}
+.tp-pd-callout-body { flex: 1; font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+.tp-pd-callout-action {
+  padding: 8px 15px; background: var(--tp-text); color: var(--tp-canvas); font-size: 12px; font-weight: 600;
+  border-radius: 7px; cursor: pointer; white-space: nowrap; text-decoration: none;
+}
+.tp-pd-callout-action:hover { background: var(--tp-text-2); color: var(--tp-canvas); }
+
+/* ============================================================================
    Comments + activity drawer
    ========================================================================== */
 .tp-comments { margin-top: 8px; }
@@ -788,7 +964,7 @@
 /* ============================================================================
    Diff (View Changes) + field-level before/after
    ========================================================================== */
-.tp-diff { padding: 24px 30px; max-width: 1240px; margin: 0 auto; overflow-y: auto; }
+.tp-diff { padding: 24px 30px; max-width: var(--tp-page-w); margin: 0 auto; overflow-y: auto; }
 .tp-diff-summary { display: flex; gap: 8px; margin-bottom: 20px; }
 .tp-diff-stat { font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: var(--tp-r-full); }
 .tp-diff-stat.add { color: var(--tp-green); background: var(--tp-green-soft); }
@@ -803,7 +979,20 @@
   font-family: var(--tp-mono); font-size: 12.5px; background: var(--tp-surface);
 }
 .tp-diff-item.is-expandable { cursor: pointer; }
-.tp-diff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Whole-row tints (design: TP Versions compare) — exact rgba values from the
+   design file, not the token aliases, since these are one-off wash colors. */
+.tp-diff-row-add { background: rgba(62,138,95,0.06); }
+.tp-diff-row-chg { background: rgba(196,144,58,0.07); }
+.tp-diff-row-rem { background: rgba(180,69,47,0.06); }
+.tp-diff-name { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-diff-name-removed { text-decoration: line-through; color: var(--tp-text-3); }
+/* Always-visible human description next to the name (design: TP Versions
+   compare) — real, derived from the diff payload, never hidden behind a click. */
+.tp-diff-desc {
+  flex: 1; min-width: 0; font-family: var(--tp-sans); font-size: 12px; color: var(--tp-text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tp-diff-desc .tp-mono { font-family: var(--tp-mono); }
 .tp-diff-comments { font-size: 11px; color: var(--tp-text-3); }
 .tp-diff-chevron { color: var(--tp-text-3); transition: transform .12s; }
 .tp-diff-item.is-open .tp-diff-chevron { transform: rotate(90deg); }
@@ -827,10 +1016,19 @@
 .tp-fd-empty { font-size: 12px; padding: 4px 8px; }
 .tp-inline-comments { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--tp-border); }
 
+/* Unplanned / live-only row tint (design: TP Event Detail parameter table) —
+   applied to a table row (e.g. a property attachment row) whose value was
+   observed live but is not (yet) part of the plan definition. The current
+   tracking-plan data model has no live/drift-observed parameter concept (that
+   lives only in the design mockups' fictional audit data), so no view wires
+   this in yet; the class is here, ready, for when audit-derived "unplanned
+   parameter" rows are surfaced in a table (see views/events.js propRow TODO). */
+.tp-row-unplanned { background: rgba(196,144,58,0.07); }
+
 /* ============================================================================
    Versions
    ========================================================================== */
-.tp-versions { padding: 24px 30px; max-width: 1240px; margin: 0 auto; overflow-y: auto; }
+.tp-versions { padding: 24px 30px; max-width: var(--tp-page-w); margin: 0 auto; overflow-y: auto; }
 .tp-ver-row {
   display: flex; align-items: center; gap: 14px; padding: 14px 16px;
   border: 1px solid var(--tp-border); border-radius: var(--tp-r-lg); margin-bottom: 8px; background: var(--tp-surface);
@@ -839,26 +1037,129 @@
 .tp-ver-main { flex: 1; min-width: 0; }
 .tp-ver-when { font-size: 11.5px; color: var(--tp-text-3); font-family: var(--tp-mono); }
 .tp-version-list { margin-top: 14px; }
+/* Draft/live badges (design: TP Versions timeline) */
+.tp-ver-badge {
+  font-family: var(--tp-mono); font-size: 9.5px; padding: 2px 8px; border-radius: var(--tp-r-full);
+  margin-left: 6px; border: 1px solid transparent; vertical-align: middle;
+}
+.tp-ver-badge.live { border-color: var(--tp-green); color: var(--tp-green); }
+.tp-ver-badge.draft { border-color: var(--tp-amber); color: var(--tp-amber); }
+.tp-ver-row-draft { background: color-mix(in srgb, var(--tp-accent) 4%, transparent); }
+/* Whole-row wash for whichever two rows are currently selected for compare
+   (design: TP Versions timeline — exact rgba from the mockup). */
+.tp-ver-row-comparing { background: rgba(196,112,58,0.04); }
+.tp-ver-num-draft { background: transparent; color: var(--tp-text-3); }
 .tp-ver-pick { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--tp-text-2); }
+/* Mono "COMPARING ▲/▼" pick control (design: TP Versions timeline) — wraps a
+   visually-hidden radio input so it stays a real form control. */
+.tp-ver-pickbtn {
+  display: inline-flex; align-items: center; font-family: var(--tp-mono); font-size: 11px;
+  letter-spacing: .02em; color: var(--tp-text-3); cursor: pointer; white-space: nowrap;
+}
+.tp-ver-pickbtn:hover { color: var(--tp-text); }
+.tp-ver-pickbtn.is-active { color: var(--tp-accent-hover); font-weight: 600; }
 .tp-compare-title { font-size: 13px; margin: 22px 0 12px; }
 
 /* ============================================================================
-   Branch review (PR screen)
+   Review (Flux's per-change accept/reject screen — design: TP Review)
    ========================================================================== */
 .tp-review-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.tp-review-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 16px 24px; border-bottom: 1px solid var(--tp-border); background: var(--tp-surface);
+.tp-review-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.tp-review-inner { max-width: var(--tp-page-w); margin: 0 auto; padding: 34px 40px 28px; }
+
+.tp-review-kicker {
+  font-family: var(--tp-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--tp-accent-hover); margin-bottom: 8px;
 }
-.tp-review-title { display: flex; align-items: center; gap: 10px; font-size: 15px; }
-.tp-review-arrow { color: var(--tp-text-3); }
-.tp-review-actions { display: flex; gap: 8px; align-items: center; }
-.tp-review-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 320px; }
-.tp-review-changes { overflow-y: auto; padding: 20px 24px; border-right: 1px solid var(--tp-border); }
-.tp-review-panel { overflow-y: auto; padding: 18px; background: var(--tp-surface-2); }
-.tp-review-section { margin-bottom: 22px; }
-.tp-review-section > h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--tp-text-3); font-weight: 650; margin: 0 0 10px; }
-.tp-reviewer-row { display: flex; align-items: center; gap: 9px; padding: 6px 0; font-size: 12.5px; }
+.tp-review-h1 {
+  margin: 0; font-family: var(--tp-serif); font-size: 34px; font-weight: 500; line-height: 1.1;
+}
+.tp-review-h1 em { color: var(--tp-accent-hover); font-style: italic; }
+.tp-review-lede { margin: 6px 0 22px; font-size: 14px; color: var(--tp-text-2); max-width: 580px; }
+
+/* Flux recommendation card */
+.tp-review-flux-card {
+  display: flex; gap: 13px; padding: 15px 18px; background: var(--tp-surface);
+  border: 1px solid var(--tp-border-2); border-radius: var(--tp-r-lg); margin-bottom: 20px;
+  align-items: flex-start;
+}
+.tp-review-flux-mark {
+  width: 26px; height: 26px; border-radius: 7px; background: var(--tp-text); color: var(--tp-canvas);
+  display: inline-flex; align-items: center; justify-content: center; font-family: var(--tp-serif);
+  font-style: italic; font-size: 13px; flex: none;
+}
+.tp-review-flux-text { font-size: 13.5px; color: var(--tp-text-2); line-height: 1.6; }
+
+/* Per-change cards */
+.tp-review-cards { display: flex; flex-direction: column; gap: 12px; }
+.tp-review-card {
+  background: var(--tp-surface); border: 1px solid var(--tp-border-2); border-radius: var(--tp-r-lg);
+  overflow: hidden;
+}
+.tp-review-card-head {
+  display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--line-3);
+}
+.tp-review-tag {
+  font-family: var(--tp-mono); font-size: 11px; padding: 3px 9px; border-radius: var(--tp-r-full); flex: none;
+}
+.tp-review-tag.add { color: var(--tp-green); background: var(--tp-green-soft); }
+.tp-review-tag.chg { color: var(--tp-amber); background: var(--tp-amber-soft); }
+.tp-review-tag.rem { color: var(--tp-red); background: rgba(180,69,47,0.10); }
+.tp-review-card-name { font-family: var(--tp-mono); font-size: 13px; font-weight: 600; flex: 1; min-width: 0; }
+.tp-review-card-state { font-family: var(--tp-mono); font-size: 10px; letter-spacing: .04em; flex: none; }
+.tp-review-card-state.pending { color: var(--tp-amber); }
+.tp-review-card-state.accepted { color: var(--tp-green); }
+.tp-review-card-state.rejected { color: var(--tp-red); }
+.tp-review-card-body { padding: 14px 18px; font-size: 13px; color: var(--tp-text-2); line-height: 1.55; }
+.tp-review-card-body .tp-inlinecode {
+  font-family: var(--tp-mono); font-size: 11.5px; background: var(--tp-surface-3); padding: 1px 5px; border-radius: 4px;
+}
+.tp-review-card-actions { display: flex; gap: 8px; align-items: center; padding: 0 18px 14px; }
+.tp-review-accept {
+  padding: 7px 14px; background: var(--tp-text); color: var(--tp-canvas); font-size: 12px; font-weight: 600;
+  border-radius: 7px; border: none; cursor: pointer; font-family: inherit;
+}
+.tp-review-accept:hover { background: var(--tp-text-2); }
+.tp-review-reject {
+  padding: 7px 14px; border: 1px solid var(--tp-border-strong); font-size: 12px; border-radius: 7px;
+  background: transparent; cursor: pointer; font-family: inherit; color: var(--tp-text);
+}
+.tp-review-reject:hover { border-color: var(--tp-red); color: var(--tp-red); }
+.tp-review-discuss { padding: 7px 14px; color: var(--tp-text-3); font-size: 12px; cursor: pointer; text-decoration: none; }
+.tp-review-discuss:hover { color: var(--tp-accent-hover); }
+.tp-review-chip {
+  padding: 7px 14px; font-size: 12px; font-weight: 600; border-radius: 7px; border: 1px solid transparent;
+}
+.tp-review-chip.accepted { background: var(--tp-green); color: #F2FBF4; }
+.tp-review-chip.rejected { background: transparent; border-color: var(--tp-red); color: var(--tp-red); }
+.tp-review-undo { padding: 7px 14px; color: var(--tp-text-3); font-size: 12px; cursor: pointer; background: none; border: none; font-family: inherit; }
+.tp-review-undo:hover { color: var(--tp-text); }
+
+/* Publish bar — dark, sticky at the bottom of the scroll area */
+.tp-review-publishbar {
+  display: flex; align-items: center; gap: 14px; margin: 24px 40px 28px; padding: 16px 20px;
+  background: var(--tp-text); border-radius: var(--tp-r-lg); position: sticky; bottom: 20px;
+  /* Sibling of .tp-review-inner (not inside it) — mirror its width minus the
+     40px side padding so the bar lines up with the cards above. */
+  max-width: calc(var(--tp-page-w) - 80px);
+  margin-left: auto; margin-right: auto;
+}
+.tp-review-publish-title { font-size: 13.5px; font-weight: 700; color: var(--tp-canvas); }
+.tp-review-publish-counts {
+  font-family: var(--tp-mono); font-size: 11px; color: #9C9483; margin-top: 2px; letter-spacing: .01em;
+}
+.tp-review-savedraft {
+  padding: 11px 20px; border: 1px solid #4A4335; color: #B8B0A0; font-size: 13px; border-radius: 8px;
+  background: none; cursor: pointer; font-family: inherit;
+}
+.tp-review-savedraft:hover { border-color: var(--tp-canvas); color: var(--tp-canvas); }
+.tp-review-publish {
+  padding: 11px 20px; background: var(--tp-accent); color: #FFF9EF; font-size: 13px; font-weight: 600;
+  border-radius: 8px; border: none; cursor: pointer; font-family: inherit;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--tp-accent) 30%, transparent);
+}
+.tp-review-publish:hover { background: var(--tp-accent-hover); }
+.tp-review-publish:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 
 /* activity timeline (review panel + overview) */
 .tp-activity-timeline { display: flex; flex-direction: column; gap: 2px; }
@@ -935,7 +1236,7 @@
 /* ============================================================================
    Overview dashboard
    ========================================================================== */
-.tp-overview { padding: 24px 30px; max-width: 1240px; margin: 0 auto; overflow-y: auto; height: 100%; }
+.tp-overview { padding: 24px 30px; max-width: var(--tp-page-w); margin: 0 auto; overflow-y: auto; height: 100%; }
 .tp-ov-head, .tp-ov-head-main { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; }
 .tp-ov-head h1 { font-size: 22px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
 .tp-ov-actions, .tp-ov-head-actions { margin-left: auto; display: flex; gap: 8px; }
@@ -990,11 +1291,193 @@
    Responsive
    ========================================================================== */
 @media (max-width: 900px) {
-  .tp-review-body { grid-template-columns: 1fr; }
-  .tp-review-panel { border-top: 1px solid var(--tp-border); }
+  .tp-review-inner { padding: 22px 18px 20px; }
+  .tp-review-publishbar { margin-left: 18px; margin-right: 18px; }
 }
 @media (max-width: 860px) {
   .tp-ov-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================================
+   Event detail — Ledger "read-first, inline-editable" redesign
+   (design: fluxito_site_revamp/designs/Flux - TP Event Detail.dc.html)
+
+   Single 760px column: mono h1 name (editable) + status pill + read subline,
+   optional drift callout, health strip, Parameters grid, Destinations grid,
+   Implementation card, then the existing Details / Tracked-on / Success-metrics
+   cards (lightly restyled), with the save cluster pinned to the bottom of the
+   scroll area. Master-list rows (.tp-ev2) get the same mono-name + status-glyph
+   treatment. Colors below reuse --tp-* tokens where one exists (amber/red/green/
+   text/border already alias the exact design hexes — see the :root-alias block
+   at the top of this file); the few one-off hexes from the design mockup that
+   have no token (#39332A drift-callout text, var(--line-3)/var(--card-well)
+   global tokens) are used directly. See views/events.js for the render code.
+   ========================================================================== */
+
+/* -- master list rows -- */
+.tp-ev2 {
+  padding: 10px 12px; border-radius: var(--tp-r); cursor: pointer;
+  border: 1px solid transparent; transition: background .1s, border-color .1s;
+}
+.tp-ev2:hover { background: var(--tp-surface-2); }
+.tp-ev2.is-active { background: var(--tp-surface); border-color: var(--tp-accent); }
+.tp-ev2-toprow { display: flex; align-items: center; gap: 8px; }
+/* Properties list reuses .tp-ev-name inside a .tp-ev2-toprow (see
+   views/properties.js) — flex it so the trailing status glyph right-aligns,
+   same as .tp-ev2-name does natively. */
+.tp-ev2-toprow .tp-ev-name { flex: 1; min-width: 0; }
+.tp-ev2-name {
+  font-family: var(--tp-mono); font-size: 12.5px; font-weight: 600; color: var(--tp-text);
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tp-ev2-glyph { font-family: var(--tp-mono); font-size: 9px; letter-spacing: .02em; flex: none; }
+.tp-ev2-sub { font-size: 11px; color: var(--tp-text-3); margin-top: 2px; }
+
+/* -- detail column -- */
+.tp-ed2 { max-width: var(--tp-page-w); margin: 0 auto; padding: 34px 40px 60px; }
+.tp-ed2-head { display: flex; align-items: flex-start; gap: 14px; }
+.tp-ed2-id { flex: 1; min-width: 0; }
+.tp-ed2-titlerow { display: flex; align-items: center; gap: 10px; }
+.tp-ed2-titlefield {
+  font-family: var(--tp-mono); font-size: 28px; font-weight: 600; letter-spacing: -0.01em;
+  border: 1px solid transparent; background: transparent; color: var(--tp-text);
+  padding: 2px 6px; margin: -2px -6px; border-radius: var(--tp-r-sm); min-width: 0;
+}
+.tp-ed2-titlefield:hover { background: var(--tp-surface-3); }
+.tp-ed2-titlefield:focus {
+  background: var(--tp-surface); border-color: var(--tp-accent-border); outline: none;
+  box-shadow: 0 0 0 3px var(--tp-accent-soft);
+}
+.tp-ed2-pill {
+  font-family: var(--tp-mono); font-size: 10px; padding: 3px 9px; border-radius: var(--tp-r-full);
+  border: 1px solid currentColor; flex: none;
+}
+.tp-ed2-subline { font-size: 13.5px; color: var(--tp-text-2); margin-top: 6px; line-height: 1.5; }
+.tp-ed2-subline strong { font-weight: 600; color: var(--tp-text-2); }
+.tp-ed2-actions { display: flex; align-items: center; gap: 8px; flex: none; margin-top: 1px; }
+.tp-ed2-fixdrift {
+  display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 16px;
+  background: var(--tp-text); color: var(--tp-canvas); font-size: 12.5px; font-weight: 600;
+  border-radius: var(--tp-r); cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+.tp-ed2-fixdrift:hover { background: var(--tp-text-2); color: var(--tp-canvas); }
+.tp-ed2-fixdrift .tp-flux-mark-tiny { font-family: var(--tp-serif); }
+
+/* Real validate()-findings callout (existing .tp-ed-callout) sits inside the
+   narrower 760px column now — tighten its margin to match the drift callout. */
+.tp-ed2 .tp-ed-callout { margin: 20px 0 0; }
+
+/* -- drift callout: only rendered when event.drift.detail.reasons exist -- */
+.tp-ed2-callout {
+  display: flex; gap: 13px; align-items: flex-start; padding: 14px 17px;
+  background: var(--tp-surface); border: 1px solid var(--tp-border-2); border-left: 4px solid var(--tp-amber);
+  border-radius: var(--tp-r-lg); margin: 20px 0;
+}
+.tp-ed2-callout-badge {
+  width: 26px; height: 26px; border-radius: 7px; background: var(--tp-text); color: var(--tp-canvas);
+  display: inline-flex; align-items: center; justify-content: center; font-family: var(--tp-serif);
+  font-style: italic; font-size: 13px; flex: none;
+}
+.tp-ed2-callout-text { font-size: 13px; color: #39332A; line-height: 1.55; }
+
+/* -- health strip: 3-col LAST 7 DAYS / PARAM COVERAGE / LAST VERIFIED -- */
+.tp-ed2-health {
+  display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--tp-border-2);
+  border-radius: var(--tp-r-lg); background: var(--tp-surface); overflow: hidden; margin-bottom: 22px;
+}
+.tp-ed2-health-cell { padding: 14px 18px; border-right: 1px solid var(--line-3); }
+.tp-ed2-health-cell:last-child { border-right: none; }
+.tp-ed2-health-label { font-family: var(--tp-mono); font-size: 10px; color: var(--tp-text-4); letter-spacing: .06em; }
+.tp-ed2-health-value { font-family: var(--tp-mono); font-size: 17px; margin-top: 3px; color: var(--tp-text); }
+.tp-ed2-health-nudge { font-size: 12.5px; font-family: var(--tp-sans); color: var(--tp-text-3); }
+
+/* -- shared section eyebrow (Parameters / Destinations / Implementation) -- */
+.tp-ed2-section { margin-bottom: 22px; }
+.tp-ed2-eyebrow {
+  font-family: var(--tp-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--tp-text-3); margin-bottom: 10px;
+}
+
+/* -- parameters grid table -- */
+.tp-ed2-ptable {
+  border: 1px solid var(--tp-border-2); border-radius: var(--tp-r-lg); background: var(--tp-surface);
+  overflow: hidden;
+}
+.tp-ed2-prow { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--line-3); }
+.tp-ed2-prow:last-child { border-bottom: none; }
+.tp-ed2-prow-head {
+  font-family: var(--tp-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--tp-text-4); padding-top: 10px; padding-bottom: 10px;
+}
+.tp-ed2-prow-grid { flex: 1; min-width: 0; display: grid; grid-template-columns: 1.2fr 90px 1.4fr 90px; gap: 12px; align-items: center; }
+/* amber tint for a live-but-unplanned parameter row (exact rgba from the design) */
+.tp-ed2-prow-unplanned { background: rgba(196,144,58,0.07); }
+.tp-ed2-pname-cell { min-width: 0; }
+.tp-ed2-pname-unplanned { color: var(--tp-accent-hover); }
+.tp-ed2-ptype { font-family: var(--tp-mono); font-size: 11.5px; color: var(--tp-text-3); }
+.tp-ed2-pexample { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tp-ed2-pexample-ro { font-family: var(--tp-mono); font-size: 11.5px; color: var(--tp-text-2); }
+.tp-ed2-cellin-sub { font-size: 11px; color: var(--tp-text-3); padding-top: 2px; padding-bottom: 2px; }
+.tp-ed2-pstatus { font-family: var(--tp-mono); font-size: 10px; }
+.tp-ed2-pstatus.good { color: var(--tp-green); }
+.tp-ed2-pstatus.bad { color: var(--tp-red); }
+.tp-ed2-pstatus.muted { color: var(--tp-text-3); }
+.tp-ed2-pstatus.unplanned { color: var(--tp-amber); }
+.tp-ed2-pactions { display: flex; align-items: center; gap: 4px; flex: none; }
+.tp-ed2-prow-empty { padding: 14px 16px; color: var(--tp-text-3); font-size: 13px; }
+
+/* smaller toggle variant for the compact parameter/destination rows */
+.tp-toggle.sm { width: 26px; height: 16px; }
+.tp-toggle.sm::after { width: 12px; height: 12px; }
+.tp-toggle.sm.on::after { left: 12px; }
+
+/* -- destinations 3-up grid -- */
+.tp-ed2-destgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.tp-ed2-destcard {
+  display: flex; align-items: flex-start; gap: 11px; padding: 13px 15px;
+  background: var(--tp-surface); border: 1px solid var(--tp-border-2); border-radius: var(--tp-r);
+}
+.tp-ed2-dest-logo { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+.tp-ed2-dest-main { flex: 1; min-width: 0; }
+.tp-ed2-dest-name { font-size: 13px; font-weight: 700; color: var(--tp-text); }
+.tp-ed2-dest-status { font-family: var(--tp-mono); font-size: 10px; color: var(--tp-text-3); margin-top: 2px; }
+.tp-ed2-dest-status.live { color: var(--tp-green); }
+.tp-ed2-dest-input {
+  display: block; width: 100%; margin-top: 4px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; font: inherit; font-size: 11px; color: var(--tp-text-3); padding: 3px 5px;
+}
+.tp-ed2-dest-input:hover { background: var(--tp-surface-3); }
+.tp-ed2-dest-input:focus {
+  outline: none; background: var(--tp-surface); border-color: var(--tp-accent-border);
+  box-shadow: 0 0 0 3px var(--tp-accent-soft); color: var(--tp-text);
+}
+.tp-ed2-dest-ctrl { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: none; }
+.tp-ed2-destmap { margin-top: 12px; }
+
+/* -- implementation card -- */
+.tp-ed2-implcard { border: 1px solid var(--tp-border-2); border-radius: var(--tp-r-lg); background: var(--tp-surface); overflow: hidden; }
+.tp-ed2-impl-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line-3); }
+.tp-ed2-impl-logo { width: 18px; height: 18px; flex: none; }
+.tp-ed2-impl-text { font-family: var(--tp-mono); font-size: 12px; color: var(--tp-text); flex: 1; min-width: 0; }
+.tp-ed2-triggerfield {
+  border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--tp-text);
+  font: inherit; font-size: 12px; padding: 0 3px; width: 140px; max-width: 40vw;
+}
+.tp-ed2-triggerfield:hover { background: var(--tp-surface-3); }
+.tp-ed2-triggerfield:focus {
+  outline: none; background: var(--tp-surface); border-color: var(--tp-accent-border);
+  box-shadow: 0 0 0 3px var(--tp-accent-soft);
+}
+.tp-ed2-code {
+  padding: 14px 18px; font-family: var(--tp-mono); font-size: 12px; line-height: 1.8; color: var(--tp-text-2);
+  background: var(--card-well);
+}
+
+/* -- sticky save bar (bottom of the .tp-detail scroll area) -- */
+.tp-ed2-savebar {
+  position: sticky; bottom: 0; z-index: 5; max-width: var(--tp-page-w); margin: 0 auto;
+  padding: 12px 40px; background: var(--tp-head-blur); backdrop-filter: saturate(1.4) blur(8px);
+  border-top: 1px solid var(--tp-border); display: flex; justify-content: flex-end;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1135,6 +1618,16 @@
   .tp-card-h { flex-wrap: wrap; padding: 12px 14px; }
   .tp-card-ha { margin-left: 0; width: 100%; }
 
+  /* Event-detail Ledger redesign (.tp-ed2) — same single-column / tighter-padding
+     treatment as the rest of the editor forms above. */
+  .tp-ed2 { max-width: 100%; padding: 18px 14px 40px; }
+  .tp-ed2-head { flex-wrap: wrap; }
+  .tp-ed2-titlefield { font-size: 19px; word-break: break-word; }
+  .tp-ed2-actions { width: 100%; flex-wrap: wrap; margin-top: 8px; }
+  .tp-ed2-destgrid { grid-template-columns: 1fr; }
+  .tp-ed2-prow-grid { grid-template-columns: 1fr 70px 1fr 70px; gap: 8px; }
+  .tp-ed2-savebar { max-width: 100%; padding: 10px 14px; }
+
   /* A.7 — Data tables → horizontal scroll inside .tp-table-scroll wrapper.
      Do NOT put overflow-x:auto on .tp-card-b — that would create a new stacking
      context that clips .tp-combo-pop even after overflow:hidden was removed from
@@ -1191,12 +1684,16 @@
   .tp-ov-grid, .tp-catalog { grid-template-columns: 1fr; }
   .tp-ov-head, .tp-ov-head-main { flex-direction: column; }
   .tp-ov-actions, .tp-ov-head-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
-  .tp-review-head { flex-direction: column; align-items: flex-start; padding: 12px 16px; }
-  .tp-review-actions { flex-wrap: wrap; }
-  .tp-review-changes { padding: 14px 16px; border-right: none; }
+  .tp-review-inner { padding: 18px 14px 18px; }
+  .tp-review-publishbar { flex-direction: column; align-items: stretch; margin-left: 14px; margin-right: 14px; position: static; }
+  .tp-review-card-actions { flex-wrap: wrap; }
   .tp-ver-row { flex-direction: column; align-items: flex-start; gap: 10px; }
 
   /* Issues view mobile */
+  .tp-issues-head { padding: 16px 16px 0; }
+  .tp-issues-subtabs { padding: 12px 16px; }
+  .tp-issues-list, .tp-rules-list { padding: 16px; }
+  .tp-issues-scanfooter { margin: 22px 16px 0; }
   .tp-issues-filters { flex-direction: column; }
   .tp-issue-row { flex-wrap: wrap; gap: 8px; }
   /* .tp-rule-row flex-wrap:wrap is now set globally (all widths) — no override needed. */
@@ -1211,34 +1708,48 @@
    ========================================================================== */
 .tp-issues-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
-/* Sub-tab bar */
+/* Page header — same centered column as every other full-page screen. */
+.tp-issues-head { width: 100%; max-width: var(--tp-page-w); margin: 0 auto; padding: 24px 30px 0; flex: none; }
+
+/* Sub-tab bar — capped to the shared column so the pills line up with the
+   header and findings below instead of hugging the pane's left edge. */
 .tp-issues-subtabs {
-  display: flex; align-items: center; gap: 4px; padding: 12px 18px;
-  border-bottom: 1px solid var(--tp-border); background: var(--tp-surface); flex: none;
+  display: flex; align-items: center; gap: 4px; padding: 12px 30px;
+  width: 100%; max-width: var(--tp-page-w); margin: 0 auto;
+  border-bottom: 1px solid var(--tp-border); flex: none;
 }
 .tp-issues-subtab {
-  border: none; background: transparent; font: inherit; font-size: 13px; font-weight: 500;
-  padding: 7px 14px; border-radius: var(--tp-r-sm); cursor: pointer;
+  border: 1px solid var(--tp-border-strong); background: transparent;
+  font-family: var(--tp-mono); font-size: 11px; letter-spacing: 0.05em; font-weight: 500;
+  text-transform: uppercase;
+  padding: 8px 16px; border-radius: var(--tp-r-full); cursor: pointer;
   color: var(--tp-text-2); transition: all .15s;
 }
-.tp-issues-subtab:hover { color: var(--tp-text); background: var(--tp-surface-3); }
+.tp-issues-subtab:hover { color: var(--tp-text); border-color: var(--tp-text); }
 .tp-issues-subtab.is-active {
-  background: var(--tp-surface-3); color: var(--tp-text); box-shadow: var(--tp-sh-xs);
+  background: var(--tp-text); color: var(--tp-canvas); border-color: var(--tp-text); box-shadow: none;
 }
 .tp-issues-refresh { margin-left: auto; font-size: 12.5px; }
 
-/* Tab content wrapper */
+/* Tab content wrapper — centered + width-capped to match .tp-versions/.tp-ov2.
+   A shared 30px side gutter on every child keeps left edges aligned. */
 .tp-issues-tab { flex: 1; overflow-y: auto; padding: 0 0 60px; }
+.tp-issues-tab > * { max-width: var(--tp-page-w); margin-left: auto; margin-right: auto; }
+.tp-issues-tab > .tp-banner { padding-left: 30px; padding-right: 30px; }
 
 /* Filter bar */
 .tp-issues-filters {
-  display: flex; align-items: center; gap: 10px; padding: 12px 18px;
+  display: flex; align-items: center; gap: 10px; padding: 12px 30px;
   border-bottom: 1px solid var(--tp-border); background: var(--tp-surface-2); flex-wrap: wrap;
 }
-.tp-issues-filter-sel { width: auto; min-width: 140px; height: 30px; padding: 0 28px 0 9px; font-size: 12.5px; }
+/* Beats ".tp-workspace .select"'s width:100% (same specificity, declared later here). */
+.tp-issues-filters .tp-issues-filter-sel { width: auto; min-width: 140px; height: 30px; padding: 0 28px 0 9px; font-size: 12.5px; }
 
 /* Finding groups */
-.tp-issues-list { padding: 16px 18px; display: flex; flex-direction: column; gap: 20px; }
+.tp-issues-list { padding: 16px 30px; display: flex; flex-direction: column; gap: 20px; }
+.tp-issues-scanfooter { display: flex; align-items: center; gap: 10px; margin: 22px 30px 0; }
+.tp-issues-scanfooter-line { flex: 1; height: 1px; background: var(--tp-border-strong); }
+.tp-issues-scanfooter-text { font-family: var(--tp-mono); font-size: 10.5px; color: var(--tp-text-3); letter-spacing: .06em; white-space: nowrap; }
 .tp-issues-group { display: flex; flex-direction: column; gap: 6px; }
 .tp-issues-group-head {
   display: flex; align-items: center; gap: 10px; padding: 4px 0 6px;
@@ -1246,25 +1757,45 @@
 }
 .tp-issues-group-count { font-size: 12px; color: var(--tp-text-3); }
 
-/* Individual finding row */
+/* Individual finding row — left border colored by severity (design: TP Issues) */
 .tp-issue-row {
-  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
-  border: 1px solid var(--tp-border); border-radius: var(--tp-r); background: var(--tp-surface);
+  display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px;
+  border: 1px solid var(--tp-border-strong); border-left: 4px solid var(--tp-border-strong);
+  border-radius: var(--tp-r-lg); background: var(--tp-surface);
   transition: border-color .1s, background .1s;
 }
+.tp-issue-row[data-sev="error"] { border-left-color: var(--tp-red); }
+.tp-issue-row[data-sev="warning"] { border-left-color: var(--tp-amber); }
+.tp-issue-row[data-sev="info"] { border-left-color: var(--tp-sky); }
 .tp-issue-row-link { cursor: pointer; }
 .tp-issue-row-link:hover { background: var(--tp-surface-2); border-color: var(--tp-border-strong); }
 .tp-issue-body { flex: 1; min-width: 0; }
-.tp-issue-msg { font-size: 13px; color: var(--tp-text); line-height: 1.5; }
+.tp-issue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tp-issue-title { font-size: 14px; font-weight: 700; color: var(--tp-text); }
+.tp-issue-rulechip { font-family: var(--tp-mono); font-size: 9.5px; color: var(--tp-text-3); }
+.tp-issue-msg { font-size: 12.5px; color: var(--tp-text-2); line-height: 1.5; margin-top: 2px; }
 .tp-issue-rule { font-size: 11.5px; color: var(--tp-text-3); margin-top: 2px; }
 .tp-issue-fix {
   font-size: 11.5px; color: var(--tp-green); margin-top: 3px;
   font-family: var(--tp-mono);
 }
 .tp-issue-link-arrow { font-size: 13px; align-self: center; flex: none; }
+.tp-issue-actions { display: flex; gap: 8px; align-self: center; flex: none; }
+.tp-issue-act-primary {
+  padding: 8px 14px; background: var(--tp-text); color: var(--tp-canvas); font-size: 12px; font-weight: 600;
+  border-radius: 7px; border: none; cursor: pointer; white-space: nowrap; font-family: inherit; text-decoration: none;
+  display: inline-block;
+}
+.tp-issue-act-primary:hover { background: var(--tp-text-2); color: var(--tp-canvas); }
+.tp-issue-act-secondary {
+  padding: 8px 12px; color: var(--tp-text-3); font-size: 12px; cursor: pointer; background: none; border: none;
+  font-family: inherit; white-space: nowrap;
+}
+.tp-issue-act-secondary:hover { color: var(--tp-text); }
+.tp-issue-snoozed { font-size: 11.5px; color: var(--tp-text-3); font-style: italic; }
 
 /* Rules list */
-.tp-rules-list { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.tp-rules-list { padding: 16px 30px; display: flex; flex-direction: column; gap: 8px; }
 .tp-rule-row {
   display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px;
   border: 1px solid var(--tp-border); border-radius: var(--tp-r-lg); background: var(--tp-surface);

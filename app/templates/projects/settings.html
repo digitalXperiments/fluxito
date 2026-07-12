@@ -13,13 +13,19 @@
     <span class="bc-here">{{ project.name }}</span>
   </div>
 
-  {# ── Header ── #}
+  {# ══════════════════════════════════════════════════════════════
+     HEADER — mono eyebrow + ink mark + Newsreader title + mono subline
+     (Flux - Project Settings.dc.html:85-91)
+     ══════════════════════════════════════════════════════════════ #}
   <div class="page-head">
+    <div class="ps-eyebrow">Project settings</div>
     <div class="ps-head">
       <div class="ps-mark">{{ project.name[:2] | upper }}</div>
       <div class="ps-head-main">
-        <span class="label">Project settings</span>
         <h1>{{ project.name }}</h1>
+        <div class="ps-subline">
+          Created {{ project.created_label or '—' }} · {{ members | length }} member{{ '' if members|length == 1 else 's' }}
+        </div>
         {% if project.description %}
         <p class="ps-desc">{{ project.description }}</p>
         {% endif %}
@@ -28,32 +34,71 @@
   </div>
 
   {# ══════════════════════════════════════════════════════════════
-     TABS
+     TAB BAR — every section below carries data-ps-tab and only the
+     active tab's sections are shown (controller script at the bottom
+     of this file). Deep links keep working: #notifications opens the
+     Notifications tab, #roles opens Members & roles and scrolls to
+     the roles card, etc.
      ══════════════════════════════════════════════════════════════ #}
-  <div class="ps-tabs" id="settingsTabs">
-    <button class="ps-tab is-active" data-tab="members" onclick="switchTab('members')">Users</button>
+  <div class="sub-tabs ps-tabs" id="psTabs">
+    <a class="sub-tab" href="#general" data-tab="general">General</a>
+    <a class="sub-tab" href="#members" data-tab="members">Members &amp; roles</a>
+    <a class="sub-tab" href="#connections" data-tab="connections">Connections</a>
+    <a class="sub-tab" href="#limits" data-tab="limits">API limits</a>
     {% if membership.role in ('owner', 'admin') %}
-    <button class="ps-tab" data-tab="roles" onclick="switchTab('roles')">User Roles</button>
+    <a class="sub-tab" href="#notifications" data-tab="notifications">Notifications</a>
     {% endif %}
-    <button class="ps-tab" data-tab="connections" onclick="switchTab('connections')">Connections</button>
-    <button class="ps-tab" data-tab="limits" onclick="switchTab('limits')">API Limits</button>
-    {% if membership.role in ('owner', 'admin') %}
-    <button class="ps-tab" data-tab="notifications" onclick="switchTab('notifications')">Notifications</button>
-    {% endif %}
-    <button class="ps-tab" data-tab="general" onclick="switchTab('general')">General</button>
   </div>
 
-  {# ── MEMBERS TAB ── #}
-  <div class="ps-panel is-active" data-panel="members">
-
-    {# Invite bar (owner/admin only) #}
+  {# ── GENERAL ── #}
+  <section class="ps-card ps-section-card" id="general" data-ps-tab="general">
+    <div class="ps-eyebrow-card">General</div>
     {% if membership.role in ('owner', 'admin') %}
-    <section class="ps-card ps-section-card ps-invite-card">
-      <div class="ps-section-copy">
-        <span class="label">Access</span>
-        <h2>Invite teammates</h2>
-        <p>Add people to this project and choose the level of access they should start with.</p>
-      </div>
+    {#
+      Flux - Project Settings.dc.html:94-108 shows Project name + Slug as editable
+      inputs with a Save button. TODO(ledger-revamp): no PATCH /api/project/{slug}
+      endpoint updates `name`/`slug` yet (project_routes.py only has member/role/
+      email-sender/slack-webhook/dashboard-settings/rbac PATCH routes) — the form
+      below is wired to call one by the obvious REST convention; add that route
+      server-side for Save to actually persist.
+    #}
+    <form id="generalForm" class="ps-grid-2" onsubmit="return false;" style="margin-bottom:0">
+      <label class="f-field">
+        <span>Project name</span>
+        <input type="text" id="generalNameInput" class="f-input" value="{{ project.name }}" maxlength="255">
+      </label>
+      <label class="f-field">
+        <span>Slug</span>
+        <input type="text" id="generalSlugInput" class="f-input mono" value="{{ project.slug }}" maxlength="64" autocomplete="off">
+      </label>
+    </form>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button type="button" class="btn btn-accent" id="generalSaveBtn" onclick="saveGeneralDetails()">Save</button>
+      <div id="generalMsg" class="ps-msg" style="display:none"></div>
+    </div>
+    <div class="ps-detail-list" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line-2)">
+      <div><span>ID</span><code>{{ project.id }}</code></div>
+    </div>
+    {% else %}
+    <div class="ps-detail-list">
+      <div><span>Name</span><strong>{{ project.name }}</strong></div>
+      <div><span>Slug</span><code>{{ project.slug }}</code></div>
+      <div><span>ID</span><code>{{ project.id }}</code></div>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ── MEMBERS ── #}
+  <section class="ps-card ps-section-card" id="members" data-ps-tab="members">
+    <div class="ps-directory-head">
+      <div class="ps-eyebrow-card" style="margin-bottom:0">Members · {{ members | length }}</div>
+      {% if membership.role in ('owner', 'admin') %}
+      <button type="button" class="btn secondary" id="inviteToggleBtn" onclick="toggleInviteForm()">+ Invite member</button>
+      {% endif %}
+    </div>
+
+    {% if membership.role in ('owner', 'admin') %}
+    <div id="inviteFormWrap" class="ps-invite-wrap" hidden>
       <form id="inviteForm" class="ps-invite" novalidate>
         <label class="f-field ps-invite-email">
           <span>Invite by email</span>
@@ -69,31 +114,20 @@
         <button type="submit" class="btn primary" id="inviteBtn">Invite</button>
       </form>
       <div id="inviteMsg" class="ps-msg" style="display:none"></div>
-    </section>
+    </div>
     {% endif %}
 
-    {# Member list #}
-    <section class="ps-card ps-directory-card">
-      <div class="ps-directory-head">
-        <div>
-          <span class="label">Directory</span>
-          <h2>Project members</h2>
-        </div>
-        <span class="ps-count-pill">{{ members | length }} members</span>
-      </div>
-      <div class="ps-member-list">
-        {% for m in members %}
-        <article class="ps-member-row" data-member-id="{{ m.id }}">
-          <div class="ps-member-person">
-            <div class="ps-avatar">{{ (m.display_name or m.email)[:2] | upper }}</div>
-            <div>
-              <div class="ps-mbr-name">{{ m.display_name or m.email.split('@')[0] }}</div>
-              <div class="ps-mbr-email">{{ m.email }}</div>
+    <div class="ps-member-list">
+      {% for m in members %}
+      <article class="ps-member-row" data-member-id="{{ m.id }}">
+        <div class="ps-member-person">
+          <div class="ps-avatar{% if m.role == 'admin' %} ps-avatar-admin{% elif m.role == 'member' %} ps-avatar-member{% endif %}">{{ (m.display_name or m.email)[:2] | upper }}</div>
+          <div>
+            <div class="ps-mbr-name">
+              {{ m.display_name or m.email.split('@')[0] }}
+              {% if m.user_id == user.user_id %}<span class="ps-you">(you)</span>{% endif %}
             </div>
-          </div>
-          <div class="ps-member-meta">
-            <span class="ps-field-label">Role</span>
-            <span class="t-flag ps-role ps-role-{{ m.role }}">{{ m.role | capitalize }}</span>
+            <div class="ps-mbr-email">{{ m.email }}</div>
             {% if membership.role in ('owner', 'admin') and m.role == 'member' %}
             <div class="mbr-roles" data-member-id="{{ m.id }}" data-role-ids="{{ m.role_ids | join(',') }}">
               <span class="mbr-role-chips"></span>
@@ -104,44 +138,411 @@
             </div>
             {% endif %}
           </div>
-          <div class="ps-member-meta">
-            <span class="ps-field-label">Joined</span>
-            <span class="ps-mono-sm">{{ m.joined_at[:10] if m.joined_at else 'Pending' }}</span>
-          </div>
-          {% if membership.role in ('owner', 'admin') %}
-          <div class="ps-member-actions">
-            {% if m.role != 'owner' %}
-              {% if membership.role == 'owner' %}
-              <label class="ps-action-field">
-                <span>Change role</span>
-                <select class="f-input ps-role-select"
-                        onchange="changeRole('{{ project.slug }}', '{{ m.id }}', this.value)" data-current="{{ m.role }}">
-                  <option value="admin" {% if m.role == 'admin' %}selected{% endif %}>Admin</option>
-                  <option value="member" {% if m.role == 'member' %}selected{% endif %}>Member</option>
-                </select>
-              </label>
-              {% endif %}
-              <div class="ps-action-buttons">
-                <button class="btn sm danger-outline" onclick="removeMember('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Remove</button>
-                <button class="btn sm" onclick="resetMemberPassword('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Reset password</button>
-              </div>
-            {% else %}
-              <span class="ps-owner-note">Owner controls billing, deletion, and ownership transfer.</span>
-            {% endif %}
-          </div>
+        </div>
+
+        <div class="ps-member-meta ps-member-meta-joined">
+          <span class="ps-field-label">Joined</span>
+          <span class="ps-mono-sm">{{ m.joined_at[:10] if m.joined_at else 'Pending' }}</span>
+        </div>
+
+        <div class="ps-member-role-col">
+          {% if m.role == 'owner' %}
+          <span class="t-flag ps-role ps-role-owner">Owner</span>
+          {% elif membership.role == 'owner' %}
+          <select class="f-input ps-role-select"
+                  onchange="changeRole('{{ project.slug }}', '{{ m.id }}', this.value)" data-current="{{ m.role }}">
+            <option value="admin" {% if m.role == 'admin' %}selected{% endif %}>Admin ▾</option>
+            <option value="member" {% if m.role == 'member' %}selected{% endif %}>Member ▾</option>
+          </select>
+          {% else %}
+          <span class="t-flag ps-role ps-role-{{ m.role }}">{{ m.role | capitalize }}</span>
           {% endif %}
-        </article>
+        </div>
+
+        {% if membership.role in ('owner', 'admin') %}
+        <div class="ps-member-actions">
+          {% if m.role != 'owner' %}
+          <div class="ps-action-buttons">
+            <button class="btn sm danger-outline" onclick="removeMember('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Remove</button>
+            <button class="btn sm" onclick="resetMemberPassword('{{ project.slug }}', '{{ m.id }}', '{{ m.email }}')">Reset password</button>
+          </div>
+          {% else %}
+          <span class="ps-owner-note">Owner controls billing, deletion, and ownership transfer.</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ── FLUX PERMISSIONS ──
+     "What Flux may do here" (Flux - Project Settings.dc.html, "flux permissions"
+     section) shows a per-platform WRITE/READ-ONLY/FULL pill with an "approval
+     required" state. There is no backing per-platform Flux write-scope/approval
+     model in this repo today — tool access is granted per *member* via custom
+     roles (User Roles below, Read/Write per domain), not per Flux-agent write
+     action. Mapping the real per-platform connection status onto the design's
+     pill vocabulary as a reasonable approximation:
+       active connection       -> FULL          (good border)
+       disconnected connection -> READ ONLY      (ink border)
+     TODO(ledger-revamp): once a real Flux write-scope/approval field exists on
+     the project or connection model, swap this mapping for the actual
+     WRITE · APPROVAL REQUIRED / READ ONLY / FULL state per platform.
+  #}
+  <section class="ps-card ps-section-card" id="flux-permissions" data-ps-tab="general">
+    <div class="ps-eyebrow-card">What Flux may do here</div>
+    <p class="ps-card-lede">
+      Write scopes are per platform; every write still requires a member's approval.
+      Flux's tool access otherwise follows each member's role — see <a href="#roles">User roles</a>
+      for per-domain read/write grants.
+    </p>
+    {% if connections %}
+    <div class="ps-flux-perm-list">
+      {% for c in connections %}
+      {% set pill_label = 'FULL' if c.status == 'active' else 'READ ONLY' %}
+      {% set pill_kind = 'good' if c.status == 'active' else 'ink' %}
+      <div class="ps-flux-perm-row">
+        <span class="ps-flux-perm-name">{{ c.provider | capitalize }}</span>
+        <span class="ps-flux-pill ps-flux-pill-{{ pill_kind }}">{{ pill_label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="ps-muted-sm" style="margin:0">No platforms connected yet — <a href="/connect">connect one</a> to see it here.</p>
+    {% endif %}
+  </section>
+
+  {% if membership.role == 'owner' %}
+  {# ── TRANSFER OWNERSHIP (owner only) ── #}
+  <section class="ps-card ps-warn-card ps-section-card" id="transfer" data-ps-tab="general">
+    <h3 class="ps-h3">Transfer <em class="serif-italic">ownership.</em></h3>
+    <p class="ps-card-lede">Transfer this project to another member. You'll be demoted to Admin.</p>
+    <form id="transferForm" class="ps-invite">
+      <label class="f-field" style="flex:1">
+        <span>New owner</span>
+        <select name="user_id" class="f-input">
+          {% for m in members if m.role != 'owner' %}
+          <option value="{{ m.user_id }}">{{ m.display_name or m.email }} ({{ m.role }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="btn warn-outline" id="transferBtn">Transfer</button>
+    </form>
+    <div id="transferMsg" class="ps-msg" style="display:none;margin-top:10px"></div>
+  </section>
+
+  {# ── DANGER ZONE ── #}
+  <section class="ps-card ps-danger-card ps-section-card" id="danger" data-ps-tab="general">
+    <div class="ps-danger-eyebrow">Danger zone</div>
+    <div class="ps-danger-row">
+      <div class="ps-danger-copy">
+        <div class="ps-danger-title">Delete this project</div>
+        <p class="ps-danger-desc">Connections, dashboards, tracking plans and Flux's memory of this project are permanently removed. This action cannot be undone.</p>
+      </div>
+      <button class="btn danger-outline" onclick="deleteProject()">Delete project</button>
+    </div>
+  </section>
+  {% endif %}
+
+  {# ══════════════════════════════════════════════════════════════
+     BELOW THE DANGER ZONE — the functionality that used to live in
+     the User Roles / Connections / API Limits / Notifications tabs,
+     kept in full and rendered as additional titled cards in the same
+     scroll so nothing is lost.
+     ══════════════════════════════════════════════════════════════ #}
+
+  {% if membership.role in ('owner', 'admin') %}
+  {# ── Role-based access toggle ── #}
+  <div class="ps-card rbac-toggle ps-section-card" id="rbac" data-ps-tab="members">
+    <h3 class="ps-h3" style="margin-bottom:8px">Role-based access</h3>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13.5px;color:var(--ink)">
+      <span class="toggle">
+        <input type="checkbox" id="rbacToggle" {% if project.rbac_enabled %}checked{% endif %}>
+        <span class="toggle-track"></span>
+      </span>
+      <span>Enable role-based access</span>
+    </label>
+    <p class="ps-card-lede" style="margin-top:8px;margin-bottom:0">When off, all members have full access. When on, members are limited to their assigned roles — members with no roles will lose access until you assign one.</p>
+  </div>
+  <script>
+  document.getElementById('rbacToggle')?.addEventListener('change', async function(e) {
+    if (e.target.checked && !confirm('Enable RBAC? Members without roles will lose access until assigned a role.')) {
+      e.target.checked = false;
+      return;
+    }
+    try {
+      var res = await fetch('/api/project/{{ project.slug }}/settings/rbac', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: e.target.checked}),
+      });
+      if (!res.ok) {
+        var d = await res.json().catch(function(){return {};});
+        alert('Failed to update RBAC setting: ' + (d.message || d.detail || res.status));
+        e.target.checked = !e.target.checked;
+      }
+    } catch(err) {
+      alert('Failed to update RBAC setting: ' + err.message);
+      e.target.checked = !e.target.checked;
+    }
+  });
+  </script>
+
+  {# ── USER ROLES ── #}
+  <section id="roles" class="ps-section-block" data-ps-tab="members">
+    <div class="ps-roles-manage-head">
+      <div>
+        <span class="label">Custom roles</span>
+        <h2>Fine-grained access</h2>
+        <p>Create access profiles for the tools and connected data sources your users need.</p>
+      </div>
+      <div class="ps-roles-manage-actions">
+        <a href="#members" class="btn">Manage users</a>
+        <button type="button" class="btn primary" id="createRoleBtn" onclick="openRoleDrawer('create', this)">Create role</button>
+      </div>
+    </div>
+
+    <div class="ps-card ps-custom-roles-card" id="rolesListCard">
+      <div id="rolesList">
+        <div class="ps-roles-empty">Loading roles…</div>
+      </div>
+    </div>
+
+    <details class="ps-built-in-roles">
+      <summary class="ps-built-in-summary">
+        <span>
+          <strong>Built-in roles and permissions</strong>
+          <small>Reference Owner, Admin, and Member capabilities.</small>
+        </span>
+        <span class="ps-built-in-summary-action">Show reference</span>
+      </summary>
+      <div class="ps-built-in-content">
+    <div class="ps-roles-hero">
+      <div>
+        <span class="label">Access model</span>
+        <h2>User roles</h2>
+        <p>Owner, Admin, and Member are the built-in project roles. Use custom roles above for fine-grained tool and provider access, then assign them to members from the Members card.</p>
+      </div>
+    </div>
+
+    <div class="ps-role-grid">
+      <article class="ps-role-card ps-role-card-owner">
+        <div class="ps-role-card-head">
+          <span class="ps-role-icon">OW</span>
+          <span class="t-flag ps-role ps-role-owner">Owner</span>
+        </div>
+        <h3>Full control</h3>
+        <p>Owns the project boundary and can transfer ownership or delete the project.</p>
+        <ul class="ps-permission-list">
+          <li><span></span>Manage every member and role</li>
+          <li><span></span>Connect platforms and notification senders</li>
+          <li><span></span>Transfer ownership and delete the project</li>
+        </ul>
+      </article>
+
+      <article class="ps-role-card ps-role-card-admin">
+        <div class="ps-role-card-head">
+          <span class="ps-role-icon">AD</span>
+          <span class="t-flag ps-role ps-role-admin">Admin</span>
+        </div>
+        <h3>Operational control</h3>
+        <p>Runs the workspace day to day without ownership-level destructive actions.</p>
+        <ul class="ps-permission-list">
+          <li><span></span>Invite and remove non-owner members</li>
+          <li><span></span>Connect data platforms and manage senders</li>
+          <li><span></span>Cannot transfer ownership or delete the project</li>
+        </ul>
+      </article>
+
+      <article class="ps-role-card ps-role-card-member">
+        <div class="ps-role-card-head">
+          <span class="ps-role-icon">MB</span>
+          <span class="t-flag ps-role ps-role-member">Member</span>
+        </div>
+        <h3>Project access</h3>
+        <p>Can use the project workspace without changing access, credentials, or billing boundaries.</p>
+        <ul class="ps-permission-list">
+          <li><span></span>View and use project resources</li>
+          <li><span></span>Run allowed workflows in the active project</li>
+          <li><span></span>No member, connection, or notification admin</li>
+        </ul>
+      </article>
+    </div>
+
+    <section class="ps-card ps-matrix-card">
+      <div class="ps-directory-head">
+        <div>
+          <span class="label">Permissions</span>
+          <h2>Role capabilities</h2>
+        </div>
+      </div>
+      <div class="ps-access-matrix">
+        <div class="ps-matrix-row ps-matrix-header">
+          <span>Capability</span>
+          <span>Owner</span>
+          <span>Admin</span>
+          <span>Member</span>
+        </div>
+        {% for capability, owner_ok, admin_ok, member_ok in [
+          ('Invite members', true, true, false),
+          ('Remove members', true, true, false),
+          ('Change member roles', true, false, false),
+          ('Connect platforms', true, true, false),
+          ('Manage notification senders', true, true, false),
+          ('Transfer ownership', true, false, false),
+          ('Delete project', true, false, false),
+        ] %}
+        <div class="ps-matrix-row">
+          <span>{{ capability }}</span>
+          <span class="{% if owner_ok %}is-yes{% endif %}">{{ 'Yes' if owner_ok else 'No' }}</span>
+          <span class="{% if admin_ok %}is-yes{% endif %}">{{ 'Yes' if admin_ok else 'No' }}</span>
+          <span class="{% if member_ok %}is-yes{% endif %}">{{ 'Yes' if member_ok else 'No' }}</span>
+        </div>
         {% endfor %}
       </div>
     </section>
+      </div>
+    </details>
 
-    <div class="ps-meta-note">
-      {{ members | length }} members
+    {# Role editor form #}
+    <div class="ps-role-drawer-backdrop" id="roleDrawerBackdrop" hidden></div>
+    <aside class="ps-role-drawer"
+           id="roleDrawer"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="roleFormTitle"
+           aria-hidden="true"
+           inert>
+    <div class="ps-card ps-role-editor">
+      <div class="ps-role-editor-head">
+        <div>
+          <span class="label">Access profile</span>
+          <h3 class="ps-h3" id="roleFormTitle">Create role</h3>
+          <p>Define which tools and connected data sources people with this role can use.</p>
+        </div>
+        <div class="ps-role-editor-head-actions">
+          <span class="ps-role-editor-state" id="roleFormState">New role</span>
+          <button type="button" class="ps-role-drawer-close" id="roleDrawerClose" aria-label="Close role editor">×</button>
+        </div>
+      </div>
+      <form id="roleForm" novalidate>
+        <input type="hidden" id="roleId" value="">
+
+        <section class="ps-role-editor-section">
+          <div class="ps-role-editor-section-head">
+            <span class="ps-role-editor-step">1</span>
+            <div>
+              <h4>Role details</h4>
+              <p>Choose a clear name that describes this access profile.</p>
+            </div>
+          </div>
+          <div class="ps-grid-2">
+            <label class="f-field">
+              <span>Name *</span>
+              <input type="text" name="name" class="f-input" placeholder="e.g. Analyst" required>
+            </label>
+            <label class="f-field">
+              <span>Description</span>
+              <input type="text" name="description" class="f-input" placeholder="e.g. Reporting and analysis access">
+            </label>
+          </div>
+        </section>
+
+        {# Tool permissions grid #}
+        <section class="ps-role-editor-section">
+          <div class="ps-role-editor-section-head">
+            <span class="ps-role-editor-step">2</span>
+            <div>
+              <h4>Tool permissions</h4>
+              <p>Choose whether this role can read from or make changes with each capability.</p>
+            </div>
+          </div>
+          <div class="ps-role-editor-control">
+            <table class="ps-table" id="toolGrid">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th style="width:96px;text-align:center">
+                    Read
+                    <label class="tg-all" title="Select all read"><input type="checkbox" id="toolAllRead"> all</label>
+                  </th>
+                  <th style="width:96px;text-align:center">
+                    Write
+                    <label class="tg-all" title="Select all write"><input type="checkbox" id="toolAllWrite"> all</label>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="toolGridBody">
+                {# populated by JS #}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {# Provider permissions — chip multiselect #}
+        <section class="ps-role-editor-section">
+          <div class="ps-role-editor-section-head">
+            <span class="ps-role-editor-step">3</span>
+            <div>
+              <h4>Provider access</h4>
+              <p>Select the connected data sources this role can use.</p>
+            </div>
+          </div>
+          <div class="prov-select" id="provSelect">
+            <div class="prov-control" id="provControl" tabindex="0">
+              <div class="prov-chips" id="provChips"></div>
+              <input type="text" class="prov-search" id="provSearch" placeholder="Search or add providers…" autocomplete="off">
+            </div>
+            <div class="prov-dropdown" id="provDropdown" hidden>
+              <label class="prov-opt prov-opt-all">
+                <input type="checkbox" id="provAll"><span>Select all</span>
+              </label>
+              <div class="prov-opt-list" id="provOptList">
+                {# checkboxes [data-provider] populated by JS — source of truth #}
+              </div>
+              <div class="prov-empty" id="provEmpty" hidden>No matching providers</div>
+            </div>
+          </div>
+        </section>
+
+        {# Advanced toggles #}
+        <section class="ps-role-editor-section" data-variant="advanced">
+          <div class="ps-role-editor-section-head">
+            <span class="ps-role-editor-step">4</span>
+            <div>
+              <h4>Advanced access</h4>
+              <p>These grants allow broader execution paths. Enable them only when required.</p>
+            </div>
+          </div>
+          <div class="ps-role-advanced-options">
+            <label class="ps-check">
+              <input type="checkbox" name="adv_scripting">
+              <span><strong>Run Script</strong><small>Allow executing custom scripts.</small></span>
+            </label>
+            <label class="ps-check">
+              <input type="checkbox" name="adv_generic">
+              <span><strong>Generic tools</strong><small>Allow use of generic read and write tools.</small></span>
+            </label>
+          </div>
+        </section>
+
+        <div class="ps-role-editor-foot">
+          <div id="roleMsg" class="ps-msg" style="display:none"></div>
+          <div class="ps-role-editor-actions">
+            <button type="button" class="btn" id="roleCancelBtn" style="display:none">Cancel</button>
+            <button type="submit" class="btn primary" id="roleSaveBtn">Create role</button>
+          </div>
+        </div>
+      </form>
     </div>
-  </div>
+    </aside>
+  </section>
+  {% endif %}
 
-  {# ── CONNECTIONS TAB ── #}
-  <div class="ps-panel" data-panel="connections" style="display:none">
+  {# ── CONNECTIONS ── #}
+  <section id="connections" class="ps-section-block" data-ps-tab="connections">
+    <div class="ps-eyebrow">Connections</div>
     {% if connections %}
     <div class="ps-conn-grid">
       {% for c in connections %}
@@ -169,11 +570,11 @@
       <a href="/connect" class="btn primary" style="margin-top:14px">Connect a platform</a>
     </div>
     {% endif %}
-  </div>
+  </section>
 
-  {# ── API LIMITS TAB ── #}
-  <div class="ps-panel" data-panel="limits" style="display:none">
-    {{ rlcards.rl_assets() }}
+  {# ── API LIMITS ── #}
+  <section id="limits" class="ps-section-block" data-ps-tab="limits">
+    <div class="ps-eyebrow">API limits</div>
     <section class="ps-card ps-section-card">
       <div class="ps-section-copy">
         <span class="label">Reference</span>
@@ -211,11 +612,13 @@
       {% for c in rate_limits_available %}{{ rlcards.rl_card(c, muted=true) }}{% endfor %}
     </div>
     {% endif %}
-  </div>
+    {{ rlcards.rl_assets() }}
+  </section>
 
-  {# ── NOTIFICATIONS TAB (owner/admin only) ── #}
+  {# ── NOTIFICATIONS (owner/admin only) ── #}
   {% if membership.role in ('owner', 'admin') %}
-  <div class="ps-panel" data-panel="notifications" style="display:none">
+  <section id="notifications" class="ps-section-block" data-ps-tab="notifications">
+    <div class="ps-eyebrow">Notifications</div>
 
     <p class="ps-lede">
       Configure how this project sends scheduled reports and shared dashboards.
@@ -451,415 +854,92 @@
       <div id="slackWebhookMsg" class="ps-msg" style="display:none;margin-top:12px"></div>
     </div>
 
-  </div>
+  </section>
   {% endif %}
 
-  {# ── GENERAL TAB ── #}
-  <div class="ps-panel" data-panel="general" style="display:none">
-    <div class="ps-card" style="padding:24px 26px">
-      <h3 class="ps-h3">Project details</h3>
-      <div class="ps-detail-list">
-        <div><span>Name</span><strong>{{ project.name }}</strong></div>
-        <div><span>Slug</span><code>{{ project.slug }}</code></div>
-        <div><span>Plan</span><strong>{{ project.plan | capitalize }}</strong></div>
-        <div><span>ID</span><code>{{ project.id }}</code></div>
-      </div>
-    </div>
+  {% if membership.role in ('owner', 'admin') %}
+  {# ── DASHBOARD STYLE CONFIGURATION ── #}
+  <div class="ps-card" id="dashboardStyleCard" data-ps-tab="general" style="padding:24px 26px">
+    <h3 class="ps-h3">Dashboard Style</h3>
+    <p class="ps-card-lede">Controls how Claude styles dashboards it builds for this project.</p>
 
-    {% if membership.role in ('owner', 'admin') %}
-    <div class="ps-card rbac-toggle" style="padding:20px 24px;margin-top:16px">
-      <h3 class="ps-h3" style="margin-bottom:8px">Role-based access</h3>
-      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13.5px;color:var(--ink)">
-        <input type="checkbox" id="rbacToggle" {% if project.rbac_enabled %}checked{% endif %} style="margin-top:3px;accent-color:var(--ink)">
-        <span>Enable role-based access</span>
+    <div class="pf-style-modes" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem">
+      <label class="pf-radio-option" style="display:flex;align-items:flex-start;gap:0.5rem;cursor:pointer">
+        <input type="radio" name="styleMode" value="none" style="margin-top:0.2rem"
+          {% if not project.dashboard_style_config %}checked{% endif %} />
+        <span><strong>Claude's judgment</strong><br><small style="opacity:0.6">Claude picks the aesthetic freely. Recommended.</small></span>
       </label>
-      <p class="ps-card-lede" style="margin-top:8px;margin-bottom:0">When off, all members have full access. When on, members are limited to their assigned roles — members with no roles will lose access until you assign one.</p>
+      <label class="pf-radio-option" style="display:flex;align-items:flex-start;gap:0.5rem;cursor:pointer">
+        <input type="radio" name="styleMode" value="preset" style="margin-top:0.2rem"
+          {% if project.dashboard_style_config and project.dashboard_style_config.get('preset') not in (none, 'custom') %}checked{% endif %} />
+        <span><strong>Preset</strong><br><small style="opacity:0.6">Choose a curated theme.</small></span>
+      </label>
+      <label class="pf-radio-option" style="display:flex;align-items:flex-start;gap:0.5rem;cursor:pointer">
+        <input type="radio" name="styleMode" value="custom" style="margin-top:0.2rem"
+          {% if project.dashboard_style_config and project.dashboard_style_config.get('preset') == 'custom' %}checked{% endif %} />
+        <span><strong>Custom</strong><br><small style="opacity:0.6">Set your own colors and fonts.</small></span>
+      </label>
     </div>
-    <script>
-    document.getElementById('rbacToggle')?.addEventListener('change', async function(e) {
-      if (e.target.checked && !confirm('Enable RBAC? Members without roles will lose access until assigned a role.')) {
-        e.target.checked = false;
-        return;
-      }
-      try {
-        var res = await fetch('/api/project/{{ project.slug }}/settings/rbac', {
-          method: 'PUT',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({enabled: e.target.checked}),
-        });
-        if (!res.ok) {
-          var d = await res.json().catch(function(){return {};});
-          alert('Failed to update RBAC setting: ' + (d.message || d.detail || res.status));
-          e.target.checked = !e.target.checked;
-        }
-      } catch(err) {
-        alert('Failed to update RBAC setting: ' + err.message);
-        e.target.checked = !e.target.checked;
-      }
-    });
-    </script>
-    {% endif %}
 
-    <!-- Dashboard Style Configuration -->
-    <div class="ps-card" id="dashboardStyleCard" style="padding:24px 26px;margin-top:16px">
-      <h3 class="ps-h3">Dashboard Style</h3>
-      <p class="ps-card-lede">Controls how Claude styles dashboards it builds for this project.</p>
-
-      <div class="pf-style-modes" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem">
-        <label class="pf-radio-option" style="display:flex;align-items:flex-start;gap:0.5rem;cursor:pointer">
-          <input type="radio" name="styleMode" value="none" style="margin-top:0.2rem"
-            {% if not project.dashboard_style_config %}checked{% endif %} />
-          <span><strong>Claude's judgment</strong><br><small style="opacity:0.6">Claude picks the aesthetic freely. Recommended.</small></span>
-        </label>
-        <label class="pf-radio-option" style="display:flex;align-items:flex-start;gap:0.5rem;cursor:pointer">
-          <input type="radio" name="styleMode" value="preset" style="margin-top:0.2rem"
-            {% if project.dashboard_style_config and project.dashboard_style_config.get('preset') not in (none, 'custom') %}checked{% endif %} />
-          <span><strong>Preset</strong><br><small style="opacity:0.6">Choose a curated theme.</small></span>
-        </label>
-        <label class="pf-radio-option" style="display:flex;align-items:flex-start;gap:0.5rem;cursor:pointer">
-          <input type="radio" name="styleMode" value="custom" style="margin-top:0.2rem"
-            {% if project.dashboard_style_config and project.dashboard_style_config.get('preset') == 'custom' %}checked{% endif %} />
-          <span><strong>Custom</strong><br><small style="opacity:0.6">Set your own colors and fonts.</small></span>
-        </label>
-      </div>
-
-      <div id="presetPicker" style="display:none;margin-bottom:1rem">
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.75rem">
-          {% for preset_key, preset_label, preset_bg, preset_primary, preset_accent in [
-            ('editorial_warm', 'Editorial Warm', '#faf6ee', '#2d4a1e', '#c4421a'),
-            ('dark_analytics', 'Dark Analytics', '#0f172a', '#6366f1', '#06b6d4'),
-            ('clean_minimal', 'Clean Minimal', '#ffffff', '#18181b', '#2563eb'),
-            ('bold_data', 'Bold Data', '#fafafa', '#7c3aed', '#db2777'),
-          ] %}
-          <label style="cursor:pointer">
-            <input type="radio" name="stylePreset" value="{{ preset_key }}" style="display:none"
-              {% if project.dashboard_style_config and project.dashboard_style_config.get('preset') == preset_key %}checked{% endif %} />
-            <div style="border:2px solid {{ preset_primary }};border-radius:8px;padding:0.75rem;background:{{ preset_bg }}"
-                 onclick="this.previousElementSibling.checked=true">
-              <div style="font-weight:600;font-size:0.85rem;color:{{ preset_primary }}">{{ preset_label }}</div>
-              <div style="display:flex;gap:4px;margin-top:6px">
-                <span style="width:24px;height:8px;border-radius:2px;background:{{ preset_primary }};display:inline-block"></span>
-                <span style="width:16px;height:8px;border-radius:2px;background:{{ preset_accent }};display:inline-block"></span>
-              </div>
+    <div id="presetPicker" style="display:none;margin-bottom:1rem">
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.75rem">
+        {% for preset_key, preset_label, preset_bg, preset_primary, preset_accent in [
+          ('editorial_warm', 'Editorial Warm', '#faf6ee', '#2d4a1e', '#c4421a'),
+          ('dark_analytics', 'Dark Analytics', '#0f172a', '#6366f1', '#06b6d4'),
+          ('clean_minimal', 'Clean Minimal', '#ffffff', '#18181b', '#2563eb'),
+          ('bold_data', 'Bold Data', '#fafafa', '#7c3aed', '#db2777'),
+        ] %}
+        <label style="cursor:pointer">
+          <input type="radio" name="stylePreset" value="{{ preset_key }}" style="display:none"
+            {% if project.dashboard_style_config and project.dashboard_style_config.get('preset') == preset_key %}checked{% endif %} />
+          <div style="border:2px solid {{ preset_primary }};border-radius:8px;padding:0.75rem;background:{{ preset_bg }}"
+               onclick="this.previousElementSibling.checked=true">
+            <div style="font-weight:600;font-size:0.85rem;color:{{ preset_primary }}">{{ preset_label }}</div>
+            <div style="display:flex;gap:4px;margin-top:6px">
+              <span style="width:24px;height:8px;border-radius:2px;background:{{ preset_primary }};display:inline-block"></span>
+              <span style="width:16px;height:8px;border-radius:2px;background:{{ preset_accent }};display:inline-block"></span>
             </div>
-          </label>
-          {% endfor %}
-        </div>
-      </div>
-
-      <div id="customConfig" style="display:none;margin-bottom:1rem">
-        {% set sc = project.dashboard_style_config or {} %}
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:0.75rem">
-          <label style="font-size:0.85rem">Background<br><input type="color" name="cfgBackground" value="{{ sc.get('background', '#ffffff') }}" style="width:100%;height:2rem"></label>
-          <label style="font-size:0.85rem">Primary<br><input type="color" name="cfgPrimary" value="{{ sc.get('primary', '#18181b') }}" style="width:100%;height:2rem"></label>
-          <label style="font-size:0.85rem">Accent<br><input type="color" name="cfgAccent" value="{{ sc.get('accent', '#2563eb') }}" style="width:100%;height:2rem"></label>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
-          <label style="font-size:0.85rem">Heading font
-            <select name="cfgFontHeading" style="width:100%;margin-top:0.25rem">
-              {% for font in ['Playfair Display', 'Inter', 'DM Serif Display', 'Merriweather', 'Space Grotesk'] %}
-              <option{% if sc.get('font_heading') == font %} selected{% endif %}>{{ font }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label style="font-size:0.85rem">Body font
-            <select name="cfgFontBody" style="width:100%;margin-top:0.25rem">
-              {% for font in ['Inter', 'DM Sans', 'IBM Plex Sans', 'Source Sans 3'] %}
-              <option{% if sc.get('font_body') == font %} selected{% endif %}>{{ font }}</option>
-              {% endfor %}
-            </select>
-          </label>
-        </div>
-        <div style="font-size:0.85rem">Chart palette
-          {% set palette = sc.get('chart_palette', ['#18181b', '#2563eb', '#64748b', '#94a3b8']) %}
-          <div style="display:flex;gap:0.5rem;margin-top:0.25rem">
-            {% for i in range(4) %}
-            <input type="color" name="cfgPalette{{ i }}" value="{{ palette[i] if i < palette|length else '#cccccc' }}" style="width:3rem;height:2rem">
-            {% endfor %}
           </div>
-        </div>
+        </label>
+        {% endfor %}
       </div>
-
-      <button type="button" class="btn sm" onclick="saveDashStyleConfig()">Save style</button>
-      <span id="styleConfigStatus" style="font-size:0.8rem;margin-left:0.75rem;opacity:0.7"></span>
     </div>
 
-    {% if membership.role == 'owner' %}
-    <div class="ps-card ps-warn-card" style="padding:24px 26px;margin-top:16px">
-      <h3 class="ps-h3">Transfer <em class="serif-italic">ownership.</em></h3>
-      <p class="ps-card-lede">Transfer this project to another member. You'll be demoted to Admin.</p>
-      <form id="transferForm" class="ps-invite">
-        <label class="f-field" style="flex:1">
-          <span>New owner</span>
-          <select name="user_id" class="f-input">
-            {% for m in members if m.role != 'owner' %}
-            <option value="{{ m.user_id }}">{{ m.display_name or m.email }} ({{ m.role }})</option>
+    <div id="customConfig" style="display:none;margin-bottom:1rem">
+      {% set sc = project.dashboard_style_config or {} %}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:0.75rem">
+        <label style="font-size:0.85rem">Background<br><input type="color" name="cfgBackground" value="{{ sc.get('background', '#ffffff') }}" style="width:100%;height:2rem"></label>
+        <label style="font-size:0.85rem">Primary<br><input type="color" name="cfgPrimary" value="{{ sc.get('primary', '#18181b') }}" style="width:100%;height:2rem"></label>
+        <label style="font-size:0.85rem">Accent<br><input type="color" name="cfgAccent" value="{{ sc.get('accent', '#2563eb') }}" style="width:100%;height:2rem"></label>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
+        <label style="font-size:0.85rem">Heading font
+          <select name="cfgFontHeading" style="width:100%;margin-top:0.25rem">
+            {% for font in ['Playfair Display', 'Inter', 'DM Serif Display', 'Merriweather', 'Space Grotesk'] %}
+            <option{% if sc.get('font_heading') == font %} selected{% endif %}>{{ font }}</option>
             {% endfor %}
           </select>
         </label>
-        <button type="submit" class="btn warn-outline" id="transferBtn">Transfer</button>
-      </form>
-      <div id="transferMsg" class="ps-msg" style="display:none;margin-top:10px"></div>
-    </div>
-
-    <div class="ps-card ps-danger-card" style="padding:24px 26px;margin-top:16px">
-      <h3 class="ps-h3" style="color:var(--red)">Delete <em class="serif-italic">project.</em></h3>
-      <p class="ps-card-lede">Permanently deactivate this project and all its connections, dashboards, and member access. This action cannot be undone.</p>
-      <button class="btn danger-outline" onclick="deleteProject()">Delete this project</button>
-    </div>
-    {% endif %}
-  </div>
-
-  {# ── USER ROLES TAB (owner/admin only) ── #}
-  {% if membership.role in ('owner', 'admin') %}
-  <div class="ps-panel" data-panel="roles" style="display:none">
-    <div class="ps-roles-manage-head">
-      <div>
-        <span class="label">Custom roles</span>
-        <h2>Fine-grained access</h2>
-        <p>Create access profiles for the tools and connected data sources your users need.</p>
+        <label style="font-size:0.85rem">Body font
+          <select name="cfgFontBody" style="width:100%;margin-top:0.25rem">
+            {% for font in ['Inter', 'DM Sans', 'IBM Plex Sans', 'Source Sans 3'] %}
+            <option{% if sc.get('font_body') == font %} selected{% endif %}>{{ font }}</option>
+            {% endfor %}
+          </select>
+        </label>
       </div>
-      <div class="ps-roles-manage-actions">
-        <a href="#settingsTabs" class="btn" onclick="switchTab('members')">Manage users</a>
-        <button type="button" class="btn primary" id="createRoleBtn" onclick="openRoleDrawer('create', this)">Create role</button>
+      <div style="font-size:0.85rem">Chart palette
+        {% set palette = sc.get('chart_palette', ['#18181b', '#2563eb', '#64748b', '#94a3b8']) %}
+        <div style="display:flex;gap:0.5rem;margin-top:0.25rem">
+          {% for i in range(4) %}
+          <input type="color" name="cfgPalette{{ i }}" value="{{ palette[i] if i < palette|length else '#cccccc' }}" style="width:3rem;height:2rem">
+          {% endfor %}
+        </div>
       </div>
     </div>
 
-    <div class="ps-card ps-custom-roles-card" id="rolesListCard">
-      <div id="rolesList">
-        <div class="ps-roles-empty">Loading roles…</div>
-      </div>
-    </div>
-
-    <details class="ps-built-in-roles">
-      <summary class="ps-built-in-summary">
-        <span>
-          <strong>Built-in roles and permissions</strong>
-          <small>Reference Owner, Admin, and Member capabilities.</small>
-        </span>
-        <span class="ps-built-in-summary-action">Show reference</span>
-      </summary>
-      <div class="ps-built-in-content">
-    <div class="ps-roles-hero">
-      <div>
-        <span class="label">Access model</span>
-        <h2>User roles</h2>
-        <p>Owner, Admin, and Member are the built-in project roles. Use custom roles above for fine-grained tool and provider access, then assign them to members from the Users tab.</p>
-      </div>
-    </div>
-
-    <div class="ps-role-grid">
-      <article class="ps-role-card ps-role-card-owner">
-        <div class="ps-role-card-head">
-          <span class="ps-role-icon">OW</span>
-          <span class="t-flag ps-role ps-role-owner">Owner</span>
-        </div>
-        <h3>Full control</h3>
-        <p>Owns the project boundary and can transfer ownership or delete the project.</p>
-        <ul class="ps-permission-list">
-          <li><span></span>Manage every member and role</li>
-          <li><span></span>Connect platforms and notification senders</li>
-          <li><span></span>Transfer ownership and delete the project</li>
-        </ul>
-      </article>
-
-      <article class="ps-role-card ps-role-card-admin">
-        <div class="ps-role-card-head">
-          <span class="ps-role-icon">AD</span>
-          <span class="t-flag ps-role ps-role-admin">Admin</span>
-        </div>
-        <h3>Operational control</h3>
-        <p>Runs the workspace day to day without ownership-level destructive actions.</p>
-        <ul class="ps-permission-list">
-          <li><span></span>Invite and remove non-owner members</li>
-          <li><span></span>Connect data platforms and manage senders</li>
-          <li><span></span>Cannot transfer ownership or delete the project</li>
-        </ul>
-      </article>
-
-      <article class="ps-role-card ps-role-card-member">
-        <div class="ps-role-card-head">
-          <span class="ps-role-icon">MB</span>
-          <span class="t-flag ps-role ps-role-member">Member</span>
-        </div>
-        <h3>Project access</h3>
-        <p>Can use the project workspace without changing access, credentials, or billing boundaries.</p>
-        <ul class="ps-permission-list">
-          <li><span></span>View and use project resources</li>
-          <li><span></span>Run allowed workflows in the active project</li>
-          <li><span></span>No member, connection, or notification admin</li>
-        </ul>
-      </article>
-    </div>
-
-    <section class="ps-card ps-matrix-card">
-      <div class="ps-directory-head">
-        <div>
-          <span class="label">Permissions</span>
-          <h2>Role capabilities</h2>
-        </div>
-      </div>
-      <div class="ps-access-matrix">
-        <div class="ps-matrix-row ps-matrix-header">
-          <span>Capability</span>
-          <span>Owner</span>
-          <span>Admin</span>
-          <span>Member</span>
-        </div>
-        {% for capability, owner_ok, admin_ok, member_ok in [
-          ('Invite members', true, true, false),
-          ('Remove members', true, true, false),
-          ('Change member roles', true, false, false),
-          ('Connect platforms', true, true, false),
-          ('Manage notification senders', true, true, false),
-          ('Transfer ownership', true, false, false),
-          ('Delete project', true, false, false),
-        ] %}
-        <div class="ps-matrix-row">
-          <span>{{ capability }}</span>
-          <span class="{% if owner_ok %}is-yes{% endif %}">{{ 'Yes' if owner_ok else 'No' }}</span>
-          <span class="{% if admin_ok %}is-yes{% endif %}">{{ 'Yes' if admin_ok else 'No' }}</span>
-          <span class="{% if member_ok %}is-yes{% endif %}">{{ 'Yes' if member_ok else 'No' }}</span>
-        </div>
-        {% endfor %}
-      </div>
-    </section>
-      </div>
-    </details>
-
-    {# Role editor form #}
-    <div class="ps-role-drawer-backdrop" id="roleDrawerBackdrop" hidden></div>
-    <aside class="ps-role-drawer"
-           id="roleDrawer"
-           role="dialog"
-           aria-modal="true"
-           aria-labelledby="roleFormTitle"
-           aria-hidden="true"
-           inert>
-    <div class="ps-card ps-role-editor">
-      <div class="ps-role-editor-head">
-        <div>
-          <span class="label">Access profile</span>
-          <h3 class="ps-h3" id="roleFormTitle">Create role</h3>
-          <p>Define which tools and connected data sources people with this role can use.</p>
-        </div>
-        <div class="ps-role-editor-head-actions">
-          <span class="ps-role-editor-state" id="roleFormState">New role</span>
-          <button type="button" class="ps-role-drawer-close" id="roleDrawerClose" aria-label="Close role editor">×</button>
-        </div>
-      </div>
-      <form id="roleForm" novalidate>
-        <input type="hidden" id="roleId" value="">
-
-        <section class="ps-role-editor-section">
-          <div class="ps-role-editor-section-head">
-            <span class="ps-role-editor-step">1</span>
-            <div>
-              <h4>Role details</h4>
-              <p>Choose a clear name that describes this access profile.</p>
-            </div>
-          </div>
-          <div class="ps-grid-2">
-            <label class="f-field">
-              <span>Name *</span>
-              <input type="text" name="name" class="f-input" placeholder="e.g. Analyst" required>
-            </label>
-            <label class="f-field">
-              <span>Description</span>
-              <input type="text" name="description" class="f-input" placeholder="e.g. Reporting and analysis access">
-            </label>
-          </div>
-        </section>
-
-        {# Tool permissions grid #}
-        <section class="ps-role-editor-section">
-          <div class="ps-role-editor-section-head">
-            <span class="ps-role-editor-step">2</span>
-            <div>
-              <h4>Tool permissions</h4>
-              <p>Choose whether this role can read from or make changes with each capability.</p>
-            </div>
-          </div>
-          <div class="ps-role-editor-control">
-            <table class="ps-table" id="toolGrid">
-              <thead>
-                <tr>
-                  <th>Domain</th>
-                  <th style="width:96px;text-align:center">
-                    Read
-                    <label class="tg-all" title="Select all read"><input type="checkbox" id="toolAllRead"> all</label>
-                  </th>
-                  <th style="width:96px;text-align:center">
-                    Write
-                    <label class="tg-all" title="Select all write"><input type="checkbox" id="toolAllWrite"> all</label>
-                  </th>
-                </tr>
-              </thead>
-              <tbody id="toolGridBody">
-                {# populated by JS #}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {# Provider permissions — chip multiselect #}
-        <section class="ps-role-editor-section">
-          <div class="ps-role-editor-section-head">
-            <span class="ps-role-editor-step">3</span>
-            <div>
-              <h4>Provider access</h4>
-              <p>Select the connected data sources this role can use.</p>
-            </div>
-          </div>
-          <div class="prov-select" id="provSelect">
-            <div class="prov-control" id="provControl" tabindex="0">
-              <div class="prov-chips" id="provChips"></div>
-              <input type="text" class="prov-search" id="provSearch" placeholder="Search or add providers…" autocomplete="off">
-            </div>
-            <div class="prov-dropdown" id="provDropdown" hidden>
-              <label class="prov-opt prov-opt-all">
-                <input type="checkbox" id="provAll"><span>Select all</span>
-              </label>
-              <div class="prov-opt-list" id="provOptList">
-                {# checkboxes [data-provider] populated by JS — source of truth #}
-              </div>
-              <div class="prov-empty" id="provEmpty" hidden>No matching providers</div>
-            </div>
-          </div>
-        </section>
-
-        {# Advanced toggles #}
-        <section class="ps-role-editor-section" data-variant="advanced">
-          <div class="ps-role-editor-section-head">
-            <span class="ps-role-editor-step">4</span>
-            <div>
-              <h4>Advanced access</h4>
-              <p>These grants allow broader execution paths. Enable them only when required.</p>
-            </div>
-          </div>
-          <div class="ps-role-advanced-options">
-            <label class="ps-check">
-              <input type="checkbox" name="adv_scripting">
-              <span><strong>Run Script</strong><small>Allow executing custom scripts.</small></span>
-            </label>
-            <label class="ps-check">
-              <input type="checkbox" name="adv_generic">
-              <span><strong>Generic tools</strong><small>Allow use of generic read and write tools.</small></span>
-            </label>
-          </div>
-        </section>
-
-        <div class="ps-role-editor-foot">
-          <div id="roleMsg" class="ps-msg" style="display:none"></div>
-          <div class="ps-role-editor-actions">
-            <button type="button" class="btn" id="roleCancelBtn" style="display:none">Cancel</button>
-            <button type="submit" class="btn primary" id="roleSaveBtn">Create role</button>
-          </div>
-        </div>
-      </form>
-    </div>
-    </aside>
-
+    <button type="button" class="btn sm" onclick="saveDashStyleConfig()">Save style</button>
+    <span id="styleConfigStatus" style="font-size:0.8rem;margin-left:0.75rem;opacity:0.7"></span>
   </div>
   {% endif %}
 
@@ -871,7 +951,7 @@
     </div>
     <label class="roles-popover-all"><input type="checkbox" id="rpAll"><span>Select all</span></label>
     <div class="roles-popover-list" id="rpList"></div>
-    <div class="roles-popover-empty" id="rpEmpty" hidden>No custom roles yet. Create one in the User Roles tab.</div>
+    <div class="roles-popover-empty" id="rpEmpty" hidden>No custom roles yet. Create one in the User Roles card.</div>
   </div>
 
 </main>
@@ -888,71 +968,152 @@
 .bc-sep { margin: 0 8px; color: var(--line); }
 .bc-here { color: var(--ink); }
 
-/* ── Header ──────────────────────────────────────── */
+/* ── Header (Flux - Project Settings.dc.html:85-91) ─────────────── */
+.page-head {
+  margin-bottom: 26px;
+}
+.ps-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-hover);
+  margin-bottom: 10px;
+}
 .ps-head {
-  display: flex; align-items: flex-start; gap: 18px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
 }
 .ps-mark {
   width: 52px; height: 52px;
-  border-radius: var(--r-m);
-  background: var(--ink); color: var(--bg);
+  border-radius: var(--r-l);
+  background: var(--ink); color: var(--paper);
   display: flex; align-items: center; justify-content: center;
   font-weight: 600; font-size: 16px;
   font-family: var(--mono);
   flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--paper) 18%, transparent);
 }
 .ps-head-main { flex: 1; min-width: 260px; }
+.ps-head-main h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.ps-subline {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  margin-top: 4px;
+}
 .ps-desc {
   font-size: 14px; color: var(--ink-soft); line-height: 1.55;
   margin-top: 6px;
-}
-.ps-plan { flex-shrink: 0; align-self: flex-start; margin-top: 6px; }
-.ps-plan-free { background: var(--bg-3); color: var(--muted); }
-.ps-plan-pro {
-  background: color-mix(in srgb, #8b5cf6 12%, transparent);
-  color: #8b5cf6;
-}
-.ps-plan-team {
-  background: color-mix(in srgb, #ec4899 12%, transparent);
-  color: #ec4899;
+  max-width: 720px;
 }
 
-/* ── Tabs ────────────────────────────────────────── */
-.ps-tabs {
-  display: flex; gap: 2px; flex-wrap: wrap;
-  align-items: stretch;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 28px;
-}
-.ps-tab {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: transparent; border: none;
-  height: 44px; padding: 0 16px;
-  font: inherit; font-size: 13.5px; font-weight: 500; line-height: 1;
-  color: var(--muted); cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  letter-spacing: -0.005em;
-  transition: color 0.15s, border-color 0.15s;
-}
-.ps-tab:hover { color: var(--ink); }
-.ps-tab.is-active { color: var(--ink); border-bottom-color: var(--ink); }
-.ps-panel { animation: fadeIn 0.2s ease; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+/* ── Tab bar ─────────────────────────────────────── */
+.ps-tabs { margin-bottom: 22px; }
+/* Belt-and-braces: the tab controller hides inactive sections via [hidden];
+   make sure no display rule on a section can override it. */
+[data-ps-tab][hidden] { display: none !important; }
 
 /* ── Card base ───────────────────────────────────── */
 .ps-card {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
   overflow: hidden;
 }
-.ps-warn-card { border-color: color-mix(in srgb, var(--amber) 30%, var(--line)); }
-.ps-danger-card { border-color: color-mix(in srgb, var(--red) 30%, var(--line)); }
+.ps-section-card {
+  padding: 22px 24px;
+  margin-bottom: 20px;
+}
+.ps-section-block {
+  margin-bottom: 20px;
+}
+.ps-eyebrow-card {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  margin-bottom: 16px;
+}
+.ps-warn-card { border-color: color-mix(in srgb, var(--warn) 30%, var(--line-2)); }
+.ps-danger-card {
+  border: 1px solid var(--bad);
+  background: color-mix(in srgb, var(--bad) 4%, var(--card));
+}
+.ps-danger-eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bad);
+  margin-bottom: 12px;
+}
+.ps-danger-row {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.ps-danger-copy { flex: 1; min-width: 220px; }
+.ps-danger-title { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.ps-danger-desc { font-size: 12.5px; color: var(--ink-soft); margin: 2px 0 0; line-height: 1.5; }
+
+/* ── Flux write-permissions (see TODO comment above the markup) ── */
+.ps-flux-perm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ps-flux-perm-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-3);
+  border-radius: 9px;
+}
+.ps-flux-perm-name {
+  flex: 1;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.ps-flux-pill {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.ps-flux-pill-good { border-color: var(--good); color: var(--good); }
+.ps-flux-pill-ink { border-color: var(--line-strong); color: var(--muted); }
+.ps-flux-pill-accent { border-color: var(--accent); color: var(--accent-hover); }
 
 /* ── Invite form ─────────────────────────────────── */
 .ps-invite {
   display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+}
+.ps-invite-wrap {
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--card-well);
+  padding: 16px 18px;
+  margin-bottom: 18px;
 }
 
 /* ── Message banners ─────────────────────────────── */
@@ -980,18 +1141,32 @@
 .ps-table tbody tr { border-bottom: 1px solid var(--line-2); }
 .ps-table tbody tr:last-child { border-bottom: none; }
 .ps-table td { padding: 14px 18px; vertical-align: middle; }
+.ps-table tbody tr { transition: background .12s ease; }
+.ps-table tbody tr:hover { background: color-mix(in srgb, var(--bg-2) 70%, transparent); }
+.ps-table th, .ps-table td { padding: 16px 18px; }
 
-.ps-mbr-name { font-weight: 500; color: var(--ink); font-size: 14px; }
-.ps-mbr-email { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); letter-spacing: 0.02em; }
+.ps-mbr-name { font-weight: 500; color: var(--ink); font-size: 14px; letter-spacing: 0; }
+.ps-you { color: var(--muted); font-weight: 400; }
+.ps-mbr-email { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); letter-spacing: 0.02em; overflow-wrap: anywhere; }
 .ps-mono-sm { font-size: 12.5px; color: var(--ink-soft); font-family: var(--mono); letter-spacing: 0.02em; }
 
-.ps-role-admin { background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); }
+.ps-role-admin { background: color-mix(in srgb, var(--good) 12%, transparent); color: var(--good); }
 .ps-role-member { background: var(--bg-3); color: var(--muted); }
-.ps-role-owner { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+.ps-role-owner { background: var(--ink); color: var(--paper); }
 
 .ps-role-select {
-  font-size: 12px; padding: 4px 8px;
-  width: auto; display: inline-block; margin-right: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  width: auto; min-height: 0;
+  display: inline-block;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+  background: var(--card);
 }
 
 .ps-meta-note {
@@ -1004,28 +1179,25 @@
 /* ── Connections ─────────────────────────────────── */
 .ps-conn-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
 }
-.ps-conn { padding: 20px 22px; }
-.ps-conn-head {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 6px;
-}
+.ps-conn { min-height: 124px; padding: 20px; }
+.ps-conn-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
 .ps-conn-name { font-weight: 600; color: var(--ink); font-size: 14.5px; flex: 1; letter-spacing: -0.01em; }
 .ps-conn-status { font-size: 10.5px; }
-.ps-conn-active { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
-.ps-conn-disconnected { background: color-mix(in srgb, var(--amber) 14%, transparent); color: var(--amber); }
+.ps-conn-active { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good); }
+.ps-conn-disconnected { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
 .ps-conn-email {
   font-size: 12.5px; color: var(--muted);
   font-family: var(--mono); letter-spacing: 0.02em;
 }
 .ps-warn {
-  font-size: 12px; color: var(--amber);
+  font-size: 12px; color: var(--warn);
   margin-top: 10px; padding: 8px 12px;
   border-radius: var(--r-m);
-  background: color-mix(in srgb, var(--amber) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 25%, var(--line));
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 25%, var(--line));
   line-height: 1.5;
 }
 
@@ -1037,30 +1209,26 @@
 }
 .rl-section-head .ps-h3 { margin: 0; }
 
-/* ── Section headings in notifications/general ── */
+/* ── Section headings in notifications ── */
 .ps-lede {
   font-size: 13.5px; color: var(--ink-soft); line-height: 1.6;
-  max-width: 720px; margin: 0 0 16px;
+  max-width: 800px; margin: 0 0 16px;
 }
 .ps-h2 {
   font-size: clamp(20px, 2.8vw, 26px);
-  font-weight: 500; letter-spacing: -0.02em;
+  font-weight: 500; letter-spacing: 0;
   margin: 8px 0 14px; color: var(--ink);
   line-height: 1.2;
 }
 .ps-h3 {
   font-size: 16px; font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   margin: 0 0 14px; color: var(--ink);
-}
-.ps-h4 {
-  font-size: 13px; font-weight: 600;
-  letter-spacing: -0.005em;
-  margin: 0 0 10px; color: var(--ink);
 }
 .ps-card-lede {
   font-size: 13px; color: var(--ink-soft);
   line-height: 1.55; margin: 0 0 14px;
+  max-width: 620px;
 }
 
 .ps-sender-name {
@@ -1068,8 +1236,8 @@
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 
-.ps-ok { color: var(--green); font-weight: 500; }
-.ps-err { color: var(--red); font-weight: 500; }
+.ps-ok { color: var(--good); font-weight: 500; }
+.ps-err { color: var(--bad); font-weight: 500; }
 .ps-stamp { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
 .ps-muted-sm { font-size: 13px; color: var(--ink-soft); }
 
@@ -1077,7 +1245,7 @@
 .ps-subtabs {
   display: inline-flex; gap: 4px;
   background: var(--bg-2);
-  padding: 4px; border-radius: var(--r-m);
+  padding: 4px; border-radius: 10px;
   margin-bottom: 18px;
   border: 1px solid var(--line-2);
 }
@@ -1086,23 +1254,23 @@
   padding: 7px 16px;
   font: inherit; font-size: 12.5px; font-weight: 500;
   color: var(--muted); cursor: pointer;
-  border-radius: var(--r-s, 6px);
+  border-radius: 7px;
   transition: background 0.15s, color 0.15s;
 }
 .ps-subtab:hover { color: var(--ink); }
 .ps-subtab.is-active {
-  background: var(--bg); color: var(--ink);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  background: var(--card); color: var(--ink);
+  box-shadow: var(--shadow-xs);
 }
 
 /* ── Form grids ───────────────────────────────────── */
 .ps-grid-2 {
   display: grid; grid-template-columns: 1fr 1fr;
-  gap: 14px; margin-bottom: 14px;
+  gap: 16px; margin-bottom: 14px;
 }
 .ps-grid-3 {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
-  gap: 14px; margin-bottom: 14px;
+  gap: 16px; margin-bottom: 14px;
 }
 .ps-check {
   display: flex; align-items: center; gap: 10px;
@@ -1128,22 +1296,18 @@
 }
 
 .ps-slack-form {
-  display: grid; grid-template-columns: 1fr 2fr auto;
+  display: grid; grid-template-columns: minmax(180px, .75fr) minmax(260px, 1.4fr) auto;
   gap: 12px; align-items: end;
 }
-.ps-slack-form .f-field {
-  margin-bottom: 0;
-}
-.ps-slack-form button {
-  min-height: 44px;
-  justify-content: center;
-  margin-bottom: 0;
-}
+.ps-slack-form .f-field { margin-bottom: 0; }
+.ps-slack-form button { min-height: 44px; justify-content: center; margin-bottom: 0; }
 
 /* ── Detail list (general) ─────────────────────── */
 .ps-detail-list { display: grid; gap: 12px; font-size: 14px; }
 .ps-detail-list > div {
-  display: flex; align-items: center; gap: 14px;
+  display: grid;
+  grid-template-columns: minmax(90px, 140px) minmax(0, 1fr);
+  align-items: center;
   padding: 10px 0;
   border-bottom: 1px solid var(--line-2);
 }
@@ -1155,148 +1319,45 @@
   font-family: var(--mono);
   min-width: 80px;
 }
-.ps-detail-list code {
+.ps-detail-list code, .ps-detail-list strong {
   font-family: var(--mono); font-size: 12.5px;
   background: var(--bg-2); padding: 3px 8px;
   border-radius: 4px; color: var(--ink-soft);
+  min-width: 0; overflow-wrap: anywhere;
 }
-
+.ps-detail-list strong { background: none; padding: 0; color: var(--ink); font-family: var(--sans); }
 
 /* ── Button variants specific here ─────────────── */
 .btn.danger-outline {
-  border-color: color-mix(in srgb, var(--red) 30%, var(--line));
-  color: var(--red);
-  background: var(--bg);
+  border-color: color-mix(in srgb, var(--bad) 30%, var(--line));
+  color: var(--bad);
+  background: var(--card);
 }
 .btn.danger-outline:hover {
-  background: color-mix(in srgb, var(--red) 6%, var(--bg));
-  border-color: var(--red);
+  background: color-mix(in srgb, var(--bad) 6%, var(--card));
+  border-color: var(--bad);
 }
 .btn.warn-outline {
-  border-color: color-mix(in srgb, var(--amber) 35%, var(--line));
-  color: var(--amber);
-  background: var(--bg);
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--line));
+  color: var(--warn);
+  background: var(--card);
 }
 .btn.warn-outline:hover {
-  background: color-mix(in srgb, var(--amber) 6%, var(--bg));
-  border-color: var(--amber);
+  background: color-mix(in srgb, var(--warn) 6%, var(--card));
+  border-color: var(--warn);
 }
 .btn.sm { padding: 5px 11px; font-size: 12px; }
 
-/* ── Project settings redesign ───────────────────── */
-.page-head {
-  margin-bottom: 22px;
-  padding-bottom: 26px;
-}
-.ps-head {
-  align-items: center;
-  gap: 20px;
-}
-.ps-mark {
-  width: 58px;
-  height: 58px;
-  border-radius: 14px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bg) 18%, transparent);
-}
-.ps-head-main h1 {
-  margin: 0;
-  font-size: clamp(34px, 5vw, 56px);
-  line-height: 1;
-  letter-spacing: 0;
-}
-.ps-desc {
-  max-width: 720px;
-}
-.ps-tabs {
-  gap: 8px;
-  margin-bottom: 26px;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-2);
-  overflow-x: auto;
-  flex-wrap: nowrap;
-}
-.ps-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 8px 12px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  margin-bottom: 0;
-  white-space: nowrap;
-}
-.ps-tab:hover {
-  background: var(--bg);
-  border-color: var(--line-2);
-}
-.ps-tab.is-active {
-  background: var(--bg);
-  border-color: var(--line);
-  box-shadow: var(--shadow-xs);
-}
-.ps-panel {
-  max-width: 1180px;
-}
-.ps-card {
-  background: color-mix(in srgb, var(--bg) 96%, var(--bg-2));
-  border-color: color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 14px;
-  box-shadow: 0 1px 0 rgba(255,255,255,0.04);
-}
-.ps-section-card {
-  padding: 22px;
-  margin-bottom: 18px;
-}
-.ps-section-copy {
-  margin-bottom: 18px;
-}
-.ps-section-copy h2,
-.ps-directory-head h2,
-.ps-roles-hero h2 {
-  margin: 4px 0 0;
-  font-size: 20px;
-  line-height: 1.2;
-  color: var(--ink);
-  letter-spacing: 0;
-}
-.ps-section-copy p,
-.ps-roles-hero p {
-  margin: 7px 0 0;
-  max-width: 620px;
-  color: var(--ink-soft);
-  font-size: 13.5px;
-}
-.ps-invite {
-  display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(150px, 210px) auto;
-  gap: 12px;
-  align-items: end;
-}
-.ps-invite .f-field {
-  margin-bottom: 0;
-}
-.ps-invite .btn {
-  min-height: 44px;
-  justify-content: center;
-  margin-bottom: 0;
-}
-.ps-invite-email,
-.ps-invite-role {
-  min-width: 0;
-}
-.ps-directory-card {
-  padding: 0;
-}
+/* ── Single-scroll layout ───────────────────────── */
+.app-main { scroll-behavior: smooth; }
+[id] { scroll-margin-top: 24px; }
+
 .ps-directory-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 20px 22px;
-  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
 }
 .ps-count-pill {
   display: inline-flex;
@@ -1316,15 +1377,13 @@
 }
 .ps-member-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1.4fr) minmax(120px, .55fr) minmax(120px, .55fr) minmax(260px, .95fr);
+  grid-template-columns: minmax(220px, 1.5fr) minmax(90px, .5fr) minmax(120px, .5fr) minmax(220px, .9fr);
   gap: 18px;
   align-items: center;
-  padding: 20px 22px;
-  border-bottom: 1px solid var(--line-2);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line-3);
 }
-.ps-member-row:last-child {
-  border-bottom: 0;
-}
+.ps-member-row:last-child { border-bottom: 0; }
 .ps-member-person {
   display: flex;
   align-items: center;
@@ -1335,43 +1394,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg-2);
-  color: var(--ink);
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #FFF9EF;
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 700;
 }
-.ps-member-meta {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-.ps-member-meta .ps-role {
-  justify-self: start;
-  width: max-content;
-}
-.ps-field-label,
-.ps-action-field > span {
+/* Owner = terracotta (default above), admin = good-green, member = muted */
+.ps-avatar-admin { background: var(--good); color: #F2FBF4; }
+.ps-avatar-member { background: var(--muted); color: var(--paper); }
+.ps-member-meta-joined { display: none; }
+.ps-field-label {
   color: var(--muted);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
 }
+.ps-member-role-col { display: flex; justify-content: flex-start; }
 .ps-member-actions {
   display: grid;
   justify-items: end;
   gap: 10px;
-}
-.ps-action-field {
-  display: grid;
-  gap: 6px;
-  width: min(100%, 230px);
 }
 .ps-action-buttons {
   display: flex;
@@ -1379,274 +1427,12 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-.ps-role-select {
-  width: 100%;
-  min-height: 38px;
-  margin-right: 0;
-  padding: 7px 10px;
-  font-size: 13px;
-}
 .ps-owner-note {
   max-width: 240px;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
   text-align: right;
-}
-.ps-mbr-name,
-.ps-sender-name,
-.ps-conn-name {
-  letter-spacing: 0;
-}
-.ps-mbr-email {
-  overflow-wrap: anywhere;
-}
-.ps-table th,
-.ps-table td {
-  padding: 16px 18px;
-}
-.ps-table tbody tr {
-  transition: background .12s ease;
-}
-.ps-table tbody tr:hover {
-  background: color-mix(in srgb, var(--bg-2) 70%, transparent);
-}
-.ps-conn-grid {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-.ps-conn {
-  min-height: 124px;
-  padding: 20px;
-}
-.ps-conn-head {
-  align-items: flex-start;
-}
-.ps-lede {
-  max-width: 800px;
-}
-.ps-h2 {
-  letter-spacing: 0;
-}
-.ps-h3 {
-  letter-spacing: 0;
-}
-.ps-grid-2,
-.ps-grid-3 {
-  gap: 16px;
-}
-.ps-subtabs {
-  border-radius: 10px;
-}
-.ps-subtab {
-  border-radius: 7px;
-}
-.ps-slack-form {
-  grid-template-columns: minmax(180px, .75fr) minmax(260px, 1.4fr) auto;
-}
-.ps-detail-list > div {
-  display: grid;
-  grid-template-columns: minmax(90px, 140px) minmax(0, 1fr);
-  align-items: center;
-}
-.ps-detail-list strong,
-.ps-detail-list code {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.ps-roles-hero {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 18px;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 72%, transparent), var(--bg));
-}
-.ps-role-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 18px;
-}
-.ps-role-card {
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg);
-}
-.ps-role-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 22px;
-}
-.ps-role-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-}
-.ps-role-card h3 {
-  margin: 0 0 8px;
-  color: var(--ink);
-  font-size: 17px;
-  letter-spacing: 0;
-}
-.ps-role-card p {
-  margin: 0 0 18px;
-  color: var(--ink-soft);
-  font-size: 13px;
-  line-height: 1.55;
-}
-.ps-permission-list {
-  display: grid;
-  gap: 10px;
-}
-.ps-permission-list li {
-  display: flex;
-  gap: 9px;
-  color: var(--ink-soft);
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-.ps-permission-list li span {
-  width: 6px;
-  height: 6px;
-  margin-top: 6px;
-  border-radius: 999px;
-  background: var(--green);
-  flex: 0 0 6px;
-}
-.ps-matrix-card {
-  padding: 0;
-}
-.ps-access-matrix {
-  overflow-x: auto;
-}
-.ps-matrix-row {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(100px, .45fr));
-  min-width: 620px;
-  border-top: 1px solid var(--line-2);
-}
-.ps-matrix-header {
-  border-top: 0;
-  background: var(--bg-2);
-}
-.ps-matrix-row span {
-  padding: 13px 16px;
-  color: var(--ink-soft);
-  font-size: 13px;
-}
-.ps-matrix-header span {
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.ps-matrix-row span:not(:first-child) {
-  text-align: center;
-  border-left: 1px solid var(--line-2);
-}
-.ps-matrix-row .is-yes {
-  color: var(--green);
-  font-weight: 600;
-}
-
-/* ── Responsive ─────────────────────────────────── */
-@media (max-width: 980px) {
-  .ps-member-row {
-    grid-template-columns: minmax(240px, 1fr) minmax(110px, .45fr) minmax(110px, .45fr);
-  }
-  .ps-member-actions {
-    grid-column: 1 / -1;
-    justify-items: start;
-    padding-top: 12px;
-    border-top: 1px solid var(--line-2);
-  }
-  .ps-action-buttons {
-    justify-content: flex-start;
-  }
-  .ps-owner-note {
-    max-width: none;
-    text-align: left;
-  }
-  .ps-role-grid {
-    grid-template-columns: 1fr;
-  }
-}
-@media (max-width: 720px) {
-  .app-main {
-    max-width: 100%;
-    overflow-x: hidden;
-    padding-left: 24px;
-    padding-right: 24px;
-  }
-  .ps-head {
-    display: grid;
-    grid-template-columns: 1fr;
-    align-items: start;
-    gap: 14px;
-  }
-  .ps-head-main {
-    min-width: 0;
-  }
-  .ps-head-main h1,
-  .ps-desc {
-    overflow-wrap: anywhere;
-  }
-  .ps-tabs {
-    margin-left: -2px;
-    margin-right: -2px;
-    max-width: 100%;
-  }
-  .ps-invite {
-    grid-template-columns: 1fr;
-  }
-  .ps-invite .btn {
-    width: 100%;
-  }
-  .ps-directory-head,
-  .ps-roles-hero {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .ps-member-row {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-  .ps-member-meta {
-    grid-template-columns: 86px minmax(0, 1fr);
-    align-items: center;
-  }
-  .ps-action-field {
-    width: 100%;
-  }
-  .ps-action-buttons,
-  .ps-action-buttons .btn {
-    width: 100%;
-  }
-  .ps-action-buttons .btn {
-    justify-content: center;
-  }
-  .ps-grid-2, .ps-grid-3 { grid-template-columns: 1fr; }
-  .ps-stat-grid { grid-template-columns: 1fr; }
-  .ps-slack-form { grid-template-columns: 1fr; }
-  .ps-slack-form button { margin-top: 0 !important; }
-  .ps-check { padding-bottom: 0; margin-top: 4px; }
 }
 
 /* ── Roles ─────────────────────────────────── */
@@ -1659,7 +1445,6 @@
 .role-row-name { font-weight: 500; color: var(--ink); font-size: 14px; flex: 1; }
 .role-row-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-/* ── Compact roles workflow ── */
 .ps-roles-manage-head {
   display: flex;
   align-items: flex-end;
@@ -1669,7 +1454,7 @@
   padding: 22px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 72%, transparent), var(--bg));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 72%, transparent), var(--card));
 }
 .ps-roles-manage-head h2 {
   margin: 4px 0 6px;
@@ -1704,14 +1489,12 @@
   color: var(--ink);
   font-size: 14px;
 }
-.ps-roles-empty .btn {
-  margin-top: 4px;
-}
+.ps-roles-empty .btn { margin-top: 4px; }
 .ps-built-in-roles {
   margin-top: 16px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--bg);
+  background: var(--card);
   overflow: hidden;
 }
 .ps-built-in-summary {
@@ -1723,22 +1506,10 @@
   cursor: pointer;
   list-style: none;
 }
-.ps-built-in-summary::-webkit-details-marker {
-  display: none;
-}
-.ps-built-in-summary > span:first-child {
-  display: grid;
-  gap: 3px;
-}
-.ps-built-in-summary strong {
-  color: var(--ink);
-  font-size: 14px;
-}
-.ps-built-in-summary small,
-.ps-built-in-summary-action {
-  color: var(--muted);
-  font-size: 11.5px;
-}
+.ps-built-in-summary::-webkit-details-marker { display: none; }
+.ps-built-in-summary > span:first-child { display: grid; gap: 3px; }
+.ps-built-in-summary strong { color: var(--ink); font-size: 14px; }
+.ps-built-in-summary small, .ps-built-in-summary-action { color: var(--muted); font-size: 11.5px; }
 .ps-built-in-summary-action {
   flex: 0 0 auto;
   padding: 5px 9px;
@@ -1751,251 +1522,186 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.ps-built-in-roles[open] .ps-built-in-summary {
-  border-bottom: 1px solid var(--line);
+.ps-built-in-roles[open] .ps-built-in-summary { border-bottom: 1px solid var(--line); }
+.ps-built-in-roles[open] .ps-built-in-summary-action { font-size: 0; }
+.ps-built-in-roles[open] .ps-built-in-summary-action::after { content: "Hide reference"; font-size: 9px; }
+.ps-built-in-content { padding: 18px; background: var(--bg-2); }
+.ps-built-in-content .ps-matrix-card { margin-bottom: 0; }
+
+.ps-roles-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 72%, transparent), var(--card));
 }
-.ps-built-in-roles[open] .ps-built-in-summary-action {
-  font-size: 0;
+.ps-role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
 }
-.ps-built-in-roles[open] .ps-built-in-summary-action::after {
-  content: "Hide reference";
-  font-size: 9px;
+.ps-role-card {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
 }
-.ps-built-in-content {
-  padding: 18px;
+.ps-role-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.ps-role-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
 }
-.ps-built-in-content .ps-matrix-card {
-  margin-bottom: 0;
+.ps-role-card h3 { margin: 0 0 8px; color: var(--ink); font-size: 17px; letter-spacing: 0; }
+.ps-role-card p { margin: 0 0 18px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; }
+.ps-permission-list { display: grid; gap: 10px; }
+.ps-permission-list li { display: flex; gap: 9px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.45; }
+.ps-permission-list li span {
+  width: 6px; height: 6px; margin-top: 6px;
+  border-radius: 999px; background: var(--good); flex: 0 0 6px;
 }
-.role-drawer-open {
-  overflow: hidden;
+.ps-matrix-card { padding: 0; }
+.ps-access-matrix { overflow-x: auto; }
+.ps-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(100px, .45fr));
+  min-width: 620px;
+  border-top: 1px solid var(--line-2);
 }
+.ps-matrix-header { border-top: 0; background: var(--bg-2); }
+.ps-matrix-row span { padding: 13px 16px; color: var(--ink-soft); font-size: 13px; }
+.ps-matrix-header span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.ps-matrix-row span:not(:first-child) { text-align: center; border-left: 1px solid var(--line-2); }
+.ps-matrix-row .is-yes { color: var(--good); font-weight: 600; }
+
+.role-drawer-open { overflow: hidden; }
 .ps-role-drawer-backdrop {
-  position: fixed;
-  z-index: 90;
-  inset: 0;
+  position: fixed; z-index: 90; inset: 0;
   background: rgba(16, 18, 23, 0.42);
   backdrop-filter: blur(2px);
 }
 .ps-role-drawer {
-  position: fixed;
-  z-index: 91;
-  top: 0;
-  right: 0;
+  position: fixed; z-index: 91; top: 0; right: 0;
   width: min(820px, calc(100vw - 48px));
   height: 100dvh;
-  overflow-x: hidden;
-  overflow-y: auto;
-  background: var(--bg);
+  overflow-x: hidden; overflow-y: auto;
+  background: var(--card);
   box-shadow: -24px 0 70px rgba(0, 0, 0, 0.2);
   transform: translateX(102%);
   visibility: hidden;
   transition: transform 0.24s ease, visibility 0.24s;
 }
-.ps-role-drawer.is-open {
-  transform: translateX(0);
-  visibility: visible;
-}
-.ps-role-drawer .ps-role-editor {
-  min-height: 100%;
-  border: 0;
-  border-radius: 0;
-  background: var(--bg);
-}
-.ps-role-drawer .ps-role-editor-head {
-  position: sticky;
-  z-index: 4;
-  top: 0;
-}
-.ps-role-editor-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.ps-role-drawer.is-open { transform: translateX(0); visibility: visible; }
+.ps-role-drawer .ps-role-editor { min-height: 100%; border: 0; border-radius: 0; background: var(--card); }
+.ps-role-drawer .ps-role-editor-head { position: sticky; z-index: 4; top: 0; }
+.ps-role-editor-head-actions { display: flex; align-items: center; gap: 8px; }
 .ps-role-drawer-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--muted);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); color: var(--muted);
+  font-size: 20px; line-height: 1; cursor: pointer;
 }
-.ps-role-drawer-close:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-}
+.ps-role-drawer-close:hover { border-color: var(--ink); color: var(--ink); }
 .ps-role-drawer .ps-role-editor-foot {
-  position: sticky;
-  z-index: 4;
-  bottom: 0;
+  position: sticky; z-index: 4; bottom: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;
   box-shadow: 0 -8px 22px color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
-/* ── Guided role editor ── */
-.ps-role-editor {
-  overflow: visible;
-  min-width: 0;
-  max-width: 100%;
-  box-sizing: border-box;
-}
+.ps-role-editor { overflow: visible; min-width: 0; max-width: 100%; box-sizing: border-box; }
 .ps-role-editor-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
   padding: 24px 26px;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 75%, transparent), var(--bg));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 75%, transparent), var(--card));
 }
-.ps-role-editor-head,
-.ps-role-editor-section,
-.ps-role-editor-foot {
-  min-width: 0;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-.ps-role-editor-head > div,
-.ps-role-editor-section-head > div {
-  min-width: 0;
-}
-.ps-role-editor-head .ps-h3 {
-  margin: 5px 0 5px;
-  font-size: 20px;
-}
-.ps-role-editor-head p,
-.ps-role-editor-section-head p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
+.ps-role-editor-head, .ps-role-editor-section, .ps-role-editor-foot { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.ps-role-editor-head > div, .ps-role-editor-section-head > div { min-width: 0; }
+.ps-role-editor-head .ps-h3 { margin: 5px 0 5px; font-size: 20px; }
+.ps-role-editor-head p, .ps-role-editor-section-head p {
+  margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere;
 }
 .ps-role-editor-state {
-  flex: 0 0 auto;
-  padding: 5px 9px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg);
-  color: var(--ink-soft);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  flex: 0 0 auto; padding: 5px 9px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--card); color: var(--ink-soft);
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
 }
-.ps-role-editor-section {
-  padding: 24px 26px;
-  border-bottom: 1px solid var(--line-2);
-}
-.ps-role-editor-section-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.ps-role-editor-section-head h4 {
-  margin: 0 0 3px;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-}
+.ps-role-editor-section { padding: 24px 26px; border-bottom: 1px solid var(--line-2); }
+.ps-role-editor-section-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.ps-role-editor-section-head h4 { margin: 0 0 3px; color: var(--ink); font-size: 14px; font-weight: 600; }
 .ps-role-editor-step {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--bg);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex: 0 0 24px;
+  border-radius: 999px; background: var(--ink); color: var(--paper);
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
 }
-.ps-role-editor-control {
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg);
-}
-.ps-role-editor-section[data-variant="advanced"] {
-  background: color-mix(in srgb, var(--amber) 4%, var(--bg));
-}
-.ps-role-editor-section[data-variant="advanced"] .ps-role-editor-step {
-  background: var(--amber);
-}
-.ps-role-advanced-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
+.ps-role-editor-control { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.ps-role-editor-section[data-variant="advanced"] { background: color-mix(in srgb, var(--warn) 4%, var(--card)); }
+.ps-role-editor-section[data-variant="advanced"] .ps-role-editor-step { background: var(--warn); }
+.ps-role-advanced-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .ps-role-advanced-options .ps-check {
-  align-items: flex-start;
-  min-height: 72px;
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--amber) 24%, var(--line));
-  border-radius: 10px;
-  background: var(--bg);
+  align-items: flex-start; min-height: 72px; padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--line));
+  border-radius: 10px; background: var(--card);
 }
-.ps-role-advanced-options .ps-check span {
-  display: grid;
-  gap: 3px;
-}
-.ps-role-advanced-options .ps-check strong {
-  color: var(--ink);
-  font-size: 13px;
-}
-.ps-role-advanced-options .ps-check small {
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.45;
-}
+.ps-role-advanced-options .ps-check span { display: grid; gap: 3px; }
+.ps-role-advanced-options .ps-check strong { color: var(--ink); font-size: 13px; }
+.ps-role-advanced-options .ps-check small { color: var(--muted); font-size: 11.5px; line-height: 1.45; }
 .ps-role-editor-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 72px;
-  padding: 14px 26px;
-  background: var(--bg-2);
-  border-radius: 0 0 14px 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  min-height: 72px; padding: 14px 26px;
+  background: var(--bg-2); border-radius: 0 0 14px 14px;
 }
-.ps-role-editor-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
+.ps-role-editor-actions { display: flex; gap: 8px; margin-left: auto; }
 
 .provider-check {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 12px; color: var(--ink-soft);
   background: var(--bg-2); border: 1px solid var(--line-2);
-  border-radius: var(--r-s, 6px); padding: 4px 10px;
+  border-radius: 6px; padding: 4px 10px;
   cursor: pointer; user-select: none;
 }
 .provider-check input { accent-color: var(--ink); cursor: pointer; }
 
-/* ── Tool-grid select-all ── */
 .tg-all { display:block; margin-top:4px; font-size:10px; font-weight:500; letter-spacing:0; text-transform:none; font-family:var(--mono); color:var(--muted); cursor:pointer; }
 .tg-all input { accent-color:var(--ink); vertical-align:middle; margin-right:2px; }
 
-/* ── Provider chip multiselect ── */
 .prov-select { position:relative; }
 .prov-control {
   display:flex; flex-wrap:wrap; align-items:center; gap:6px;
   min-height:42px; padding:7px 10px;
-  border:1px solid var(--line); border-radius:var(--r-m);
-  background:var(--bg); cursor:text;
+  border:1px solid var(--line); border-radius:9px;
+  background:var(--card); cursor:text;
 }
 .prov-select.is-open .prov-control { border-color:var(--ink); }
 .prov-chips { display:flex; flex-wrap:wrap; gap:6px; }
@@ -2008,11 +1714,11 @@
   border:none; background:none; cursor:pointer; color:var(--muted);
   font-size:14px; line-height:1; padding:0 3px; border-radius:4px;
 }
-.prov-chip button:hover { color:var(--red); background:color-mix(in srgb, var(--red) 10%, transparent); }
+.prov-chip button:hover { color:var(--bad); background:color-mix(in srgb, var(--bad) 10%, transparent); }
 .prov-search { flex:1; min-width:120px; border:none; outline:none; background:none; font:inherit; font-size:13px; color:var(--ink); padding:2px 0; }
 .prov-dropdown {
   position:absolute; z-index:30; left:0; right:0; top:calc(100% + 4px);
-  background:var(--bg); border:1px solid var(--line); border-radius:var(--r-m);
+  background:var(--card); border:1px solid var(--line); border-radius:9px;
   box-shadow:0 8px 28px rgba(0,0,0,.12); padding:6px; max-height:260px; overflow:auto;
 }
 .prov-opt, .prov-opt-all {
@@ -2024,71 +1730,13 @@
 .prov-opt-all { font-weight:600; border-bottom:1px solid var(--line-2); border-radius:6px 6px 0 0; margin-bottom:2px; }
 .prov-empty { padding:10px; text-align:center; font-size:12px; color:var(--muted); }
 
-@media (max-width: 720px) {
-  .ps-roles-manage-head,
-  .ps-built-in-summary {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .ps-roles-manage-actions,
-  .ps-roles-manage-actions .btn {
-    width: 100%;
-  }
-  .ps-roles-manage-actions .btn {
-    justify-content: center;
-  }
-  .ps-built-in-content {
-    padding: 12px;
-  }
-  .ps-role-drawer {
-    width: 100vw;
-  }
-  .ps-role-drawer .ps-role-editor-head p,
-  .ps-role-drawer .ps-role-editor-section-head p {
-    max-width: calc(100vw - 54px);
-    width: calc(100vw - 54px);
-    white-space: normal;
-  }
-  .ps-role-drawer .ps-role-editor-section-head p {
-    max-width: calc(100vw - 110px);
-    width: calc(100vw - 110px);
-  }
-  .ps-role-drawer .ps-role-editor-head > div:first-child {
-    width: calc(100vw - 36px);
-  }
-  .ps-role-drawer .ps-role-editor-section-head > div {
-    width: calc(100vw - 96px);
-  }
-  .ps-role-editor-head,
-  .ps-role-editor-section,
-  .ps-role-editor-foot {
-    padding-left: 18px;
-    padding-right: 18px;
-  }
-  .ps-role-editor-head,
-  .ps-role-editor-foot {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .ps-role-advanced-options {
-    grid-template-columns: 1fr;
-  }
-  .ps-role-editor-actions,
-  .ps-role-editor-actions .btn {
-    width: 100%;
-  }
-  .ps-role-editor-actions .btn {
-    justify-content: center;
-  }
-}
-
 /* ── Member row actions + role chips ── */
 .ps-row-actions { display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
-.mbr-roles { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.mbr-roles { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .mbr-role-chips { display:inline-flex; flex-wrap:wrap; gap:4px; }
 .mbr-role-chip {
-  display:inline-block; background:color-mix(in srgb, var(--blue) 10%, transparent);
-  color:var(--blue); border-radius:5px; padding:2px 8px; font-size:11.5px; font-weight:500;
+  display:inline-block; background:color-mix(in srgb, var(--accent) 10%, transparent);
+  color:var(--accent-hover); border-radius:5px; padding:2px 8px; font-size:11.5px; font-weight:500;
 }
 .mbr-role-none { font-size:11.5px; color:var(--muted); font-style:italic; }
 .mbr-roles-edit {
@@ -2101,7 +1749,7 @@
 /* ── Member roles popover ── */
 .roles-popover {
   position:absolute; z-index:60; width:240px;
-  background:var(--bg); border:1px solid var(--line); border-radius:var(--r-m);
+  background:var(--card); border:1px solid var(--line); border-radius:9px;
   box-shadow:0 10px 34px rgba(0,0,0,.16); padding:8px;
 }
 .roles-popover-head { display:flex; align-items:center; justify-content:space-between; padding:4px 6px 8px; font-size:12px; font-weight:600; color:var(--ink); }
@@ -2113,26 +1761,119 @@
 .roles-popover-opt:hover { background:var(--bg-2); }
 .roles-popover-all input, .roles-popover-opt input { accent-color:var(--ink); }
 .roles-popover-empty { padding:12px 8px; font-size:12px; color:var(--muted); text-align:center; }
+
+/* ── Responsive ─────────────────────────────────── */
+@media (max-width: 980px) {
+  .ps-member-row {
+    grid-template-columns: minmax(200px, 1fr) minmax(110px, .5fr);
+  }
+  .ps-member-meta-joined { display: none; }
+  .ps-member-actions {
+    grid-column: 1 / -1;
+    justify-items: start;
+    padding-top: 12px;
+    border-top: 1px solid var(--line-2);
+  }
+  .ps-action-buttons { justify-content: flex-start; }
+  .ps-owner-note { max-width: none; text-align: left; }
+  .ps-role-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .app-main {
+    max-width: 100%;
+    overflow-x: hidden;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .ps-head { display: grid; grid-template-columns: 1fr; align-items: start; gap: 14px; }
+  .ps-head-main { min-width: 0; }
+  .ps-head-main h1, .ps-desc { overflow-wrap: anywhere; }
+  .ps-invite { grid-template-columns: 1fr; }
+  .ps-invite .btn { width: 100%; }
+  .ps-directory-head { align-items: flex-start; flex-direction: column; }
+  .ps-roles-hero { align-items: flex-start; flex-direction: column; }
+  .ps-member-row { grid-template-columns: 1fr; gap: 12px; }
+  .ps-member-role-col { justify-content: flex-start; }
+  .ps-action-buttons, .ps-action-buttons .btn { width: 100%; }
+  .ps-action-buttons .btn { justify-content: center; }
+  .ps-grid-2, .ps-grid-3 { grid-template-columns: 1fr; }
+  .ps-slack-form { grid-template-columns: 1fr; }
+  .ps-slack-form button { margin-top: 0 !important; }
+  .ps-check { padding-bottom: 0; margin-top: 4px; }
+  .ps-roles-manage-head, .ps-built-in-summary { align-items: flex-start; flex-direction: column; }
+  .ps-roles-manage-actions, .ps-roles-manage-actions .btn { width: 100%; }
+  .ps-roles-manage-actions .btn { justify-content: center; }
+  .ps-built-in-content { padding: 12px; }
+  .ps-role-drawer { width: 100vw; }
+  .ps-role-drawer .ps-role-editor-head p, .ps-role-drawer .ps-role-editor-section-head p {
+    max-width: calc(100vw - 54px); width: calc(100vw - 54px); white-space: normal;
+  }
+  .ps-role-drawer .ps-role-editor-section-head p { max-width: calc(100vw - 110px); width: calc(100vw - 110px); }
+  .ps-role-drawer .ps-role-editor-head > div:first-child { width: calc(100vw - 36px); }
+  .ps-role-drawer .ps-role-editor-section-head > div { width: calc(100vw - 96px); }
+  .ps-role-editor-head, .ps-role-editor-section, .ps-role-editor-foot { padding-left: 18px; padding-right: 18px; }
+  .ps-role-editor-head, .ps-role-editor-foot { align-items: flex-start; flex-direction: column; }
+  .ps-role-advanced-options { grid-template-columns: 1fr; }
+  .ps-role-editor-actions, .ps-role-editor-actions .btn { width: 100%; }
+  .ps-role-editor-actions .btn { justify-content: center; }
+}
 </style>
 
 <script>
-// ── Tab switching ──
-function switchTab(tabName) {
-  document.querySelectorAll('.ps-tab').forEach(function(b) { b.classList.remove('is-active'); });
-  document.querySelectorAll('.ps-panel').forEach(function(p) { p.style.display = 'none'; p.classList.remove('is-active'); });
-  var btn = document.querySelector('.ps-tab[data-tab="' + tabName + '"]');
-  if (btn) btn.classList.add('is-active');
-  var panel = document.querySelector('[data-panel="' + tabName + '"]');
-  if (panel) { panel.style.display = ''; panel.classList.add('is-active'); }
-}
-
-// Deep-link a tab via URL hash (e.g. /project/<slug>/settings#limits from Home).
+// ── Tab controller ──
+// Sections carry data-ps-tab; only the active tab's sections are visible.
+// The URL hash is the source of truth so deep links keep working:
+//   #notifications          → Notifications tab
+//   #roles / #rbac          → Members & roles tab, scrolled to that card
+//   #danger / #transfer / #flux-permissions → General tab, scrolled to card
 (function() {
-  var hash = (location.hash || '').replace('#', '');
-  if (hash && document.querySelector('.ps-tab[data-tab="' + hash + '"]')) {
-    switchTab(hash);
+  var TABS = ['general', 'members', 'connections', 'limits', 'notifications'];
+  var ALIAS = {
+    'flux-permissions': 'general', transfer: 'general', danger: 'general',
+    dashboardStyleCard: 'general', roles: 'members', rbac: 'members',
+  };
+  function tabFor(id) {
+    if (TABS.indexOf(id) !== -1) return id;
+    if (ALIAS[id]) return ALIAS[id];
+    // A hash pointing inside a tabbed section (e.g. a sender row) still opens
+    // the right tab.
+    var el = id && document.getElementById(id);
+    var host = el && el.closest('[data-ps-tab]');
+    return host ? host.getAttribute('data-ps-tab') : 'general';
   }
+  function activate() {
+    var id = (location.hash || '').replace('#', '');
+    var tab = tabFor(id);
+    document.querySelectorAll('[data-ps-tab]').forEach(function(el) {
+      el.hidden = el.getAttribute('data-ps-tab') !== tab;
+    });
+    document.querySelectorAll('#psTabs .sub-tab').forEach(function(a) {
+      a.classList.toggle('is-active', a.getAttribute('data-tab') === tab);
+    });
+    if (id && id !== tab) {
+      // Wait a beat so the just-unhidden section has laid out.
+      window.setTimeout(function() {
+        var el = document.getElementById(id);
+        if (el) el.scrollIntoView({block: 'start'});
+      }, 40);
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }
+  window.addEventListener('hashchange', activate);
+  activate();
 })();
+
+// ── Members — toggle inline invite form ──
+function toggleInviteForm() {
+  var wrap = document.getElementById('inviteFormWrap');
+  if (!wrap) return;
+  wrap.hidden = !wrap.hidden;
+  if (!wrap.hidden) {
+    var emailInput = wrap.querySelector('input[name="email"]');
+    if (emailInput) emailInput.focus();
+  }
+}
 
 // ── Invite member ──
 var inviteForm = document.getElementById('inviteForm');
@@ -2146,9 +1887,9 @@ if (inviteForm) {
     var emailVal = (this.email.value || '').trim();
     if (!emailVal) {
       msg.textContent = 'Enter an email address.';
-      msg.style.background = 'color-mix(in srgb, var(--red) 10%, transparent)';
-      msg.style.color = 'var(--red)';
-      msg.style.borderColor = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+      msg.style.background = 'color-mix(in srgb, var(--bad) 10%, transparent)';
+      msg.style.color = 'var(--bad)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--bad) 25%, var(--line))';
       msg.style.display = 'inline-block';
       btn.disabled = false; btn.textContent = 'Invite';
       return;
@@ -2193,16 +1934,16 @@ if (inviteForm) {
       } else {
         msg.textContent = data.message || 'Invited!';
       }
-      msg.style.background = 'color-mix(in srgb, var(--green) 10%, transparent)';
-      msg.style.color = 'var(--text)';
-      msg.style.borderColor = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+      msg.style.background = 'color-mix(in srgb, var(--good) 10%, transparent)';
+      msg.style.color = 'var(--ink)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--good) 25%, var(--line))';
       msg.style.display = 'block';
       btn.disabled = false; btn.textContent = 'Invite';
     } catch(err) {
       msg.textContent = err.message;
-      msg.style.background = 'color-mix(in srgb, var(--red) 10%, transparent)';
-      msg.style.color = 'var(--red)';
-      msg.style.borderColor = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+      msg.style.background = 'color-mix(in srgb, var(--bad) 10%, transparent)';
+      msg.style.color = 'var(--bad)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--bad) 25%, var(--line))';
       msg.style.display = 'inline-block';
       btn.disabled = false; btn.textContent = 'Invite';
     }
@@ -2263,16 +2004,16 @@ if (transferForm) {
       var data = await res.json();
       if (!res.ok) throw new Error(data.message || data.detail || 'Failed');
       msg.textContent = data.message || 'Ownership transferred!';
-      msg.style.color = 'var(--green)';
-      msg.style.background = 'color-mix(in srgb, var(--green) 8%, transparent)';
-      msg.style.borderColor = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+      msg.style.color = 'var(--good)';
+      msg.style.background = 'color-mix(in srgb, var(--good) 8%, transparent)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--good) 25%, var(--line))';
       msg.style.display = 'inline-block';
       setTimeout(function(){ window.location.reload(); }, 1500);
     } catch(err) {
       msg.textContent = err.message;
-      msg.style.color = 'var(--red)';
-      msg.style.background = 'color-mix(in srgb, var(--red) 8%, transparent)';
-      msg.style.borderColor = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+      msg.style.color = 'var(--bad)';
+      msg.style.background = 'color-mix(in srgb, var(--bad) 8%, transparent)';
+      msg.style.borderColor = 'color-mix(in srgb, var(--bad) 25%, var(--line))';
       msg.style.display = 'inline-block';
       btn.disabled = false;
     }
@@ -2299,13 +2040,13 @@ function _senderMsg(text, kind) {
   el.textContent = text;
   var color, bg, bd;
   if (kind === 'error') {
-    color = 'var(--red)';
-    bg = 'color-mix(in srgb, var(--red) 8%, transparent)';
-    bd = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+    color = 'var(--bad)';
+    bg = 'color-mix(in srgb, var(--bad) 8%, transparent)';
+    bd = 'color-mix(in srgb, var(--bad) 25%, var(--line))';
   } else if (kind === 'success') {
-    color = 'var(--green)';
-    bg = 'color-mix(in srgb, var(--green) 8%, transparent)';
-    bd = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+    color = 'var(--good)';
+    bg = 'color-mix(in srgb, var(--good) 8%, transparent)';
+    bd = 'color-mix(in srgb, var(--good) 25%, var(--line))';
   } else {
     color = 'var(--ink-soft)';
     bg = 'var(--bg-2)';
@@ -2463,13 +2204,13 @@ function _slackMsg(text, kind) {
   el.textContent = text;
   var color, bg, bd;
   if (kind === 'error') {
-    color = 'var(--red)';
-    bg = 'color-mix(in srgb, var(--red) 8%, transparent)';
-    bd = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+    color = 'var(--bad)';
+    bg = 'color-mix(in srgb, var(--bad) 8%, transparent)';
+    bd = 'color-mix(in srgb, var(--bad) 25%, var(--line))';
   } else if (kind === 'success') {
-    color = 'var(--green)';
-    bg = 'color-mix(in srgb, var(--green) 8%, transparent)';
-    bd = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+    color = 'var(--good)';
+    bg = 'color-mix(in srgb, var(--good) 8%, transparent)';
+    bd = 'color-mix(in srgb, var(--good) 25%, var(--line))';
   } else {
     color = 'var(--ink-soft)';
     bg = 'var(--bg-2)';
@@ -2579,7 +2320,7 @@ async function saveDashStyleConfig() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ROLES — tab 15
+// ROLES
 // ═══════════════════════════════════════════════════════════════════
 var ROLES_API = '/api/project/{{ project.slug }}/roles';
 
@@ -2777,13 +2518,13 @@ function _roleMsg(text, kind) {
   if (!el) return;
   el.textContent = text;
   if (kind === 'error') {
-    el.style.color = 'var(--red)';
-    el.style.background = 'color-mix(in srgb, var(--red) 8%, transparent)';
-    el.style.borderColor = 'color-mix(in srgb, var(--red) 25%, var(--line))';
+    el.style.color = 'var(--bad)';
+    el.style.background = 'color-mix(in srgb, var(--bad) 8%, transparent)';
+    el.style.borderColor = 'color-mix(in srgb, var(--bad) 25%, var(--line))';
   } else if (kind === 'success') {
-    el.style.color = 'var(--green)';
-    el.style.background = 'color-mix(in srgb, var(--green) 8%, transparent)';
-    el.style.borderColor = 'color-mix(in srgb, var(--green) 25%, var(--line))';
+    el.style.color = 'var(--good)';
+    el.style.background = 'color-mix(in srgb, var(--good) 8%, transparent)';
+    el.style.borderColor = 'color-mix(in srgb, var(--good) 25%, var(--line))';
   } else {
     el.style.color = 'var(--ink-soft)';
     el.style.background = 'var(--bg-2)';
@@ -2947,7 +2688,7 @@ async function loadRoles() {
     // also refresh member role chips
     renderAllMemberRoleChips();
   } catch(err) {
-    listEl.innerHTML = '<div style="padding:20px;color:var(--red);font-size:13px">Error loading roles: ' + _esc(err.message) + '</div>';
+    listEl.innerHTML = '<div style="padding:20px;color:var(--bad);font-size:13px">Error loading roles: ' + _esc(err.message) + '</div>';
   }
 }
 
@@ -3132,33 +2873,67 @@ async function saveMemberRoles(memberId) {
   });
 })();
 
-// Load roles when the Roles tab is first activated
+// Roles are always visible now (no lazy tab load) — fetch once on page load
+// whenever the roles section (or member role-chip widgets) is present.
 (function() {
-  var rolesTabBtn = document.querySelector('.ps-tab[data-tab="roles"]');
-  if (!rolesTabBtn) return;
-  var _rolesLoaded = false;
-  rolesTabBtn.addEventListener('click', function() {
-    if (!_rolesLoaded) {
-      _rolesLoaded = true;
-      loadRoles();
-    }
-  });
+  var hasRolesSection = !!document.getElementById('rolesList');
+  var hasMemberRoleWidgets = !!document.querySelector('.mbr-roles');
+  if (!hasRolesSection && !hasMemberRoleWidgets) return;
+  if (hasRolesSection) {
+    loadRoles();
+  } else {
+    // Only member role-chip widgets on the page (no owner/admin roles card) —
+    // still need role names to render the chips.
+    fetch(ROLES_API).then(function(res) {
+      return res.json();
+    }).then(function(data) {
+      var roles = Array.isArray(data) ? data : (data.roles || []);
+      _rolesCache = roles;
+      renderAllMemberRoleChips();
+    }).catch(function() {
+      // non-fatal — member role chips stay empty
+    });
+  }
 })();
 
-// Also load roles on page load for member multi-selects (Users tab is default)
-(function() {
-  // Only fetch if there are member role widgets on the page
-  if (!document.querySelector('.mbr-roles')) return;
-  fetch(ROLES_API).then(function(res) {
-    return res.json();
-  }).then(function(data) {
-    var roles = Array.isArray(data) ? data : (data.roles || []);
-    _rolesCache = roles;
-    renderAllMemberRoleChips();
-  }).catch(function() {
-    // non-fatal — member role chips stay empty
-  });
-})();
+// ── General — Project name / Slug (Flux - Project Settings.dc.html:94-108) ──
+// TODO(ledger-revamp): PATCH /api/project/{slug} for name/slug doesn't exist server-side
+// yet (see comment above the form). This calls the conventional REST route so it's ready
+// to work the moment that route is added; today it will surface a clear error instead of
+// silently pretending to save.
+async function saveGeneralDetails() {
+  var btn = document.getElementById('generalSaveBtn');
+  var msg = document.getElementById('generalMsg');
+  var nameInput = document.getElementById('generalNameInput');
+  var slugInput = document.getElementById('generalSlugInput');
+  if (!btn || !nameInput || !slugInput) return;
+  var name = nameInput.value.trim();
+  var slug = slugInput.value.trim();
+  if (!name) { nameInput.focus(); return; }
+  btn.disabled = true;
+  var origLabel = btn.textContent;
+  btn.textContent = 'Saving…';
+  if (msg) { msg.style.display = 'none'; }
+  try {
+    var res = await fetch('/api/project/{{ project.slug }}', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, slug: slug }),
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(data.message || data.detail || data.error || ('Failed (' + res.status + ')'));
+    if (msg) { msg.textContent = 'Saved.'; msg.style.display = 'inline-block'; }
+    if (data.redirect_url) {
+      window.location.href = data.redirect_url;
+    } else if (slug && slug !== '{{ project.slug }}') {
+      window.location.href = '/project/' + slug + '/settings';
+    }
+  } catch (err) {
+    if (msg) { msg.textContent = err.message; msg.style.display = 'inline-block'; }
+  }
+  btn.disabled = false;
+  btn.textContent = origLabel;
+}
 
 // ── Delete project ──
 async function deleteProject() {

@@ -1,17 +1,23 @@
 // app/static/js/tracking_plan/views/events.js
-// Redesigned Event editor (best-in-class, mockup /tmp/tp_redesign_mockup.html) with the
-// EXPLICIT BUFFERED-SAVE model — nothing hits the API on edit; everything commits on Save.
+// Redesigned Event editor (Ledger "read-first, inline-editable" detail design —
+// fluxito_site_revamp/designs/Flux - TP Event Detail.dc.html) with the EXPLICIT
+// BUFFERED-SAVE model — nothing hits the API on edit; everything commits on Save.
 //
 // LAYOUT
-//   master  : .tp-search + .btn.btn-primary '+ New event' + grouped .tp-ev rows
-//   detail  : sticky .tp-ed-head (kicker 'Event' + mono name + chips + actions + SAVE CLUSTER)
-//             body of .tp-card sections — Details / Properties / Tracked on / Destinations
+//   master  : .tp-search ('Filter events…') + .btn.btn-primary '+ New event' +
+//             grouped .tp-ev2 rows (mono name + drift-derived status glyph)
+//   detail  : .tp-ed2 (760px column) — header (editable mono h1 name + status
+//             pill + read subline + actions), optional drift callout + real
+//             validate() findings callout, health strip, Parameters grid,
+//             Destinations grid, Implementation card, then the existing
+//             Details / Tracked-on / Success-metrics cards (lightly restyled),
+//             followed by a sticky bottom save bar (.tp-ed2-savebar).
 //
 // SAVE FLOW (per tp/util/editor)
 //   selectEvent(id) → snapshot server = clone(editable fields+collections of E),
 //                     draft = clone(server); render detail FROM draft.
 //   every field/collection edit mutates `draft` ONLY → recompute dirty → re-render detail.
-//   header save cluster: dirty → '● Unsaved' + Discard + Save(enabled); clean → 'Saved'.
+//   save bar: dirty → '● Unsaved' + Discard + Save(enabled); clean → 'Saved'.
 //   Discard → draft = clone(server); dirty=false; re-render.
 //   Save → saving=true; commitEvent(draft, server, branch) [snapshot-sync via idempotent/
 //          replace-all actions]; await state.reload(); re-snapshot server+draft from the
@@ -33,7 +39,7 @@ import * as api from 'tp/api';
 import { mountDrawer } from 'tp/comments';
 import { clone, isDirty } from 'tp/util/editor';
 import {
-  eventStatus, typeBadge, propByName, sourceByName, destByName, catByName,
+  eventStatus, typeBadge, propByName, sourceByName, destByName, catByName, relativeTime,
 } from 'tp/util/format';
 
 const DATA_TYPES = ['string', 'integer', 'float', 'boolean', 'object'];
@@ -71,7 +77,7 @@ function snapshotOf(e) {
   };
 }
 
-// Badge color class from data type (mockup: numbers→sky, boolean→amber, object→green).
+// Badge color class from data type (used by the add-property combo's library popup).
 function badgeClass(dataType) {
   switch (dataType) {
     case 'integer':
@@ -103,6 +109,19 @@ export function mountView(container) {
   let server = null; // clone of the server snapshot
   let draft = null; // clone the editor renders from
   let saving = false;
+
+  // ---- overview state (read by renderOverview(), declared here — not down by its
+  // definition — because loadSelection() below can call into renderOverview()
+  // synchronously on a remount where the plan is already loaded, and a `let`
+  // declared after that call would still be in its temporal dead zone) ----
+  let lastFindings = []; // cached validate() findings, refreshed per plan load
+  let findingsLoadedForPlan = null;
+  let ovFilter = 'all'; // 'all' | category name | '__drift' | '__issues'
+  // Cached /versions summary (just the number range) for the overview eyebrow
+  // ("v3" suffix) and the table footer's "Version history (v1 → v3) →" link.
+  let verLatest = null;
+  let verOldest = null;
+  let versionsLoadedForPlan = null;
 
   function dirty() {
     return !!draft && isDirty(draft, server);
@@ -166,7 +185,7 @@ export function mountView(container) {
       h('div', { class: 'tp-search' },
         searchIcon(),
         h('input', {
-          class: 'input', placeholder: 'Search events', value: search,
+          class: 'input', placeholder: 'Filter events…', value: search,
           onInput: (e) => { search = e.target.value; renderListBody(listBody); },
         })),
       h('button', { class: 'btn btn-primary btn-sm btn-block', onClick: newEvent },
@@ -192,24 +211,28 @@ export function mountView(container) {
       nodes.push(h('div', { class: 'tp-grp' }, cat));
       byCat[cat].forEach((e) => {
         const n = e.properties.length;
+        const m = (e.destinations || []).length;
+        const glyph = listStatusGlyph(e);
         nodes.push(h('div', {
-          class: 'tp-ev' + (sel.type === 'event' && sel.id === e.id ? ' is-active' : ''),
+          class: 'tp-ev2' + (sel.type === 'event' && sel.id === e.id ? ' is-active' : ''),
           onClick: () => selectEvent(e.id),
         },
-          h('span', { class: 'tp-sd ' + dotColor(eventStatus(e)) }),
-          h('div', { class: 'tp-ev-main' },
-            h('div', { class: 'tp-ev-name' }, e.name),
-            h('div', { class: 'tp-ev-sub' }, e.purpose || e.display_name || '—')),
-          h('span', { class: 'tp-ev-meta' }, `${n} prop${n === 1 ? '' : 's'}`)));
+          h('div', { class: 'tp-ev2-toprow' },
+            h('span', { class: 'tp-ev2-name' }, e.name),
+            h('span', { class: 'tp-ev2-glyph', style: { color: glyph.color } }, glyph.label)),
+          h('div', { class: 'tp-ev2-sub' },
+            `${n} param${n === 1 ? '' : 's'} · ${m} destination${m === 1 ? '' : 's'}`)));
       });
     });
     mountAll(listBody, nodes);
   }
 
-  function dotColor(status) {
-    if (status === 'verified') return 'green';
-    if (status === 'implemented') return 'amber';
-    return 'grey';
+  // Right-aligned master-list glyph: prefer live drift status, fall back to the
+  // source-based eventStatus() when there's no drift data yet.
+  function listStatusGlyph(e) {
+    const st = statusInfo(e);
+    if (st.key === 'verified') return { label: '✓', color: st.color };
+    return { label: st.label, color: st.color };
   }
 
   // Selecting a DIFFERENT event while dirty → confirm before discarding.
@@ -239,17 +262,23 @@ export function mountView(container) {
     const e = curEvent();
     if (!e || !draft) {
       if (drawer) { drawer.destroy(); drawer = null; drawerEntityId = null; }
-      mountAll(detail, [h('div', { class: 'tp-empty' }, 'Select an event, or create one.')]);
+      renderOverview(detail);
       return;
     }
+    const findings = findingsForEvent(e.id);
     const nodes = [
-      editorHead(e),
-      h('div', { class: 'tp-ed-body' },
+      h('div', { class: 'tp-ed2' },
+        edHeader(e),
+        driftCallout(e),
+        findings.length ? findingCallout(findings) : null,
+        healthStrip(e),
+        parametersSection(e),
+        destinationsSection(e),
+        implementationSection(e),
         detailsCard(e),
-        propertiesCard(e),
         sourcesCard(e),
-        destinationsCard(e),
         metricsPanel(e)),
+      h('div', { class: 'tp-ed2-savebar' }, saveClusterEl()),
     ];
     mountAll(detail, nodes);
 
@@ -261,6 +290,210 @@ export function mountView(container) {
         { entityType: 'event', entityId: e.id, branch: state.getState().branch });
       drawerEntityId = e.id;
     }
+  }
+
+  // ======================= OVERVIEW (no event selected) =======================
+  // Real data only: per-event status is derived synchronously from the plan;
+  // "open issues" / per-event findings come from the tracking-plan's own
+  // validate() rule engine (structural checks — no fabricated coverage % or
+  // live-volume stats, since there's no real source for those).
+  // (lastFindings/findingsLoadedForPlan/ovFilter are declared earlier in this
+  // function, above — see the comment there for why.)
+
+  function findingsForEvent(id) {
+    return lastFindings.filter((f) => f.entity_type === 'event' && f.entity_id === id);
+  }
+
+  function renderOverview(container) {
+    const p = plan();
+    const events = (p.events || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    const tally = { verified: 0, implemented: 0, planned: 0 };
+    events.forEach((e) => { tally[eventStatus(e)] += 1; });
+    // "Drifted from plan" (design: TP Tracking Plan 4th stat tile) — events
+    // whose live drift.status resolves to the 'drifted' key via statusInfo().
+    const driftCount = events.filter((e) => statusInfo(e).key === 'drifted').length;
+
+    const catCounts = {};
+    events.forEach((e) => { const c = e.category || 'Uncategorized'; catCounts[c] = (catCounts[c] || 0) + 1; });
+    // Rows currently shown in the table (updated by paintTable) — read by the
+    // versions fetch below if it resolves after the initial synchronous paint.
+    let lastShownCount = events.length;
+
+    const kickerEl = h('div', { class: 'tp-ed-kicker' }, `Tracking plan · ${(p.plan && p.plan.name) || 'SDR'}`);
+    const statsRow = h('div', { class: 'tp-ov2-stats', id: 'tp-ov2-stats' });
+    const calloutRow = h('div', { id: 'tp-ov2-callout' });
+    const pillsRow = h('div', { class: 'tp-ov2-pills', id: 'tp-ov2-pills' });
+    const tableWrap = h('div', { class: 'tp-ov2-table', id: 'tp-ov2-tablewrap' });
+    const footerRow = h('div', { class: 'tp-ov2-footer', id: 'tp-ov2-footer' });
+
+    mountAll(container, [
+      h('div', { class: 'tp-ov2' },
+        h('div', { class: 'tp-ov2-head' },
+          kickerEl,
+          h('h1', { class: 'tp-ov2-h1' }, 'The single source of ', h('em', {}, 'tracking truth.'))),
+        statsRow, calloutRow, pillsRow, tableWrap, footerRow),
+    ]);
+
+    paintStats(statsRow, events.length, tally, null);
+    paintPills(pillsRow, catCounts, null);
+    paintTable(tableWrap, events);
+
+    // Load real findings once per plan object (cheap re-use across re-renders).
+    function repaintWithFindings() {
+      const openIssues = lastFindings.length;
+      const affectedEvents = new Set(
+        lastFindings.filter((f) => f.entity_type === 'event').map((f) => f.entity_id),
+      );
+      paintStats(statsRow, events.length, tally, openIssues);
+      paintPills(pillsRow, catCounts, affectedEvents.size);
+      paintCallout(calloutRow, affectedEvents.size);
+    }
+    if (findingsLoadedForPlan !== p) {
+      findingsLoadedForPlan = p;
+      api.validate(state.getState().branch).then((r) => {
+        lastFindings = r.findings || [];
+        if (!curEvent()) repaintWithFindings(); // still on the overview (not navigated into an event)
+      }).catch(() => { /* validate unavailable — stats/callout stay real-but-partial */ });
+    } else {
+      repaintWithFindings(); // findings already cached for this plan object
+    }
+
+    // Load the published version range once per plan object — real data only:
+    // the "v3" eyebrow suffix and the "Version history (v1 → v3) →" footer
+    // link are both omitted (not fabricated) until at least one version exists.
+    if (versionsLoadedForPlan !== p) {
+      versionsLoadedForPlan = p;
+      api.versions().then((r) => {
+        const vs = r.versions || [];
+        if (vs.length) {
+          verLatest = vs[0].version_number;
+          verOldest = vs[vs.length - 1].version_number;
+          kickerEl.textContent = `Tracking plan · ${(p.plan && p.plan.name) || 'SDR'} v${verLatest}`;
+        }
+        if (!curEvent()) updateFooter(lastShownCount);
+      }).catch(() => { /* versions unavailable — eyebrow/footer stay plain */ });
+    } else if (verLatest != null) {
+      kickerEl.textContent = `Tracking plan · ${(p.plan && p.plan.name) || 'SDR'} v${verLatest}`;
+    }
+
+    function statCell(value, label, tone) {
+      return h('div', { class: 'tp-ov2-stat' },
+        h('div', { class: 'tp-ov2-stat-v' + (tone ? ' ' + tone : '') }, value),
+        h('div', { class: 'tp-ov2-stat-l' }, label));
+    }
+
+    function paintStats(row, total, t, openIssues) {
+      const implPct = total ? Math.round(((t.verified + t.implemented) / total) * 100) : 0;
+      mountAll(row, [
+        statCell(String(total), 'Events defined'),
+        statCell(implPct + '%', 'Implemented & verified', 'good'),
+        statCell(String(driftCount), 'Drifted from plan', driftCount ? 'warn' : null),
+        statCell(openIssues == null ? '—' : String(openIssues), 'Open issues', openIssues ? 'bad' : null),
+      ]);
+    }
+
+    function paintCallout(row, affectedCount) {
+      if (!affectedCount) {
+        mountAll(row, [h('div', { class: 'tp-ov2-callout good' },
+          fluxMark(),
+          h('div', { class: 'tp-ov2-callout-body' }, 'No structural gaps — every event has a source, a destination, and at least one property.'))]);
+        return;
+      }
+      const top = lastFindings.slice(0, 3).map((f) => f.message).join(' ');
+      mountAll(row, [h('div', { class: 'tp-ov2-callout' },
+        fluxMark(),
+        h('div', { class: 'tp-ov2-callout-body' },
+          h('strong', {}, `${affectedCount} event${affectedCount === 1 ? '' : 's'} need attention. `),
+          top),
+        h('span', {
+          class: 'tp-ov2-callout-action',
+          onClick: () => state.setView('issues'),
+        }, 'Review in Issues'))]);
+    }
+
+    // Two distinct pills (design: TP Tracking Plan filter row) — amber
+    // "Drifted · N" and red "Issues · N", instead of one combined pill.
+    function paintPills(row, counts, issuesCount) {
+      const cats = Object.keys(counts).sort();
+      const pills = [pill('all', `All · ${events.length}`, ovFilter === 'all')];
+      cats.forEach((c) => pills.push(pill(c, `${c} · ${counts[c]}`, ovFilter === c)));
+      if (driftCount) pills.push(pill('__drift', `Drifted · ${driftCount}`, ovFilter === '__drift', 'warn'));
+      if (issuesCount) pills.push(pill('__issues', `Issues · ${issuesCount}`, ovFilter === '__issues', 'bad'));
+      mountAll(row, pills);
+    }
+
+    function pill(key, label, active, tone) {
+      return h('span', {
+        class: 'tp-ov2-pill' + (active ? ' is-active' : '') + (tone ? ' is-' + tone : ''),
+        onClick: () => { ovFilter = key; paintTable(tableWrap, events); refreshPillActive(pillsRow); },
+      }, label);
+    }
+
+    // Repaint the pills row so the just-clicked pill shows as active.
+    function refreshPillActive(row) {
+      const cats = {};
+      events.forEach((e) => { const c = e.category || 'Uncategorized'; cats[c] = (cats[c] || 0) + 1; });
+      const affected = new Set(lastFindings.filter((f) => f.entity_type === 'event').map((f) => f.entity_id));
+      paintPills(row, cats, affected.size);
+    }
+
+    // Table footer — "Showing N of M" always; the version-history link only
+    // once real version data has loaded (see the versions fetch above).
+    function updateFooter(shownCount) {
+      const parts = [h('span', {}, `Showing ${shownCount} of ${events.length}`)];
+      if (verLatest != null) {
+        parts.push(h('a', {
+          class: 'tp-link', href: '#',
+          onClick: (e) => { e.preventDefault(); state.setView('versions'); },
+        }, `Version history (v${verOldest} → v${verLatest}) →`));
+      }
+      mountAll(footerRow, parts);
+    }
+
+    function paintTable(wrap, allEvents) {
+      let rows = allEvents;
+      if (ovFilter === '__issues') {
+        const affected = new Set(lastFindings.filter((f) => f.entity_type === 'event').map((f) => f.entity_id));
+        rows = allEvents.filter((e) => affected.has(e.id));
+      } else if (ovFilter === '__drift') {
+        rows = allEvents.filter((e) => statusInfo(e).key === 'drifted');
+      } else if (ovFilter !== 'all') {
+        rows = allEvents.filter((e) => (e.category || 'Uncategorized') === ovFilter);
+      }
+      const head = h('div', { class: 'tp-ov2-row tp-ov2-row-head' },
+        h('span', {}, 'Event'), h('span', {}, 'Params'), h('span', {}, 'Destinations'),
+        h('span', {}, 'Owner'), h('span', {}, 'Status'));
+      const body = rows.map((e) => {
+        const status = eventStatus(e);
+        const hasIssue = findingsForEvent(e.id).length > 0;
+        return h('div', { class: 'tp-ov2-row', onClick: () => selectEvent(e.id) },
+          h('div', {},
+            h('div', { class: 'tp-ov2-ev-name' }, e.name),
+            h('div', { class: 'tp-ov2-ev-sub' }, e.purpose || e.display_name || '—')),
+          h('span', { class: 'tp-mono' }, String(e.properties.length)),
+          h('span', { class: 'tp-ov2-dest' }, (e.destinations || []).map((d) => d.destination).join(' · ') || '—'),
+          h('span', {}, e.owner_business || '—'),
+          h('span', { class: 'tp-ov2-status ' + status + (hasIssue ? ' has-issue' : '') },
+            hasIssue ? '⚠ ' : '', status.toUpperCase()));
+      });
+      if (!rows.length) body.push(h('div', { class: 'tp-row-empty' }, 'No events in this filter.'));
+      mountAll(wrap, [head, ...body]);
+      lastShownCount = rows.length;
+      updateFooter(lastShownCount);
+    }
+  }
+
+  function findingCallout(findings) {
+    const top = findings[0];
+    return h('div', { class: 'tp-ed-callout' + (top.severity === 'error' ? ' bad' : '') },
+      fluxMark(),
+      h('div', { class: 'tp-ov2-callout-body' },
+        findings.length > 1 ? h('strong', {}, `${findings.length} findings. `) : null,
+        findings.map((f) => f.message).join(' ')));
+  }
+
+  function fluxMark() {
+    return h('span', { class: 'tp-flux-mark-tiny tp-flux-badge' }, 'F');
   }
 
   // After mutating the draft, recompute dirty and re-render just the detail.
@@ -301,10 +534,38 @@ export function mountView(container) {
       'tp-namehint' + (issue ? ' ' + (issue.kind === 'err' ? 'is-err' : 'is-warn') : '');
   }
 
+  // Resolve an event's status pill: prefer live drift.status (DRIFTED / BROKEN /
+  // VERIFIED / UNPLANNED), fall back to the source-based eventStatus() when no
+  // drift data is available yet (verified→VERIFIED, implemented/planned→PLAN).
+  function statusInfo(e) {
+    const drift = e.drift;
+    if (drift && drift.status) {
+      const s = String(drift.status).toUpperCase();
+      if (s === 'BROKEN') return { key: 'broken', label: 'BROKEN', color: 'var(--tp-red)' };
+      if (s === 'DRIFTED' || s === 'UNPLANNED') return { key: 'drifted', label: s, color: 'var(--tp-amber)' };
+      if (s === 'VERIFIED') return { key: 'verified', label: 'VERIFIED', color: 'var(--tp-green)' };
+      return { key: s.toLowerCase(), label: s, color: 'var(--tp-text-3)' };
+    }
+    const es = eventStatus(e);
+    if (es === 'verified') return { key: 'verified', label: 'VERIFIED', color: 'var(--tp-green)' };
+    return { key: 'plan', label: 'PLAN', color: 'var(--tp-text-3)' };
+  }
+
+  // Resolve a destination's logo slug: match display_name in the vendor catalog
+  // (case-insensitive), else slugify (spaces→underscore; "Google Ads"→"google-ads").
+  function destLogoSlug(name) {
+    const vendors = (state.getState().vendors && state.getState().vendors.destinations) || [];
+    const hit = vendors.find((v) => (v.display_name || '').toLowerCase() === (name || '').toLowerCase());
+    if (hit && hit.slug) return hit.slug;
+    const n = (name || '').trim();
+    if (n.toLowerCase() === 'google ads') return 'google-ads';
+    return n.toLowerCase().replace(/\s+/g, '_');
+  }
+
   // ---- sticky editor header: kicker + mono name + chips + actions + save cluster ----
-  function editorHead(e) {
+  function edHeader(e) {
     const nameInput = h('input', {
-      class: 'tp-titlefield',
+      class: 'tp-ed2-titlefield',
       id: 'ed-name',
       spellcheck: 'false',
       autocapitalize: 'off',
@@ -325,25 +586,43 @@ export function mountView(container) {
     });
     const nameHint = h('div', { class: 'tp-namehint' });
     refreshNameHint(nameHint, draft.name, e.id);
-    const idBlock = h('div', { class: 'tp-ed-id' },
-      h('div', { class: 'tp-ed-kicker' }, 'Event'),
-      nameInput,
-      nameHint);
 
-    const chips = h('div', { class: 'tp-ed-chips' });
-    if (draft.category) chips.appendChild(h('span', { class: 'tp-chip accent' }, draft.category));
-    if (draft.trigger_type) {
-      chips.appendChild(h('span', { class: 'tp-chip mono' },
-        h('span', { class: 'tp-mono' }, draft.trigger_type)));
+    const st = statusInfo(e);
+    const pill = st
+      ? h('span', { class: 'tp-ed2-pill', style: { borderColor: st.color, color: st.color } }, st.label)
+      : null;
+
+    const subline = h('div', { class: 'tp-ed2-subline' },
+      draft.description || 'No description yet',
+      ' · Owned by ', h('strong', {}, draft.owner_business || '—'),
+      ' · category ', h('strong', {}, draft.category || '—'));
+
+    const idBlock = h('div', { class: 'tp-ed2-id' },
+      h('div', { class: 'tp-ed2-titlerow' }, nameInput, pill),
+      nameHint,
+      subline);
+
+    const actions = [];
+    if (st.key === 'drifted' || st.key === 'broken') {
+      actions.push(h('a', {
+        class: 'tp-ed2-fixdrift',
+        href: '/ask?q=' + encodeURIComponent('Fix the drift on ' + (draft.name || e.name)),
+      }, h('span', { class: 'tp-flux-mark-tiny' }, 'F'), 'Fix the drift'));
     }
+    actions.push(h('button', { class: 'btn btn-ghost btn-sm', onClick: () => drawer && drawer.open() }, 'Comments'));
+    actions.push(h('button', { class: 'btn btn-ghost btn-sm', onClick: () => delEvent(e) }, 'Delete'));
+    actions.push(h('button', { class: 'btn btn-ghost btn-sm', onClick: doRefreshDrift }, 'Refresh'));
 
-    const actions = h('div', { class: 'tp-ed-actions' },
-      h('button', { class: 'btn btn-ghost btn-sm', onClick: () => drawer && drawer.open() }, 'Comments'),
-      h('button', { class: 'btn btn-ghost btn-sm', onClick: () => delEvent(e) }, 'Delete'),
-      h('div', { class: 'tp-divv' }),
-      saveClusterEl());
+    return h('div', { class: 'tp-ed2-head' }, idBlock, h('div', { class: 'tp-ed2-actions' }, ...actions));
+  }
 
-    return h('div', { class: 'tp-ed-head' }, h('div', { class: 'tp-ed-id-row' }, idBlock, chips, actions));
+  async function doRefreshDrift() {
+    try {
+      await api.doAction('refresh_drift', {}, state.getState().branch);
+      await state.reload();
+    } catch (err) {
+      if (window.__tpBanner) window.__tpBanner((err && err.message) || 'Could not refresh drift', 'err');
+    }
   }
 
   // Save cluster wired to this view's buffered-save flow.
@@ -399,77 +678,72 @@ export function mountView(container) {
     }
   }
 
-  // ---- Details card: description + 2-up grid of scalars ----
-  function detailsCard(e) {
-    const desc = h('textarea', {
-      class: 'textarea', placeholder: 'When does this event fire?',
-      onInput: () => { draft.description = desc.value; syncDirty(); refreshSaveCluster(); },
-    });
-    desc.value = draft.description || '';
-
-    const cat = h('select', {
-      class: 'select',
-      onChange: () => { draft.category = cat.value; touch(); },
-    },
-      h('option', { value: '' }, '(no category)'),
-      ...(plan().categories || []).map((c) =>
-        h('option', { value: c.name, selected: draft.category === c.name }, c.name)));
-
-    const trigger = h('input', {
-      class: 'input mono', value: draft.trigger_type || '', placeholder: 'click / pageview / …',
-      onInput: (ev) => { draft.trigger_type = ev.target.value; syncDirty(); refreshSaveCluster(); },
-      onChange: () => touch(), // re-render so the header chip updates
-    });
-
-    // Text field bound to a draft scalar. mono=true for identifier-shaped values
-    // (e.g. @handles). Header chips that mirror display_name/purpose don't exist,
-    // so these use refreshSaveCluster() (no full re-render) to keep input focus.
-    const field = (label, key, mono) => {
-      const inp = h('input', {
-        class: mono ? 'input mono' : 'input', value: draft[key] || '',
-        onInput: (ev) => { draft[key] = ev.target.value; syncDirty(); refreshSaveCluster(); },
-      });
-      return h('div', { class: 'tp-field' }, h('label', { class: 'tp-lbl' }, label), inp);
-    };
-    const wrap = (label, control) => h('div', { class: 'tp-field' }, h('label', { class: 'tp-lbl' }, label), control);
-
-    return card('Details', null, null,
-      h('div', { class: 'tp-field', style: { marginBottom: '16px' } },
-        h('label', { class: 'tp-lbl' }, 'Description'), desc),
-      h('div', { class: 'tp-grid2' },
-        field('Display name', 'display_name'),
-        field('Purpose / KPI', 'purpose'),
-        field('Business owner', 'owner_business'),
-        field('Technical owner', 'owner_technical', true),
-        wrap('Category', cat),
-        wrap('Trigger', trigger)));
+  // ---- drift callout: only when the live audit surfaced explicit reasons ----
+  function driftCallout(e) {
+    const reasons = e.drift && e.drift.detail && e.drift.detail.reasons;
+    if (!reasons || !reasons.length) return null;
+    return h('div', { class: 'tp-ed2-callout' },
+      h('span', { class: 'tp-ed2-callout-badge' }, 'F'),
+      h('div', { class: 'tp-ed2-callout-text' }, reasons.join(' ')));
   }
 
-  // ---- Properties card: data-table + add-property combobox ----
-  function propertiesCard(e) {
-    const tbody = h('tbody');
-    draft.properties.forEach((p, idx) => tbody.appendChild(propRow(e, p, idx)));
-    if (!draft.properties.length) {
-      tbody.appendChild(h('tr', {},
-        h('td', { class: 'tp-muted', colspan: '6', style: { padding: '14px 10px' } },
-          'No properties yet — add one below.')));
+  // ---- health strip: 7d volume / param coverage / last audit ----
+  function healthStrip(e) {
+    const drift = e.drift || {};
+    const vol = drift.volume_7d != null ? `${Number(drift.volume_7d).toLocaleString('en-US')} events` : '—';
+
+    let covNode;
+    if (drift.param_coverage_pct == null) {
+      covNode = h('span', { class: 'tp-ed2-health-nudge' }, 'Connect BigQuery');
+    } else {
+      const pct = drift.param_coverage_pct;
+      covNode = h('span', pct < 90 ? { style: { color: 'var(--tp-amber)' } } : {}, `${pct}%`);
     }
-    const table = h('table', { class: 'tp-ptable' },
-      h('thead', {}, h('tr', {},
-        h('th', { style: { width: '18px' } }),
-        h('th', {}, 'Name'),
-        h('th', { style: { width: '110px' } }, 'Type'),
-        h('th', { style: { width: '74px' } }, 'Required'),
-        h('th', { style: { width: '170px' } }, 'Example'),
-        h('th', {}, 'Description'))),
-      tbody);
 
-    const body = h('div', { class: 'tp-card-b' }, table, addPropertyCombo(e));
-    return cardShell('Properties', String(draft.properties.length), null, body);
+    const lastAudit = plan().last_audit_at;
+    const verified = lastAudit ? `Audit · ${relativeTime(lastAudit)}` : '—';
+
+    return h('div', { class: 'tp-ed2-health' },
+      healthCell('LAST 7 DAYS', vol),
+      healthCell('PARAM COVERAGE', covNode),
+      healthCell('LAST VERIFIED', verified));
+  }
+  function healthCell(label, value) {
+    return h('div', { class: 'tp-ed2-health-cell' },
+      h('div', { class: 'tp-ed2-health-label' }, label),
+      h('div', { class: 'tp-ed2-health-value' }, value));
   }
 
-  function propRow(e, p, idx) {
-    const toggle = h('div', { class: 'tp-toggle' + (p.required ? ' on' : ''), role: 'switch' });
+  // ---- Parameters: eyebrow + grid table (draft rows + read-only unplanned rows) ----
+  function parametersSection(e) {
+    const unplanned = (plan().unplanned_params && plan().unplanned_params[e.name]) || [];
+    const eyebrow = h('div', { class: 'tp-ed2-eyebrow' },
+      `Parameters · ${draft.properties.length} planned${unplanned.length ? ` + ${unplanned.length} unplanned` : ''}`);
+
+    const headerRow = h('div', { class: 'tp-ed2-prow tp-ed2-prow-head' },
+      h('span', { class: 'tp-grip' }),
+      h('div', { class: 'tp-ed2-prow-grid' },
+        h('span', {}, 'Parameter'), h('span', {}, 'Type'), h('span', {}, 'Example'), h('span', {}, 'Status')),
+      h('span', { class: 'tp-ed2-pactions' }));
+
+    const rows = draft.properties.map((p, idx) => paramRow2(p, idx));
+    const unplannedRows = unplanned.map((u) => unplannedRow2(u));
+    if (!rows.length && !unplannedRows.length) {
+      rows.push(h('div', { class: 'tp-ed2-prow-empty' }, 'No properties yet — add one below.'));
+    }
+
+    const table = h('div', { class: 'tp-ed2-ptable' }, headerRow, ...rows, ...unplannedRows);
+
+    return h('div', { class: 'tp-ed2-section' }, eyebrow, table, addPropertyCombo(e));
+  }
+
+  // TODO(2.6, ledger-revamp Phase 2): once audit/drift data always exposes a
+  // per-property "seen live but unplanned" flag alongside .observation, this row
+  // already renders with class 'tp-ed2-prow-unplanned' for any draft property the
+  // caller marks — currently every unplanned param arrives via plan().unplanned_params
+  // instead (rendered by unplannedRow2 below), which is the live data source we have.
+  function paramRow2(p, idx) {
+    const toggle = h('div', { class: 'tp-toggle sm' + (p.required ? ' on' : ''), role: 'switch', title: 'Required' });
     toggle.addEventListener('click', () => { p.required = !p.required; touch(); });
 
     const ex = h('input', {
@@ -477,23 +751,56 @@ export function mountView(container) {
       onInput: (ev) => { p.example = ev.target.value; syncDirty(); refreshSaveCluster(); },
     });
     const ov = h('input', {
-      class: 'tp-cellin', value: p.override_description || '', placeholder: 'override description',
+      class: 'tp-cellin tp-ed2-cellin-sub', value: p.override_description || '', placeholder: 'override description',
       onInput: (ev) => { p.override_description = ev.target.value; syncDirty(); refreshSaveCluster(); },
     });
 
-    const row = h('tr', { class: 'tp-prow', draggable: 'true', dataset: { name: p.name } },
-      h('td', { class: 'tp-grip', title: 'Drag to reorder' }, '⠿'),
-      h('td', {}, h('span', { class: 'tp-pn' }, p.name)),
-      h('td', {}, h('span', { class: 'tp-badge ' + badgeClass(p.data_type) }, typeBadge(p.data_type, p.is_list))),
-      h('td', {}, toggle),
-      h('td', {}, ex),
-      h('td', {},
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
-          ov,
-          h('button', { class: 'btn btn-ghost btn-sm', title: 'Remove property',
-            onClick: () => { draft.properties.splice(idx, 1); touch(); } }, '✕'))));
+    const obs = p.observation;
+    let statusNode;
+    if (obs && obs.present_pct != null) {
+      const good = obs.present_pct >= 90;
+      statusNode = h('span', { class: 'tp-ed2-pstatus ' + (good ? 'good' : 'bad') },
+        `${obs.present_pct}%${good ? '' : ' ⚠'}`);
+    } else {
+      statusNode = h('span', { class: 'tp-ed2-pstatus muted' }, p.required ? 'required' : 'optional');
+    }
+
+    const row = h('div', { class: 'tp-ed2-prow', draggable: 'true', dataset: { name: p.name } },
+      h('span', { class: 'tp-grip', title: 'Drag to reorder' }, '⠿'),
+      h('div', { class: 'tp-ed2-prow-grid' },
+        h('span', { class: 'tp-ed2-pname-cell' }, h('span', { class: 'tp-pn' }, p.name)),
+        h('span', { class: 'tp-ed2-ptype' }, typeBadge(p.data_type, p.is_list)),
+        h('div', { class: 'tp-ed2-pexample' }, ex, ov),
+        statusNode),
+      h('div', { class: 'tp-ed2-pactions' }, toggle,
+        h('button', { class: 'btn btn-ghost btn-sm', title: 'Remove property',
+          onClick: () => { draft.properties.splice(idx, 1); touch(); } }, '✕')));
     wireRowDrag(row);
     return row;
+  }
+
+  // Read-only row for a param observed live but not (yet) in the plan. Offers a
+  // small '+' to attach it to draft.properties (buffered — commits on Save).
+  function unplannedRow2(u) {
+    const addBtn = h('button', {
+      class: 'btn btn-ghost btn-sm', title: 'Add to plan',
+      onClick: () => {
+        if (draft.properties.some((dp) => dp.name === u.param_key)) return;
+        draft.properties.push({
+          name: u.param_key, data_type: 'string', is_list: false, required: false,
+          example: u.sample_value != null ? String(u.sample_value) : '', override_description: '', __new: true,
+        });
+        touch();
+      },
+    }, '+');
+    return h('div', { class: 'tp-ed2-prow tp-ed2-prow-unplanned' },
+      h('span', { class: 'tp-grip' }),
+      h('div', { class: 'tp-ed2-prow-grid' },
+        h('span', { class: 'tp-ed2-pname-cell' }, h('span', { class: 'tp-pn tp-ed2-pname-unplanned' }, u.param_key)),
+        h('span', { class: 'tp-ed2-ptype' }, '—'),
+        h('span', { class: 'tp-ed2-pexample-ro' }, u.sample_value != null ? String(u.sample_value) : '—'),
+        h('span', { class: 'tp-ed2-pstatus unplanned' }, 'UNPLANNED')),
+      h('div', { class: 'tp-ed2-pactions' }, addBtn));
   }
 
   // Drag-to-reorder rows; on drop reorder draft.properties (buffered — commits on Save).
@@ -695,6 +1002,47 @@ export function mountView(container) {
     return wrap;
   }
 
+  // ---- Details card: description + 2-up grid of the remaining scalars ----
+  // (name lives in the header, trigger_type is edited inline in the Implementation
+  // card, owner_business/category are surfaced read-only in the header subline —
+  // both remain editable here so no field loses its edit surface.)
+  function detailsCard(e) {
+    const desc = h('textarea', {
+      class: 'textarea', placeholder: 'When does this event fire?',
+      onInput: () => { draft.description = desc.value; syncDirty(); refreshSaveCluster(); },
+    });
+    desc.value = draft.description || '';
+
+    const cat = h('select', {
+      class: 'select',
+      onChange: () => { draft.category = cat.value; touch(); },
+    },
+      h('option', { value: '' }, '(no category)'),
+      ...(plan().categories || []).map((c) =>
+        h('option', { value: c.name, selected: draft.category === c.name }, c.name)));
+
+    // Text field bound to a draft scalar. mono=true for identifier-shaped values
+    // (e.g. @handles). Uses refreshSaveCluster() (no full re-render) to keep focus.
+    const field = (label, key, mono) => {
+      const inp = h('input', {
+        class: mono ? 'input mono' : 'input', value: draft[key] || '',
+        onInput: (ev) => { draft[key] = ev.target.value; syncDirty(); refreshSaveCluster(); },
+      });
+      return h('div', { class: 'tp-field' }, h('label', { class: 'tp-lbl' }, label), inp);
+    };
+    const wrap = (label, control) => h('div', { class: 'tp-field' }, h('label', { class: 'tp-lbl' }, label), control);
+
+    return card('Details', null, null,
+      h('div', { class: 'tp-field', style: { marginBottom: '16px' } },
+        h('label', { class: 'tp-lbl' }, 'Description'), desc),
+      h('div', { class: 'tp-grid2' },
+        field('Display name', 'display_name'),
+        field('Purpose / KPI', 'purpose'),
+        field('Business owner', 'owner_business'),
+        field('Technical owner', 'owner_technical', true),
+        wrap('Category', cat)));
+  }
+
   // ---- Tracked on card: per-source status chips + Manage sources ----
   function sourcesCard(e) {
     const allSources = plan().sources || [];
@@ -747,47 +1095,82 @@ export function mountView(container) {
     return 'amber'; // planned / implemented / deprecated → amber while tracked
   }
 
-  // ---- Destinations card: mapping rows + map / unmap ----
-  function destinationsCard(e) {
+  // ---- Destinations: eyebrow + 3-up card grid + map/unmap controls ----
+  function destinationsSection(e) {
+    const eyebrow = h('div', { class: 'tp-ed2-eyebrow' }, `Destinations · ${draft.destinations.length}`);
+
     const allDest = plan().destinations || [];
-    const body = h('div', { class: 'tp-card-b', style: { paddingTop: '6px', paddingBottom: '6px' } });
-
-    draft.destinations.forEach((d, idx) => {
-      const mapInput = h('input', {
-        class: 'tp-cellin mono', value: d.dest_event_name || '', placeholder: draft.name || e.name,
-        style: { width: '180px' },
-        onInput: (ev) => { d.dest_event_name = ev.target.value; syncDirty(); refreshSaveCluster(); },
-      });
-      const toggle = h('div', { class: 'tp-toggle' + (d.enabled ? ' on' : ''), role: 'switch', title: 'Enabled' });
-      toggle.addEventListener('click', () => { d.enabled = !d.enabled; touch(); });
-      body.appendChild(h('div', { class: 'tp-destrow' },
-        h('span', { class: 'tp-dest-nm' }, d.destination),
-        h('span', { class: 'tp-arrow' }, '→'),
-        mapInput,
-        h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' } },
-          toggle,
-          h('button', { class: 'btn btn-ghost btn-sm', title: 'Unmap',
-            onClick: () => { draft.destinations.splice(idx, 1); touch(); } }, '✕'))));
-    });
-    if (!draft.destinations.length) {
-      body.appendChild(h('div', { class: 'tp-muted', style: { padding: '8px 0' } }, 'Not mapped to any destination.'));
-    }
-
-    // Map-destination control (only destinations not already mapped).
-    let ha = null;
-    const unmapped = allDest.filter((d) => !draft.destinations.some((dd) => dd.destination === d.name));
+    const unmapped = allDest.filter((pd) => !draft.destinations.some((dd) => dd.destination === pd.name));
+    let mapControl = null;
     if (unmapped.length) {
       const sel = h('select', { class: 'tp-statusel', style: { height: '28px' } },
         h('option', { value: '' }, '+ Map destination'),
-        ...unmapped.map((d) => h('option', { value: d.name }, d.name)));
+        ...unmapped.map((pd) => h('option', { value: pd.name }, pd.name)));
       sel.addEventListener('change', () => {
         if (!sel.value) return;
         draft.destinations.push({ destination: sel.value, dest_event_name: '', enabled: true });
         touch();
       });
-      ha = h('div', { class: 'tp-card-ha' }, sel);
+      mapControl = h('div', { class: 'tp-ed2-destmap' }, sel);
     }
-    return cardShell('Destinations', null, ha, body);
+
+    const children = [eyebrow];
+    if (draft.destinations.length) {
+      children.push(h('div', { class: 'tp-ed2-destgrid' },
+        ...draft.destinations.map((d, idx) => destCard(e, d, idx))));
+    } else {
+      children.push(h('div', { class: 'tp-muted', style: { marginBottom: '10px' } }, 'Not mapped to any destination.'));
+    }
+    if (mapControl) children.push(mapControl);
+
+    return h('div', { class: 'tp-ed2-section' }, ...children);
+  }
+
+  function destCard(e, d, idx) {
+    const slug = destLogoSlug(d.destination);
+    const toggle = h('div', { class: 'tp-toggle sm' + (d.enabled ? ' on' : ''), role: 'switch', title: 'Enabled' });
+    toggle.addEventListener('click', () => { d.enabled = !d.enabled; touch(); });
+
+    const nameInput = h('input', {
+      class: 'tp-ed2-dest-input mono', value: d.dest_event_name || '', placeholder: draft.name || e.name,
+      onInput: (ev) => { d.dest_event_name = ev.target.value; syncDirty(); refreshSaveCluster(); },
+    });
+
+    const statusLine = h('div', { class: 'tp-ed2-dest-status' + (d.enabled ? ' live' : '') },
+      d.enabled ? 'LIVE' : 'OFF');
+
+    return h('div', { class: 'tp-ed2-destcard' },
+      h('img', { src: `/static/img/logos/${slug}.svg`, alt: '', class: 'tp-ed2-dest-logo' }),
+      h('div', { class: 'tp-ed2-dest-main' },
+        h('div', { class: 'tp-ed2-dest-name' }, d.destination),
+        statusLine,
+        nameInput),
+      h('div', { class: 'tp-ed2-dest-ctrl' }, toggle,
+        h('button', { class: 'btn btn-ghost btn-sm', title: 'Unmap',
+          onClick: () => { draft.destinations.splice(idx, 1); touch(); } }, '✕')));
+  }
+
+  // ---- Implementation: GTM trigger row + synthesized dataLayer.push() snippet ----
+  function implementationSection(e) {
+    const eyebrow = h('div', { class: 'tp-ed2-eyebrow' }, 'Implementation');
+
+    const triggerInput = h('input', {
+      class: 'tp-ed2-triggerfield mono', value: draft.trigger_type || '', placeholder: '—',
+      onInput: (ev) => { draft.trigger_type = ev.target.value; syncDirty(); refreshSaveCluster(); },
+      onChange: () => touch(),
+    });
+    const gtmRow = h('div', { class: 'tp-ed2-impl-row' },
+      h('img', { src: '/static/img/logos/gtm.svg', alt: '', class: 'tp-ed2-impl-logo' }),
+      h('span', { class: 'tp-ed2-impl-text' }, 'GTM · trigger "', triggerInput, '"'));
+
+    const propNames = draft.properties.map((p) => p.name).join(', ');
+    const code = h('div', { class: 'tp-ed2-code' },
+      `dataLayer.push({ event: "${draft.name || e.name}",`, h('br'),
+      '  ' + (propNames || '/* no properties yet */'), h('br'),
+      '});');
+
+    return h('div', { class: 'tp-ed2-section' }, eyebrow,
+      h('div', { class: 'tp-ed2-implcard' }, gtmRow, code));
   }
 
   // ---- Success metrics panel (Issue 4) ----

@@ -79,7 +79,7 @@
 </div>
 
 <div class="mcp-help-link" style="margin-top:14px;padding-left:14px;">
-  <a href="https://github.com/digitalXperiments/fluxito/tree/master/docs/tutorials" target="_blank" rel="noopener" style="font-size:12px;font-weight:500;font-family:var(--mono, 'JetBrains Mono', monospace);color:var(--muted);text-decoration:none;letter-spacing:0.02em;transition:color .15s;">Need help? View full setup guides <span style="display:inline-block;transition:transform .15s;">→</span></a>
+  <a href="https://github.com/digitalXperiments/fluxito/tree/master/docs/tutorials" target="_blank" rel="noopener" style="font-size:12px;font-weight:500;font-family:var(--mono);color:var(--muted);text-decoration:none;letter-spacing:0.02em;transition:color .15s;">Need help? View full setup guides <span style="display:inline-block;transition:transform .15s;">→</span></a>
 </div>
 
 {# ═══════════════════════════════════════════════════════════════════════════ #}
@@ -102,7 +102,7 @@
 
     {# -- Config display (step 2) -- #}
     <div id="mcpModalStep2" style="display:none;">
-      <button onclick="mcpModalBack()" style="background:none;border:none;cursor:pointer;color:var(--ink);font-size:12px;font-weight:500;padding:0;margin-bottom:16px;display:flex;align-items:center;gap:4px;font-family:'JetBrains Mono',ui-monospace,monospace;text-transform:uppercase;letter-spacing:0.06em;">
+      <button onclick="mcpModalBack()" style="background:none;border:none;cursor:pointer;color:var(--ink);font-size:12px;font-weight:500;padding:0;margin-bottom:16px;display:flex;align-items:center;gap:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         All tools
       </button>
@@ -125,13 +125,13 @@
       <div id="mcpToolInstructions" style="font-size:13px;color:var(--ink-soft, #3F3F46);line-height:1.65;margin-bottom:16px;"></div>
 
       <div id="mcpToolPathBlock" style="margin-bottom:12px;">
-        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;font-family:'JetBrains Mono',ui-monospace,monospace;">Config file</div>
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;font-family:var(--mono);">Config file</div>
         <code id="mcpToolPath" class="mono" style="display:block;font-size:12px;padding:10px 14px;background:var(--bg-2);border:1px solid var(--line-2);border-radius:8px;word-break:break-all;white-space:pre-wrap;color:var(--ink-soft);"></code>
       </div>
 
       <div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-family:'JetBrains Mono',ui-monospace,monospace;">JSON to add</div>
+          <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-family:var(--mono);">JSON to add</div>
           <button class="btn primary sm" onclick="copyMcpConfig()" style="font-size:11px;padding:4px 12px;">Copy JSON</button>
         </div>
         <pre id="mcpToolConfig" class="mono" style="font-size:12px;line-height:1.6;padding:14px 16px;background:#0B0B0E;color:#FAFAFA;border:1px solid #0B0B0E;border-radius:10px;overflow-x:auto;white-space:pre;margin:0;"></pre>

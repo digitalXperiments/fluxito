@@ -1,9 +1,12 @@
 {% extends "settings/shell.html" %}
+{% from "partials/page_header.html" import page_header %}
 {% block title %}Account — Fluxito{% endblock %}
 {% set settings_section = 'account' %}
 
 {% block settings_main %}
 <main class="app-main">
+
+  {{ page_header('Account', 'You & your <em>Flux.</em>') }}
 
   {# ── Identity header ── #}
   <div class="pf-identity">
@@ -57,31 +60,123 @@
                  value="{{ user.email }}"
                  placeholder="your@email.com"/>
         </label>
+        <label class="f-field">
+          <span>New password</span>
+          <input class="f-input" type="password" id="newPasswordField" name="new_password"
+                 autocomplete="new-password" placeholder="Leave blank to keep current"/>
+        </label>
         <button type="button" class="btn primary" id="saveProfileBtn" onclick="Fluxito._saveProfile()">Save changes</button>
       </form>
     </div>
 
+    {% if org %}
     <div class="pf-card pf-side-card">
       <div class="pf-card-head">
-        <h2>Preferences</h2>
+        <h2>Organization</h2>
       </div>
       <div class="pf-pref-row">
         <div>
-          <div class="pf-pref-name">Appearance</div>
-          <div class="pf-pref-sub">Follows your system theme</div>
-        </div>
-        <span class="t-flag">Auto</span>
-      </div>
-      {% if org %}
-      <div class="pf-pref-row" style="margin-top:8px">
-        <div>
-          <div class="pf-pref-name">Organization</div>
-          <div class="pf-pref-sub">{{ org.name }} · {{ org_member_count }} members</div>
+          <div class="pf-pref-name">{{ org.name }}</div>
+          <div class="pf-pref-sub">{{ org_member_count }} members</div>
         </div>
         <a href="/org" class="btn sm">Manage</a>
       </div>
-      {% endif %}
     </div>
+    {% endif %}
+  </div>
+
+  {# ── How Flux briefs you (role + monitors from onboarding, editable) ── #}
+  <div class="pf-card">
+    <div class="pf-card-head">
+      <h2>How Flux briefs you</h2>
+    </div>
+    <div class="pf-briefs-sub">Set during onboarding — tune anytime.</div>
+
+    <div class="pf-brief-block">
+      <div class="pf-brief-label">Role</div>
+      <div class="pf-role-grid" id="pfRoleGrid">
+        <div class="pf-role-card {% if user.flux_role == 'run_marketing' %}is-selected{% endif %}" data-role="run_marketing">
+          <div class="pf-role-title">I run marketing</div>
+          <div class="pf-role-sub">Campaigns, budgets, ROAS.</div>
+        </div>
+        <div class="pf-role-card {% if user.flux_role == 'implement_tracking' %}is-selected{% endif %}" data-role="implement_tracking">
+          <div class="pf-role-title">I implement tracking</div>
+          <div class="pf-role-sub">GTM, dataLayers, pixels.</div>
+        </div>
+        <div class="pf-role-card {% if user.flux_role == 'analyze_report' %}is-selected{% endif %}" data-role="analyze_report">
+          <div class="pf-role-title">I analyze &amp; report</div>
+          <div class="pf-role-sub">Dashboards, deep dives.</div>
+        </div>
+        <div class="pf-role-card {% if user.flux_role == 'everything' %}is-selected{% endif %}" data-role="everything">
+          <div class="pf-role-title">A bit of everything</div>
+          <div class="pf-role-sub">I own the whole stack.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pf-brief-block">
+      <div class="pf-brief-label">Watching</div>
+      <div class="pf-chip-row" id="pfMonitorChips">
+        <span class="pf-chip {% if 'roas' in user.flux_monitors %}is-selected{% endif %}" data-monitor="roas">{% if 'roas' in user.flux_monitors %}✓ {% endif %}ROAS by channel</span>
+        <span class="pf-chip {% if 'health' in user.flux_monitors %}is-selected{% endif %}" data-monitor="health">{% if 'health' in user.flux_monitors %}✓ {% endif %}Conversion tracking health</span>
+        <span class="pf-chip {% if 'pacing' in user.flux_monitors %}is-selected{% endif %}" data-monitor="pacing">{% if 'pacing' in user.flux_monitors %}✓ {% endif %}Budget pacing</span>
+        <span class="pf-chip {% if 'funnel' in user.flux_monitors %}is-selected{% endif %}" data-monitor="funnel">{% if 'funnel' in user.flux_monitors %}✓ {% endif %}Funnel drop-offs</span>
+        <span class="pf-chip {% if 'seo' in user.flux_monitors %}is-selected{% endif %}" data-monitor="seo">{% if 'seo' in user.flux_monitors %}✓ {% endif %}SEO movement</span>
+        <span class="pf-chip {% if 'comp' in user.flux_monitors %}is-selected{% endif %}" data-monitor="comp">{% if 'comp' in user.flux_monitors %}✓ {% endif %}Competitor bidding</span>
+      </div>
+    </div>
+  </div>
+
+  {# ── AI providers (summary card — full editor lives at /settings/ai) ── #}
+  <div class="pf-card">
+    <div class="pf-card-head">
+      <h2>AI providers</h2>
+    </div>
+    <div class="pf-briefs-sub">The model behind Flux's in-app chat. Keys are encrypted at rest and never leave your instance.</div>
+    <div class="pf-ai-provider-list" id="pfAiProviderList">
+      <div class="pf-loading">Loading…</div>
+    </div>
+  </div>
+
+  {# ── Your AI client (preferred_ai_client + MCP URL, Flux - Profile & AI.dc.html) ── #}
+  <div class="pf-card">
+    <div class="pf-card-head">
+      <h2>Your AI client</h2>
+    </div>
+    <div class="pf-briefs-sub">Which tool talks to Flux over MCP. For provider API keys (the model behind in-app chat), see <a href="/settings/ai">AI providers</a>.</div>
+
+    <div class="pf-client-grid" id="pfClientGrid">
+      <div class="pf-client-card {% if user.preferred_ai_client == 'claude' %}is-selected{% endif %}" data-client="claude">
+        <span class="pf-client-icon" style="background:#d97757;"><img src="/static/img/logos/claude.svg" alt=""></span>
+        <div><div class="pf-client-name">Claude</div><div class="pf-client-desc">Web &amp; Desktop · native MCP</div></div>
+      </div>
+      <div class="pf-client-card {% if user.preferred_ai_client == 'chatgpt' %}is-selected{% endif %}" data-client="chatgpt">
+        <span class="pf-client-icon" style="background:#10a37f;"><img src="/static/img/logos/chatgpt.svg" alt=""></span>
+        <div><div class="pf-client-name">ChatGPT</div><div class="pf-client-desc">Web &amp; Desktop</div></div>
+      </div>
+      <div class="pf-client-card {% if user.preferred_ai_client == 'cursor' %}is-selected{% endif %}" data-client="cursor">
+        <span class="pf-client-icon" style="background:#09090b;"><img src="/static/img/logos/cursor.svg" alt=""></span>
+        <div><div class="pf-client-name">Cursor</div><div class="pf-client-desc">Code editor</div></div>
+      </div>
+      <div class="pf-client-card {% if user.preferred_ai_client == 'windsurf' %}is-selected{% endif %}" data-client="windsurf">
+        <span class="pf-client-icon" style="background:#09b6a2;"><img src="/static/img/logos/windsurf.svg" alt=""></span>
+        <div><div class="pf-client-name">Windsurf</div><div class="pf-client-desc">Code editor</div></div>
+      </div>
+      <div class="pf-client-card {% if user.preferred_ai_client == 'lmstudio' %}is-selected{% endif %}" data-client="lmstudio">
+        <span class="pf-client-icon" style="background:#4338ca;"><img src="/static/img/logos/lmstudio.svg" alt=""></span>
+        <div><div class="pf-client-name">LM Studio</div><div class="pf-client-desc">Local models</div></div>
+      </div>
+      <div class="pf-client-card {% if user.preferred_ai_client == 'inapp' %}is-selected{% endif %}" data-client="inapp">
+        <span class="pf-client-icon pf-client-icon-flux">F</span>
+        <div><div class="pf-client-name">Just the app</div><div class="pf-client-desc">Chat with Flux right here</div></div>
+      </div>
+    </div>
+
+    <div class="pf-mcp-box">
+      <span class="pf-mcp-url" id="pfMcpUrl">{{ base_url }}/mcp</span>
+      <span class="pf-mcp-copy" id="pfCopyMcpUrl">Copy URL</span>
+    </div>
+    <div class="pf-mcp-hint">Paste this into your client's MCP settings — see <a href="/tutorials">Tutorials</a> for a walkthrough per tool.</div>
   </div>
 
   {# ── MCP Access Tokens (PATs) for remote / headless / SSH use ── #}
@@ -258,7 +353,7 @@
 .pf-avatar {
   width: 56px; height: 56px;
   border-radius: 50%;
-  background: var(--ink); color: var(--bg);
+  background: var(--accent); color: #FFF9EF;
   display: flex; align-items: center; justify-content: center;
   font-weight: 600; font-size: 20px;
   letter-spacing: 0.02em;
@@ -484,6 +579,95 @@
   padding-top: 9px;
   padding-bottom: 9px;
 }
+
+/* ── How Flux briefs you + Your AI client (Flux - Profile & AI.dc.html) ── */
+.pf-briefs-sub { font-size: 13px; color: var(--ink-soft); margin: -2px 0 14px; }
+.pf-briefs-sub a { color: var(--accent-hover); }
+.pf-brief-block { margin-bottom: 14px; }
+.pf-brief-block:last-child { margin-bottom: 0; }
+.pf-brief-label {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+}
+
+.pf-role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pf-role-card {
+  padding: 13px 14px; background: var(--card); border: 1px solid var(--line-2);
+  border-radius: 10px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+}
+.pf-role-card:hover { border-color: var(--accent); }
+.pf-role-card.is-selected { border: 2px solid var(--accent); box-shadow: 0 10px 26px rgba(196,112,58,0.14); padding: 12px 13px; }
+.pf-role-title { font-size: 13.5px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+.pf-role-sub { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+
+.pf-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pf-chip {
+  padding: 8px 14px; background: var(--card); border: 1px solid var(--line-strong);
+  color: var(--ink); font-size: 12.5px; border-radius: 999px; cursor: pointer;
+  transition: all .15s; user-select: none;
+}
+.pf-chip:hover { border-color: var(--ink); }
+.pf-chip.is-selected { background: var(--accent); border-color: var(--accent); color: #FFF9EF; font-weight: 600; }
+
+.pf-client-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+@media (min-width: 640px) { .pf-client-grid { grid-template-columns: 1fr 1fr 1fr; } }
+.pf-client-card {
+  display: flex; align-items: center; gap: 11px; padding: 12px 13px;
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 10px;
+  cursor: pointer; transition: border-color .15s, box-shadow .15s;
+}
+.pf-client-card:hover { border-color: var(--accent); }
+.pf-client-card.is-selected { border: 2px solid var(--accent); box-shadow: 0 10px 26px rgba(196,112,58,0.14); padding: 11px 12px; }
+.pf-client-icon {
+  width: 30px; height: 30px; border-radius: 8px; display: inline-flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+}
+.pf-client-icon img { width: 16px; height: 16px; }
+.pf-client-icon-flux { background: var(--ink); color: var(--paper); font-family: var(--serif); font-style: italic; font-size: 14px; }
+.pf-client-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+.pf-client-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+/* ── AI providers summary card ── */
+.pf-ai-provider-list { display: flex; flex-direction: column; gap: 10px; }
+.pf-ai-provider-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border: 1px solid var(--line-3); border-radius: 10px;
+  transition: border-color .15s;
+}
+.pf-ai-provider-row.is-default { border-color: var(--good); }
+.pf-ai-provider-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: var(--paper);
+}
+.pf-ai-provider-icon img { width: 17px; height: 17px; display: block; }
+.pf-ai-provider-icon-initial { font-family: var(--sans); font-size: 13px; font-weight: 700; }
+.pf-ai-provider-info { flex: 1; min-width: 0; }
+.pf-ai-provider-name { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--ink); flex-wrap: wrap; }
+.pf-ai-provider-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 1px; }
+.pf-ai-provider-sub.is-plain { font-family: var(--sans); font-size: 12px; }
+.pf-ai-default-badge {
+  display: inline-flex; align-items: center; padding: 2px 7px;
+  border: 1px solid var(--good); color: var(--good); border-radius: 999px;
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.pf-ai-provider-link { font-family: var(--mono); font-size: 11px; color: var(--accent-hover); flex-shrink: 0; white-space: nowrap; }
+.pf-ai-provider-link:hover { text-decoration: underline; }
+
+.pf-mcp-box {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; background: var(--dark-bg, #201B14); border-radius: 10px;
+}
+.pf-mcp-url { font-family: var(--mono); font-size: 12px; color: var(--dark-muted, #B8B0A0); flex: 1; word-break: break-all; }
+.pf-mcp-copy {
+  display: inline-flex; padding: 7px 14px; background: var(--accent); color: #FFF9EF;
+  font-size: 12px; font-weight: 600; border-radius: 7px; cursor: pointer; flex-shrink: 0;
+  transition: background .15s;
+}
+.pf-mcp-copy:hover { background: var(--accent-hover); }
+.pf-mcp-hint { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+.pf-mcp-hint a { color: var(--accent-hover); }
 </style>
 {% endblock %}
 
@@ -494,6 +678,8 @@ document.addEventListener('DOMContentLoaded', function(){
     var btn = document.getElementById('saveProfileBtn');
     var name = document.getElementById('displayName').value.trim();
     var email = document.getElementById('emailField').value.trim();
+    var pwField = document.getElementById('newPasswordField');
+    var newPassword = pwField ? pwField.value : '';
     btn.disabled = true; btn.textContent = 'Saving…';
     try {
       var res = await fetch('/api/profile', {
@@ -508,12 +694,97 @@ document.addEventListener('DOMContentLoaded', function(){
         if (el && name) el.textContent = name;
         var av = document.getElementById('profileAvatar');
         if (av && name) av.textContent = name.substring(0,2).toUpperCase();
+        // TODO(ledger-revamp): no self-service "change my password" endpoint exists yet
+        // (see app/api/auth_routes.py forgot/reset-password flow, token-based only). Once
+        // POST /api/profile (or a dedicated route) accepts a `new_password` field, send it
+        // here instead of just warning the user.
+        if (newPassword) {
+          Fluxito.toast('Password changes aren’t available from this page yet — use "Forgot password" on the sign-in screen.', 'error');
+        }
       } else {
         Fluxito.toast(data.error || 'Failed to update profile', 'error');
       }
     } catch(e) { Fluxito.toast('Network error', 'error'); }
+    if (pwField) pwField.value = '';
     btn.disabled = false; btn.textContent = 'Save changes';
   };
+
+  // --- AI providers summary card (fetches the same account-level key data
+  // as /settings/ai, shown here as a compact link-out per Flux - Profile & AI.dc.html) ---
+  (function loadAiProvidersSummary() {
+    var listEl = document.getElementById('pfAiProviderList');
+    if (!listEl) return;
+    var SUMMARY_PROVIDERS = [
+      { key: 'anthropic', label: 'Anthropic', color: '#d97757', logo: '/static/img/logos/claude.svg' },
+      { key: 'openai', label: 'OpenAI', color: '#10a37f', logo: '/static/img/logos/chatgpt.svg' },
+      { key: 'lmstudio', label: 'LM Studio (local)', color: '#4338ca', logo: '/static/img/logos/lmstudio.svg' },
+    ];
+    fetch('/api/ask/keys', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var configured = {};
+        (data.keys || []).forEach(function (k) { configured[k.provider] = k; });
+        listEl.innerHTML = '';
+        SUMMARY_PROVIDERS.forEach(function (p) {
+          var info = configured[p.key] || null;
+          var row = document.createElement('div');
+          row.className = 'pf-ai-provider-row' + (info && info.is_default ? ' is-default' : '');
+
+          var icon = document.createElement('span');
+          icon.className = 'pf-ai-provider-icon';
+          icon.style.background = p.color;
+          if (p.logo) {
+            var img = document.createElement('img');
+            img.src = p.logo; img.alt = '';
+            icon.appendChild(img);
+          } else {
+            var initial = document.createElement('span');
+            initial.className = 'pf-ai-provider-icon-initial';
+            initial.textContent = p.label.charAt(0).toUpperCase();
+            icon.appendChild(initial);
+          }
+          row.appendChild(icon);
+
+          var infoDiv = document.createElement('div');
+          infoDiv.className = 'pf-ai-provider-info';
+          var nameRow = document.createElement('div');
+          nameRow.className = 'pf-ai-provider-name';
+          var nameSpan = document.createElement('span');
+          nameSpan.textContent = p.label;
+          nameRow.appendChild(nameSpan);
+          if (info && info.is_default) {
+            var badge = document.createElement('span');
+            badge.className = 'pf-ai-default-badge';
+            badge.textContent = 'DEFAULT';
+            nameRow.appendChild(badge);
+          }
+          infoDiv.appendChild(nameRow);
+          var sub = document.createElement('div');
+          if (info) {
+            sub.className = 'pf-ai-provider-sub';
+            sub.textContent = info.default_model || (info.base_url ? info.base_url : 'Connected');
+          } else {
+            sub.className = 'pf-ai-provider-sub is-plain';
+            sub.textContent = p.key === 'lmstudio'
+              ? 'Point Flux at a local model — nothing leaves your machine'
+              : 'Not configured';
+          }
+          infoDiv.appendChild(sub);
+          row.appendChild(infoDiv);
+
+          var link = document.createElement('a');
+          link.className = 'pf-ai-provider-link';
+          link.href = '/settings/ai';
+          link.textContent = info ? 'Manage' : (p.key === 'lmstudio' ? 'Configure' : 'Add key');
+          row.appendChild(link);
+
+          listEl.appendChild(row);
+        });
+      })
+      .catch(function () {
+        listEl.innerHTML = '<div class="pf-loading" style="color:var(--red);">Could not load providers.</div>';
+      });
+  })();
 
   window.Fluxito._openUsageModal = async function() {
     var modal = document.getElementById('usageModal');
@@ -635,6 +906,68 @@ document.addEventListener('DOMContentLoaded', function(){
       }
     } catch(e) { Fluxito.toast('Network error', 'error'); }
   };
+
+  // --- "How Flux briefs you" + "Your AI client" — editable onboarding prefs ---
+  // Reuses POST /api/onboarding/preferences (same endpoint the onboarding
+  // wizard uses); selections save immediately, no separate "Save" button.
+  window.Fluxito._savePrefs = async function(payload) {
+    try {
+      await fetch('/api/onboarding/preferences', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      Fluxito.toast('Preferences updated');
+    } catch (e) { Fluxito.toast('Failed to save — try again', 'error'); }
+  };
+
+  var roleGrid = document.getElementById('pfRoleGrid');
+  if (roleGrid) {
+    roleGrid.querySelectorAll('.pf-role-card').forEach(function(card) {
+      card.addEventListener('click', function() {
+        roleGrid.querySelectorAll('.pf-role-card').forEach(function(c) { c.classList.remove('is-selected'); });
+        card.classList.add('is-selected');
+        Fluxito._savePrefs({ role: card.dataset.role });
+      });
+    });
+  }
+
+  var chipRow = document.getElementById('pfMonitorChips');
+  if (chipRow) {
+    chipRow.querySelectorAll('.pf-chip').forEach(function(chip) {
+      chip.addEventListener('click', function() {
+        var selected = chip.classList.toggle('is-selected');
+        var label = chip.textContent.replace(/^✓\s*/, '');
+        chip.textContent = (selected ? '✓ ' : '') + label;
+        var monitors = [];
+        chipRow.querySelectorAll('.pf-chip.is-selected').forEach(function(c) { monitors.push(c.dataset.monitor); });
+        Fluxito._savePrefs({ monitors: monitors });
+      });
+    });
+  }
+
+  var clientGrid = document.getElementById('pfClientGrid');
+  if (clientGrid) {
+    clientGrid.querySelectorAll('.pf-client-card').forEach(function(card) {
+      card.addEventListener('click', function() {
+        clientGrid.querySelectorAll('.pf-client-card').forEach(function(c) { c.classList.remove('is-selected'); });
+        card.classList.add('is-selected');
+        Fluxito._savePrefs({ ai_client: card.dataset.client });
+      });
+    });
+  }
+
+  var copyMcpBtn = document.getElementById('pfCopyMcpUrl');
+  if (copyMcpBtn) {
+    copyMcpBtn.addEventListener('click', function() {
+      var url = document.getElementById('pfMcpUrl').textContent;
+      var orig = copyMcpBtn.textContent;
+      navigator.clipboard.writeText(url).then(function() {
+        copyMcpBtn.textContent = 'Copied!';
+        setTimeout(function(){ copyMcpBtn.textContent = orig; }, 1500);
+      }).catch(function() { Fluxito.toast('Copy failed', 'error'); });
+    });
+  }
 
   // --- MCP PAT (remote access token) helpers ---
   window.Fluxito._createMcpPat = async function() {

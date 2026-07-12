@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select as _sel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import app.app_state as app_state
 from app.auth.mcp_session_manager import build_project_context, require_valid_mcp_token
@@ -358,43 +359,59 @@ if _STATIC_DIR.exists():
 
 @app.exception_handler(_OAuthAppNotConfigured)
 async def oauth_not_configured_handler(request: Request, exc: _OAuthAppNotConfigured):
-    from fastapi.responses import HTMLResponse
+    from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
+    from app.templating import render
+
+    try:
+        user_ctx = await _resolve_user_ctx(request)
+        user_view = await _load_user_view(user_ctx) if user_ctx else None
+    except Exception:
+        user_view = None
 
     platform = str(exc).split("'")[1] if "'" in str(exc) else "this platform"
-    return HTMLResponse(
+    platform_label = platform.replace("_", " ").title()
+    return render(
+        request,
+        "error.html",
+        {
+            "user": user_view,
+            "eyebrow": "Not configured",
+            "title": f"{platform_label} isn't set up yet.",
+            "message": (
+                f"OAuth credentials for {platform_label} haven't been added. "
+                "An admin can add them at Settings → Integrations."
+            ),
+            "back_url": "/connect",
+        },
         status_code=403,
-        content=f"""<!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Not configured — Fluxito</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/app.css"/>
-<style>
-.err-shell {{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:40px 16px; }}
-.err-card {{ max-width:480px; text-align:center; }}
-.err-card h1 {{ font-size:24px; font-weight:600; margin:0 0 12px; color:var(--ink); letter-spacing:-0.02em; }}
-.err-card p {{ font-size:14px; color:var(--ink-soft); line-height:1.6; margin:0 0 24px; }}
-.err-actions {{ display:flex; gap:10px; justify-content:center; }}
-</style>
-</head>
-<body>
-<div class="err-shell">
-  <div class="err-card">
-    <h1>{platform.replace("_"," ").title()} not configured</h1>
-    <p>OAuth credentials for <strong>{platform}</strong> haven't been set up yet.
-       An admin can add them at Settings &rarr; Integrations.</p>
-    <div class="err-actions">
-      <a href="/settings/integrations" class="btn primary">Go to Integrations</a>
-      <a href="/connect" class="btn">Back to Connections</a>
-    </div>
-  </div>
-</div>
-</body>
-</html>""",
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def not_found_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code != 404 or request.url.path.startswith(("/api/", "/mcp")):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
+    from app.templating import render
+
+    try:
+        user_ctx = await _resolve_user_ctx(request)
+        user_view = await _load_user_view(user_ctx) if user_ctx else None
+    except Exception:
+        user_view = None
+
+    return render(
+        request,
+        "error.html",
+        {
+            "user": user_view,
+            "eyebrow": "404 · Not Found",
+            "title": "I looked everywhere.",
+            "title_em": "It's not here.",
+            "message": "The page may have moved, or the link is stale. Your data is fine — I checked that too.",
+        },
+        status_code=404,
     )
 
 
@@ -428,6 +445,7 @@ from app.api.connector_metadata_routes import router as connector_metadata_route
 from app.api.dashboard_query_routes import router as dashboard_query_router
 from app.api.dashboard_routes import router as dashboard_router
 from app.api.google_oauth_routes import router as google_router
+from app.api.implement_routes import router as implement_router
 from app.api.integrations_routes import router as integrations_router
 from app.api.knowledge_routes import router as knowledge_router
 from app.api.notification_routes import router as notification_router
@@ -436,6 +454,7 @@ from app.api.scheduled_report_routes import router as scheduled_report_router
 from app.api.settings_routes import router as settings_router
 from app.api.setup_routes import router as setup_router
 from app.api.template_routes import router as template_router
+from app.api.test_flow_routes import router as test_flow_router
 from app.api.tracking_plan_routes import router as tracking_plan_router
 from app.api.update_routes import router as update_router
 from app.auth.mcp_oauth_server import router as oauth_router
@@ -462,6 +481,8 @@ app.include_router(admin_router)
 app.include_router(access_request_router)
 app.include_router(update_router)
 app.include_router(ask_router)
+app.include_router(implement_router)
+app.include_router(test_flow_router)
 
 from app.api import (
     apple_oauth_routes,
@@ -759,14 +780,34 @@ async def _maintenance_gate(scope, path: str, state: dict):
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         f"<title>{name} — Maintenance</title>"
-        "<style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
-        "background:#f7f9fc;color:#101114;display:flex;min-height:100vh;align-items:center;justify-content:center}"
-        ".m{max-width:440px;padding:40px;text-align:center}.m h1{font-size:28px;margin:0 0 12px}"
-        ".m p{color:#566070;line-height:1.55;margin:0 0 8px}.dot{display:inline-block;width:7px;height:7px;"
-        "border-radius:99px;background:#2557f6;margin-left:2px;vertical-align:middle}</style></head>"
-        f"<body><div class='m'><h1>{name}<span class='dot'></span></h1>"
-        "<p>We're performing scheduled maintenance and will be back shortly.</p>"
-        "<p>Thanks for your patience.</p></div></body></html>"
+        "<link rel='preconnect' href='https://fonts.googleapis.com'>"
+        "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>"
+        "<link href='https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;1,6..72,400"
+        "&family=Archivo:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap' rel='stylesheet'>"
+        "<style>"
+        "body{margin:0;font-family:'Archivo',sans-serif;background:#E8E1D3;color:#F6F1E8;"
+        "display:flex;min-height:100vh;align-items:center;justify-content:center;padding:20px}"
+        ".m{max-width:460px;width:100%;padding:52px 44px;text-align:center;background:#201B14;"
+        "border-radius:14px;box-shadow:0 20px 50px rgba(50,40,20,0.22)}"
+        ".m .wordmark{font-family:'Newsreader',serif;font-size:22px;font-weight:600;margin-bottom:18px}"
+        ".dot{display:inline-block;width:5px;height:5px;border-radius:99px;background:#C4703A;"
+        "margin-left:3px;vertical-align:middle}"
+        ".m .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em;"
+        "color:#C4903A;margin-bottom:10px}"
+        ".m h1{font-family:'Newsreader',serif;font-size:34px;font-weight:500;line-height:1.1;margin:0 0 10px}"
+        ".m p{color:#B8B0A0;line-height:1.6;margin:0 0 20px;font-size:14.5px}"
+        ".m .eta{display:inline-flex;align-items:center;gap:10px;padding:10px 18px;"
+        "border:1px dashed #4A4335;border-radius:9px;font-family:'IBM Plex Mono',monospace;"
+        "font-size:12px;color:#B8B0A0}"
+        ".eta-dot{width:7px;height:7px;border-radius:99px;background:#C4903A;display:inline-block}"
+        "</style></head>"
+        f"<body><div class='m'><div class='wordmark'>{name}<span class='dot'></span></div>"
+        "<div class='eyebrow'>SCHEDULED MAINTENANCE</div>"
+        "<h1>Back in a few minutes.</h1>"
+        "<p>We're performing scheduled maintenance. Scheduled reports and monitors will run as soon "
+        "as we're back — nothing is lost.</p>"
+        "<div class='eta'><span class='eta-dot'></span>Thanks for your patience.</div>"
+        "</div></body></html>"
     )
     return HTMLResponse(html, status_code=503)
 
@@ -818,6 +859,40 @@ async def _attach_nav_project_context(scope) -> None:
                 scope["state"]["active_project_name"] = projects[0]["name"]
                 scope["state"]["active_project_id"] = projects[0]["id"]
                 scope["state"]["active_project_role"] = projects[0]["role"]
+
+            # Sidebar "Flux's tasks" badge — things that genuinely want the
+            # user's attention for the resolved active project: Flux drafts
+            # still pending approval plus test flows whose last run failed.
+            # Kept to two cheap COUNT()s and fail-silent (see outer except).
+            active_pid_for_badge = scope["state"].get("active_project_id")
+            if active_pid_for_badge:
+                from sqlalchemy import func as _func
+
+                from app.models.flux_draft import FluxDraft as _FluxDraft
+                from app.models.test_flows import TestFlow as _TestFlow
+
+                badge_pid = _uuid.UUID(active_pid_for_badge)
+
+                pending_drafts = await db.execute(
+                    _sel(_func.count())
+                    .select_from(_FluxDraft)
+                    .where(
+                        _FluxDraft.project_id == badge_pid,
+                        _FluxDraft.status == "pending",
+                    )
+                )
+                failing_flows = await db.execute(
+                    _sel(_func.count())
+                    .select_from(_TestFlow)
+                    .where(
+                        _TestFlow.project_id == badge_pid,
+                        _TestFlow.last_status == "failing",
+                        _TestFlow.enabled == True,
+                    )
+                )
+                scope["state"]["sidebar_tasks_count"] = (pending_drafts.scalar() or 0) + (
+                    failing_flows.scalar() or 0
+                )
     except Exception:
         pass
 

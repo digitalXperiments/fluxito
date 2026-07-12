@@ -1,18 +1,45 @@
 {% extends "base.html" %}
-{% block title %}{{ title or "Error" }} — Fluxito{% endblock %}
+{% block title %}{{ title or error_title or "Error" }} — {{ brand().name }}{% endblock %}
 
 {% block main %}
 <main class="app-main" style="max-width:640px">
-  <div class="audit-empty" style="padding-top:60px">
-    <div style="font-size:52px;margin-bottom:18px;color:var(--muted)">{{ icon or "⚠" }}</div>
-    <h3 style="font-size:28px;font-weight:500;letter-spacing:-0.02em;color:var(--ink)">{{ title or "Something went wrong" }}</h3>
-    {% if message %}
-    <p style="max-width:460px;margin:10px auto 0;color:var(--ink-soft);line-height:1.6">{{ message }}</p>
+  <div class="err-card">
+    <div class="err-badge" aria-hidden="true">F</div>
+    <div class="eyebrow err-eyebrow">{{ eyebrow or ((status_code ~ " · Not Found") if status_code else "Error") }}</div>
+    <h1>{{ title or error_title or "Something went wrong" }}{% if title_em %} <em>{{ title_em }}</em>{% endif %}</h1>
+    {% if message or error_message %}
+    <p>{{ message or error_message }}</p>
     {% endif %}
-    <div style="display:flex;justify-content:center;gap:10px;margin-top:24px;flex-wrap:wrap">
-      {% if back_url %}<a href="{{ back_url }}" class="btn">← Back</a>{% endif %}
-      <a href="/" class="btn primary">Home</a>
+    <div class="err-actions">
+      {% if back_url %}<a href="{{ back_url }}" class="btn btn-secondary">← Back</a>{% endif %}
+      <a href="/home" class="btn btn-primary">Back to briefing</a>
+      <a href="/ask" class="btn btn-secondary">Ask Flux for help</a>
     </div>
   </div>
 </main>
+
+<style>
+.err-card {
+  max-width: 480px; margin: 15vh auto 0; text-align: center;
+  background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  padding: 52px 44px; box-shadow: 0 20px 50px rgba(50,40,20,0.10);
+}
+.err-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: 13px;
+  background: var(--ink); color: var(--paper);
+  font-family: var(--serif); font-style: italic; font-size: 26px;
+  margin-bottom: 18px;
+}
+.err-eyebrow { text-align: center; margin-bottom: 10px; }
+.err-card h1 {
+  margin: 0 0 10px; font-size: 34px; line-height: 1.1;
+}
+.err-card h1 em { color: var(--accent-hover); font-style: italic; }
+.err-actions .btn { padding: 12px 22px; font-size: 13.5px; border-radius: 9px; }
+.err-card p {
+  margin: 0 0 24px; font-size: 14.5px; color: var(--ink-soft); line-height: 1.6;
+}
+.err-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+</style>
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/page_header.html" import page_header %}
 {% block title %}Business Context — Fluxito{% endblock %}
 {% set active = 'business_context' %}
 {% set context_section = 'business' %}
@@ -9,27 +10,27 @@
   /* ── EasyMDE → Fluxito editorial theme overrides ─────────────────── */
   .EasyMDEContainer { font-family: var(--sans); }
   .EasyMDEContainer .CodeMirror {
-    background: var(--bg);
-    color: var(--ink);
-    border: 1px solid var(--line);
-    border-radius: var(--r-m);
+    background: var(--card-well);
+    color: var(--ink-2);
+    border: 1px solid var(--line-2);
+    border-radius: 9px;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
     font-family: var(--mono);
-    font-size: 13px; line-height: 1.65;
+    font-size: 13px; line-height: 1.75;
     min-height: 480px;
   }
-  .EasyMDEContainer .CodeMirror-cursor { border-left-color: var(--ink); }
-  .EasyMDEContainer .CodeMirror-selected { background: var(--bg-3) !important; }
+  .EasyMDEContainer .CodeMirror-cursor { border-left-color: var(--accent); }
+  .EasyMDEContainer .CodeMirror-selected { background: var(--paper-2) !important; }
   .EasyMDEContainer .CodeMirror-focused .CodeMirror-selected {
-    background: color-mix(in srgb, var(--blue) 18%, transparent) !important;
+    background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
   }
   .EasyMDEContainer .editor-toolbar {
-    background: var(--bg-2);
-    border: 1px solid var(--line);
+    background: var(--paper-2);
+    border: 1px solid var(--line-2);
     border-bottom: none;
-    border-top-left-radius: var(--r-m);
-    border-top-right-radius: var(--r-m);
+    border-top-left-radius: 9px;
+    border-top-right-radius: 9px;
     opacity: 1; padding: 6px 8px;
   }
   .EasyMDEContainer .editor-toolbar button {
@@ -40,12 +41,12 @@
   }
   .EasyMDEContainer .editor-toolbar button:hover,
   .EasyMDEContainer .editor-toolbar button.active {
-    background: var(--bg-3);
-    border-color: var(--line);
+    background: var(--card-well);
+    border-color: var(--line-2);
     color: var(--ink) !important;
   }
   .EasyMDEContainer .editor-toolbar i.separator {
-    border-left: 1px solid var(--line);
+    border-left: 1px solid var(--line-2);
     border-right: none; margin: 0 4px;
   }
   .EasyMDEContainer .editor-statusbar {
@@ -54,11 +55,11 @@
   }
   .EasyMDEContainer .editor-preview,
   .EasyMDEContainer .editor-preview-side {
-    background: var(--bg);
-    color: var(--ink);
-    border: 1px solid var(--line);
+    background: var(--card-well);
+    color: var(--ink-2);
+    border: 1px solid var(--line-2);
     padding: 22px 26px;
-    font-size: 14px; line-height: 1.7;
+    font-size: 14px; line-height: 1.75;
   }
   .EasyMDEContainer .editor-preview h1,
   .EasyMDEContainer .editor-preview h2,
@@ -66,88 +67,146 @@
   .EasyMDEContainer .editor-preview-side h1,
   .EasyMDEContainer .editor-preview-side h2,
   .EasyMDEContainer .editor-preview-side h3 {
-    color: var(--ink); margin-top: 1.2em; letter-spacing: -0.01em;
+    color: var(--ink); font-family: var(--serif); font-weight: 500;
+    margin-top: 1.2em; letter-spacing: -0.01em;
   }
   .EasyMDEContainer .editor-preview code,
   .EasyMDEContainer .editor-preview-side code {
-    background: var(--bg-2); padding: 2px 6px; border-radius: 4px;
-    font-size: 12px; font-family: var(--mono);
+    background: var(--paper-2); padding: 1px 5px; border-radius: 4px;
+    font-size: 12.5px; font-family: var(--mono);
   }
   .EasyMDEContainer .editor-preview blockquote,
   .EasyMDEContainer .editor-preview-side blockquote {
-    border-left: 3px solid var(--line); color: var(--ink-soft);
+    border-left: 3px solid var(--line-strong); color: var(--ink-soft);
     padding-left: 12px; margin-left: 0;
   }
   .EasyMDEContainer .CodeMirror-fullscreen,
   .EasyMDEContainer .editor-toolbar.fullscreen,
   .EasyMDEContainer .editor-preview-side {
-    background: var(--bg);
+    background: var(--card-well);
   }
 
+  /* Doc card — Ledger card shell per Flux - Context.dc.html: bg card,
+     border line-2, radius 12, header row w/ hairline border-bottom */
   .bc-card {
-    padding: 22px 24px;
-    border: 1px solid var(--line); border-radius: var(--r-l);
-    background: var(--bg);
+    border: 1px solid var(--line-2); border-radius: 12px;
+    background: var(--card); overflow: hidden;
   }
   .bc-card-hd {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 12px;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--line-3);
   }
   .bc-card-hd .title {
-    font-size: 11px; font-weight: 500; text-transform: uppercase;
-    letter-spacing: 0.06em; color: var(--muted); font-family: var(--mono);
+    flex: 1;
+    font-size: 14.5px; font-weight: 700; color: var(--ink);
   }
-  .bc-status { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .bc-status { font-size: 10.5px; color: var(--muted); font-family: var(--mono); letter-spacing: 0.02em; white-space: nowrap; }
+
+  /* Bordered "Edit" action in the read-first card header (Flux - Context.dc.html:82) */
+  .bc-edit-btn {
+    flex-shrink: 0; padding: 8px 15px; font-size: 12.5px; font-family: inherit;
+    background: transparent; color: var(--ink-soft);
+    border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+    cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .bc-edit-btn:hover { border-color: var(--ink); color: var(--ink); }
+
+  .bc-body { padding: 18px 22px; }
+
+  /* Read-first excerpt — collapsed doc preview + word-count footer
+     (Flux - Context.dc.html:84-88) */
+  .bc-view-heading {
+    font-family: var(--serif); font-size: 19px; margin-bottom: 8px; color: var(--ink);
+  }
+  .bc-view-text {
+    font-size: 14px; color: var(--ink-2); line-height: 1.75;
+    white-space: pre-line;
+  }
+  .bc-view-text .bc-empty { color: var(--muted); font-style: italic; }
+  .bc-view-more {
+    margin-top: 10px; font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  }
 
   .bc-foot {
     display: flex; justify-content: space-between; align-items: center;
     margin-top: 16px; gap: 12px;
+    padding: 0 22px 20px;
   }
-  .bc-count { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .bc-count { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
 
   .bc-tip {
-    margin-top: 20px;
-    padding: 16px 20px;
-    background: var(--bg-2); border: 1px solid var(--line);
-    border-radius: var(--r-m);
-    font-size: 13.5px; color: var(--ink-soft); line-height: 1.6;
+    display: flex; align-items: center; gap: 14px;
+    margin-top: 24px;
+    padding: 15px 18px;
+    background: var(--card); border: 1px solid var(--line-2);
+    border-radius: var(--r-lg);
+    font-size: 13.5px; color: var(--ink-2); line-height: 1.55;
   }
   .bc-tip strong { color: var(--ink); font-weight: 600; }
+  .bc-flux-mark {
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 7px;
+    background: var(--ink); color: var(--paper);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-style: italic; font-size: 14px;
+  }
+  .bc-tip-cta {
+    flex-shrink: 0; white-space: nowrap;
+    padding: 9px 16px; font-size: 12.5px; color: var(--ink);
+    background: transparent; border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+    text-decoration: none; cursor: pointer; transition: border-color 0.15s ease;
+  }
+  .bc-tip-cta:hover { border-color: var(--ink); }
 </style>
 {% endblock %}
 
 {% block main %}
 <main class="app-main">
+  {% set context_subline %}The business context and KPI definitions Flux loads before answering anything — so "conversion rate" means what you mean by it.{% endset %}
+  {{ page_header('Context', 'What Flux knows about <em>your business.</em>', context_subline) }}
+
   {% include "partials/context_tabs.html" %}
 
-  <div class="page-head">
-    <div>
-      <span class="label">{{ 'Org-wide context' if scope_type == 'organization' else 'Business context' }}</span>
-      <h1>Teach your AI <em class="serif-italic">your business.</em></h1>
-      <p>A plain-Markdown document describing {{ 'your organization' if scope_type == 'organization' else 'your business' }} —
-         industry, audience, goals, seasonality, competitors, anything your AI should know before answering analytics questions.
-         Loaded on demand by Claude, ChatGPT, Cursor, and any MCP-compatible tool, alongside your KPI Library.</p>
+  {# ── Read-first doc card: default view shows a short excerpt + metadata;
+     "Edit" swaps to the full EasyMDE editor below (Flux - Context.dc.html:78-89). ── #}
+  <div class="bc-card" id="bcViewCard">
+    <div class="bc-card-hd">
+      <div class="title">Business context</div>
+      <div class="bc-status" id="bcViewStatus">MARKDOWN DOCUMENT</div>
+      <button type="button" class="bc-edit-btn" id="bcEditToggle">Edit</button>
+    </div>
+    <div class="bc-body">
+      <div class="bc-view-heading" id="bcViewHeading"></div>
+      <div class="bc-view-text" id="bcViewText"></div>
+      <div class="bc-view-more" id="bcViewMore"></div>
     </div>
   </div>
 
-  <div class="bc-card">
+  <div class="bc-card" id="bcEditCard" style="display:none">
     <div class="bc-card-hd">
-      <div class="title">Context document (Markdown)</div>
-      <div class="bc-status" id="bcStatus"></div>
+      <div class="title">Business context</div>
+      <div class="bc-status" id="bcStatus">MARKDOWN · LOADED BY EVERY MCP TOOL CALL</div>
     </div>
-    <textarea
-      id="bcContent"
-      rows="22"
-      placeholder="# About the business&#10;&#10;## Industry&#10;We sell prescription eyewear online across the GCC region.&#10;&#10;## Audience&#10;- Primary: 25–44 urban professionals in UAE &amp; KSA&#10;- Secondary: Parents buying for children&#10;&#10;## Seasonality&#10;- Ramadan: spend shifts to evening/late-night&#10;- Back-to-school (Aug–Sep): kids frames spike 3x&#10;&#10;## Definitions specific to us&#10;- 'Prescription order' = any order with at least one lens SKU&#10;- 'New customer' = first order in the last 365 days&#10;">{{ content }}</textarea>
+    <div class="bc-body">
+      <textarea
+        id="bcContent"
+        rows="22"
+        placeholder="# About the business&#10;&#10;## Industry&#10;We sell prescription eyewear online across the GCC region.&#10;&#10;## Audience&#10;- Primary: 25–44 urban professionals in UAE &amp; KSA&#10;- Secondary: Parents buying for children&#10;&#10;## Seasonality&#10;- Ramadan: spend shifts to evening/late-night&#10;- Back-to-school (Aug–Sep): kids frames spike 3x&#10;&#10;## Definitions specific to us&#10;- 'Prescription order' = any order with at least one lens SKU&#10;- 'New customer' = first order in the last 365 days&#10;">{{ content }}</textarea>
+    </div>
 
     <div class="bc-foot">
       <div class="bc-count"><span id="bcCharCount">0</span> chars · Markdown supported</div>
-      <button id="bcSaveBtn" class="btn primary" type="button">Save</button>
+      <div style="display:flex;gap:8px">
+        <button id="bcCancelBtn" class="btn" type="button">Cancel</button>
+        <button id="bcSaveBtn" class="btn primary" type="button">Save</button>
+      </div>
     </div>
   </div>
 
   <div class="bc-tip">
-    <strong>Tip —</strong> Include things your AI can't infer from raw data: internal terminology, business rules ("we only count paid orders after refund window"), launches, campaigns, and goals. Works the same whether your AI is Claude, ChatGPT, Cursor, or anything else MCP-compatible.
+    <span class="bc-flux-mark">F</span>
+    <div><strong>Tip —</strong> Include things your AI can't infer from raw data: internal terminology, business rules ("we only count paid orders after refund window"), launches, campaigns, and goals. Works the same whether your AI is Claude, ChatGPT, Cursor, or anything else MCP-compatible.</div>
+    <a href="/ask?q=I%20want%20to%20add%20something%20to%20our%20business%20context%3A%20" class="bc-tip-cta">Tell Flux</a>
   </div>
 </main>
 {% endblock %}
@@ -158,8 +217,63 @@
 (function() {
   const ta = document.getElementById('bcContent');
   const saveBtn = document.getElementById('bcSaveBtn');
+  const cancelBtn = document.getElementById('bcCancelBtn');
   const status = document.getElementById('bcStatus');
   const count = document.getElementById('bcCharCount');
+
+  const viewCard = document.getElementById('bcViewCard');
+  const editCard = document.getElementById('bcEditCard');
+  const editToggle = document.getElementById('bcEditToggle');
+  const viewHeading = document.getElementById('bcViewHeading');
+  const viewText = document.getElementById('bcViewText');
+  const viewMore = document.getElementById('bcViewMore');
+
+  // Read-first excerpt: pull the first heading (if any) as a display title,
+  // then a plain-text preview of the body with a trailing word count —
+  // matches Flux - Context.dc.html:84-88 without needing a full markdown
+  // renderer for the collapsed state (the full document still renders via
+  // EasyMDE's own preview once in Edit mode).
+  const EXCERPT_WORDS = 90;
+  function renderExcerpt(md) {
+    const trimmed = (md || '').trim();
+    if (!trimmed) {
+      viewHeading.textContent = '';
+      viewText.innerHTML = '<span class="bc-empty">No business context yet — click Edit to write one.</span>';
+      viewMore.textContent = '';
+      return;
+    }
+    const lines = trimmed.split(/\n+/).filter(Boolean);
+    let heading = '';
+    let bodyLines = lines;
+    if (/^#{1,3}\s+/.test(lines[0] || '')) {
+      heading = lines[0].replace(/^#{1,3}\s+/, '').trim();
+      bodyLines = lines.slice(1);
+    }
+    const plain = bodyLines.join(' ').replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim();
+    const words = plain.split(' ').filter(Boolean);
+    const shown = words.slice(0, EXCERPT_WORDS);
+    const remaining = Math.max(0, words.length - shown.length);
+    viewHeading.textContent = heading;
+    viewText.textContent = shown.join(' ') + (remaining ? '…' : '');
+    viewMore.textContent = remaining
+      ? `— ${remaining.toLocaleString()} more word${remaining === 1 ? '' : 's'} · Flux cites this in every analysis`
+      : (words.length ? 'Flux cites this in every analysis' : '');
+  }
+
+  function showView() {
+    renderExcerpt(currentValue());
+    editCard.style.display = 'none';
+    viewCard.style.display = 'block';
+  }
+  function showEdit() {
+    viewCard.style.display = 'none';
+    editCard.style.display = 'block';
+    // CodeMirror mis-sizes if it was initialized/updated while hidden.
+    if (editor.codemirror) editor.codemirror.refresh();
+    editor.codemirror.focus();
+  }
+  editToggle.addEventListener('click', showEdit);
+  cancelBtn.addEventListener('click', showView);
 
   const editor = new EasyMDE({
     element: ta,
@@ -211,6 +325,7 @@
       status.textContent = 'Saved just now';
       status.style.color = 'var(--muted)';
       if (window.Fluxito && Fluxito.toast) Fluxito.toast('Business context saved');
+      showView();
     } catch (e) {
       alert('Failed to save');
     } finally {
@@ -228,6 +343,10 @@
     'Cmd-S': () => save(),
     'Ctrl-S': () => save(),
   });
+
+  // Start in read-first view mode; editor stays mounted underneath so
+  // toggling to Edit never re-initializes CodeMirror.
+  showView();
 })();
 </script>
 {% endblock %}

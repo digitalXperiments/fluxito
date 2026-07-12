@@ -71,6 +71,7 @@ class StreamEvent:
         "tool_call_end",
         "message_done",
         "error",
+        "draft",  # a Flux-proposed change (e.g. GTM diff) — see app/ask/drafts.py
     ]
     text: str | None = None
     tool_id: str | None = None
@@ -79,6 +80,9 @@ class StreamEvent:
     stop_reason: StopReason | None = None
     usage: dict[str, Any] | None = None
     error: str | None = None
+    # Populated only for type == "draft"; see app.ask.drafts.draft_to_stream_payload
+    # for the exact shape (kind/title/status/payload/published_version/...).
+    draft: dict[str, Any] | None = None
 
 
 def blocks_to_json(blocks: list[ContentBlock]) -> list[dict[str, Any]]:

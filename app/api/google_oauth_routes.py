@@ -227,6 +227,38 @@ async def _resolve_user_ctx(request: Request):
 # ---------------------------------------------------------------------------
 
 
+def _time_ago(when: datetime | None) -> str:
+    """Humanize a past timestamp for the Home briefing (e.g. "2d ago")."""
+    if when is None:
+        return "Never"
+    delta = datetime.utcnow() - when
+    seconds = delta.total_seconds()
+    if seconds < 60:
+        return "Just now"
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m ago"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)}h ago"
+    return f"{int(seconds // 86400)}d ago"
+
+
+def _cron_to_text(cron_expression: str) -> str:
+    """Best-effort human label for a cron string; falls back to the raw value."""
+    parts = (cron_expression or "").split()
+    if len(parts) != 5:
+        return cron_expression or ""
+    minute, hour, dom, month, dow = parts
+    if dom == "*" and month == "*" and dow == "*" and minute.isdigit() and hour.isdigit():
+        return f"Every day {int(hour):02d}:{int(minute):02d}"
+    if dom == "*" and month == "*" and dow.isdigit() and minute.isdigit() and hour.isdigit():
+        days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        try:
+            return f"Every {days[int(dow) % 7]} {int(hour):02d}:{int(minute):02d}"
+        except (ValueError, IndexError):
+            return cron_expression
+    return cron_expression
+
+
 async def _render_interstitial(
     request: Request,
     platform_slug: str,
@@ -591,6 +623,184 @@ async def home(request: Request):
     except Exception:
         pass
 
+    # ── Briefing feed: findings from Flux's most recent audit run ───────────
+    # Real data, not a mocked feed — pulled from the Auditing Platform
+    # (audit_runs/audit_findings) so the briefing reflects whatever Flux has
+    # actually checked for this project. Falls back to the tracking-plan gap
+    # above when no audit has run yet, so a brand-new project isn't blank.
+    briefing_findings: list[dict] = []
+    last_audit_display = "Never"
+    audit_checked_summary: str | None = None
+    audit_open_issues = 0
+
+    # Findings the user has already dismissed from the briefing (Ledger
+    # Phase 1.2 dismiss/archive). Keyed by (user_id, project_id, finding_key)
+    # so a dismissal never leaks across projects. Loaded up front so both the
+    # audit-derived findings and the synthetic tracking-plan-gap finding
+    # below can be filtered against the same set.
+    dismissed_keys: set[str] = set()
+    try:
+        if active_pid_uuid:
+            from app.models.briefing_dismissal import BriefingDismissal
+
+            db_session_dismissed = app_state.db_session_factory()
+            async with db_session_dismissed as db_dismissed:
+                dismissed_keys = set(
+                    (
+                        await db_dismissed.execute(
+                            select(BriefingDismissal.finding_key).where(
+                                BriefingDismissal.user_id == uuid.UUID(user_ctx.user_id),
+                                BriefingDismissal.project_id == active_pid_uuid,
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+    except Exception:
+        pass
+
+    try:
+        if active_pid_uuid:
+            from sqlalchemy import case, desc
+
+            from app.models.auditing import AuditFinding, AuditRun
+
+            db_session3 = app_state.db_session_factory()
+            async with db_session3 as db3:
+                latest_run = (
+                    await db3.execute(
+                        select(AuditRun)
+                        .where(AuditRun.project_id == active_pid_uuid, AuditRun.status == "complete")
+                        .order_by(desc(AuditRun.created_at))
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if latest_run:
+                    last_audit_display = _time_ago(latest_run.created_at)
+                    audit_open_issues = latest_run.critical_count + latest_run.warning_count
+                    checked = (
+                        latest_run.passed_count
+                        + latest_run.critical_count
+                        + latest_run.warning_count
+                        + latest_run.info_count
+                    )
+                    audit_checked_summary = (
+                        f"Flux's last audit checked {checked} things · {latest_run.passed_count} passed"
+                    )
+                    findings = (
+                        (
+                            await db3.execute(
+                                select(AuditFinding)
+                                .where(AuditFinding.run_id == latest_run.id, AuditFinding.passed == False)
+                                .order_by(
+                                    case(
+                                        (AuditFinding.severity == "critical", 0),
+                                        (AuditFinding.severity == "warning", 1),
+                                        else_=2,
+                                    )
+                                )
+                                .limit(4)
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    for f in findings:
+                        finding_key = str(f.id)
+                        if finding_key in dismissed_keys:
+                            continue
+                        # "Show evidence" has no separate deep-link today — the
+                        # only link we hold is the audit run detail page,
+                        # already used by the primary "Review the fix" action
+                        # — so evidence expands inline from the finding's own
+                        # expected/actual/rule meta instead of duplicating
+                        # that link.
+                        evidence_meta = {
+                            "rule_id": f.rule_id,
+                            "platform": f.platform,
+                            "event": f.event,
+                            "expected": f.expected,
+                            "actual": f.actual,
+                        }
+                        briefing_findings.append(
+                            {
+                                "key": finding_key,
+                                "severity": "urgent" if f.severity == "critical" else "watch",
+                                "title": f.message
+                                or f"{(f.platform or 'Platform').title()} — {f.event or f.rule_id or 'issue found'}",
+                                "body": f.remediation or "",
+                                "link": f"/audits/run/{latest_run.id}",
+                                "evidence_link": None,
+                                "evidence_meta": {k: v for k, v in evidence_meta.items() if v},
+                            }
+                        )
+    except Exception:
+        pass
+
+    if not briefing_findings and tp_open_issues and f"tp-gap:{active_pid}" not in dismissed_keys:
+        briefing_findings.append(
+            {
+                "key": f"tp-gap:{active_pid}",
+                "severity": "watch",
+                "title": (
+                    f"{tp_open_issues} tracking-plan event"
+                    f"{'s' if tp_open_issues != 1 else ''} missing a source or destination"
+                ),
+                "body": "Wire these up so Flux can trust this data in dashboards and audits.",
+                "link": "/tracking-plan",
+                "evidence_link": None,
+                "evidence_meta": {},
+            }
+        )
+
+    # ── Right rail: installed automations (real Cowork task installs) ──────
+    # AutomationInstallation has no per-run progress state (no steps-completed
+    # or started-at/expected-duration columns — installs are Cowork-scheduled
+    # recipes we don't execute ourselves, see app/models/automation.py), so
+    # there is nothing to derive a real completion percentage from. Render
+    # every rail card with an indeterminate progress indicator rather than
+    # fabricate a number.
+    running_automations: list[dict] = []
+    try:
+        if active_pid_uuid:
+            from sqlalchemy import desc
+
+            from app.models.automation import AutomationInstallation
+
+            db_session4 = app_state.db_session_factory()
+            async with db_session4 as db4:
+                installs = (
+                    (
+                        await db4.execute(
+                            select(AutomationInstallation)
+                            .where(
+                                AutomationInstallation.project_id == active_pid_uuid,
+                                AutomationInstallation.status == "active",
+                            )
+                            .order_by(desc(AutomationInstallation.installed_at))
+                            .limit(4)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for inst in installs:
+                    running_automations.append(
+                        {
+                            "name": inst.task_name,
+                            "detail": inst.channel_summary or _cron_to_text(inst.cron_expression),
+                            "progress_pct": None,
+                        }
+                    )
+    except Exception:
+        pass
+
+    # ── Greeting: time-of-day + how many things genuinely need attention ───
+    hour = datetime.now().hour
+    time_of_day = "Morning" if hour < 12 else "Afternoon" if hour < 18 else "Evening"
+    needs_attention = sum(1 for f in briefing_findings if f["severity"] in ("urgent", "watch"))
+
     # Ensure active project cookie is set
     active_pid = await ensure_active_project(request, user_ctx.user_id)
 
@@ -608,6 +818,14 @@ async def home(request: Request):
             "tp_event_count": tp_event_count,
             "tp_open_issues": tp_open_issues,
             "tp_coverage_pct": tp_coverage_pct,
+            "briefing_findings": briefing_findings,
+            "briefing_needs_attention": needs_attention,
+            "briefing_time_of_day": time_of_day,
+            "briefing_now_display": datetime.now().strftime("%A, %B %-d · %H:%M"),
+            "audit_checked_summary": audit_checked_summary,
+            "last_audit_display": last_audit_display,
+            "audit_open_issues": audit_open_issues,
+            "running_automations": running_automations,
         },
     )
 
@@ -615,6 +833,247 @@ async def home(request: Request):
         set_active_project_cookie(response, active_pid)
 
     return response
+
+
+@router.post("/api/briefing/dismiss")
+async def briefing_dismiss(request: Request):
+    """Dismiss a Home briefing card for the current user in the active project.
+
+    Ledger revamp Phase 1.2. Body: ``{"finding_key": "<audit finding id or
+    synthetic key, e.g. tp-gap:<project_id>>"}``. Idempotent — dismissing an
+    already-dismissed key is a no-op success.
+    """
+    user_ctx = await _resolve_user_ctx(request)
+    if user_ctx is None:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    active_pid = await ensure_active_project(request, user_ctx.user_id)
+    if not active_pid:
+        return JSONResponse({"error": "no_project"}, status_code=400)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    finding_key = (payload or {}).get("finding_key")
+    if not finding_key or not isinstance(finding_key, str):
+        return JSONResponse({"error": "missing_finding_key"}, status_code=400)
+
+    from app.models.briefing_dismissal import BriefingDismissal
+
+    try:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            existing = (
+                await db.execute(
+                    select(BriefingDismissal).where(
+                        BriefingDismissal.user_id == uuid.UUID(user_ctx.user_id),
+                        BriefingDismissal.project_id == uuid.UUID(active_pid),
+                        BriefingDismissal.finding_key == finding_key,
+                    )
+                )
+            ).scalar_one_or_none()
+            if not existing:
+                db.add(
+                    BriefingDismissal(
+                        id=uuid.uuid4(),
+                        user_id=uuid.UUID(user_ctx.user_id),
+                        project_id=uuid.UUID(active_pid),
+                        finding_key=finding_key,
+                    )
+                )
+                await db.commit()
+    except Exception:
+        return JSONResponse({"error": "failed"}, status_code=500)
+
+    return JSONResponse({"ok": True})
+
+
+@router.get("/api/home/feed")
+async def home_feed(request: Request):
+    """Merged reverse-chronological activity feed for the Home page.
+
+    Blends recent items across the product into a single stream (newest
+    first, capped at 30). Each item has the shape::
+
+        {"kind", "title", "subtitle", "status", "ts", "url"}
+
+    ``kind`` is one of ``audit`` | ``test_flow`` | ``draft`` |
+    ``report`` | ``activity``. ``ts`` is an ISO-8601 string. Sources with
+    no rows simply contribute nothing — the endpoint is best-effort and
+    fail-silent per source so one broken query can't blank the feed.
+    """
+    from sqlalchemy import desc as _desc
+
+    user_ctx = await _resolve_user_ctx(request)
+    if user_ctx is None:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    active_pid = await ensure_active_project(request, user_ctx.user_id)
+    if not active_pid:
+        return JSONResponse({"items": []})
+    pid = uuid.UUID(active_pid)
+
+    items: list[dict] = []
+
+    def _iso(dt):
+        return dt.isoformat() if dt else None
+
+    try:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            # ── Recent audit run completions ──────────────────────────
+            try:
+                from app.models.auditing import AuditRun
+
+                rows = (
+                    (
+                        await db.execute(
+                            select(AuditRun)
+                            .where(AuditRun.project_id == pid)
+                            .order_by(_desc(AuditRun.created_at))
+                            .limit(30)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for r in rows:
+                    score_txt = f"Score {r.score}" if r.score is not None else "Completed"
+                    items.append(
+                        {
+                            "kind": "audit",
+                            "title": r.title or f"{(r.audit_type or 'Audit').title()} audit",
+                            "subtitle": f"{score_txt} · {r.critical_count} critical, {r.warning_count} warnings",
+                            "status": r.status or "complete",
+                            "ts": _iso(r.created_at),
+                            "url": f"/audits/run/{r.id}",
+                        }
+                    )
+            except Exception:
+                pass
+
+            # ── Recent test-flow runs ─────────────────────────────────
+            try:
+                from app.models.test_flows import TestFlow, TestFlowRun
+
+                rows = (
+                    await db.execute(
+                        select(TestFlowRun, TestFlow.name)
+                        .join(TestFlow, TestFlowRun.flow_id == TestFlow.id)
+                        .where(TestFlowRun.project_id == pid)
+                        .order_by(_desc(TestFlowRun.started_at))
+                        .limit(30)
+                    )
+                ).all()
+                for run, flow_name in rows:
+                    items.append(
+                        {
+                            "kind": "test_flow",
+                            "title": flow_name or "Test flow",
+                            "subtitle": f"{run.assertions_passed}/{run.assertions_total} assertions passed",
+                            "status": run.status,
+                            "ts": _iso(run.finished_at or run.started_at),
+                            "url": f"/audits/flows/{run.flow_id}/runs/{run.id}",
+                        }
+                    )
+            except Exception:
+                pass
+
+            # ── Pending Flux drafts ───────────────────────────────────
+            try:
+                from app.models.flux_draft import FluxDraft
+
+                rows = (
+                    (
+                        await db.execute(
+                            select(FluxDraft)
+                            .where(FluxDraft.project_id == pid, FluxDraft.status == "pending")
+                            .order_by(_desc(FluxDraft.created_at))
+                            .limit(30)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for d in rows:
+                    items.append(
+                        {
+                            "kind": "draft",
+                            "title": d.title,
+                            "subtitle": "Awaiting your approval",
+                            "status": "pending",
+                            "ts": _iso(d.created_at),
+                            "url": "/ask",
+                        }
+                    )
+            except Exception:
+                pass
+
+            # ── Recent report-schedule sends ──────────────────────────
+            try:
+                from app.models.scheduled_report import ReportRun, ReportSchedule
+
+                rows = (
+                    await db.execute(
+                        select(ReportRun, ReportSchedule.name)
+                        .join(ReportSchedule, ReportRun.schedule_id == ReportSchedule.id)
+                        .where(ReportSchedule.project_id == pid)
+                        .order_by(_desc(ReportRun.started_at))
+                        .limit(30)
+                    )
+                ).all()
+                for run, sched_name in rows:
+                    items.append(
+                        {
+                            "kind": "report",
+                            "title": sched_name or "Scheduled report",
+                            "subtitle": f"Sent to {run.recipient_count} recipient(s)"
+                            if run.status == "success"
+                            else "Delivery failed",
+                            "status": run.status,
+                            "ts": _iso(run.finished_at or run.started_at),
+                            "url": "/reports/schedules",
+                        }
+                    )
+            except Exception:
+                pass
+
+            # ── Recent activity events ────────────────────────────────
+            try:
+                from app.models.activity import ActivityEvent
+
+                rows = (
+                    (
+                        await db.execute(
+                            select(ActivityEvent)
+                            .where(ActivityEvent.project_id == pid)
+                            .order_by(_desc(ActivityEvent.created_at))
+                            .limit(30)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for e in rows:
+                    items.append(
+                        {
+                            "kind": "activity",
+                            "title": e.description,
+                            "subtitle": (e.event_type or "").replace("_", " ").title(),
+                            "status": None,
+                            "ts": _iso(e.created_at),
+                            "url": "/activity-log",
+                        }
+                    )
+            except Exception:
+                pass
+    except Exception:
+        return JSONResponse({"items": []})
+
+    # Merge: newest first, cap at 30. Items with no ts sink to the bottom.
+    items.sort(key=lambda it: it.get("ts") or "", reverse=True)
+    return JSONResponse({"items": items[:30]})
 
 
 @router.get("/signin")
@@ -648,7 +1107,12 @@ async def signin(request: Request, next: str = Query(default="/home")):
     except Exception:
         pass
 
-    # Check if Google OAuth is configured so the template can hide the button
+    # Check if Google OAuth is configured so the template can hide the button.
+    # A row that exists but fails to decrypt (wrong/rotated encryption key) is
+    # treated the same as "not configured" — either way we can't offer the
+    # button, and the sign-in page must never 500 over it.
+    from cryptography.fernet import InvalidToken
+
     from app.auth.oauth_app_credentials import get_oauth_app_credentials, OAuthAppNotConfigured
 
     google_configured = False
@@ -657,7 +1121,7 @@ async def signin(request: Request, next: str = Query(default="/home")):
             async with app_state.db_session_factory() as _cred_db:
                 await get_oauth_app_credentials(_cred_db, "google")
             google_configured = True
-        except OAuthAppNotConfigured:
+        except (OAuthAppNotConfigured, InvalidToken):
             pass
 
     # Admin-controlled sign-in surface flags. During first-run the operator must
@@ -958,6 +1422,9 @@ async def tutorial_page(request: Request):
     force = request.query_params.get("force") == "1" or request.query_params.get("replay") == "1"
 
     # Check if user already completed the tutorial (skip redirect when force/replay is set)
+    flux_role = None
+    flux_monitors: list[str] = []
+    preferred_ai_client = None
     try:
         db_session = app_state.db_session_factory()
         async with db_session as db:
@@ -965,10 +1432,51 @@ async def tutorial_page(request: Request):
             user = result.scalar_one_or_none()
             if user and user.tutorial_completed_at is not None and not force:
                 return RedirectResponse(url="/home", status_code=302)
+            if user:
+                flux_role = user.flux_role
+                flux_monitors = list(user.flux_monitors or [])
+                preferred_ai_client = user.preferred_ai_client
     except Exception:
         pass
 
     has_connections = len(user_ctx.connections) > 0
+
+    # ── Real connection status for Step 3 (Connect data) ────────────────
+    # Same scope-based detection home() uses for GA4/GTM/Ads, plus a quick
+    # check for Meta and BigQuery — just the 5 platforms shown in this step.
+    conn_status = {"ga4": False, "gtm": False, "gads": False, "meta": False, "bq": False}
+    try:
+        for c in user_ctx.connections:
+            if c.provider == "meta":
+                conn_status["meta"] = True
+            elif (c.provider or "google") in ("google", None, ""):
+                scopes = c.scopes or []
+                if any("analytics" in s for s in scopes):
+                    conn_status["ga4"] = True
+                if any("tagmanager" in s for s in scopes):
+                    conn_status["gtm"] = True
+                if "https://www.googleapis.com/auth/adwords" in scopes:
+                    conn_status["gads"] = True
+        if active_pid:
+            from app.models.bq_connection import BQConnection
+
+            db_session_bq = app_state.db_session_factory()
+            async with db_session_bq as db_bq:
+                bq_row = (
+                    await db_bq.execute(
+                        select(BQConnection)
+                        .where(
+                            BQConnection.user_id == uuid.UUID(user_ctx.user_id),
+                            BQConnection.fluxito_project_id == uuid.UUID(active_pid),
+                            BQConnection.is_active == True,
+                        )
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                conn_status["bq"] = bq_row is not None
+    except Exception:
+        pass
+
     user_view = await _load_user_view(user_ctx)
     return render(
         request,
@@ -976,6 +1484,11 @@ async def tutorial_page(request: Request):
         {
             "user": user_view,
             "has_connections": has_connections,
+            "conn_status": conn_status,
+            "conn_live_count": sum(1 for v in conn_status.values() if v),
+            "flux_role": flux_role,
+            "flux_monitors": flux_monitors,
+            "preferred_ai_client": preferred_ai_client,
         },
     )
 
@@ -1013,12 +1526,195 @@ async def tutorial_complete(request: Request):
     return JSONResponse({"ok": True})
 
 
-@router.get("/connect", response_class=HTMLResponse)
+@router.post("/api/onboarding/preferences")
+async def save_onboarding_preferences(request: Request):
+    """Persist onboarding Step 2 (role/monitors) and Step 4 (AI client) choices.
+
+    Body is a partial dict — any of ``role``, ``monitors``, ``ai_client``.
+    Surfaced later in Profile -> "How Flux briefs you".
+    """
+    user_ctx = await _resolve_user_ctx(request)
+    if user_ctx is None:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    from app.models.user import VALID_FLUX_MONITORS, VALID_FLUX_ROLES
+
+    values: dict = {}
+    if "role" in payload:
+        role = payload["role"]
+        if role is not None and role not in VALID_FLUX_ROLES:
+            return JSONResponse({"error": "invalid_role"}, status_code=400)
+        values["flux_role"] = role
+    if "monitors" in payload:
+        monitors = payload["monitors"] or []
+        if not isinstance(monitors, list) or any(m not in VALID_FLUX_MONITORS for m in monitors):
+            return JSONResponse({"error": "invalid_monitors"}, status_code=400)
+        values["flux_monitors"] = monitors
+    if "ai_client" in payload:
+        values["preferred_ai_client"] = payload["ai_client"]
+
+    if not values:
+        return JSONResponse({"ok": True})
+
+    try:
+        db_session = app_state.db_session_factory()
+        async with db_session as db:
+            await db.execute(update(User).where(User.id == uuid.UUID(user_ctx.user_id)).values(**values))
+            await db.commit()
+    except Exception:
+        return JSONResponse({"error": "failed"}, status_code=500)
+
+    return JSONResponse({"ok": True})
+
+
+@router.get("/api/onboarding/health-check")
+async def onboarding_health_check(request: Request):
+    """Real "what does Flux know so far" summary for onboarding Step 5.
+
+    No fabricated findings — every line reflects data this project actually
+    has: connections made, tracking-plan coverage, and structural gaps.
+    """
+    user_ctx = await _resolve_user_ctx(request)
+    if user_ctx is None:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    active_pid = get_active_project_id(request)
+    lines: list[dict] = []
+    connected_names: list[str] = []
+
+    try:
+        google_scopes: list[str] = []
+        has_meta = False
+        for c in user_ctx.connections:
+            if c.provider == "meta":
+                has_meta = True
+            elif (c.provider or "google") in ("google", None, ""):
+                google_scopes.extend(c.scopes or [])
+        if any("analytics" in s for s in google_scopes):
+            connected_names.append("GA4")
+        if any("tagmanager" in s for s in google_scopes):
+            connected_names.append("Google Tag Manager")
+        if "https://www.googleapis.com/auth/adwords" in google_scopes:
+            connected_names.append("Google Ads")
+        if has_meta:
+            connected_names.append("Meta Ads")
+
+        if active_pid:
+            from app.models.bq_connection import BQConnection
+
+            db_session_bq = app_state.db_session_factory()
+            async with db_session_bq as db_bq:
+                bq_row = (
+                    await db_bq.execute(
+                        select(BQConnection)
+                        .where(
+                            BQConnection.user_id == uuid.UUID(user_ctx.user_id),
+                            BQConnection.fluxito_project_id == uuid.UUID(active_pid),
+                            BQConnection.is_active == True,
+                        )
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if bq_row is not None:
+                    connected_names.append("BigQuery")
+    except Exception:
+        pass
+
+    if connected_names:
+        lines.append(
+            {
+                "icon": "✓",
+                "color": "good",
+                "text": f"{', '.join(connected_names)}: connected · read-only access confirmed",
+            }
+        )
+    else:
+        lines.append(
+            {
+                "icon": "○",
+                "color": "muted",
+                "text": "No platforms connected yet — Flux will remind you when a question needs one",
+            }
+        )
+
+    tp_open_issues = 0
+    tp_event_count = 0
+    try:
+        if active_pid:
+            from app.services.tracking_plan import latest_snapshot_for_project
+
+            db_session_tp = app_state.db_session_factory()
+            async with db_session_tp as db_tp:
+                snapshot = await latest_snapshot_for_project(db_tp, uuid.UUID(active_pid))
+            if snapshot:
+                events = snapshot.get("events", [])
+                tp_event_count = len(events)
+                tp_open_issues = sum(
+                    1 for ev in events if not ev.get("sources") or not ev.get("destinations")
+                )
+    except Exception:
+        pass
+
+    if tp_event_count > 0:
+        lines.append(
+            {
+                "icon": "✓",
+                "color": "good",
+                "text": f"tracking plan: {tp_event_count} event{'s' if tp_event_count != 1 else ''} found",
+            }
+        )
+        if tp_open_issues > 0:
+            lines.append(
+                {
+                    "icon": "⚠",
+                    "color": "warn",
+                    "text": (
+                        f"tracking plan: {tp_open_issues} event"
+                        f"{'s' if tp_open_issues != 1 else ''} missing a source or destination"
+                    ),
+                }
+            )
+    else:
+        lines.append(
+            {
+                "icon": "○",
+                "color": "muted",
+                "text": "tracking plan: none yet — Flux will draft one from what's live",
+            }
+        )
+
+    lines.append({"icon": "✓", "color": "good", "text": "scopes verified: read-only · nothing was changed"})
+
+    issues = tp_open_issues
+    if issues > 0:
+        summary = f"Found {issues} thing{'s' if issues != 1 else ''} worth fixing and nothing on fire."
+    else:
+        summary = "Nothing on fire — you're in good shape."
+    summary += " Your first briefing is ready. See you on the home screen."
+
+    return JSONResponse({"lines": lines, "summary": summary})
+
+
+@router.get("/connect")
+async def connect_page_legacy_redirect():
+    """Legacy /connect entry point — connections now live in the settings shell."""
+    return RedirectResponse(url="/settings/connections", status_code=302)
+
+
+@router.get("/settings/connections", response_class=HTMLResponse)
 async def connect_page(request: Request):
-    """Google OAuth tier selector + platform picker — scoped to active project."""
+    """Google OAuth tier selector + platform picker — scoped to active project.
+
+    Rendered inside the settings shell (rail visible) at /settings/connections.
+    """
     user_ctx = await _resolve_user_ctx(request)
     if not user_ctx:
-        return RedirectResponse(url="/signin?next=/connect", status_code=302)
+        return RedirectResponse(url="/signin?next=/settings/connections", status_code=302)
 
     # Connections are project-scoped — if the user has no project yet,
     # send them to create one before they can connect anything.

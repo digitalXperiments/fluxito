@@ -91,8 +91,15 @@ async def test_audits_page_with_project():
     mock_ss_result = MagicMock()
     mock_ss_result.mappings = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
 
-    # Return mock results on DB execute calls
-    mock_db.execute.side_effect = [mock_runs_result, mock_ss_result]
+    # Mock result for the live-run ("running") lookup — the page now surfaces an
+    # in-progress audit card, so it always issues this third query when a project
+    # is in scope. No run is in flight here.
+    mock_running_result = MagicMock()
+    mock_running_result.scalar_one_or_none = MagicMock(return_value=None)
+
+    # Return mock results on DB execute calls. With no completed runs, the
+    # open-findings / pages-tested queries are skipped, so three calls suffice.
+    mock_db.execute.side_effect = [mock_runs_result, mock_ss_result, mock_running_result]
 
     mock_db_context = MagicMock()
     mock_db_context.__aenter__ = AsyncMock(return_value=mock_db)

@@ -1,137 +1,180 @@
 /* integrations.css — settings/integrations page styles
-   Uses global tokens from app.css; no new variables introduced. */
+   Uses global tokens from app.css; no new variables introduced.
 
-/* ── Platform grid ─────────────────────────────────────────────────────── */
+   The OAuth-credentials list renders as flat "plumbing" rows (Ledger design:
+   Flux - Workspace Settings.dc.html), not brand-colored cards. `.intg-row`
+   markup keeps the class hooks integrations.js already queries
+   (`.intg-status-row`, `.intg-badge*`, `.intg-id-row`, `.intg-updated`,
+   `.intg-actions`, `.intg-remove-btn`) so the existing live-refresh JS keeps
+   working — they're restyled here rather than renamed. */
 
-.intg-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-  margin-top: 24px;
+/* ── OAuth credentials panel ───────────────────────────────────────────── */
+
+.intg-panel {
+  padding: 22px 24px;
+  margin-bottom: 22px;
 }
 
-.intg-card {
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--bg);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+.intg-panel-eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  margin-bottom: 6px;
 }
 
-/* ── Card brand header ─────────────────────────────────────────────────── */
-
-.intg-card-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 18px;
-  background: var(--bg-2);
-  border-bottom: 1px solid var(--line);
+.intg-panel-desc {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 16px;
 }
 
-/* Per-platform gradients — match CSS brand vars */
-.intg-head-google    { background: linear-gradient(135deg, #4285F4, #1a6fd8); color: #fff; }
-.intg-head-meta      { background: linear-gradient(135deg, #0866FF, #0052cc); color: #fff; }
-.intg-head-tiktok    { background: linear-gradient(135deg, #FE2C55, #010101); color: #fff; }
-.intg-head-snap      { background: linear-gradient(135deg, #FFFC00, #f5e900); color: #1A1A1A; }
-.intg-head-linkedin  { background: linear-gradient(135deg, #0A66C2, #00438a); color: #fff; }
-.intg-head-pinterest { background: linear-gradient(135deg, #E60023, #ad001a); color: #fff; }
-.intg-head-reddit    { background: linear-gradient(135deg, #FF4500, #cc3700); color: #fff; }
-.intg-head-x         { background: linear-gradient(135deg, #111111, #555555); color: #fff; }
-.intg-head-bing      { background: linear-gradient(135deg, #008373, #00614f); color: #fff; }
-.intg-head-apple     { background: linear-gradient(135deg, #111111, #6b7280); color: #fff; }
+/* ── Row list ───────────────────────────────────────────────────────────── */
 
-.intg-platform-name {
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: -0.01em;
-}
-
-/* ── Card body ─────────────────────────────────────────────────────────── */
-
-.intg-card-body {
-  padding: 16px 18px;
+.intg-rows {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  flex: 1;
 }
 
-/* ── Status badges ─────────────────────────────────────────────────────── */
-
-.intg-status-row { display: flex; }
-
-.intg-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: var(--r-full);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.intg-badge-db {
-  background: color-mix(in srgb, var(--green, #16a34a) 12%, transparent);
-  color: var(--green, #16a34a);
-  border: 1px solid color-mix(in srgb, var(--green, #16a34a) 25%, transparent);
-}
-
-.intg-badge-env {
-  background: color-mix(in srgb, #d97706 12%, transparent);
-  color: #d97706;
-  border: 1px solid color-mix(in srgb, #d97706 25%, transparent);
-}
-
-.intg-badge-none {
-  background: var(--bg-2);
-  color: var(--muted);
-  border: 1px solid var(--line);
-}
-
-/* ── Client ID row ─────────────────────────────────────────────────────── */
-
-.intg-id-row {
+.intg-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 14px;
+  padding: 13px 15px;
+  border: 1px solid var(--line-3);
+  border-radius: 9px;
+  transition: border-color 0.15s ease;
 }
 
-.intg-id-label {
-  color: var(--muted);
+.intg-row:hover { border-color: var(--line-strong); }
+
+/* Unconfigured rows get the design's dashed treatment + dimmed name. */
+.intg-row[data-source="unconfigured"] {
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+
+.intg-row[data-source="unconfigured"] .intg-row-name {
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+/* Meta line (client_id + capabilities) only makes sense once configured;
+   the "needed before" sentence only makes sense while unconfigured. Both
+   are keyed off `data-source`, which integrations.js keeps in sync on every
+   save/remove, so this stays correct without a page reload. */
+.intg-row:not([data-source="unconfigured"]) .intg-row-empty { display: none; }
+.intg-row[data-source="unconfigured"] .intg-row-meta { display: none; }
+
+/* ── Icon tile — monochrome, no brand colors ───────────────────────────── */
+
+.intg-row-icon {
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
-}
-
-.intg-id-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper-2);
+  border-radius: 9px;
   font-family: var(--mono);
   font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+/* ── Row text ───────────────────────────────────────────────────────────── */
+
+.intg-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.intg-row-name {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 700;
   color: var(--ink);
 }
 
-.intg-updated {
+.intg-row-meta {
+  margin-top: 2px;
+  font-family: var(--mono);
   font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.intg-row-empty {
+  margin-top: 2px;
+  font-size: 11.5px;
   color: var(--muted);
 }
 
-/* ── Card action row ───────────────────────────────────────────────────── */
+.intg-updated {
+  /* Real data (p.updated_at) stays wired up for anyone inspecting the DOM /
+     a future surface, but the flat-row design doesn't dedicate space to it. */
+  display: none;
+}
+
+/* ── Status ─────────────────────────────────────────────────────────────── */
+
+.intg-status-row { display: flex; flex-shrink: 0; }
+
+.intg-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.intg-badge-db,
+.intg-badge-env { color: var(--good); }
+
+.intg-badge-none { display: none; }
+
+/* ── Client ID (mono meta line) ────────────────────────────────────────── */
+
+.intg-id-row { display: inline; }
+
+.intg-id-label { display: none; }
+
+.intg-id-row::before { content: "client_id "; }
+
+.intg-id-value { color: var(--ink-2); }
+
+/* ── Row actions — flat mono links, not buttons ────────────────────────── */
 
 .intg-actions {
   display: flex;
-  gap: 8px;
-  margin-top: auto;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
-.intg-remove-btn {
-  color: var(--red, #ef4444) !important;
-  border-color: color-mix(in srgb, var(--red, #ef4444) 30%, transparent) !important;
+.intg-actions .intg-row-link,
+.intg-actions .btn.intg-remove-btn {
+  all: unset;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent-hover);
+  cursor: pointer;
 }
 
-.intg-remove-btn:hover {
-  background: color-mix(in srgb, var(--red, #ef4444) 8%, transparent) !important;
+.intg-actions .intg-row-link:hover,
+.intg-actions .btn.intg-remove-btn:hover {
+  text-decoration: underline;
+}
+
+.intg-actions .intg-row-link-danger,
+.intg-actions .btn.intg-remove-btn {
+  color: var(--bad);
 }
 
 /* ── Env banner ────────────────────────────────────────────────────────── */
@@ -141,15 +184,13 @@
   align-items: flex-start;
   gap: 10px;
   padding: 12px 16px;
-  background: color-mix(in srgb, #d97706 8%, transparent);
-  border: 1px solid color-mix(in srgb, #d97706 25%, transparent);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 25%, transparent);
   border-radius: var(--r-md);
   font-size: 13px;
-  color: #92400e;
+  color: var(--ink-2);
   margin-top: 8px;
 }
-
-html[data-theme="dark"] .intg-banner { color: #fde68a; }
 
 .intg-banner svg { flex-shrink: 0; margin-top: 1px; }
 
@@ -308,8 +349,8 @@ html[data-theme="dark"] .intg-banner { color: #fde68a; }
 }
 
 .intg-remove-modal-btn {
-  color: var(--red, #ef4444) !important;
-  border-color: color-mix(in srgb, var(--red, #ef4444) 30%, transparent) !important;
+  color: var(--bad) !important;
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent) !important;
 }
 
 /* ── Test result ───────────────────────────────────────────────────────── */
@@ -325,15 +366,15 @@ html[data-theme="dark"] .intg-banner { color: #fde68a; }
 .intg-test-loading { color: var(--muted); }
 
 .intg-test-ok {
-  background: color-mix(in srgb, var(--green, #16a34a) 8%, transparent);
-  border-color: color-mix(in srgb, var(--green, #16a34a) 25%, transparent);
-  color: var(--green, #16a34a);
+  background: color-mix(in srgb, var(--good) 8%, transparent);
+  border-color: color-mix(in srgb, var(--good) 25%, transparent);
+  color: var(--good);
 }
 
 .intg-test-fail {
-  background: color-mix(in srgb, var(--red, #ef4444) 8%, transparent);
-  border-color: color-mix(in srgb, var(--red, #ef4444) 25%, transparent);
-  color: var(--red, #ef4444);
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+  border-color: color-mix(in srgb, var(--bad) 25%, transparent);
+  color: var(--bad);
 }
 
 .intg-test-issues {
@@ -351,13 +392,13 @@ html[data-theme="dark"] .intg-banner { color: #fde68a; }
   gap: 8px;
   padding: 10px 20px;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--blue, #4285F4) 4%, var(--bg));
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg));
   font-size: 13px;
   color: var(--muted);
 }
 
 .intg-guide-link a {
-  color: var(--blue, #4285F4);
+  color: var(--accent);
   font-weight: 500;
   text-decoration: none;
 }
@@ -367,6 +408,7 @@ html[data-theme="dark"] .intg-banner { color: #fde68a; }
 /* ── Responsive ────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
-  .intg-grid { grid-template-columns: 1fr; }
+  .intg-row { flex-wrap: wrap; }
+  .intg-row-main { flex-basis: 100%; order: 1; }
   .intg-modal { max-width: 100%; }
 }
