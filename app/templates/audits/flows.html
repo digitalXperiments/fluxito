@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "partials/page_header.html" import page_header %}
+{% block title %}{{ page_title }}{% endblock %}
+{% set active = 'audit_flows' %}
+{% set audit_tab = 'flows' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/audit_flows.css?v={{ asset_hash('css/audit_flows.css') }}"/>
+{% endblock %}
+
+{% block main %}
+<div class="app-main">
+
+  {% call page_header('Automated test flows', 'Replay it. <em>Trust it.</em>', 'Saved browser journeys that Flux replays in a real browser, asserting your dataLayer events and vendor beacons fire exactly as they should — on demand or on a schedule.') %}
+    <div class="af-builder-actions">
+      <a href="/audits/vendors" class="btn ghost sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9M14 17H5M17 17a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM7 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
+        Vendors
+      </a>
+      <a href="/audits/flows/new" class="btn primary sm">+ New flow</a>
+    </div>
+  {% endcall %}
+
+  {% include "partials/audit_tabs.html" %}
+
+  <div class="af-toolbar">
+    <input type="text" id="afSearch" class="af-input af-search" placeholder="Filter flows…" autocomplete="off"/>
+    <div class="af-filter-chips" id="afStatusFilter">
+      <button class="af-fchip is-active" data-status="all">All</button>
+      <button class="af-fchip" data-status="passing">Passing</button>
+      <button class="af-fchip" data-status="failing">Failing</button>
+      <button class="af-fchip" data-status="error">Error</button>
+    </div>
+  </div>
+
+  <div id="afFlowsMount"></div>
+
+  {# Empty-state template (cloned by JS when no flows exist) #}
+  <template id="afEmptyTpl">
+    <div class="af-empty">
+      <div class="af-empty-icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3z"/></svg>
+      </div>
+      <h3>No test flows yet</h3>
+      <p>Record a checkout, a signup, a key conversion — then let Flux replay it and verify every tag fires. Your first flow takes about two minutes to build.</p>
+      <a href="/audits/flows/new" class="btn primary">+ Build your first flow</a>
+    </div>
+  </template>
+
+</div>{# /app-main #}
+{% endblock %}
+
+{% block scripts %}
+<script>window.__AUDIT_FLOWS__ = {{ flows | tojson }};</script>
+<script src="/static/js/audit_flows.js?v={{ asset_hash('js/audit_flows.js') }}" defer></script>
+{% endblock %}
