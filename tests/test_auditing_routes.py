@@ -47,11 +47,10 @@ async def test_audits_page_without_project():
 
     assert response.status_code == 200
     html = response.body.decode()
-    # Rule Books tab badge should show 21
-    assert 'Rule Books <span class="t-seg-count">21</span>' in html
-    # Check that platforms like ga4_ecom are displayed (Note: Ecommerce without hyphen)
-    assert "Google Analytics 4 (Ecommerce)" in html
-    assert "Meta Pixel" in html
+    # Page header reflects the rule-book count (rule books themselves now
+    # live in the Vendors section, not tabs on this page).
+    assert "Tag auditing" in html
+    assert "21 platform rule books" in html
 
 
 @pytest.mark.asyncio
@@ -116,6 +115,7 @@ async def test_audits_page_with_project():
 
     assert response.status_code == 200
     html = response.body.decode()
-    # Rule Books tab badge should show 21
-    assert 'Rule Books <span class="t-seg-count">21</span>' in html
-    assert "Google Analytics 4 (Ecommerce)" in html
+    # Page header reflects the rule-book count (rule books themselves now
+    # live in the Vendors section, not tabs on this page).
+    assert "Tag auditing" in html
+    assert "21 platform rule books" in html

@@ -18,7 +18,7 @@ SETTINGS_PAGES = {
     "profile.html": "account",
     "settings/ai.html": "ai",
     "settings/integrations.html": "integrations",
-    "settings/system.html": "system",
+    "connect.html": "connections",
     "settings/ai_models.html": "ai-models",
     "admin.html": "platform",
     "audit.html": "activity",
@@ -54,7 +54,7 @@ def test_rail_has_real_anchor_links():
         "/profile",
         "/settings/ai",
         "/settings/integrations",
-        "/settings/system",
+        "/settings/connections",
         "/activity-log",
         "/admin",
     ):

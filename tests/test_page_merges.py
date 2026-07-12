@@ -72,8 +72,11 @@ def test_dashboards_tabs_are_real_links():
 
 
 def test_dashboards_pages_include_tabs_and_section():
+    # The hub folded Scheduled reports in as an inline hash-driven tab bar
+    # (#dashboards | #schedules); the gallery still uses the shared partial.
     hub = LIVE_HUB.read_text()
-    assert 'include "partials/dashboards_tabs.html"' in hub
+    assert 'id="lhTabs"' in hub
+    assert 'data-tab="schedules"' in hub
     assert "dashboards_section = 'live'" in hub
     gallery = GALLERY.read_text()
     assert 'include "partials/dashboards_tabs.html"' in gallery
