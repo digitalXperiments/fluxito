@@ -41,10 +41,10 @@
       {% if related_tutorials %}
       <div class="tut-aside-card">
         <span class="tut-aside-label">Related guides</span>
-        {% for related_slug, related_name, related_time, related_note in related_tutorials %}
-        <a href="/tutorials/{{ related_slug }}" class="tut-related-link">
-          <span>{{ related_name }}</span>
-          <small>{{ related_time }}</small>
+        {% for rt in related_tutorials %}
+        <a href="/tutorials/{{ rt[0] }}" class="tut-related-link">
+          <span>{{ rt[1] }}</span>
+          <small>{{ rt[2] }}</small>
         </a>
         {% endfor %}
       </div>

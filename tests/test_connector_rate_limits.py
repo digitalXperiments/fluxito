@@ -136,15 +136,16 @@ def test_by_key_roundtrips():
 
 def test_settings_has_api_limits_tab_between_connections_and_notifications():
     src = SETTINGS_TEMPLATE.read_text()
-    tabs = src[src.index('<div class="ps-tabs"') : src.index("{# ── MEMBERS TAB")]
-    assert ">API Limits</button>" in tabs
-    assert tabs.index(">Connections</button>") < tabs.index(">API Limits</button>")
-    assert tabs.index(">API Limits</button>") < tabs.index(">Notifications</button>")
+    # The revamped Settings page is a single editorial scroll (no tab bar); the
+    # API limits section sits between Connections and Notifications by order.
+    assert 'id="limits"' in src
+    assert src.index('id="connections"') < src.index('id="limits"')
+    assert src.index('id="limits"') < src.index('id="notifications"')
 
 
 def test_settings_limits_panel_renders_via_shared_partial():
     src = SETTINGS_TEMPLATE.read_text()
-    assert 'data-panel="limits"' in src
+    assert 'id="limits"' in src
     # Cards come from the shared partial, not an inline macro.
     assert 'import "partials/rate_limit_cards.html" as rlcards' in src
     assert "rlcards.rl_assets()" in src
@@ -159,11 +160,15 @@ def test_settings_limits_panel_renders_via_shared_partial():
 
 
 def test_home_renders_connected_limits_section_with_deep_link():
+    # The home page is now a findings briefing. The rate-limit catalog is no
+    # longer duplicated on home — it lives solely in Project Settings (guarded
+    # by the settings tests above). Guard that home stays the briefing and does
+    # not re-embed the catalog cards or a stale partial import.
     src = HOME_TEMPLATE.read_text()
-    assert 'import "partials/rate_limit_cards.html" as rlcards' in src
-    assert "rate_limits_connected" in src
-    assert "rlcards.rl_card(c)" in src
-    assert "/settings#limits" in src  # deep-links into the Settings tab
+    assert "briefing_findings" in src
+    assert "Latest activity" in src
+    assert "rlcards.rl_card" not in src
+    assert "rate_limit_cards.html" not in src
 
 
 # ── Shared compact-card + modal partial ──────────────────────────────────

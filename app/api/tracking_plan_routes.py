@@ -373,6 +373,7 @@ _ROUTE_OWNED_ACTIONS = frozenset(
         "add_member",
         "remove_member",
         "reorder_members",
+        "refresh_drift",
     }
 )
 
@@ -404,6 +405,13 @@ async def _handle_route_action(
     service and translate errors to the standard shape.
     """
     try:
+        # ---- refresh_drift: recompute live-vs-plan drift on demand ----------
+        if action == "refresh_drift":
+            from app.services.tracking_plan.drift import compute_drift
+
+            summary = await compute_drift(db, uuid.UUID(ctx.project_id))
+            return _route_ok(drift=summary)
+
         # ---- update_rule (extended) ----------------------------------------
         if action == "update_rule":
             _sentinel = object()

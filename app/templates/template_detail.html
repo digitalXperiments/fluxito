@@ -13,21 +13,23 @@
     <span class="crumb-cur">{{ template.title }}</span>
   </div>
 
-  {% set cat_colors = {
-    'ecommerce': '#10b981',
-    'ppc': '#f59e0b',
-    'seo': '#3b82f6',
-    'gtm': '#8b5cf6',
-    'analytics': '#06b6d4',
-    'cross_channel': '#ec4899',
-    'warehouse': '#64748b',
-    'custom': '#4b7bec',
+  {# Ledger chip token per category — see --chip-* palette in app.css
+     (color-mix derived from accent/good/warn/bad/ink, no off-palette hex). #}
+  {% set cat_chip = {
+    'ecommerce': 'green',
+    'ppc': 'amber',
+    'seo': 'blue',
+    'gtm': 'purple',
+    'analytics': 'teal',
+    'cross_channel': 'pink',
+    'warehouse': 'red',
+    'custom': 'blue',
   } %}
-  {% set cat_color = cat_colors.get(template.category, '#4b7bec') %}
+  {% set cat_chip_name = cat_chip.get(template.category, 'blue') %}
 
   <div class="ad-header">
     <div class="ad-header-top">
-      <div class="auto-icon" style="width:56px;height:56px;font-size:22px;background:{{ cat_color }}18;color:{{ cat_color }}">
+      <div class="auto-icon" style="width:56px;height:56px;font-size:22px;background:var(--chip-{{ cat_chip_name }}-bg);color:var(--chip-{{ cat_chip_name }}-label)">
         {{ template.category[0] | upper }}
       </div>
       <div style="flex:1;min-width:0">
@@ -128,7 +130,7 @@
       {% for step in template.steps %}
       <div class="td-step-row">
         <div class="td-step-rail">
-          <div class="td-step-num" style="background:{{ cat_color }}18;color:{{ cat_color }};border-color:{{ cat_color }}40">
+          <div class="td-step-num" style="background:var(--chip-{{ cat_chip_name }}-bg);color:var(--chip-{{ cat_chip_name }}-label);border-color:var(--chip-{{ cat_chip_name }}-border)">
             {{ loop.index }}
           </div>
           {% if not loop.last %}<div class="td-step-line"></div>{% endif %}
@@ -363,8 +365,8 @@
   background: color-mix(in srgb, var(--muted) 10%, transparent);
   color: var(--muted); letter-spacing: 0.02em;
 }
-.t-flag.system { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue); }
-.t-flag.custom { background: color-mix(in srgb, var(--purple) 10%, transparent); color: var(--purple); }
+.t-flag.system { background: color-mix(in srgb, var(--accent) 10%, var(--card)); color: var(--accent-hover); }
+.t-flag.custom { background: color-mix(in srgb, var(--warn) 12%, var(--card)); color: var(--warn); }
 
 .t-cat {
   display: inline-flex; align-items: center;

@@ -31,7 +31,7 @@ from app.models.notification import Notification
 from app.models.token import GA4Property, GoogleAdsAccount, GTMContainer
 from app.models.user import User
 from app.templating import render
-from app.utils import safe_uuid
+from app.utils import base_url_from_request, safe_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,9 @@ async def _load_user(uid: str | None) -> dict | None:
                     "is_active": bool(u.is_active),
                     "is_superadmin": bool(u.is_superadmin),
                     "created_at": str(u.created_at) if u.created_at else "",
+                    "flux_role": u.flux_role,
+                    "flux_monitors": list(u.flux_monitors or []),
+                    "preferred_ai_client": u.preferred_ai_client,
                 }
     except Exception:
         pass
@@ -478,6 +481,7 @@ async def profile_page(request: Request):
             "recent_notifs": recent_notifs,
             "unread_notifs": unread_notifs,
             "mcp_pats": mcp_pats,
+            "base_url": base_url_from_request(request),
         },
     )
 

@@ -29,6 +29,9 @@ class Conversation(Base):
         index=True,
     )
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The app section the chat was started from (page_context.section), e.g.
+    # 'implement' or 'report'. Null for chats opened outside a known section.
+    origin_section: Mapped[str | None] = mapped_column(Text, nullable=True)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     model: Mapped[str] = mapped_column(String(120), nullable=False)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
@@ -62,7 +65,11 @@ class ChatMessage(Base):
 
 
 class AIProviderKey(Base):
-    """An encrypted AI-vendor API key, scoped to a project + user."""
+    """An encrypted AI-vendor API key, scoped to a project + user.
+
+    ``user_id IS NULL`` marks a project-shared default key (set by an
+    owner/admin) that every member falls back to when they have no personal
+    key for the provider."""
 
     __tablename__ = "ai_provider_keys"
 
@@ -73,10 +80,10 @@ class AIProviderKey(Base):
         nullable=True,
         index=True,
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False)

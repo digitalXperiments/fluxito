@@ -24,85 +24,90 @@
 /* ── Left rail ── */
 
 .settings-rail {
-  width: 220px;
+  width: 212px;
   flex-shrink: 0;
-  border-right: 1px solid var(--line, #e4e9f1);
-  background: var(--bg, #fff);
-  padding: 20px 0 24px;
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+  padding: 26px 14px;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
   align-self: stretch;
+}
+
+/* Keep the rail in view while the settings page scrolls (desktop only — the
+   mobile layout below turns it into a horizontal strip). */
+@media (min-width: 641px) {
+  .settings-rail {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    overflow-y: auto;
+  }
 }
 
 .settings-rail-group {
   display: flex;
   flex-direction: column;
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .settings-rail-group-label {
-  font-family: var(--mono, monospace);
+  font-family: var(--mono);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted, #71717a);
-  padding: 10px 18px 4px;
+  letter-spacing: 0.1em;
+  color: var(--muted-2);
+  padding: 16px 11px 6px;
+}
+
+.settings-rail-group:first-child .settings-rail-group-label {
+  padding-top: 0;
 }
 
 .settings-tab {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 18px;
+  gap: 10px;
+  padding: 8px 11px;
   border: none;
   background: transparent;
-  color: var(--ink-soft, #3f3f46);
-  font-size: 14px;
+  color: var(--ink-soft);
+  font-size: 13px;
   font-family: var(--sans, inherit);
-  font-weight: 450;
+  font-weight: 500;
   cursor: pointer;
-  border-radius: 0;
+  border-radius: 8px;
   text-align: left;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.15s ease, color 0.15s ease;
   width: 100%;
 }
 
 .settings-tab svg {
   flex-shrink: 0;
-  color: var(--muted, #71717a);
-  transition: color 0.12s;
+  color: var(--muted);
+  transition: color 0.15s ease;
 }
 
 .settings-tab:hover {
-  background: var(--bg-2, #f4f6f9);
-  color: var(--ink, #0b0b0e);
+  background: var(--paper-2);
+  color: var(--ink);
 }
 
 .settings-tab:hover svg {
-  color: var(--ink, #0b0b0e);
+  color: var(--ink);
 }
 
 .settings-tab.is-active {
-  background: color-mix(in srgb, var(--blue, #2557f6) 8%, transparent);
-  color: var(--blue, #2557f6);
-  font-weight: 550;
+  background: #EAE2D2;
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .settings-tab.is-active svg {
-  color: var(--blue, #2557f6);
-}
-
-/* ── Dark mode ── */
-
-html[data-theme="dark"] .settings-rail {
-  background: var(--bg, #0f0f12);
-  border-right-color: var(--line, #2a2a30);
-}
-
-html[data-theme="dark"] .settings-tab:hover {
-  background: var(--bg-2, #1a1a20);
+  color: var(--ink);
 }
 
 /* ── Responsive: stack on mobile ── */
@@ -120,7 +125,7 @@ html[data-theme="dark"] .settings-tab:hover {
   .settings-rail {
     width: 100%;
     border-right: none;
-    border-bottom: 1px solid var(--line, #e4e9f1);
+    border-bottom: 1px solid var(--line);
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
@@ -148,7 +153,61 @@ html[data-theme="dark"] .settings-tab:hover {
   }
 
   .settings-tab.is-active {
-    border-bottom-color: var(--blue, #2557f6);
+    border-bottom-color: var(--accent);
     background: transparent;
   }
+}
+
+/* ── Shared Ledger toggle recipe ──
+   34×20px pill, 16px knob; on = accent bg + knob right, off = --line-strong.
+   Markup: <label class="toggle"><input type="checkbox"><span class="toggle-track"></span></label> */
+
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.toggle input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: background 0.15s ease;
+}
+
+.toggle-track::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--card);
+  transition: transform 0.15s ease;
+}
+
+.toggle input:checked + .toggle-track {
+  background: var(--accent);
+}
+
+.toggle input:checked + .toggle-track::before {
+  transform: translateX(14px);
+}
+
+.toggle input:focus-visible + .toggle-track {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }

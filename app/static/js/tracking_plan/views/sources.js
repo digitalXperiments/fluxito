@@ -43,7 +43,7 @@ export function mountView(container) {
     if (!st.plan) return;
     const root = h("div", { class: "tp-pane is-active" });
     const detail = h("div", { class: "tp-detail", style: "flex:1" });
-    const inner = h("div", { class: "tp-detail-inner", style: "max-width:1040px" });
+    const inner = h("div", { class: "tp-detail-inner" });
     inner.appendChild(headerSection(st, render));
     inner.appendChild(catalogSection(st, render));
     inner.appendChild(graphSection(st, render));

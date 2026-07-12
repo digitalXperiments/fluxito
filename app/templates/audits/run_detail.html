@@ -124,10 +124,6 @@
          data-platform="{{ f.platform or '' }}"
          data-passed="{{ 'true' if f.passed else 'false' }}">
 
-      <div class="fr-left">
-        <div class="sev-dot sev-dot--{{ f.severity or 'pass' }}"></div>
-      </div>
-
       <div class="fr-body">
         <div class="fr-header">
           {% if f.platform %}
@@ -172,6 +168,16 @@
         </details>
         {% endif %}
       </div>
+      {% if not f.passed and f.severity in ('critical', 'warning') %}
+      <div class="fr-actions">
+        {% set ask_q = 'Fix this ' ~ (f.platform | replace('_', ' ') if f.platform else '') ~ ' finding: ' ~ (f.message or '') ~ (' Suggested fix: ' ~ f.remediation if f.remediation else '') %}
+        {% if f.severity == 'critical' %}
+        <a class="fr-action fr-action--primary" href="/ask?q={{ ask_q | urlencode }}">Ask Flux to fix</a>
+        {% else %}
+        <a class="fr-action fr-action--ghost" href="/ask?q={{ ask_q | urlencode }}">Ask Flux</a>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
     {% else %}
     <div class="audit-empty" style="padding:64px 24px">

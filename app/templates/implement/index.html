@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% from "partials/page_header.html" import page_header %}
+{% block title %}Implement — Fluxito{% endblock %}
+{% set active = 'implement' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/implement.css?v={{ asset_hash('css/implement.css') }}"/>
+{% endblock %}
+
+{% block main %}
+<div class="app-main" data-project-id="{{ project_id }}">
+
+  {% call page_header('Implement', 'Plan meets <em>production.</em>', 'Every planned event, side by side with what is actually deployed in your tag manager — status, drift, and a one-click path to ship the gaps.') %}
+    <div class="impl-hero-actions">
+      <a href="/tracking-plan" class="btn ghost sm">View Tracking Plan</a>
+    </div>
+  {% endcall %}
+
+  {# ── Summary stat strip ── #}
+  <div class="impl-stat-strip" id="implStatStrip">
+    <div class="impl-stat"><span class="impl-stat-num" data-stat="planned">—</span><span class="impl-stat-label">Planned</span></div>
+    <div class="impl-stat"><span class="impl-stat-num" data-stat="implemented">—</span><span class="impl-stat-label">Implemented</span></div>
+    <div class="impl-stat"><span class="impl-stat-num" data-stat="verified">—</span><span class="impl-stat-label">Verified</span></div>
+    <div class="impl-stat"><span class="impl-stat-num impl-stat-num--warn" data-stat="drifted">—</span><span class="impl-stat-label">Drifted</span></div>
+    <div class="impl-stat"><span class="impl-stat-num impl-stat-num--bad" data-stat="unplanned">—</span><span class="impl-stat-label">Unplanned in GTM</span></div>
+  </div>
+
+  {# ── Connect-your-tag-manager card (shown by JS when a plan exists but no
+        GTM is connected — the two implementation paths, side by side) ── #}
+  <div class="impl-connect-card" id="implConnectCard" hidden>
+    <div class="impl-connect-copy">
+      <div class="impl-connect-title">No tag manager connected</div>
+      <p>Connect Google Tag Manager and Flux deploys plan events straight into your container —
+         tags, triggers and variables, staged for your approval. Prefer to hand-implement?
+         Use <strong>Get code</strong> on any event below for a copy-paste snippet.</p>
+    </div>
+    <a href="/connect" class="btn primary sm">Connect Google Tag Manager</a>
+  </div>
+
+  {# ── Controls row ── #}
+  <div class="impl-controls">
+    <button class="btn ghost sm" id="refreshDriftBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      <span class="rd-label">Refresh drift</span>
+    </button>
+    <div class="impl-gtm-badge" id="implGtmBadge" hidden></div>
+  </div>
+
+  {# ── Coverage table ── #}
+  <div class="impl-panel">
+    <div class="impl-panel-head">
+      <span class="impl-panel-title">Event coverage</span>
+    </div>
+    <div class="impl-table-wrap">
+      <table class="impl-table" id="coverageTable">
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Category</th>
+            <th>Sources</th>
+            <th>Drift</th>
+            <th class="ta-r">7d volume</th>
+            <th class="ta-r">Param coverage</th>
+            <th>GTM</th>
+            <th class="ta-r">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="coverageBody">
+          <tr><td colspan="8" class="impl-loading">Loading coverage…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    {# Empty states, toggled by JS #}
+    <div class="impl-empty" id="emptyNoPlan" hidden>
+      <div class="impl-empty-title">No tracking plan yet</div>
+      <p>Define the events you want to track, then come back here to ship them.</p>
+      <a href="/tracking-plan" class="btn primary sm">Build your plan</a>
+    </div>
+  </div>
+
+  {# ── Unplanned in GTM (collapsible) ── #}
+  <details class="impl-collapse" id="unplannedSection" hidden>
+    <summary>
+      <span class="impl-collapse-title">Unplanned in GTM</span>
+      <span class="impl-collapse-count" id="unplannedCount">0</span>
+    </summary>
+    <div class="impl-collapse-body">
+      <p class="impl-collapse-hint">Events firing in your container with no matching plan event. Add them to the plan or retire the tag.</p>
+      <ul class="impl-unplanned-list" id="unplannedList"></ul>
+    </div>
+  </details>
+
+  {# ── Pending drafts panel ── #}
+  <div class="impl-panel" id="draftsPanel">
+    <div class="impl-panel-head">
+      <span class="impl-panel-title">Pending drafts</span>
+    </div>
+    <div class="impl-drafts" id="draftsBody">
+      <div class="impl-drafts-empty" id="draftsEmpty">No pending drafts. Deploy an event above to stage a change.</div>
+    </div>
+  </div>
+
+  {# ── "Get code" snippet modal (filled by implement.js) ── #}
+  <div class="impl-modal-backdrop" id="implCodeModal" hidden>
+    <div class="impl-modal" role="dialog" aria-modal="true" aria-labelledby="implCodeTitle">
+      <div class="impl-modal-head">
+        <div>
+          <div class="impl-modal-kicker">Implement event</div>
+          <h3 class="impl-modal-title" id="implCodeTitle"></h3>
+        </div>
+        <button type="button" class="impl-modal-close" id="implCodeClose" aria-label="Close">×</button>
+      </div>
+      <div class="impl-code-tabs" id="implCodeTabs">
+        <button type="button" class="impl-code-tab is-active" data-fmt="datalayer">GTM · dataLayer</button>
+        <button type="button" class="impl-code-tab" data-fmt="gtag">GA4 · gtag.js</button>
+      </div>
+      <pre class="impl-code" id="implCodeBlock"></pre>
+      <div class="impl-modal-foot">
+        <span class="impl-code-hint" id="implCodeHint"></span>
+        <button type="button" class="btn primary sm" id="implCodeCopy">Copy snippet</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/implement.js?v={{ asset_hash('js/implement.js') }}" defer></script>
+{% endblock %}

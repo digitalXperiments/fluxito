@@ -1,11 +1,12 @@
 // app/static/js/tracking_plan/shell.js
-// Workspace shell: nav rail (top: branch switcher + review pill), top action bar.
-// Subscribes to state; calls setView/setBranch. Hosts the view container.
+// Workspace shell: Ledger-styled sub-rail (branch switcher + nav + Ask Flux) and
+// topbar (breadcrumb + global plan actions). Subscribes to state; calls
+// setView/setBranch. Hosts the view container.
 //
-// TOPBAR (redesign): left = breadcrumb (.tp-crumb) showing 'Events / <current>'
-// or just the view name; right = .tp-topbar-actions with the GLOBAL plan actions
-// (Validate, Export ▾ → .md/.xlsx, Publish / branch review+merge). There is no
-// global save-state indicator anymore — save is per-editor (tp/util/editor).
+// TOPBAR: left = breadcrumb (.tp-crumb) showing 'Events / <current>' or just the
+// view name; right = .tp-topbar-actions with the GLOBAL plan actions (Validate,
+// Export ▾ → .md/.xlsx, Publish / branch review+merge). There is no global
+// save-state indicator anymore — save is per-editor (tp/util/editor).
 
 import { h, mountAll } from 'tp/render';
 import * as state from 'tp/state';
@@ -13,25 +14,28 @@ import * as api from 'tp/api';
 import { getPid } from 'tp/api';
 import { titleCase } from 'tp/util/format';
 
+// [view key, label, real-count resolver over plan (or null for no count)].
 const NAV = [
-  ['overview', 'Overview'],
-  ['events', 'Events'],
-  ['properties', 'Properties'],
-  ['bundles', 'Bundles'],
-  ['categories', 'Categories'],
-  ['sources', 'Sources & Destinations'],
-  ['issues', 'Issues'],
+  ['events', 'Events', (plan) => (plan.events || []).length],
+  ['properties', 'Properties', (plan) => propCount(plan)],
+  ['categories', 'Categories', (plan) => (plan.categories || []).length],
+  ['bundles', 'Bundles', (plan) => (plan.bundles || []).length],
+  ['sources', 'Destinations', (plan) => (plan.destinations || []).length],
 ];
+
+function propCount(plan) {
+  const p = plan.properties || {};
+  return (p.event || []).length + (p.user || []).length + (p.group || []).length + (p.system || []).length;
+}
 
 // view key → breadcrumb label + the plan collection holding its entities (for
 // resolving a selected entity's display name in the crumb).
 const VIEW_META = {
-  overview: { label: 'Overview' },
   events: { label: 'Events', coll: 'events' },
   properties: { label: 'Properties', coll: 'properties' },
   bundles: { label: 'Bundles', coll: 'bundles' },
   categories: { label: 'Categories', coll: 'categories' },
-  sources: { label: 'Sources & Destinations' },
+  sources: { label: 'Destinations' },
   review: { label: 'Branch review' },
   versions: { label: 'Versions' },
   issues: { label: 'Issues' },
@@ -68,9 +72,6 @@ export function mountShell(root) {
 function installDrillDown(viewHost, wsMain) {
   const mq = window.matchMedia(MOBILE_MQ);
 
-  // Persistent back button, inserted once as the first child of .tp-ws-main
-  // (renderTop/renderRail never touch .tp-ws-main's children directly, and
-  // mountAll(top, …) only clears `top`, so this survives every re-render).
   const back = h('button', { class: 'tp-back', type: 'button',
     onClick: () => state.select(null, null) },
     h('span', { 'aria-hidden': 'true' }, '‹'), 'Back to list');
@@ -82,9 +83,9 @@ function installDrillDown(viewHost, wsMain) {
     viewHost.classList.toggle('tp-detail-open', open);
   };
 
-  state.subscribe(sync);               // re-evaluate on every state change
-  mq.addEventListener('change', sync); // re-evaluate when crossing the breakpoint
-  sync();                              // initial
+  state.subscribe(sync);
+  mq.addEventListener('change', sync);
+  sync();
 }
 
 function curBranch() {
@@ -96,12 +97,12 @@ function curBranch() {
 function renderRail(rail) {
   const s = state.getState();
   const b = curBranch();
-  const onMain = b.is_main || s.branch === 'main';
+  const plan = s.plan || { events: [], properties: {}, categories: [], bundles: [], destinations: [] };
 
-  // branch switcher
+  // ---- wordmark-style eyebrow that doubles as the branch switcher ----
   const switcher = h('div', { class: 'tp-branchpick' });
   const btn = h('button', { class: 'tp-branch-btn', onClick: (e) => { e.stopPropagation(); menu.classList.toggle('is-open'); } },
-    h('b', {}, b.name),
+    h('span', { class: 'tp-branch-label' }, 'Tracking plan · ', h('b', {}, b.name)),
     h('span', { class: 'tp-caret' }, '▾'));
   const menu = h('div', { class: 'tp-menu' });
   for (const br of s.branches || []) {
@@ -111,7 +112,7 @@ function renderRail(rail) {
         menu.classList.remove('is-open');
         if (!guardNav()) return;
         state.setBranch(br.name);
-        state.setView('overview');
+        state.setView('events');
         await state.reload();
       },
     }, h('span', { class: 'tp-mono' }, br.name),
@@ -123,28 +124,47 @@ function renderRail(rail) {
   switcher.appendChild(btn);
   switcher.appendChild(menu);
 
-  const pill = onMain ? null
-    : h('span', { class: 'tp-review', dataset: { s: b.review_status || 'draft' } }, titleCase(b.review_status || 'draft'));
+  // ---- primary nav items (real counts from the loaded plan) ----
+  const items = NAV.map(([key, label, countFn]) => {
+    const count = countFn ? countFn(plan) : null;
+    return h('a', {
+      class: 'tp-nav-item' + (s.view === key ? ' is-active' : ''),
+      href: '#',
+      onClick: (e) => { e.preventDefault(); navTo(key); },
+    }, h('span', {}, label), count != null ? h('span', { class: 'tp-nav-count' }, String(count)) : null);
+  });
 
-  // nav items
-  const items = NAV.map(([key, label]) => h('button', {
-    class: 'tp-nav-item' + (s.view === key ? ' is-active' : ''),
-    onClick: () => navTo(key),
-  }, label));
+  const divider = h('div', { class: 'tp-nav-divider' });
 
-  // Branch review entry (non-main only)
-  if (!onMain) {
-    items.push(h('button', {
-      class: 'tp-nav-item tp-nav-review' + (s.view === 'review' ? ' is-active' : ''),
-      onClick: () => navTo('review'),
-    }, 'Branch review'));
-  }
-  items.push(h('button', {
+  // Branch review entry — ALWAYS visible (design: TP Review rail). Shows an
+  // accent count pill of pending (undecided) changes on the review-target
+  // branch (state.reviewPendingCount, kept live by state.reload()); on main
+  // with no draft branch the pill is simply absent (0 pending / no target).
+  const secondary = [];
+  const pendingCount = s.reviewPendingCount || 0;
+  secondary.push(h('a', {
+    class: 'tp-nav-item tp-nav-review' + (s.view === 'review' ? ' is-active' : ''),
+    href: '#',
+    onClick: (e) => { e.preventDefault(); navTo('review'); },
+  }, h('span', {}, 'Review'),
+     pendingCount > 0 ? h('span', { class: 'tp-nav-review-pill' }, String(pendingCount)) : null));
+  secondary.push(h('a', {
     class: 'tp-nav-item' + (s.view === 'versions' ? ' is-active' : ''),
-    onClick: () => navTo('versions'),
+    href: '#',
+    onClick: (e) => { e.preventDefault(); navTo('versions'); },
   }, 'Versions'));
+  secondary.push(h('a', {
+    class: 'tp-nav-item' + (s.view === 'issues' ? ' is-active' : ''),
+    href: '#',
+    onClick: (e) => { e.preventDefault(); navTo('issues'); },
+  }, 'Issues'));
 
-  mountAll(rail, [switcher, pill, h('div', { class: 'tp-nav-list' }, ...items)].filter(Boolean));
+  const askFlux = h('a', {
+    class: 'tp-ask-flux',
+    href: '/ask?q=' + encodeURIComponent('Help me update the tracking plan'),
+  }, h('span', { class: 'tp-flux-mark-tiny' }, 'F'), 'Ask Flux');
+
+  mountAll(rail, [switcher, h('div', { class: 'tp-nav-list' }, ...items, divider, ...secondary), askFlux]);
 }
 
 // ---- navigation guard ----
@@ -192,11 +212,11 @@ function renderTop(top) {
   const qs = s.branch && s.branch !== 'main' ? `?branch=${encodeURIComponent(s.branch)}` : '';
 
   const acts = [
-    h('button', { class: 'btn btn-ghost btn-sm', onClick: validate }, 'Validate'),
+    h('button', { class: 'btn btn-secondary btn-sm', onClick: validate }, 'Validate'),
     exportMenu(base, qs),
   ];
   if (onMain) {
-    acts.push(h('button', { class: 'btn btn-primary btn-sm tp-publish', onClick: publish }, 'Publish'));
+    acts.push(h('button', { class: 'btn btn-primary btn-sm tp-btn-accent', onClick: publish }, 'Publish'));
   } else {
     const rs = b.review_status || 'draft';
     if (rs === 'draft') acts.push(h('button', { class: 'btn btn-secondary btn-sm', onClick: () => setReview(b, 'ready_for_review') }, 'Request review'));
@@ -204,7 +224,7 @@ function renderTop(top) {
       acts.push(h('button', { class: 'btn btn-secondary btn-sm', onClick: () => setReview(b, 'approved') }, 'Approve'));
       acts.push(h('button', { class: 'btn btn-ghost btn-sm', onClick: () => setReview(b, 'changes_requested') }, 'Request changes'));
     }
-    if (state.isAdmin()) acts.push(h('button', { class: 'btn btn-primary btn-sm tp-publish', onClick: () => mergeBranch(b) }, 'Merge & publish'));
+    if (state.isAdmin()) acts.push(h('button', { class: 'btn btn-primary btn-sm tp-btn-accent', onClick: () => mergeBranch(b) }, 'Merge & publish'));
   }
   mountAll(top, [crumbFor(s), h('div', { class: 'tp-topbar-actions' }, ...acts)]);
 }
@@ -252,7 +272,7 @@ async function createBranch() {
   const description = prompt("What's this branch for? (optional)") || null;
   try {
     const r = await api.doAction('create_branch', { name, description }, state.getState().branch);
-    state.setBranch(r.name); state.setView('overview'); await state.reload();
+    state.setBranch(r.name); state.setView('events'); await state.reload();
     banner(`Branch "${r.name}" created.`, 'ok');
   } catch (e) { banner(e.message, 'err'); }
 }
@@ -262,7 +282,7 @@ async function mergeBranch(b) {
   try {
     const r = await api.doAction('merge_branch', { branch_id: b.id, changelog }, state.getState().branch);
     banner(`Merged → published ${r.version_number}.`, 'ok');
-    state.setBranch('main'); state.setView('overview'); await state.reload();
+    state.setBranch('main'); state.setView('events'); await state.reload();
   } catch (e) { banner(e.message, 'err'); }
 }
 async function setReview(b, review_status) {

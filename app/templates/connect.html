@@ -1,59 +1,34 @@
-{% extends "base.html" %}
+{% extends "settings/shell.html" %}
 {% from "partials/platform_icons.html" import platform_icon %}
+{% from "partials/page_header.html" import page_header %}
 {% block title %}Connections — Fluxito{% endblock %}
-{% set active = 'connect' %}
+{% set settings_section = 'connections' %}
 
-{# Map a backend platform slug to a prototype .pbadge class (for colored tile)
-   Falls back to `.pbadge.ghost` for unknown slugs. #}
-{% macro pbadge_class(slug) -%}
-{%- set s = (slug or '')|lower -%}
-{%- if s in ['ga4', 'google-analytics', 'google_analytics'] -%}ga4
-{%- elif s == 'amplitude' -%}amp
-{%- elif s == 'mixpanel' -%}mp
-{%- elif s == 'posthog' -%}ph
-{%- elif s in ['adobe-analytics', 'adobe_analytics', 'adobe'] -%}aa
-{%- elif s in ['marketo', 'adobe-marketo', 'adobe_marketo'] -%}marketo
-{%- elif s == 'gtm' -%}gtm
-{%- elif s in ['adobe-launch', 'adobe_launch'] -%}al
-{%- elif s in ['google', 'google_suite', 'google-suite'] -%}google
-{%- elif s in ['google-ads', 'google_ads', 'gads'] -%}gads
-{%- elif s == 'meta' -%}meta
-{%- elif s == 'tiktok' -%}tiktok
-{%- elif s in ['snap', 'snapchat'] -%}snap
-{%- elif s == 'linkedin' -%}linkedin
-{%- elif s == 'pinterest' -%}pinterest
-{%- elif s == 'reddit' -%}reddit
-{%- elif s == 'x' -%}x
-{%- elif s == 'bing' -%}bing
-{%- elif s in ['apple', 'apple-ads', 'apple_ads'] -%}apple
-{%- elif s == 'bigquery' -%}bq
-{%- elif s == 'redshift' -%}rs
-{%- elif s == 'snowflake' -%}sf
-{%- elif s == 'branch' -%}branch
-{%- elif s == 'appsflyer' -%}appsflyer
-{%- elif s == 'adjust' -%}adjust
-{%- elif s == 'braze' -%}braze
-{%- elif s == 'moengage' -%}moengage
-{%- else -%}ghost
+{# Scope badge — Flux's instruments carry a read/write/query tier per platform.
+   The backend doesn't (yet) persist a per-connection scope tier, so this infers
+   a reasonable default from the provider; the Google row uses the real
+   `google_active_tier` computed server-side from granted OAuth scopes. #}
+{% macro scope_badge(c) %}
+{%- set s = (c.provider or '')|lower -%}
+{%- if s in ['bigquery', 'redshift', 'snowflake'] -%}
+  <span class="scope-pill">QUERY</span>
+{%- elif s == 'google' -%}
+  {%- if google_active_tier in ['Full', 'GTM Write'] -%}
+  <span class="scope-pill is-write">READ + WRITE</span>
+  {%- else -%}
+  <span class="scope-pill">READ</span>
+  {%- endif -%}
+{%- else -%}
+  <span class="scope-pill">READ</span>
 {%- endif -%}
-{%- endmacro %}
+{% endmacro %}
 
-{% block main %}
+{% block settings_main %}
 <main class="app-main">
 
-  {# ── Editorial page header ── #}
-  <div class="page-head">
-    <div>
-      <span class="label">Connections</span>
-      <h1>
-        {% if connected_count and connected_count > 0 %}{{ connected_count }} connected.{% else %}Link your <em class="serif-italic">first platform.</em>{% endif %}
-        {% if remaining_count and remaining_count > 0 and connected_count and connected_count > 0 %}<em class="serif-italic">{{ remaining_count }} to go.</em>{% endif %}
-      </h1>
-      <p>Each connection belongs to this project. Teammates inherit read access — never your personal credentials. Write operations are scope-gated per platform.</p>
-    </div>
-  </div>
+  {{ page_header('Connections', "Flux's <em>instruments.</em>", 'Read-only by default; write scopes are granted per platform and every write is approved by you. Tokens encrypted at rest.') }}
 
-  {# Global live filter — applies to Connected cards + Google Suite CTA + More platforms cards #}
+  {# Global live filter — applies to Connected rows + Google Suite CTA + Available cards #}
   <div class="conn-search-wrap">
     <div class="conn-search">
       <input type="text" id="connSearch" placeholder="Filter connections and platforms…" oninput="window.filterConnections()">
@@ -64,48 +39,55 @@
      SECTION 1 — Currently connected
      ───────────────────────────────────────────────────────────────── #}
   {% if connections %}
-  <div class="cat-title analytics" style="margin-top:10px">Connected</div>
-  <div class="conn-grid" id="connectedGrid">
+  <div class="cat-title" style="margin-top:10px">Connected · {{ connections|length }}</div>
+  <div class="conn-grid conn-rows" id="connectedGrid">
     {% for c in connections %}
-    <div class="conn-card is-connected" data-search="{{ [c.platform_name, c.label, c.detail or '', (c.services or []) | map(attribute='name') | join(' ')] | join(' ') | lower }}">
-      <div class="conn-head">
-        <span class="conn-card-icon">{{ platform_icon(c.provider, 26) }}</span>
-        {% if c.is_active %}
-          <span class="status-pill live">Live</span>
-        {% else %}
-          <span class="status-pill">Inactive</span>
+    {% set is_expiring = c.is_expiring is defined and c.is_expiring %}
+    <div class="conn-row{% if is_expiring %} is-warn{% endif %}" data-search="{{ [c.platform_name, c.label, c.detail or '', (c.services or []) | map(attribute='name') | join(' ')] | join(' ') | lower }}">
+      <span class="conn-row-icon">{{ platform_icon(c.provider, 22) }}</span>
+      <div class="conn-row-body">
+        <div class="conn-row-name">
+          <span class="name">{{ c.platform_name }}</span>
+          {{ scope_badge(c) }}
+        </div>
+        <div class="conn-row-meta{% if is_expiring %} is-warn{% endif %}">
+          {{ c.label }}{% if c.detail %} · {{ c.detail }}{% endif %}
+        </div>
+        {% if c.services %}
+        <div class="svc-icons" aria-label="Services">
+          {% for svc in c.services %}
+          <span class="svc-icon {% if not svc.enabled %}is-disabled{% endif %}"
+                title="{{ svc.name }}{% if not svc.enabled %} — not connected{% endif %}"
+                aria-label="{{ svc.name }}{% if not svc.enabled %} (not connected){% endif %}">
+            {{ platform_icon(svc.slug, 14) }}
+          </span>
+          {% endfor %}
+        </div>
         {% endif %}
-        <div class="kebab-wrap" style="margin-left:auto">
-          <button class="kebab-btn" aria-label="Connection options" onclick="Fluxito.toggleKebab(event)">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>
+      </div>
+      {% if is_expiring %}
+      <a href="{{ c.edit_url }}" class="renew-btn">Renew</a>
+      {% elif c.is_active %}
+      <span class="conn-row-dot" title="Live"></span>
+      {% else %}
+      <span class="conn-row-dot is-inactive" title="Inactive"></span>
+      {% endif %}
+      <div class="kebab-wrap">
+        <button class="kebab-btn" aria-label="Connection options" onclick="Fluxito.toggleKebab(event)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>
+        </button>
+        <div class="kebab-menu">
+          <a href="{{ c.edit_url }}" class="kebab-menu-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit
+          </a>
+          <button class="kebab-menu-item is-danger"
+                  onclick="Fluxito.confirmDelete('{{ c.delete_url }}', 'Disconnect {{ c.platform_name }}?')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            Disconnect
           </button>
-          <div class="kebab-menu">
-            <a href="{{ c.edit_url }}" class="kebab-menu-item">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Edit
-            </a>
-            <button class="kebab-menu-item is-danger"
-                    onclick="Fluxito.confirmDelete('{{ c.delete_url }}', 'Disconnect {{ c.platform_name }}?')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-              Disconnect
-            </button>
-          </div>
         </div>
       </div>
-      <h4>{{ c.platform_name }}</h4>
-      <div class="desc">{{ c.label }}</div>
-      {% if c.detail %}<div class="conn-detail" style="font-size:12px;color:var(--muted);margin-top:6px">{{ c.detail }}</div>{% endif %}
-      {% if c.services %}
-      <div class="svc-icons" aria-label="Services">
-        {% for svc in c.services %}
-        <span class="svc-icon {% if not svc.enabled %}is-disabled{% endif %}"
-              title="{{ svc.name }}{% if not svc.enabled %} — not connected{% endif %}"
-              aria-label="{{ svc.name }}{% if not svc.enabled %} (not connected){% endif %}">
-          {{ platform_icon(svc.slug, 16) }}
-        </span>
-        {% endfor %}
-      </div>
-      {% endif %}
     </div>
     {% endfor %}
   </div>
@@ -115,7 +97,7 @@
      SECTION 2 — Google Suite connect / manage
      ───────────────────────────────────────────────────────────────── #}
   {% if not has_google %}
-  <div class="cat-title analytics" style="margin-top:48px">Google Suite</div>
+  <div class="cat-title" style="margin-top:48px">Google Suite</div>
   <a href="/connect/google" class="google-suite-cta" data-search="google suite ga4 gtm google ads search console analytics tag manager">
     <div class="gs-icon">{{ platform_icon("google", 26) }}</div>
     <div class="gs-body">
@@ -135,45 +117,57 @@
   {% endif %}
 
   {# ─────────────────────────────────────────────────────────────────
-     SECTION 3 — Other platforms (grouped)
+     SECTION 3 — Available platforms
      ───────────────────────────────────────────────────────────────── #}
-  {# Group available platforms by category. The backend supplies flat list;
-     we bucket client-side via tag on p. If not available, just show one list. #}
-  {% if platforms_avail %}
-  <div class="cat-title tags" style="margin-top:48px">More platforms</div>
-  <div class="conn-grid" id="platformsGrid">
-    {% for p in platforms_avail %}
-      {% if not p.primary %}
-      <a href="{{ p.url }}" class="conn-card {% if p.count %}is-connected{% endif %}" style="text-decoration:none;color:inherit"
-         data-search="{{ [p.name, p.desc, ((p.products or []) | map(attribute='name') | join(' '))] | join(' ') | lower }}">
-        <div class="conn-head">
-          <span class="conn-card-icon">{{ platform_icon(p.slug, 26) }}</span>
-          {% if p.count %}
-            <span class="status-pill live">{{ p.count }} connected</span>
-          {% else %}
-            <span class="status-pill">Available</span>
-          {% endif %}
-        </div>
-        <h4>{{ p.name }}</h4>
-        <div class="desc">{{ p.desc }}</div>
-        {% if p.products %}
-        <div class="svc-tags" aria-label="Included tools">
-          {% for pr in p.products %}
-          <span class="svc-tag {% if pr.soon %}is-soon{% endif %}"
-                title="{{ pr.name }}{% if pr.soon %} — coming soon{% endif %}">
-            <span class="svc-tag-ic">{{ platform_icon(pr.slug, 14) }}</span>{{ pr.name }}{% if pr.soon %} · soon{% endif %}
-          </span>
-          {% endfor %}
-        </div>
-        {% endif %}
-        <div class="conn-actions">
-          <span class="btn sm block" style="width:100%">
-            {% if p.count %}Add another{% else %}Connect {{ p.name }}{% endif %} <span class="arrow">→</span>
-          </span>
-        </div>
-      </a>
+  {% set avail_list = platforms_avail | rejectattr('primary') | list if platforms_avail else [] %}
+  {% set avail_cap = 8 %}
+  {% if avail_list %}
+  <div class="cat-title" style="margin-top:48px">Available · {{ avail_list|length }}</div>
+  <div class="conn-grid avail-grid" id="platformsGrid">
+    {% for p in avail_list %}
+    {% if loop.index == avail_cap + 1 %}
+    <a href="#" class="avail-card avail-overflow-tile" id="availOverflowTile">
+      <span class="avail-overflow-name">{{ avail_list|length - avail_cap }} more platforms</span>
+      <span class="avail-overflow-browse">BROWSE →</span>
+    </a>
+    <div class="avail-overflow-wrap" id="availOverflowWrap">
+    {% endif %}
+    <a href="{{ p.url }}" class="avail-card"
+       data-search="{{ [p.name, p.desc, ((p.products or []) | map(attribute='name') | join(' '))] | join(' ') | lower }}">
+      <span class="avail-card-icon">{{ platform_icon(p.slug, 20) }}</span>
+      <span class="avail-card-name">{{ p.name }}</span>
+      {% if p.count %}
+        <span class="avail-card-count" title="Add another {{ p.name }} connection">{{ p.count }} ↗</span>
+      {% else %}
+        <span class="avail-card-plus" title="Connect {{ p.name }}">+</span>
       {% endif %}
+      {% if p.products %}
+      <div class="svc-tags" aria-label="Included tools">
+        {% for pr in p.products %}
+        <span class="svc-tag {% if pr.soon %}is-soon{% endif %}"
+              title="{{ pr.name }}{% if pr.soon %} — coming soon{% endif %}">
+          <span class="svc-tag-ic">{{ platform_icon(pr.slug, 14) }}</span>{{ pr.name }}{% if pr.soon %} · soon{% endif %}
+        </span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </a>
     {% endfor %}
+    {% if avail_list|length > avail_cap %}</div>{% endif %}
+  </div>
+  {% endif %}
+
+  {# ─────────────────────────────────────────────────────────────────
+     Flux nudge — points at the highest-value unconnected platform.
+     No spend/usage stat is fabricated here (the backend doesn't expose one
+     per-platform yet) — copy stays honest about what connecting unlocks.
+     ───────────────────────────────────────────────────────────────── #}
+  {% set nudge = (avail_list | rejectattr('count') | list | first) if avail_list else None %}
+  {% if nudge %}
+  <div class="flux-nudge">
+    <span class="flux-nudge-mark">F</span>
+    <div class="flux-nudge-body">Connecting <strong>{{ nudge.name }}</strong> would let me fold it into your briefings and cross-channel comparisons — right now I can't see any of its data.</div>
+    <a href="{{ nudge.url }}" class="flux-nudge-cta">Connect {{ nudge.name }}</a>
   </div>
   {% endif %}
 
@@ -200,8 +194,58 @@
 .gs-body .desc { font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
 .gs-cta { flex-shrink: 0; }
 
-/* Service icon chips inside a connected card */
-.svc-icons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+/* ── Connected rows (2-col) ── */
+.conn-rows { grid-template-columns: 1fr 1fr; gap: 12px; }
+.conn-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 18px;
+  background: var(--card, var(--bg));
+  border: 1px solid var(--line-2);
+  border-radius: 11px;
+  position: relative;
+}
+.conn-row.is-warn { border-color: var(--warn); }
+.conn-row-icon {
+  width: 38px; height: 38px; flex-shrink: 0;
+  border-radius: var(--r-m);
+  background: var(--bg-2);
+  display: flex; align-items: center; justify-content: center;
+}
+.conn-row-icon svg, .conn-row-icon img { display: block; }
+.conn-row-body { flex: 1; min-width: 0; }
+.conn-row-name { display: flex; align-items: center; gap: 8px; }
+.conn-row-name .name { font-size: 14.5px; font-weight: 700; color: var(--ink); }
+.conn-row-meta { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.conn-row-meta.is-warn { color: var(--accent-hover); }
+.conn-row-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--good); flex-shrink: 0; }
+.conn-row-dot.is-inactive { background: var(--line-strong); }
+
+.scope-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  border-radius: 999px;
+}
+.scope-pill.is-write { border-color: var(--accent); color: var(--accent-hover); }
+
+.renew-btn {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  background: var(--accent);
+  color: #FFF9EF;
+  font-size: 12px; font-weight: 600;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+.renew-btn:hover { background: var(--accent-hover); color: #FFF9EF; }
+
+/* Service icon chips inside a connected row */
+.svc-icons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .svc-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px;
@@ -216,15 +260,6 @@
   border-style: dashed;
 }
 
-/* Card header platform icon */
-.conn-card-icon {
-  width: 40px; height: 40px; flex-shrink: 0;
-  border-radius: var(--r-m);
-  background: var(--bg-2); border: 1px solid var(--line);
-  display: flex; align-items: center; justify-content: center;
-}
-.conn-card-icon svg { display: block; }
-
 /* Product chips — showcase the named tools a single connection unlocks */
 .svc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .svc-tag {
@@ -238,8 +273,75 @@
 .svc-tag-ic svg { display: block; width: 14px; height: 14px; }
 .svc-tag.is-soon { opacity: 0.5; border-style: dashed; }
 
-/* Kebab menu — kept functional but recolored to editorial tokens */
-.kebab-wrap { position: relative; }
+/* ── Available platforms (3-col) ── */
+.avail-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: stretch; }
+.avail-card {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 16px;
+  background: var(--card, var(--bg));
+  border: 1px solid var(--line-2);
+  border-radius: 11px;
+  cursor: pointer;
+  text-decoration: none; color: inherit;
+  transition: border-color 0.15s ease;
+}
+.avail-card:hover { border-color: var(--accent); }
+.avail-card-icon { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; }
+.avail-card-icon svg, .avail-card-icon img { display: block; width: 20px; height: 20px; }
+.avail-card-name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; color: var(--ink); }
+.avail-card-plus, .avail-card-count {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* Overflow tile — caps the Available grid at 8 cards, dashed "N more" tile
+   reveals the rest in place when clicked (no separate browse page exists). */
+.avail-overflow-tile {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line-strong);
+  cursor: pointer;
+}
+.avail-overflow-tile:hover { border-color: var(--ink); }
+.avail-overflow-tile.is-hidden { display: none; }
+.avail-overflow-name { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; color: var(--ink-soft); }
+.avail-overflow-browse { font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex-shrink: 0; }
+.avail-overflow-wrap { display: none; }
+.avail-overflow-wrap.is-shown { display: contents; }
+
+/* ── Flux nudge card ── */
+.flux-nudge {
+  display: flex; align-items: center; gap: 14px;
+  padding: 15px 18px;
+  background: var(--card, var(--bg));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-l);
+  margin-top: 28px;
+}
+.flux-nudge-mark {
+  width: 28px; height: 28px; flex-shrink: 0;
+  border-radius: var(--r-sm);
+  background: var(--ink); color: var(--paper, var(--bg));
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-style: italic; font-size: 14px;
+}
+.flux-nudge-body { flex: 1; min-width: 200px; font-size: 13.5px; color: var(--ink-2, var(--ink-soft)); line-height: 1.55; }
+.flux-nudge-cta {
+  padding: 9px 16px;
+  border: 1px solid var(--line-strong);
+  font-size: 12.5px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  color: inherit; text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+.flux-nudge-cta:hover { border-color: var(--ink); }
+
+/* Kebab menu — kept functional, recolored to editorial tokens */
+.kebab-wrap { position: relative; flex-shrink: 0; }
 .kebab-btn {
   background: transparent; border: 1px solid transparent;
   color: var(--muted); padding: 4px; border-radius: 6px;
@@ -266,7 +368,7 @@
 .kebab-menu-item.is-danger { color: var(--red); }
 .kebab-menu-item.is-danger:hover { background: color-mix(in srgb, var(--red) 8%, transparent); }
 
-/* ── Dynamic page-wide search (filters Connected + Google Suite CTA + More platforms) ── */
+/* ── Dynamic page-wide search (filters Connected + Google Suite CTA + Available) ── */
 .conn-search-wrap {
   width: 100%;
   margin: 8px 0 28px;
@@ -300,33 +402,17 @@
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") center/contain no-repeat;
 }
 
-/* SEO Tools CTA */
-.seo-tools-cta {
-  display: flex; align-items: center; gap: 20px;
-  padding: 22px 26px;
-  border: 1px solid var(--ink); border-radius: var(--r-l);
-  background: var(--bg); text-decoration: none; color: inherit;
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
+@media (max-width: 900px) {
+  .conn-rows { grid-template-columns: 1fr; }
+  .avail-grid { grid-template-columns: repeat(2, 1fr); }
 }
-.seo-tools-cta:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(11,11,14,0.08); }
-.st-icon {
-  width: 54px; height: 54px; flex-shrink: 0;
-  border-radius: var(--r-m);
-  background: var(--bg-2); border: 1px solid var(--line);
-  display: flex; align-items: center; justify-content: center;
-}
-.st-body { flex: 1; min-width: 0; }
-.st-body h4 { margin: 0 0 4px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
-.st-body .desc { font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
-.st-cta { flex-shrink: 0; }
-
 @media (max-width: 640px) {
   .google-suite-cta { flex-direction: column; align-items: flex-start; }
   .gs-cta { width: 100%; }
   .gs-cta .btn { width: 100%; justify-content: center; }
-  .seo-tools-cta { flex-direction: column; align-items: flex-start; }
-  .st-cta { width: 100%; }
-  .st-cta .btn { width: 100%; justify-content: center; }
+  .avail-grid { grid-template-columns: 1fr; }
+  .flux-nudge { flex-direction: column; align-items: flex-start; }
+  .flux-nudge-cta { width: 100%; text-align: center; }
 }
 </style>
 {% endblock %}
@@ -338,8 +424,25 @@
     if (!input) return;
     var q = (input.value || '').toLowerCase().trim();
 
-    // Filter all conn-card lists (Connected + More platforms)
-    document.querySelectorAll('.conn-card').forEach(function (card) {
+    // The "N more platforms" overflow tile collapses cards 9+ by default.
+    // A search needs to be able to surface matches among those, so expand
+    // the overflow group (and hide the tile) whenever a query is active;
+    // collapse back to the capped view once the query is cleared.
+    var overflowWrap = document.getElementById('availOverflowWrap');
+    var overflowTile = document.getElementById('availOverflowTile');
+    if (overflowWrap && overflowTile) {
+      if (q) {
+        overflowWrap.classList.add('is-shown');
+        overflowTile.classList.add('is-hidden');
+      } else {
+        overflowWrap.classList.remove('is-shown');
+        overflowTile.classList.remove('is-hidden');
+      }
+    }
+
+    // Filter all connected rows + available cards (the overflow tile itself
+    // isn't a searchable card)
+    document.querySelectorAll('.conn-row, .avail-card:not(.avail-overflow-tile)').forEach(function (card) {
       var hay = (card.dataset.search || card.textContent || '').toLowerCase();
       var show = !q || hay.indexOf(q) !== -1;
       card.style.display = show ? '' : 'none';
@@ -361,7 +464,7 @@
     // when the query is active and that section has no visible cards.
     document.querySelectorAll('.conn-grid').forEach(function (grid) {
       var hasVisible = false;
-      grid.querySelectorAll('.conn-card').forEach(function (c) {
+      grid.querySelectorAll('.conn-row, .avail-card:not(.avail-overflow-tile)').forEach(function (c) {
         if (c.style.display !== 'none') hasVisible = true;
       });
       var title = grid.previousElementSibling;
@@ -374,5 +477,16 @@
       }
     });
   };
+
+  // "N more platforms" overflow tile — reveals the capped Available cards
+  // in place (there's no separate browse-all-platforms page).
+  document.addEventListener('click', function (e) {
+    var tile = e.target.closest('#availOverflowTile');
+    if (!tile) return;
+    e.preventDefault();
+    var wrap = document.getElementById('availOverflowWrap');
+    if (wrap) wrap.classList.add('is-shown');
+    tile.classList.add('is-hidden');
+  });
 </script>
 {% endblock %}

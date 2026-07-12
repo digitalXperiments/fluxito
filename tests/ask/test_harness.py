@@ -1,3 +1,6 @@
+import json
+import uuid
+
 import pytest
 
 from app.ask.harness import Harness, HarnessDeps
@@ -223,3 +226,153 @@ async def test_parallel_tool_calls_dispatched_correctly():
     assert len(result_blocks) == 2
     result_ids = {b.tool_use_id for b in result_blocks}
     assert result_ids == {"id-A", "id-B"}
+
+
+# ---- draft wiring (tagmanager_write propose_change) -----------------------
+
+
+class _ProposeBridge:
+    """Returns a propose_change-shaped result for tagmanager_write."""
+
+    def tool_specs(self):
+        return []
+
+    async def dispatch(self, name, params):
+        result = {
+            "operation": "propose_change",
+            "proposal": "Proposed update of tag 'Meta Pixel':\n  - Set eventID",
+            "proposed_config": {"entity_type": "tag"},
+            "change_type": "update",
+            "entity_type": "tag",
+            "entity_name": "Meta Pixel",
+            "is_live": False,
+            "requires_publish": True,
+            "connection_id": "conn-1",
+            "account_id": "acc-1",
+            "container_id": "GTM-XYZ",
+            "workspace_id": "ws-9",
+        }
+        return (json.dumps(result), False)
+
+
+class _IdService:
+    """Records appends and hands back a fresh message id each time."""
+
+    def __init__(self):
+        self.appended = []
+        self.ids = []
+
+    async def append(self, conv_id, message, token_usage=None):
+        self.appended.append(message)
+        mid = uuid.uuid4()
+        self.ids.append(mid)
+        return mid
+
+
+class _FakeDrafts:
+    def __init__(self):
+        self.created = []
+        self.attached = []
+
+    async def create(self, **kwargs):
+        did = uuid.uuid4()
+
+        class _D:
+            id = did
+            message_id = None
+            kind = kwargs["kind"]
+            title = kwargs["title"]
+            status = "pending"
+            payload = kwargs["payload"]
+            published_version = None
+            created_at = None
+
+        self.created.append((did, kwargs))
+        return _D()
+
+    async def attach_message(self, draft_id, message_id):
+        self.attached.append((draft_id, message_id))
+
+
+@pytest.mark.asyncio
+async def test_propose_change_creates_draft_and_attaches_to_answer():
+    provider = FakeProvider(
+        [
+            [  # iteration 1: propose_change tool call
+                StreamEvent(type="tool_call_start", tool_id="t1", tool_name="tagmanager_write"),
+                StreamEvent(type="tool_args_delta", args_fragment='{"action":"propose_change"}'),
+                StreamEvent(type="tool_call_end"),
+                StreamEvent(type="message_done", stop_reason=StopReason.TOOL_USE),
+            ],
+            [  # iteration 2: final text answer
+                StreamEvent(type="text_delta", text="Here is the proposed change."),
+                StreamEvent(type="message_done", stop_reason=StopReason.END),
+            ],
+        ]
+    )
+    svc = _IdService()
+    drafts = _FakeDrafts()
+    deps = HarnessDeps(
+        provider=provider,
+        bridge=_ProposeBridge(),
+        service=svc,
+        conversation_id=uuid.uuid4(),
+        model="m",
+        system="SYS",
+        drafts=drafts,
+        project_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+    )
+    h = Harness(deps, max_iterations=5)
+    out = [e async for e in h.run(LLMMessage(role="user", content=[TextBlock(text="fix it")]))]
+
+    # A draft frame was streamed to the client.
+    draft_frames = [e for e in out if e.type == "draft"]
+    assert len(draft_frames) == 1
+    assert draft_frames[0].draft["kind"] == "gtm_workspace_change"
+
+    # One FluxDraft was created, carrying the GTM identifiers for real publish.
+    assert len(drafts.created) == 1
+    _, kwargs = drafts.created[0]
+    assert kwargs["kind"] == "gtm_workspace_change"
+    assert kwargs["payload"]["gtm"] == {
+        "connection_id": "conn-1",
+        "account_id": "acc-1",
+        "container_id": "GTM-XYZ",
+        "workspace_id": "ws-9",
+    }
+
+    # It was attached to the follow-up assistant answer (the last appended message).
+    assert len(drafts.attached) == 1
+    attached_draft_id, attached_msg_id = drafts.attached[0]
+    assert attached_msg_id == svc.ids[-1]
+
+
+@pytest.mark.asyncio
+async def test_no_draft_without_drafts_service():
+    """Same propose_change flow, but no drafts wiring → no draft, no crash."""
+    provider = FakeProvider(
+        [
+            [
+                StreamEvent(type="tool_call_start", tool_id="t1", tool_name="tagmanager_write"),
+                StreamEvent(type="tool_args_delta", args_fragment='{"action":"propose_change"}'),
+                StreamEvent(type="tool_call_end"),
+                StreamEvent(type="message_done", stop_reason=StopReason.TOOL_USE),
+            ],
+            [
+                StreamEvent(type="text_delta", text="done"),
+                StreamEvent(type="message_done", stop_reason=StopReason.END),
+            ],
+        ]
+    )
+    deps = HarnessDeps(
+        provider=provider,
+        bridge=_ProposeBridge(),
+        service=RecordingService(),
+        conversation_id="c1",
+        model="m",
+        system="SYS",
+    )
+    h = Harness(deps, max_iterations=5)
+    out = [e async for e in h.run(LLMMessage(role="user", content=[TextBlock(text="fix it")]))]
+    assert not [e for e in out if e.type == "draft"]

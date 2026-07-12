@@ -13,12 +13,13 @@
 // a mono identifier name, an optional comment badge, and a rotate-on-open chevron.
 // Field-level before/after renders as the .tp-fielddiff table.
 import { h } from "tp/render";
+import { changeKey } from "tp/util/diff";
 
 const MARK_CLASS = { "+": "add", "~": "chg", "-": "rem" };
 const MARK_GLYPH = { "+": "+", "~": "~", "-": "−" };
 
 export function entityKey(c) {
-  return `${c.entityType}:${c.id || c.name}`;
+  return changeKey(c);
 }
 
 // Small inline-SVG speech bubble for the comment badge (no emoji — sans system).
@@ -90,9 +91,14 @@ function changeRow(c, opts) {
   const expandable = c.marker === "~" && (c.fields && c.fields.length);
   const count = opts.commentCounts ? (opts.commentCounts[entityKey(c)] || 0) : 0;
 
-  const header = h("div", { class: "tp-diff-item" + (expandable ? " is-expandable" : "") },
+  const header = h("div", { class: "tp-diff-item tp-diff-row-" + cls + (expandable ? " is-expandable" : "") },
     h("span", { class: "tp-diff-mark " + cls }, MARK_GLYPH[c.marker] || c.marker),
-    h("span", { class: "tp-diff-name" }, String(c.name)),
+    h("span", { class: "tp-diff-name" + (c.marker === "-" ? " tp-diff-name-removed" : "") }, String(c.name)),
+    // Always-visible human description (design: TP Versions compare) — never
+    // gated behind the expand chevron, unlike the field-level before/after table.
+    c.description
+      ? h("span", { class: "tp-diff-desc" }, String(c.description))
+      : null,
     count
       ? h("span", { class: "tp-diff-comments", title: `${count} comment${count === 1 ? "" : "s"}` },
           commentIcon(), String(count))

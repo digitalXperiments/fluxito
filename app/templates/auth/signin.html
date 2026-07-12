@@ -1,30 +1,51 @@
 {% extends "base.html" %}
 {% block title %}Sign in — {{ brand().name }}{% endblock %}
+{% block nav %}{% endblock %}
+{% block footer %}{% endblock %}
 
 {% block main %}
 <div class="auth-shell">
-  <div class="auth-card">
-    <div class="auth-brand">
-      <a href="/">
-        <span class="auth-brand-mark">{{ brand().name }}<span class="auth-brand-dot">.</span></span>
-      </a>
-      {% if brand().name == 'Fluxito' %}<span class="beta-pill" title="Fluxito is in public beta">Beta</span>{% endif %}
+  <!-- ═══ LEFT · BRAND PANEL ═══ -->
+  <div class="auth-brand-panel">
+    <a href="/" class="auth-wordmark">{{ brand().name | lower }}<span class="auth-wordmark-dot"></span></a>
+
+    <div class="auth-quote-block">
+      <div class="auth-quote">&ldquo;Morning. While you were out: two anomalies, one fix drafted, <em>nothing on fire.</em>&rdquo;</div>
+      <div class="auth-quote-attr">
+        <span class="auth-flux-mark">F</span>
+        <div>
+          <div class="auth-flux-name">Flux</div>
+          <div class="auth-flux-role">Your analytics teammate · on duty</div>
+        </div>
+      </div>
     </div>
+
+    <div class="auth-brand-stats">
+      <span>27 platforms</span><span>MCP native</span><span>Apache-2.0</span>
+    </div>
+  </div>
+
+  <!-- ═══ RIGHT · FORM ═══ -->
+  <div class="auth-form-panel">
+  <div class="auth-card">
+    {% if brand().name == 'Fluxito' %}<span class="beta-pill" title="Fluxito is in public beta">Beta</span>{% endif %}
 
     {% if first_run %}
     {# ── First-run: create the admin account ── #}
     <div class="auth-lead">
-      <h1>Welcome to <em class="serif-italic">{{ brand().name }}.</em></h1>
+      <div class="auth-eyebrow">Get started</div>
+      <h1>Welcome to <em>{{ brand().name }}.</em></h1>
       <p>Create an admin account to get started. You can add Google sign-in and invite teammates later from Settings.</p>
     </div>
     {% else %}
     {# ── Normal: sign in (+ create account when signup is open) ── #}
     <div class="auth-lead">
-      <h1>Welcome <em class="serif-italic">back.</em></h1>
+      <div class="auth-eyebrow">Sign in</div>
+      <h1>Welcome <em>back.</em></h1>
       {% if signup_enabled %}
-      <p>Sign in to your workspace, or create a new account to get started.</p>
+      <p>Flux kept the seat warm. Sign in to your workspace, or create a new account to get started.</p>
       {% else %}
-      <p>Sign in to your workspace. {{ brand().name }} is in invite-only beta — <a href="/request-access">request access</a>.</p>
+      <p>Flux kept the seat warm. {{ brand().name }} is in invite-only beta — <a href="/request-access">request access</a>.</p>
       {% endif %}
     </div>
 
@@ -83,7 +104,7 @@
         <a href="#" onclick="showForgotPassword();return false;">Forgot password?</a>
       </div>
 
-      <button type="submit" class="btn primary block" id="authSubmitBtn">{% if first_run %}Create admin account{% else %}Sign in{% endif %}</button>
+      <button type="submit" class="btn-accent auth-submit" id="authSubmitBtn">{% if first_run %}Create admin account{% else %}Sign in{% endif %}</button>
 
       <div id="authError" class="auth-message auth-error" style="display:none;"></div>
       <div id="authSuccess" class="auth-message auth-success" style="display:none;"></div>
@@ -96,7 +117,7 @@
         <span>Email</span>
         <input type="email" id="forgotEmail" name="email" class="f-input" placeholder="you@example.com" required autocomplete="email">
       </div>
-      <button type="submit" class="btn primary block">Send reset link</button>
+      <button type="submit" class="btn-accent auth-submit">Send reset link</button>
       <div class="auth-back">
         <a href="#" onclick="hideForgotPassword();return false;">Back to sign in</a>
       </div>
@@ -110,7 +131,7 @@
       <div class="auth-message auth-warning" style="display:block;">
         <strong>Email not verified.</strong> Check your inbox for the verification link.
       </div>
-      <button class="btn block" style="margin-top:12px" onclick="resendVerification()">Resend verification email</button>
+      <button class="btn-secondary auth-resend" onclick="resendVerification()">Resend verification email</button>
       <div id="resendMsg" class="auth-message auth-success" style="display:none;"></div>
     </div>
 
@@ -118,137 +139,97 @@
       By continuing, you agree to {{ brand().name }}'s <a href="/legal/terms">terms</a> and <a href="/legal/privacy">privacy policy</a>.
     </p>
   </div>
+  </div>
 </div>
 
 <style>
-.auth-shell {
-  min-height: calc(100vh - 120px);
-  display: flex; align-items: center; justify-content: center;
-  padding: 40px 16px;
-}
-.auth-card {
-  width: 100%; max-width: 460px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
-  padding: 40px 36px;
-}
-.auth-brand { text-align: center; margin-bottom: 20px; }
-.auth-brand a { text-decoration: none; color: var(--ink); }
-.auth-brand-mark {
-  font-size: 22px; font-weight: 600; letter-spacing: -0.02em;
-  color: var(--ink);
-}
-.auth-brand-dot { color: var(--green); }
+.auth-shell { min-height: 100vh; display: grid; grid-template-columns: 1fr 480px; }
+.has-sidebar .main { margin-left: 0; }
 
-.auth-lead { text-align: center; margin-bottom: 26px; }
-.auth-lead h1 {
-  font-size: 30px; font-weight: 500; letter-spacing: -0.02em;
-  margin: 0 0 6px; color: var(--ink); line-height: 1.1;
-}
-.auth-lead p {
-  font-size: 13.5px; color: var(--ink-soft); margin: 0; line-height: 1.55;
-}
+/* ── Left brand panel ── */
+.auth-brand-panel { background: var(--dark-bg); color: var(--paper); padding: 48px 56px; display: flex; flex-direction: column; }
+.auth-wordmark { display: flex; align-items: baseline; gap: 2px; font-family: var(--serif); font-size: 23px; font-weight: 600; color: var(--paper); text-decoration: none; }
+.auth-wordmark-dot { width: 6px; height: 6px; border-radius: 99px; background: var(--accent); display: inline-block; margin-left: 3px; }
 
-.auth-toggle {
-  display: flex; background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-m); padding: 3px;
-  margin-bottom: 22px;
+.auth-quote-block { margin: auto 0; max-width: 480px; }
+.auth-quote { font-family: var(--serif); font-size: 44px; font-weight: 500; line-height: 1.12; letter-spacing: -0.01em; }
+.auth-quote em { color: var(--accent); font-style: italic; }
+.auth-quote-attr { display: flex; align-items: center; gap: 12px; margin-top: 28px; }
+.auth-flux-mark {
+  width: 38px; height: 38px; border-radius: 10px; background: var(--paper); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center; font-family: var(--serif); font-style: italic; font-size: 20px; flex-shrink: 0;
 }
+.auth-flux-name { font-size: 14px; font-weight: 700; }
+.auth-flux-role { font-family: var(--mono); font-size: 11px; color: #9C9483; text-transform: uppercase; letter-spacing: 0.02em; }
+
+.auth-brand-stats { display: flex; gap: 24px; font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+
+/* ── Right form panel ── */
+.auth-form-panel { background: var(--paper); display: flex; align-items: center; justify-content: center; padding: 40px; position: relative; }
+.auth-card { width: 100%; max-width: 360px; }
+.auth-card .beta-pill { position: absolute; top: 24px; right: 24px; }
+
+.auth-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-hover); margin-bottom: 12px; }
+.auth-lead { margin-bottom: 26px; }
+.auth-lead h1 { font-family: var(--serif); font-size: 34px; font-weight: 500; line-height: 1.1; margin: 0 0 8px; color: var(--ink); }
+.auth-lead h1 em { color: var(--accent-hover); font-style: italic; }
+.auth-lead p { font-size: 13.5px; color: var(--ink-soft); margin: 0; line-height: 1.55; }
+.auth-lead p a { color: var(--accent-hover); text-decoration: underline; }
+
+.auth-toggle { display: flex; background: var(--paper-2); border: 1px solid var(--line-2); border-radius: var(--r-md); padding: 3px; margin-bottom: 22px; }
 .auth-toggle-btn {
-  flex: 1; padding: 8px 0;
-  border: none; background: transparent;
-  border-radius: calc(var(--r-m) - 2px);
-  font-size: 13px; font-weight: 500;
-  cursor: pointer; color: var(--muted);
-  transition: background 0.15s, color 0.15s;
-  font-family: inherit;
+  flex: 1; padding: 8px 0; border: none; background: transparent; border-radius: calc(var(--r-md) - 2px);
+  font-size: 13px; font-weight: 500; cursor: pointer; color: var(--muted); transition: background 0.15s, color 0.15s; font-family: inherit;
 }
-.auth-toggle-btn.is-active {
-  background: var(--bg); color: var(--ink);
-}
+.auth-toggle-btn.is-active { background: var(--card); color: var(--ink); }
 
 .btn-google {
-  display: flex; align-items: center; justify-content: center;
-  gap: 10px; width: 100%;
-  padding: 11px 16px;
-  border: 1px solid var(--line); border-radius: var(--r-m);
-  background: var(--bg); color: var(--ink);
-  font-size: 14px; font-weight: 500;
-  text-decoration: none; cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-  font-family: inherit;
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px 16px;
+  border: 1px solid var(--line-strong); border-radius: 9px; background: var(--card); color: var(--ink);
+  font-size: 14px; font-weight: 500; text-decoration: none; cursor: pointer; transition: border-color 0.15s; font-family: inherit;
 }
-.btn-google:hover { border-color: var(--ink); background: var(--bg-2); }
+.btn-google:hover { border-color: var(--ink); }
 
-.auth-divider {
-  display: flex; align-items: center;
-  margin: 20px 0; gap: 12px;
-}
-.auth-divider::before,
-.auth-divider::after {
-  content: ''; flex: 1; height: 1px; background: var(--line);
-}
-.auth-divider span {
-  font-size: 11px; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.08em;
-  font-family: var(--mono);
-}
+.auth-divider { display: flex; align-items: center; margin: 20px 0; gap: 12px; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--line-2); }
+.auth-divider span { font-size: 10.5px; color: var(--muted-2); text-transform: uppercase; letter-spacing: 0.08em; font-family: var(--mono); }
 
-.auth-form .f-field { margin-bottom: 14px; }
-
-.auth-forgot { text-align: right; margin: -4px 0 14px; }
-.auth-forgot a {
-  font-size: 12.5px; color: var(--muted);
-  text-decoration: none;
-  font-family: var(--mono); letter-spacing: 0.02em;
+.auth-form .f-field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+.auth-form .f-field > span { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.auth-form .f-input {
+  padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--card);
+  font-family: var(--sans); font-size: 14px; color: var(--ink); outline: none; width: 100%; transition: border-color .15s, box-shadow .15s;
 }
-.auth-forgot a:hover { color: var(--ink); }
+.auth-form .f-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(196,112,58,0.15); }
+
+.auth-forgot { text-align: right; margin: -6px 0 14px; }
+.auth-forgot a { font-size: 11.5px; color: var(--muted); text-decoration: none; font-family: var(--mono); }
+.auth-forgot a:hover { color: var(--accent-hover); }
+
+.auth-submit {
+  display: flex; width: 100%; align-items: center; justify-content: center; padding: 13px;
+  font-size: 14.5px; box-shadow: 0 8px 20px rgba(196,112,58,0.25);
+}
+.auth-resend { display: flex; width: 100%; align-items: center; justify-content: center; margin-top: 12px; }
 
 .auth-back { text-align: center; margin-top: 14px; }
-.auth-back a {
-  font-size: 12.5px; color: var(--muted);
-  text-decoration: none; font-family: var(--mono);
-}
-.auth-back a:hover { color: var(--ink); }
+.auth-back a { font-size: 12.5px; color: var(--muted); text-decoration: none; font-family: var(--mono); }
+.auth-back a:hover { color: var(--accent-hover); }
 
-.auth-help {
-  font-size: 13px; color: var(--ink-soft);
-  margin-bottom: 16px; line-height: 1.55;
-}
+.auth-help { font-size: 13px; color: var(--ink-soft); margin-bottom: 16px; line-height: 1.55; }
 
-.auth-message {
-  margin-top: 14px; padding: 10px 14px;
-  border-radius: var(--r-m);
-  font-size: 12.5px; line-height: 1.55;
-  border: 1px solid transparent;
-}
-.auth-error {
-  background: color-mix(in srgb, var(--red) 8%, transparent);
-  border-color: color-mix(in srgb, var(--red) 30%, var(--line));
-  color: var(--red);
-}
-.auth-success {
-  background: color-mix(in srgb, var(--green) 8%, transparent);
-  border-color: color-mix(in srgb, var(--green) 30%, var(--line));
-  color: var(--green);
-}
-.auth-warning {
-  background: color-mix(in srgb, var(--amber) 8%, transparent);
-  border-color: color-mix(in srgb, var(--amber) 30%, var(--line));
-  color: var(--amber);
-}
+.auth-message { margin-top: 14px; padding: 10px 14px; border-radius: var(--r-md); font-size: 12.5px; line-height: 1.55; border: 1px solid transparent; }
+.auth-error { background: color-mix(in srgb, var(--bad) 8%, transparent); border-color: color-mix(in srgb, var(--bad) 30%, var(--line-2)); color: var(--bad); }
+.auth-success { background: color-mix(in srgb, var(--good) 8%, transparent); border-color: color-mix(in srgb, var(--good) 30%, var(--line-2)); color: var(--good); }
+.auth-warning { background: color-mix(in srgb, var(--warn) 8%, transparent); border-color: color-mix(in srgb, var(--warn) 30%, var(--line-2)); color: var(--warn); }
 
-.auth-footnote {
-  font-size: 11.5px; color: var(--muted);
-  text-align: center; margin-top: 26px; line-height: 1.55;
-}
+.auth-footnote { font-size: 11.5px; color: var(--muted); text-align: center; margin-top: 26px; line-height: 1.55; }
 .auth-footnote a { color: var(--ink-soft); text-decoration: underline; }
 
-@media (max-width: 480px) {
-  .auth-card { padding: 30px 20px; border: none; }
-  .auth-lead h1 { font-size: 26px; }
+@media (max-width: 900px) {
+  .auth-shell { grid-template-columns: 1fr; }
+  .auth-brand-panel { display: none; }
+  .auth-form-panel { padding: 40px 20px; }
 }
 </style>
 

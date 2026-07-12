@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "partials/page_header.html" import page_header %}
+{% block title %}{{ page_title }}{% endblock %}
+{% set active = 'audit_vendors' %}
+{% set audit_tab = 'vendors' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/audit_flows.css?v={{ asset_hash('css/audit_flows.css') }}"/>
+{% endblock %}
+
+{% block main %}
+<div class="app-main" id="afVendors">
+
+  {% call page_header('Audit vendors', 'Every vendor, its <em>rule book.</em>', 'Each vendor bundles its beacon profile, the platform rule book Flux validates against, and your custom rules — configure once, reuse in every test flow and audit.') %}
+    <div class="af-builder-actions">
+      <a href="/audits/flows" class="btn ghost sm">Test flows</a>
+    </div>
+  {% endcall %}
+
+  {% include "partials/audit_tabs.html" %}
+
+  <div class="af-vendors">
+    {# ── Left rail ── #}
+    <div class="af-vrail">
+      <div class="af-vrail-head">
+        <span class="af-card-title" style="margin:0;">Vendors</span>
+        <button type="button" class="btn ghost sm" id="afVAddBtn">+ Add</button>
+      </div>
+      <div class="af-vlist" id="afVList"></div>
+
+      <div class="af-card-title af-catalog-title">Add from catalog</div>
+      <div class="af-catalog-picks" id="afVCatalog"></div>
+    </div>
+
+    {# ── Vendor detail: Profile | Rule book | Custom rules ── #}
+    <div class="af-card">
+      <div class="af-vdetail-head">
+        <div class="af-card-title" id="afVFormTitle" style="margin:0;">Vendor</div>
+        <div class="af-vdetail-badges" id="afVDetailBadges"></div>
+      </div>
+
+      <div class="af-vtabs" id="afVTabs">
+        <button type="button" class="af-vtab is-active" data-vtab="profile">Profile</button>
+        <button type="button" class="af-vtab" data-vtab="rulebook">Rule book <span class="af-vtab-count" id="afVRbCount" hidden></span></button>
+        <button type="button" class="af-vtab" data-vtab="custom">Custom rules <span class="af-vtab-count" id="afVCrCount" hidden></span></button>
+      </div>
+
+      {# ── Tab: Profile ── #}
+      <div data-vpane="profile">
+        <div class="af-field">
+          <label class="af-label" for="afVName">Name</label>
+          <input type="text" id="afVName" class="af-input" placeholder="e.g. GA4 Measurement Protocol"/>
+        </div>
+        <div class="af-field">
+          <label class="af-label" for="afVSlug">Slug</label>
+          <input type="text" id="afVSlug" class="af-input mono" placeholder="ga4"/>
+          <div class="af-help">Unique per project. Lowercase identifier.</div>
+        </div>
+        <div class="af-field">
+          <label class="af-label" for="afVPlatform">Rule book platform</label>
+          <select id="afVPlatform" class="af-select">
+            <option value="">— none —</option>
+          </select>
+          <div class="af-help">Links this vendor to a built-in platform rule book: validation rules, event specs, and custom rules all follow it.</div>
+        </div>
+        <div class="af-field">
+          <label class="af-label" for="afVPattern">URL pattern</label>
+          <input type="text" id="afVPattern" class="af-input mono" placeholder="google-analytics.com/g/collect"/>
+          <div class="af-help">Substring matched against request URLs.</div>
+        </div>
+        <div class="af-field">
+          <label class="af-label" for="afVDesc">Description</label>
+          <textarea id="afVDesc" class="af-textarea" placeholder="Optional notes"></textarea>
+        </div>
+
+        <div class="af-field">
+          <label class="af-label">Known parameters</label>
+          <table class="af-ptable">
+            <thead>
+              <tr><th>Label</th><th>Key</th><th>Source</th><th>Default</th><th>Hint</th><th></th></tr>
+            </thead>
+            <tbody id="afVParams"></tbody>
+          </table>
+          <button type="button" class="af-mini-add" id="afVAddParam">+ Add parameter</button>
+          <button type="button" class="af-mini-add" id="afVSeedBtn" hidden>⤓ Seed pattern &amp; params from rule book</button>
+        </div>
+
+        <div class="af-builder-actions" style="margin-top:16px;justify-content:flex-end;">
+          <button type="button" class="btn ghost sm" id="afVDeleteBtn" hidden>Delete</button>
+          <button type="button" class="btn primary sm" id="afVSaveBtn">Save vendor</button>
+        </div>
+      </div>
+
+      {# ── Tab: Rule book (read-only platform spec) ── #}
+      <div data-vpane="rulebook" hidden>
+        <div id="afVRulebook" class="af-rulebook">
+          <div class="af-empty-inline">Link a rule book platform on the Profile tab to see its spec here.</div>
+        </div>
+      </div>
+
+      {# ── Tab: Custom rules (project rules scoped to this vendor's platform) ── #}
+      <div data-vpane="custom" hidden>
+        <p class="af-help" style="margin:0 0 12px">
+          Custom rules extend the platform rule book with your business requirements.
+          They are stored per platform, so every flow and audit that touches this
+          vendor validates against them automatically.
+        </p>
+        <div id="afVCustomList" class="af-crlist"></div>
+
+        <div class="af-crform" id="afVCrForm">
+          <div class="af-card-title" style="margin-bottom:10px">Add custom rule</div>
+          <div class="af-crform-grid">
+            <div class="af-field">
+              <label class="af-label" for="afCrName">Name</label>
+              <input type="text" id="afCrName" class="af-input" placeholder="e.g. purchase must carry value"/>
+            </div>
+            <div class="af-field">
+              <label class="af-label" for="afCrEvent">Event</label>
+              <input type="text" id="afCrEvent" class="af-input mono" placeholder="* (any event)"/>
+            </div>
+            <div class="af-field">
+              <label class="af-label" for="afCrSeverity">Severity</label>
+              <select id="afCrSeverity" class="af-select">
+                <option value="warning" selected>warning</option>
+                <option value="critical">critical</option>
+                <option value="info">info</option>
+              </select>
+            </div>
+            <div class="af-field">
+              <label class="af-label" for="afCrRequired">Required params <span class="af-help" style="display:inline">(comma-separated)</span></label>
+              <input type="text" id="afCrRequired" class="af-input mono" placeholder="value, currency"/>
+            </div>
+            <div class="af-field">
+              <label class="af-label" for="afCrForbidden">Forbidden params</label>
+              <input type="text" id="afCrForbidden" class="af-input mono" placeholder="test_event_code"/>
+            </div>
+            <div class="af-field">
+              <label class="af-label" for="afCrRemediation">Remediation</label>
+              <input type="text" id="afCrRemediation" class="af-input" placeholder="How to fix this if it fails"/>
+            </div>
+          </div>
+          <div class="af-builder-actions" style="justify-content:flex-end;">
+            <button type="button" class="btn primary sm" id="afCrSaveBtn">Save rule</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>{# /app-main #}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__VENDORS__ = {{ vendors | tojson }};
+  window.__VENDOR_CATALOG__ = {{ catalog | tojson }};
+</script>
+<script src="/static/js/audit_flows.js?v={{ asset_hash('js/audit_flows.js') }}" defer></script>
+{% endblock %}

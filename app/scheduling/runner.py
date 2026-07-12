@@ -94,6 +94,22 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 
 
+async def run_test_flow(flow_id: uuid.UUID | str) -> uuid.UUID:
+    """APScheduler-facing entry point for a scheduled test flow.
+
+    Thin wrapper delegating to the flow runner's own orchestration
+    (``app.tag_testing.flow_runner.service.run_flow``), which owns row
+    creation, execution, evaluation, audit mirroring and notifications.
+    Kept here so the scheduler wiring mirrors ``run_scheduled_report``.
+
+    Returns the ``TestFlowRun.id``. Raises ``LookupError`` if the flow no
+    longer exists.
+    """
+    from app.tag_testing.flow_runner.service import run_flow
+
+    return await run_flow(flow_id, trigger="schedule")
+
+
 async def run_scheduled_report(
     schedule_id: uuid.UUID | str,
     triggered_by: str = TRIGGERED_BY_SCHEDULE,

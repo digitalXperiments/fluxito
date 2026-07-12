@@ -128,16 +128,21 @@
   // Palette — Looker Clean. Reads the --dv-* tokens from app.css so a category
   // is the same color in charts and everywhere else. Hex fallbacks match app.css.
   function palette(isDark){
+    // Ledger palette — light-only. Fallbacks mirror the --dv-* tokens in app.css.
     return {
-      primary:   cssVar('--dv-c1', isDark ? '#8ab4f8' : '#4285F4'),
-      secondary: cssVar('--dv-c2', isDark ? '#81c995' : '#34A853'),
-      accent:    cssVar('--dv-c3', isDark ? '#fdd663' : '#FBBC04'),
-      neg:       cssVar('--dv-c4', isDark ? '#f28b82' : '#EA4335'),
-      pink:      cssVar('--dv-c5', isDark ? '#c58af9' : '#A142F4'),
-      cyan:      cssVar('--dv-c6', isDark ? '#78d9ec' : '#24C1E0'),
-      orange:    cssVar('--dv-c7', isDark ? '#fcad70' : '#FF6D01'),
-      neutral:   cssVar('--dv-neutral', isDark ? '#9aa0a6' : '#5F6368'),
-      muted:     isDark ? '#5f6368' : '#94a3b8',
+      primary:   cssVar('--dv-c1', '#C4703A'),
+      secondary: cssVar('--dv-c2', '#3E8A5F'),
+      accent:    cssVar('--dv-c3', '#C4903A'),
+      neg:       cssVar('--dv-c4', '#B4452F'),
+      pink:      cssVar('--dv-c5', '#201B14'),
+      cyan:      cssVar('--dv-c6', '#57503F'),
+      orange:    cssVar('--dv-c7', '#A89F8D'),
+      neutral:   cssVar('--dv-neutral', '#8A857C'),
+      muted:     '#A89F8D',
+      // Tan base for single-series bars + terracotta highlight for the most
+      // recent value (Dashboard View design).
+      bar:       cssVar('--dv-bar', '#E8DFCC'),
+      highlight: cssVar('--dv-accent', '#C4703A'),
     };
   }
 
@@ -238,9 +243,9 @@
       }
     }
 
-    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var isDark = false;
     var colors = paletteSeq(pal);
-    var highlightColor = pal.accent;
+    var highlightColor = pal.highlight;
 
     // For line/bar charts: highlight last point by color-splitting the first series.
     // In horizontal mode, the value axis is X, so dual axes use xAxisIndex;
@@ -278,9 +283,9 @@
         return Object.assign(base, {
           type: 'bar',
           barMaxWidth: 28,
-          itemStyle: {color: color, borderRadius: [2, 2, 0, 0]},
-          // Highlight the last bar (most recent period) in accent color
-          data: group.length === 1 ? withHighlightLast(s.data, color, highlightColor) : s.data,
+          itemStyle: {color: group.length === 1 ? pal.bar : color, borderRadius: [2, 2, 0, 0]},
+          // Single-series: tan bars with the most-recent period highlighted terracotta.
+          data: group.length === 1 ? withHighlightLast(s.data, pal.bar, highlightColor) : s.data,
         });
       });
     }
@@ -485,17 +490,18 @@
           lineStyle: {width: 2.5, color: color},
           itemStyle: {color: color},
           areaStyle: isArea ? {opacity: 0.15, color: color} : undefined,
-          data: (highlightLast && cfg.series.length === 1) ? withHighlightLast(raw, color, pal.accent) : raw,
+          data: (highlightLast && cfg.series.length === 1) ? withHighlightLast(raw, color, pal.highlight) : raw,
         });
       }
+      var singleBar = (cfg.series.length === 1 && !isStacked);
       var barOpts = {
         type: 'bar',
         barMaxWidth: 28,
-        itemStyle: {color: color, borderRadius: isHorizontal ? [0,2,2,0] : [2,2,0,0]},
+        itemStyle: {color: singleBar ? pal.bar : color, borderRadius: isHorizontal ? [0,2,2,0] : [2,2,0,0]},
       };
       if (isStacked) barOpts.stack = s.stack || 'total';
-      var data = (highlightLast && cfg.series.length === 1 && !isStacked)
-        ? withHighlightLast(raw, color, pal.accent)
+      var data = (highlightLast && singleBar)
+        ? withHighlightLast(raw, pal.bar, pal.highlight)
         : raw;
       return Object.assign(base, barOpts, {data: data});
     });
@@ -581,7 +587,7 @@
     return {
       tooltip: {trigger: 'item', formatter: function(p){ return p.name + ': ' + (F.fmtNum ? F.fmtNum(p.value) : p.value) + ' (' + p.percent + '%)'; }},
       legend: showLegend ? {bottom: 0, textStyle: {color: axisColor, fontSize: 11}} : {show: false},
-      color: paletteSeq(palette(document.documentElement.getAttribute('data-theme') === 'dark')),
+      color: paletteSeq(palette(false)),
       series: [{
         type: 'pie',
         radius: isDonut ? ['45%','70%'] : '70%',
@@ -617,7 +623,7 @@
       return;
     }
 
-    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var isDark = false;
     var theme = isDark ? 'dark' : null;
     var axisColor = isDark ? '#9ca3af' : '#6b7280';
     var gridColor = cssVar('--dv-grid', isDark ? '#2A2A30' : '#ECEFF1');
@@ -667,7 +673,7 @@
           }
         } else if (kind === 'audit-gauge') {
           var score = parseInt(el.getAttribute('data-score'), 10) || 0;
-          var color = score >= 70 ? '#10b981' : (score >= 40 ? '#f59e0b' : '#ef4444');
+          var color = score >= 70 ? cssVar('--good', '#3E8A5F') : (score >= 40 ? cssVar('--warn', '#C4903A') : cssVar('--bad', '#B4452F'));
           inst.setOption({
             series: [{
               type: 'gauge', startAngle: 180, endAngle: 0, min: 0, max: 100,

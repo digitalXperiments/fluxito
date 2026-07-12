@@ -9,60 +9,59 @@
 #}
 <style>
   .metric-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; width:100%; }
-  .metric-kpi { position:relative; padding:20px 18px 18px; background:var(--bg); border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; }
-  .metric-kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:linear-gradient(180deg,var(--brand,#6c8cff),var(--brand-2,#31d0aa)); opacity:.9; }
-  .metric-kpi .l { font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-subtle); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .metric-kpi .v { font-size:30px; font-weight:700; letter-spacing:-.02em; line-height:1.1; font-variant-numeric:tabular-nums; color:var(--text); }
-  .metric-kpi .delta { display:inline-flex; align-items:center; gap:3px; margin-top:8px; font-size:11.5px; font-weight:600; font-variant-numeric:tabular-nums; }
-  .metric-kpi .delta.pos { color:#059669; }
-  .metric-kpi .delta.neg { color:#dc2626; }
-  .metric-kpi .delta.neu { color:var(--text-subtle); }
+  .metric-kpi { position:relative; padding:18px 20px; background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-lg); overflow:hidden; transition:border-color .15s, transform .15s; }
+  .metric-kpi:hover { border-color:var(--ink); transform:translateY(-1px); }
+  .metric-kpi .l { font-family:var(--mono); font-size:10px; font-weight:400; text-transform:uppercase; letter-spacing:.08em; color:var(--muted-2); margin-bottom:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .metric-kpi .v { font-family:var(--mono); font-size:26px; font-weight:600; letter-spacing:-.01em; line-height:1.1; margin-top:6px; font-variant-numeric:tabular-nums; color:var(--ink); }
+  .metric-kpi .delta { display:inline-flex; align-items:center; gap:3px; margin-top:2px; font-size:12px; font-weight:400; font-variant-numeric:tabular-nums; }
+  .metric-kpi .delta.pos { color:var(--good); }
+  .metric-kpi .delta.neg { color:var(--bad); }
+  .metric-kpi .delta.neu { color:var(--muted); }
   .big-metric { text-align:center; padding:20px 10px; }
-  .big-metric .metric-value { font-size:34px; line-height:1.1; font-weight:700; font-variant-numeric:tabular-nums; }
-  .big-metric .metric-label { font-size:12px; color:var(--text-subtle); text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
-  .big-metric .delta { display:inline-flex; gap:3px; margin-top:10px; font-size:13px; font-weight:600; }
-  .big-metric .delta.pos { color:#059669; }
-  .big-metric .delta.neg { color:#dc2626; }
+  .big-metric .metric-value { font-family:var(--mono); font-size:34px; line-height:1.1; font-weight:600; font-variant-numeric:tabular-nums; color:var(--ink); }
+  .big-metric .metric-label { font-family:var(--mono); font-size:11px; color:var(--muted-2); text-transform:uppercase; letter-spacing:.08em; margin-top:6px; }
+  .big-metric .delta { display:inline-flex; gap:3px; margin-top:10px; font-size:13px; font-weight:500; }
+  .big-metric .delta.pos { color:var(--good); }
+  .big-metric .delta.neg { color:var(--bad); }
   .card-chart { width:100%; height:260px; }
   .card-chart[data-chart-layout="hbar"] { height:320px; }
   /* Inline delta pill used inside table cells (compact version of .delta) */
   .delta-pill {
     display:inline-flex; align-items:center; gap:3px;
     padding:2px 7px; border-radius:999px;
-    font-size:11px; font-weight:600; font-variant-numeric:tabular-nums;
+    font-family:var(--mono); font-size:11px; font-weight:500; font-variant-numeric:tabular-nums;
     line-height:1.4; white-space:nowrap;
   }
-  .delta-pill.pos { color:#047857; background:rgba(16,185,129,.12); }
-  .delta-pill.neg { color:#b91c1c; background:rgba(239,68,68,.12); }
-  .delta-pill.neu { color:var(--text-subtle); background:rgba(148,163,184,.12); }
-  [data-theme="dark"] .delta-pill.pos { color:#34d399; background:rgba(16,185,129,.18); }
-  [data-theme="dark"] .delta-pill.neg { color:#f87171; background:rgba(239,68,68,.18); }
+  .delta-pill.pos { color:var(--good); background:var(--success-soft); }
+  .delta-pill.neg { color:var(--bad); background:var(--danger-soft); }
+  .delta-pill.neu { color:var(--muted); background:color-mix(in srgb, var(--muted) 14%, transparent); }
   /* Wide table cards span the full 12-col grid row */
   .grid-cards > .data-card.card-wide { grid-column: 1 / -1 !important; }
 
   /* Pastel Pop scorecard tile */
   .sc-card {
     position: relative;
-    padding: 20px 18px 18px;
-    border-radius: var(--r-md, 10px);
-    border: 1.5px solid var(--sc-border, var(--pp-blue-border, #93c5fd));
-    background: var(--sc-bg, var(--pp-blue-bg, #eff6ff));
+    padding: 18px 20px;
+    border-radius: var(--r-lg);
+    border: 1.5px solid var(--sc-border, var(--chip-blue-border));
+    background: var(--sc-bg, var(--chip-blue-bg));
     overflow: hidden;
   }
   .sc-label {
-    font-size: 10.5px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: .06em; color: var(--sc-label-color, var(--pp-blue-label, #1d4ed8));
-    margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 10px; font-weight: 400; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--sc-label-color, var(--chip-blue-label));
+    margin-bottom: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     font-family: var(--mono, monospace);
   }
   .sc-value {
-    font-size: 30px; font-weight: 700; letter-spacing: -.02em;
-    line-height: 1.1; font-variant-numeric: tabular-nums;
-    color: var(--sc-accent, var(--pp-blue-accent, #1d4ed8));
+    font-family: var(--mono);
+    font-size: 26px; font-weight: 600; letter-spacing: -.01em;
+    line-height: 1.1; margin-top: 6px; font-variant-numeric: tabular-nums;
+    color: var(--sc-accent, var(--chip-blue-accent));
   }
   .sc-delta {
     display: inline-flex; align-items: center; gap: 3px;
-    margin-top: 8px; font-size: 11.5px; font-weight: 600;
+    margin-top: 2px; font-size: 12px; font-weight: 400;
     font-variant-numeric: tabular-nums;
   }
   .sc-sparkline { width: 100%; height: 36px; margin-top: 10px; }
@@ -267,7 +266,7 @@
   // One Pastel Pop tile. label/value are raw (escaped here); delta/spark are
   // pre-built HTML fragments.
   function scTile(scheme, label, value, deltaHtml, sparkHtml){
-    return '<div class="sc-card" style="--sc-border:var(--pp-'+scheme+'-border);--sc-bg:var(--pp-'+scheme+'-bg);--sc-accent:var(--pp-'+scheme+'-accent);--sc-label-color:var(--pp-'+scheme+'-label);">' +
+    return '<div class="sc-card" style="--sc-border:var(--chip-'+scheme+'-border);--sc-bg:var(--chip-'+scheme+'-bg);--sc-accent:var(--chip-'+scheme+'-accent);--sc-label-color:var(--chip-'+scheme+'-label);">' +
       '<div class="sc-label" title="'+F.esc(label)+'">'+F.esc(label)+'</div>' +
       '<div class="sc-value">'+value+'</div>' + (deltaHtml||'') + (sparkHtml||'') + '</div>';
   }
@@ -295,7 +294,7 @@
     var bars = sparkVals.map(function(v, i){
       var h = Math.round((v / sparkMax) * 100);
       var isLast = i === sparkVals.length - 1;
-      var fill = isLast ? 'var(--sc-accent,#1d4ed8)' : 'var(--sc-border,#93c5fd)';
+      var fill = isLast ? 'var(--sc-accent,#C4703A)' : 'var(--sc-border,#E0D6C3)';
       return '<rect x="'+(i*barW+1)+'" y="'+(100-h)+'" width="'+(barW-2)+'" height="'+h+'" fill="'+fill+'" rx="1"/>';
     }).join('');
     return '<div class="sc-sparkline"><svg viewBox="0 0 100 100" preserveAspectRatio="none" width="100%" height="100%">' + bars + '</svg></div>';

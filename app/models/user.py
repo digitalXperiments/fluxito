@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Index, String, func, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -13,6 +13,16 @@ USER_TYPE_TEAM = "team"
 AUTH_PROVIDER_GOOGLE = "google"
 AUTH_PROVIDER_EMAIL = "email"
 AUTH_PROVIDER_BOTH = "both"
+
+# Onboarding "Role & goals" step — role cards (Flux - Onboarding.dc.html).
+FLUX_ROLE_MARKETING = "run_marketing"
+FLUX_ROLE_TRACKING = "implement_tracking"
+FLUX_ROLE_ANALYST = "analyze_report"
+FLUX_ROLE_GENERALIST = "everything"
+VALID_FLUX_ROLES = (FLUX_ROLE_MARKETING, FLUX_ROLE_TRACKING, FLUX_ROLE_ANALYST, FLUX_ROLE_GENERALIST)
+
+# Onboarding "what should Flux watch for you" monitor chips.
+VALID_FLUX_MONITORS = ("roas", "health", "pacing", "funnel", "seo", "comp")
 
 
 class User(Base):
@@ -45,6 +55,11 @@ class User(Base):
     )
 
     is_superadmin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+    # --- Onboarding preferences (set in the wizard, editable in Profile) ---
+    flux_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    flux_monitors: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    preferred_ai_client: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     __table_args__ = (Index("idx_email_active", email, is_active),)
 

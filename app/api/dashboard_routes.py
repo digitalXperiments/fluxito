@@ -967,6 +967,24 @@ async def live_dashboards_hub(request: Request):
             )
             has_connections = conn_result.scalar_one_or_none() is not None
 
+    # Featured templates strip (Google Docs style "start from a template").
+    from app.api.template_routes import _format_template
+    from app.models import Template
+
+    gallery_templates = []
+    async with app_state.db_session_factory() as db3:
+        tpl_result = await db3.execute(
+            select(Template)
+            .where(Template.is_active == True, Template.template_type.in_(["system", "shared"]))
+            .order_by(
+                Template.is_featured.desc(),
+                Template.use_count.desc(),
+                Template.created_at.desc(),
+            )
+            .limit(8)
+        )
+        gallery_templates = [_format_template(t) for t in tpl_result.scalars().all()]
+
     user_view = await _load_user_view_from_uid(uid)
     return render(
         request,
@@ -974,6 +992,7 @@ async def live_dashboards_hub(request: Request):
         {
             "deployed_dashboards": deployed,
             "has_connections": has_connections,
+            "gallery_templates": gallery_templates,
             "user": user_view,
         },
     )

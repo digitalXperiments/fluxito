@@ -12,20 +12,20 @@
   {# ── Page header ── #}
   <div class="page-head">
     <div>
-      <span class="label">Admin</span>
+      <span class="label">Workspace · OAuth credentials</span>
       <h1>Integrations</h1>
-      <p>Configure OAuth apps so users can connect their platforms. Credentials stored in DB take precedence over environment variables.</p>
+      <p>Configure OAuth apps so users can connect their platforms. Credentials stored in the database take precedence over environment variables.</p>
     </div>
   </div>
 
   {# ── First-run welcome banner (shown when ?welcome=1) ── #}
   {% if request.query_params.get('welcome') == '1' %}
-  <div class="intg-banner" style="border-color:color-mix(in srgb,var(--green,#16a34a) 35%,var(--line));background:color-mix(in srgb,var(--green,#16a34a) 6%,var(--bg));">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--green,#16a34a);flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+  <div class="intg-banner" style="border-color:color-mix(in srgb,var(--good) 35%,var(--line));background:color-mix(in srgb,var(--good) 6%,var(--bg));">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--good);flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
     <span style="color:var(--ink);">
       <strong>Admin account created.</strong>
       Configure at least one OAuth app below so users can connect their platforms.
-      Click <strong>Configure</strong> on any platform card to enter its client ID and secret.
+      Click <strong>Add credentials</strong> on any platform row to enter its client ID and secret.
     </span>
   </div>
   {% endif %}
@@ -38,26 +38,55 @@
     <span>
       {{ env_platforms | map(attribute='platform') | map('capitalize') | join(', ') }}
       {% if env_platforms | length == 1 %}is{% else %}are{% endif %}
-      configured via environment variables. Use the UI below to migrate credentials to the database for easier rotation.
+      configured via environment variables. Use the rows below to migrate credentials to the database for easier rotation.
     </span>
   </div>
   {% endif %}
 
-  {# ── Platform grid ── #}
-  <div class="intg-grid" id="intgGrid">
-    {% for p in platforms %}
-    {% set slug = p.platform %}
-    {% set source = p.source %}
-    <div class="intg-card" id="intg-card-{{ slug }}" data-platform="{{ slug }}" data-source="{{ source }}">
+  {# ── Display copy per platform — pure presentation, no backend change.
+       `caps` mirrors the products each OAuth app unlocks (see PLATFORM_TUTORIALS
+       in app/api/integrations_routes.py); `short` is used in the "not configured"
+       sentence. ── #}
+  {% set platform_meta = {
+    'google':    {'name': 'Google Cloud OAuth',      'caps': 'GA4, GTM, Ads, Search Console, BigQuery', 'short': 'Google'},
+    'meta':      {'name': 'Meta for Developers',      'caps': 'Marketing API',                           'short': 'Meta Ads'},
+    'tiktok':    {'name': 'TikTok for Business',       'caps': 'TikTok Ads',                              'short': 'TikTok Ads'},
+    'snap':      {'name': 'Snap Kit',                  'caps': 'Snapchat Ads',                            'short': 'Snapchat Ads'},
+    'linkedin':  {'name': 'LinkedIn Developers',       'caps': 'LinkedIn Ads',                            'short': 'LinkedIn Ads'},
+    'pinterest': {'name': 'Pinterest Developers',      'caps': 'Pinterest Ads',                           'short': 'Pinterest Ads'},
+    'x':         {'name': 'X Developer Platform',      'caps': 'X Ads (OAuth 1.0a)',                      'short': 'X Ads'},
+    'reddit':    {'name': 'Reddit Apps',                'caps': 'Reddit Ads API',                          'short': 'Reddit Ads'},
+    'bing':      {'name': 'Microsoft Azure AD',        'caps': 'Bing Webmaster, Microsoft Ads',           'short': 'Microsoft Ads'},
+    'apple':     {'name': 'Apple Search Ads',          'caps': 'Apple Ads API',                           'short': 'Apple Ads'},
+  } %}
 
-      {# Brand header #}
-      <div class="intg-card-head intg-head-{{ slug }}">
-        <span class="pbadge {{ slug }}"></span>
-        <span class="intg-platform-name">{{ slug | capitalize }}</span>
-      </div>
+  {# ── OAuth app credentials ── #}
+  <div class="card intg-panel">
+    <div class="intg-panel-eyebrow">OAuth app credentials</div>
+    <div class="intg-panel-desc">Your own OAuth apps for platform connections. Required for self-hosted instances; encrypted at rest.</div>
 
-      {# Status #}
-      <div class="intg-card-body">
+    <div class="intg-rows" id="intgGrid">
+      {% for p in platforms %}
+      {% set slug = p.platform %}
+      {% set source = p.source %}
+      {% set meta = platform_meta.get(slug, {'name': slug | capitalize, 'caps': '', 'short': slug | capitalize}) %}
+      <div class="intg-row" id="intg-card-{{ slug }}" data-platform="{{ slug }}" data-source="{{ source }}">
+
+        <span class="intg-row-icon" aria-hidden="true">{{ slug[:2] | upper }}</span>
+
+        <div class="intg-row-main">
+          <div class="intg-row-name">{{ meta.name }}</div>
+
+          <div class="intg-row-meta">
+            <span class="intg-id-row" {% if not p.client_id_masked %}style="display:none"{% endif %}>
+              <span class="intg-id-label">Client ID</span><span class="intg-id-value">{{ p.client_id_masked or '' }}</span>
+            </span>{% if meta.caps %}<span class="intg-row-caps"> · {{ meta.caps }}</span>{% endif %}
+          </div>
+          <div class="intg-row-empty">Needed before users can connect {{ meta.short }}</div>
+
+          <div class="intg-updated">{% if source == 'db' and p.updated_at %}Updated {{ p.updated_at | fmt_datetime }}{% else %}&nbsp;{% endif %}</div>
+        </div>
+
         <div class="intg-status-row">
           {% if source == 'db' %}
           <span class="intg-badge intg-badge-db">Configured (DB)</span>
@@ -68,28 +97,17 @@
           {% endif %}
         </div>
 
-        {% if p.client_id_masked %}
-        <div class="intg-id-row">
-          <span class="intg-id-label">Client ID</span>
-          <span class="intg-id-value">{{ p.client_id_masked }}</span>
-        </div>
-        {% endif %}
-
-        {% if source == 'db' and p.updated_at %}
-        <div class="intg-updated">Updated {{ p.updated_at | fmt_datetime }}</div>
-        {% else %}
-        <div class="intg-updated">&nbsp;</div>
-        {% endif %}
-
         <div class="intg-actions">
-          <button class="btn primary sm" onclick="IntgUI.openModal('{{ slug }}')">Configure</button>
+          <a href="#" class="intg-row-link" onclick="IntgUI.openModal('{{ slug }}'); return false;">
+            {% if source in ('db', 'env') %}Edit{% else %}Add credentials{% endif %}
+          </a>
           {% if source == 'db' %}
-          <button class="btn sm intg-remove-btn" onclick="IntgUI.removeCredentials('{{ slug }}')">Remove</button>
+          <a href="#" class="intg-row-link intg-row-link-danger intg-remove-btn" onclick="IntgUI.removeCredentials('{{ slug }}'); return false;">Remove</a>
           {% endif %}
         </div>
       </div>
+      {% endfor %}
     </div>
-    {% endfor %}
   </div>
 
 </main>

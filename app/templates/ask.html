@@ -1,18 +1,29 @@
 {% extends "base.html" %}
+{% block title %}Ask Flux — {{ brand().name }}{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/ask.css?v={{ asset_hash('css/ask.css') }}"/>
 {% endblock %}
 {% block main %}
 <div class="ask-shell" id="ask-shell">
   <aside class="ask-history">
-    <button class="ask-new" id="ask-new">+ New chat</button>
+    <div class="ask-history-header">
+      <span class="ask-history-title">Conversations</span>
+      <button class="ask-new" id="ask-new" title="New conversation" aria-label="New conversation">+</button>
+    </div>
     <ul class="ask-conv-list" id="ask-conv-list"></ul>
   </aside>
   <main class="ask-main">
+    <div class="ask-thread-header" id="ask-thread-header" hidden>
+      <div class="ask-thread-header-main">
+        <div class="ask-thread-title" id="ask-thread-title"></div>
+        <div class="ask-thread-eyebrow" id="ask-thread-eyebrow" hidden></div>
+      </div>
+      <span class="ask-thread-status" id="ask-thread-status" hidden></span>
+    </div>
     <div class="ask-messages" id="ask-messages">
       <div class="ask-messages-inner">
         <div class="ask-empty" id="ask-empty">
-          <h2>Ask Fluxito</h2>
+          <h2>Ask Flux</h2>
           <p>Ask about your analytics, tracking plan, dashboards, or marketing data.</p>
           <p class="ask-setup-hint" id="ask-setup-hint" hidden>
             No AI provider key yet — <a href="/settings?tab=ai">add one</a> to start.
@@ -22,7 +33,8 @@
     </div>
     <form class="ask-composer" id="ask-composer">
       <div class="ask-composer-inner">
-        <textarea id="ask-input" rows="1" placeholder="Ask Fluxito…"></textarea>
+        <span class="ask-composer-badge" aria-hidden="true">F</span>
+        <textarea id="ask-input" rows="1" placeholder="Ask Flux…" data-flux-composer></textarea>
         <button type="submit" id="ask-send">Send</button>
       </div>
     </form>
@@ -64,5 +76,6 @@
 
 {% endblock %}
 {% block scripts %}
+<script src="/static/js/flux/core.js?v={{ asset_hash('js/flux/core.js') }}" defer></script>
 <script src="/static/js/ask.js?v={{ asset_hash('js/ask.js') }}" defer></script>
 {% endblock %}

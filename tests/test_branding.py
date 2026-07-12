@@ -80,9 +80,13 @@ async def test_invite_email_uses_brand_name(_patch_db, db_session_factory, monke
         inviter_email="boss@example.com",
         role="member",
     )
-    assert "Acme Analytics" in captured["subject"]
+    # The subject is deliberately personal now ("boss invited you to Proj") and
+    # no longer carries the brand name — the brand identity lives in the email
+    # body (header wordmark, From line, footer). The rebrand must still fully
+    # replace the default "Fluxito" wordmark in the rendered body.
+    assert "invited you to Proj" in captured["subject"]
     assert "Acme Analytics" in captured["html"]
-    assert "Fluxito" not in captured["subject"]
+    assert "Fluxito" not in captured["html"]
 
 
 @pytest.fixture

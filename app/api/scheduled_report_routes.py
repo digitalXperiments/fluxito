@@ -48,7 +48,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 
@@ -725,3 +725,67 @@ async def list_schedule_runs(dashboard_id: str, schedule_id: str, request: Reque
         runs = list(result.scalars().all())
 
     return JSONResponse({"runs": [_run_dict(r) for r in runs]})
+
+
+# --------------------------------------------------------------------------- #
+# Project-wide schedules — page + list JSON
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/api/reports/schedules")
+async def list_project_schedules(request: Request):
+    """List every ReportSchedule across the caller's active project.
+
+    The per-dashboard CRUD endpoints above stay authoritative for
+    mutations; this is the single project-scoped read the /reports/schedules
+    page needs so it doesn't have to fan out one request per dashboard.
+    Each row carries its ``dashboard_id`` so the page can call the existing
+    dashboard-scoped PATCH/DELETE/run endpoints directly.
+    """
+    from app.api.google_oauth_routes import _resolve_user_ctx
+    from app.api.project_routes import ensure_active_project
+
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    active_pid = await ensure_active_project(request, user_ctx.user_id)
+    if not active_pid:
+        return JSONResponse({"schedules": []})
+    pid = uuid.UUID(active_pid)
+
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(
+            select(ReportSchedule, Dashboard.title, Dashboard.share_slug)
+            .join(Dashboard, ReportSchedule.dashboard_id == Dashboard.id)
+            .where(ReportSchedule.project_id == pid)
+            .order_by(ReportSchedule.created_at.desc())
+        )
+        rows = result.all()
+
+    # Overlay live next-run times from APScheduler where available.
+    try:
+        from app.scheduling.service import get_next_run_time
+
+        for sched, _title, _slug in rows:
+            nrt = get_next_run_time(sched.id)
+            if nrt is not None:
+                sched.next_run_at = nrt.replace(tzinfo=None) if nrt.tzinfo else nrt
+    except Exception:
+        pass
+
+    out = []
+    for sched, title, slug in rows:
+        d = _schedule_dict(sched)
+        d["dashboard_title"] = title or "Untitled dashboard"
+        d["dashboard_slug"] = slug or ""
+        out.append(d)
+
+    return JSONResponse({"schedules": out})
+
+
+@router.get("/reports/schedules", response_class=HTMLResponse)
+async def reports_schedules_page(request: Request):
+    """The standalone Scheduled reports page merged into the Dashboards hub
+    (site revamp) — it is now the #schedules tab there. Redirect old links."""
+    return RedirectResponse("/live-dashboards#schedules", status_code=302)

@@ -19,8 +19,10 @@ router = APIRouter()
 _TAB_DESTINATIONS = {
     "account": "/profile",
     "ai": "/settings/ai",
-    "integrations": "/settings/integrations",
-    "system": "/settings/system",
+    "integrations": "/settings/connections",
+    "connections": "/settings/connections",
+    "connect": "/settings/connections",
+    "system": "/admin",  # System settings retired — superadmin console covers it
     "activity": "/activity-log",
     "platform": "/admin",
     "ai-models": "/settings/ai",
@@ -34,7 +36,16 @@ async def settings_page(request: Request):
     if not uid:
         return RedirectResponse("/signin?next=/settings", status_code=302)
 
-    tab = request.query_params.get("tab") or "account"
+    tab = request.query_params.get("tab")
+
+    # Bare /settings (no legacy ?tab=): install admins land on Connections,
+    # everyone else on their profile. Mirrors the rail's `is_install_admin`
+    # gate, derived from nav-project roles already on request.state.
+    if not tab:
+        state = getattr(request, "state", None)
+        nav = (getattr(state, "nav_projects", None) or []) if state is not None else []
+        is_install_admin = any(p.get("role") in ("owner", "admin") for p in nav)
+        return RedirectResponse("/settings/connections" if is_install_admin else "/profile", status_code=302)
 
     if tab == "project":
         # Resolve the active project slug from nav state (set by middleware).

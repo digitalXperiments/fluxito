@@ -143,6 +143,40 @@ templates.env.globals["app_version"] = _get_version()
 
 # ---------- Render helpers ---------------------------------------------------
 
+# Maps the legacy per-page `active` nav key to its lifecycle "section" in the
+# grouped sidebar (Home / Plan / Implement / Audit / Report / Context /
+# Settings). Used by `render()` to derive a default `section` for templates
+# that don't set one explicitly. `None` means "no section highlight" (e.g.
+# the Tutorials help affordance, which isn't a nav cluster).
+SECTION_BY_ACTIVE: dict[str, str | None] = {
+    "home": "home",
+    "ask": "implement",
+    "automations": "home",  # Flux's tasks de-navved in Phase 5; bare URL redirects
+    "tracking_plan": "plan",
+    "dashboards": "report",
+    "live": "report",
+    "templates": "report",
+    "saved_dashboards": "report",
+    "reports_schedules": "report",
+    "audits": "audit",
+    "audit": "audit",
+    "audit_flows": "audit",
+    "audit_vendors": "audit",
+    "implement": "implement",
+    "context": "context",
+    "kpi_library": "context",
+    "business_context": "context",
+    "connect": "settings",
+    "connections": "settings",
+    "settings": "settings",
+    "integrations": "settings",
+    "system_settings": "settings",
+    "profile": "settings",
+    "projects": "settings",
+    "admin": "settings",
+    "tutorials": None,
+}
+
 
 def render(
     request: Request,
@@ -155,6 +189,7 @@ def render(
     ctx.setdefault("request", request)
     ctx.setdefault("user", None)
     ctx.setdefault("active", None)
+    ctx.setdefault("section", SECTION_BY_ACTIVE.get(ctx.get("active")))
     ctx.setdefault("base_url", _base_url_from_request(request))
     # Inject project context for the nav switcher
     if "active_project_name" not in ctx:
@@ -167,6 +202,13 @@ def render(
         ctx["user_project_role"] = getattr(request.state, "active_project_role", None)
     if "nav_projects" not in ctx:
         ctx["nav_projects"] = getattr(request.state, "nav_projects", [])
+    # Sidebar "Flux's tasks" badge count — populated by the
+    # ``_attach_nav_project_context`` ASGI middleware in main.py (same
+    # choke point as nav_projects/active_project_*), which counts active
+    # AutomationInstallation rows for the resolved active project. 0/absent
+    # hides the badge.
+    if "sidebar_tasks_count" not in ctx:
+        ctx["sidebar_tasks_count"] = getattr(request.state, "sidebar_tasks_count", 0)
     # Settings-rail context — derived purely from the nav state already on
     # request.state (no extra DB queries) so the shared settings rail renders
     # with correct role gating on every standalone settings page.

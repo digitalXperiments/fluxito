@@ -1,0 +1,7 @@
+{# Sub-nav for the Audit section (real pages, no iframe).
+   Pass `audit_tab` = 'runs' | 'flows' | 'vendors' from the page. #}
+<div class="sub-tabs" role="tablist" aria-label="Audit sections">
+  <a href="/audits" class="sub-tab {% if audit_tab == 'runs' %}is-active{% endif %}" {% if audit_tab == 'runs' %}aria-current="page"{% endif %}>Runs</a>
+  <a href="/audits/flows" class="sub-tab {% if audit_tab == 'flows' %}is-active{% endif %}" {% if audit_tab == 'flows' %}aria-current="page"{% endif %}>Test flows</a>
+  <a href="/audits/vendors" class="sub-tab {% if audit_tab == 'vendors' %}is-active{% endif %}" {% if audit_tab == 'vendors' %}aria-current="page"{% endif %}>Vendors</a>
+</div>

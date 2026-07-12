@@ -1,4 +1,4 @@
-/* app/static/css/ask.css — Ask Fluxito chat page */
+/* app/static/css/ask.css — Flux chat page */
 
 .ask-shell {
   display: flex;
@@ -11,62 +11,167 @@
 
 /* ── History sidebar ── */
 .ask-history {
-  width: 240px;
+  width: 264px;
   flex-shrink: 0;
-  border-right: 1px solid var(--line, #e5e7eb);
-  padding: 12px;
+  border-right: 1px solid var(--line);
   overflow-y: auto;
-  background: var(--bg-2, #fafafa);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.ask-history-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 18px 12px;
+  flex-shrink: 0;
+}
+
+.ask-history-title {
+  flex: 1;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink);
 }
 
 .ask-new {
-  width: 100%;
-  padding: 8px 12px;
-  margin-bottom: 12px;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  margin-bottom: 0;
   cursor: pointer;
-  border: 1px solid var(--line, #e5e7eb);
+  border: none;
   border-radius: 8px;
-  background: var(--bg, #fff);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink, #0b0b0e);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: background 0.15s;
 }
 
 .ask-new:hover {
-  background: var(--bg-2, #f3f4f6);
+  background: var(--ink-2);
 }
 
 .ask-conv-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  overflow-y: auto;
 }
 
 .ask-conv-item {
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 13px;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--ink-soft, #3f3f46);
   transition: background 0.12s;
 }
 
+.ask-conv-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ask-conv-item-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .ask-conv-item:hover {
-  background: var(--bg-3, #f3f4f6);
-  color: var(--ink, #0b0b0e);
+  background: var(--bg-2);
+}
+
+.ask-conv-item:hover .ask-conv-item-title {
+  color: var(--ink);
 }
 
 .ask-conv-item.is-active {
-  background: color-mix(in srgb, var(--accent, #2557f6) 10%, transparent);
-  color: var(--ink, #0b0b0e);
-  font-weight: 500;
+  background: var(--card);
+  border-color: var(--line-2);
+}
+
+.ask-conv-item.is-active .ask-conv-item-title {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ── Thread header: title + mono eyebrow + status pill ── */
+.ask-thread-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+.ask-thread-header[hidden] {
+  display: none;
+}
+
+.ask-thread-header-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ask-thread-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ask-thread-eyebrow {
+  margin-top: 1px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ask-thread-eyebrow[hidden] {
+  display: none;
+}
+
+.ask-thread-status {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--warn);
+  color: var(--accent-hover);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ask-thread-status[hidden] {
+  display: none;
 }
 
 /* ── Main chat area ── */
@@ -76,7 +181,7 @@
   flex-direction: column;
   min-width: 0;
   height: 100%;
-  background: var(--bg, #fff);
+  background: var(--bg);
 }
 
 .ask-messages {
@@ -88,14 +193,17 @@
 
 /* Inner centering wrapper — all messages + empty state share this constraint */
 .ask-messages-inner {
-  max-width: min(900px, 92%);
+  max-width: min(760px, 92%);
   margin: 0 auto;
   padding-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .ask-empty {
   text-align: center;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
   margin-top: 15vh;
   padding: 0 24px;
 }
@@ -103,7 +211,7 @@
 .ask-empty h2 {
   font-size: 22px;
   font-weight: 600;
-  color: var(--ink, #0b0b0e);
+  color: var(--ink);
   margin: 0 0 10px;
   letter-spacing: -0.02em;
 }
@@ -116,17 +224,16 @@
 
 .ask-setup-hint {
   font-size: 13px;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
 }
 
 .ask-setup-hint a {
-  color: var(--blue, #2557f6);
+  color: var(--blue);
   text-decoration: underline;
 }
 
 /* ── Messages ── */
 .ask-msg {
-  margin: 0 0 24px;
   display: flex;
   flex-direction: column;
 }
@@ -137,34 +244,76 @@
 }
 
 .ask-msg-user .ask-msg-body {
-  max-width: 78%;
-  background: var(--surface-2, #1a1a1f);
-  border: 1px solid var(--border, #27272a);
-  border-radius: 14px;
-  padding: .6rem .9rem;
-  color: var(--bg, #fff);
+  max-width: 70%;
+  background: var(--ink);
+  border-radius: 12px 3px 12px 12px;
+  padding: 13px 17px;
+  color: var(--paper);
 }
 
-/* Light mode: use a subtle tinted surface for user bubble */
-html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
-  background: var(--bg-3, #f0f0f0);
-  border-color: var(--line, #e5e7eb);
-  color: var(--ink, #0b0b0e);
+/* The generic .ask-md rule below sets color:var(--ink) directly on this
+   element (a rule targeting an element beats an inherited value regardless
+   of ancestor specificity), so it must be overridden explicitly here or
+   user-message text renders ink-on-ink and is invisible. */
+.ask-msg-user .ask-md {
+  color: var(--paper);
+  line-height: 1.55;
 }
 
-/* Assistant message: no bubble — plain text only */
+.ask-msg-user .ask-md p {
+  color: var(--paper);
+}
+
+/* Assistant message: Flux badge + answer well */
+.ask-msg-assistant {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.ask-msg-assistant .ask-msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 .ask-msg-assistant .ask-msg-body {
-  background: none;
-  border: none;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   max-width: 100%;
+  flex: 1;
+  min-width: 0;
+}
+
+/* The well: Flux's answer text lives inside this card-well surface */
+.ask-msg-assistant .ask-md {
+  background: var(--card-well);
+  border: 1px solid var(--line-3);
+  border-radius: 3px 12px 12px 12px;
+  padding: 15px 18px;
+  color: var(--ink-2);
+}
+
+.ask-msg-assistant .ask-md + .ask-md {
+  margin-top: 0;
 }
 
 /* ── Markdown content ── */
 .ask-md {
   font-size: 14px;
   line-height: 1.7;
-  color: var(--ink, #0b0b0e);
+  color: var(--ink);
   word-break: break-word;
 }
 
@@ -189,7 +338,7 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   margin: 14px 0 6px;
   font-weight: 600;
   line-height: 1.3;
-  color: var(--ink, #0b0b0e);
+  color: var(--ink);
 }
 
 .ask-md h1 { font-size: 1.3em; }
@@ -212,13 +361,13 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
 .ask-md code {
   font-family: var(--mono, ui-monospace, monospace);
   font-size: 0.875em;
-  background: var(--bg-3, #f0f0f0);
+  background: var(--bg-3);
   border-radius: 4px;
   padding: 1px 5px;
 }
 
 .ask-md pre {
-  background: var(--bg-3, #f0f0f0);
+  background: var(--bg-3);
   border-radius: 8px;
   padding: 12px 14px;
   overflow-x: auto;
@@ -234,14 +383,14 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
 }
 
 .ask-md blockquote {
-  border-left: 3px solid var(--line, #e5e7eb);
+  border-left: 3px solid var(--line);
   margin: 8px 0;
   padding: 4px 12px;
-  color: var(--ink-soft, #3f3f46);
+  color: var(--ink-soft);
 }
 
 .ask-md a {
-  color: var(--blue, #2557f6);
+  color: var(--blue);
   text-decoration: underline;
 }
 
@@ -263,182 +412,319 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
 
 .ask-md th,
 .ask-md td {
-  border: 1px solid var(--line, #e5e7eb);
+  border: 1px solid var(--line);
   padding: 7px 12px;
   text-align: left;
 }
 
 .ask-md th {
-  background: var(--bg-3, #f0f0f0);
+  background: var(--bg-3);
   font-weight: 600;
 }
 
 .ask-md tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--bg-3, #f0f0f0) 50%, transparent);
+  background: color-mix(in srgb, var(--bg-3) 50%, transparent);
 }
 
-/* ── Tool chip (inline, pill style) ── */
-.ask-tool-chip {
-  display: inline-flex;
-  align-items: center;
+/* ── Tool calls: quiet mono lines between the user message and the answer ──
+   Replaces the old rounded pill chips per the Conversation design — a tool
+   call reads as `→ ga4.run_report · last 7 days`, not a colored badge. */
+.ask-tool-lines {
+  display: flex;
+  flex-direction: column;
   gap: 5px;
-  margin: 4px 6px 4px 0;
-  padding: 2px 9px;
+  font-family: var(--mono, ui-monospace, monospace);
   font-size: 11.5px;
-  font-family: var(--mono, ui-monospace, monospace);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--blue, #2557f6) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--blue, #2557f6) 20%, transparent);
-  color: var(--blue, #2557f6);
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
-  white-space: nowrap;
-  line-height: 1.6;
+  color: var(--muted);
+  /* No padding-left here: these lines live inside .ask-msg-body, which is
+     already offset ~42px from the message edge by the avatar (28px) + gap
+     (14px) in the parent .ask-msg-assistant flex row — adding padding on
+     top of that flex offset double-indented tool lines vs. the answer well
+     and the user bubble. */
+  margin: 2px 0;
 }
 
-.ask-tool-chip.is-done {
-  background: color-mix(in srgb, var(--green, #16a34a) 8%, transparent);
-  border-color: color-mix(in srgb, var(--green, #16a34a) 22%, transparent);
-  color: var(--green, #16a34a);
+.ask-tool-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  transition: opacity 0.2s, color 0.2s;
 }
 
-/* Animated spinner dot (while calling) */
-.ask-tool-dot {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: ask-pulse 1.2s ease-in-out infinite;
-  flex-shrink: 0;
+/* While a call is in flight: a soft pulse, not a spinner */
+.ask-tool-line.is-pending {
+  animation: ask-tool-pulse 1.4s ease-in-out infinite;
 }
 
-@keyframes ask-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.35; transform: scale(0.7); }
+@keyframes ask-tool-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
 }
 
-/* ── Chips container (shown during stream) ── */
-.ask-chips-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  margin: 6px 0 2px;
-  gap: 2px;
+/* Completed: quiet — a subtle check, no color change */
+.ask-tool-line.is-done {
+  opacity: 0.85;
 }
 
-/* ── Collapsed tool summary (shown after done) ── */
-.ask-tools-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 8px 0 2px;
-  font-size: 12px;
-  color: var(--muted, #6b7280);
-  cursor: pointer;
-  user-select: none;
-}
-
-.ask-tools-summary:hover {
-  color: var(--ink-soft, #3f3f46);
-}
-
-.ask-tools-summary-caret {
-  font-size: 10px;
-  transition: transform 0.15s;
-}
-
-.ask-tools-summary.is-open .ask-tools-summary-caret {
-  transform: rotate(180deg);
-}
-
-.ask-tools-detail {
-  margin: 4px 0 6px 2px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.ask-tools-detail[hidden] {
-  display: none;
-}
-
-.ask-tool-chip-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 8px;
-  font-size: 11px;
-  font-family: var(--mono, ui-monospace, monospace);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--green, #16a34a) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--green, #16a34a) 20%, transparent);
-  color: var(--green, #16a34a);
-  white-space: nowrap;
+.ask-tool-line-check {
+  opacity: 0.6;
 }
 
 .ask-error {
-  color: var(--red, #dc2626);
+  color: var(--red);
   font-size: 13px;
   margin-top: 8px;
 }
 
-/* ── Composer — pinned to bottom, no gap ── */
-.ask-composer {
-  flex-shrink: 0;
-  padding: 12px 24px 16px;
-  border-top: 1px solid var(--line, #e5e7eb);
-  background: var(--bg, #fff);
+/* ── GTM diff card (Conversation approve flow) ──────────────────────────
+   Copied 1:1 from designs/Flux - Conversation.dc.html: card = --card bg,
+   --line-2 border; header = plain mono workspace/tag line (not dark — the
+   design's dark-header language in the plan refers to the app shell, not
+   this card); body = mono diff on --card-well; footer swaps between the
+   pending action row and the published/rejected confirmation row. */
+.ask-draft-card {
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
+.ask-draft-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-3);
+}
+
+.ask-draft-header-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.ask-draft-header-target {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.ask-draft-body {
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.9;
+  background: var(--card-well);
+}
+
+.ask-draft-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ask-draft-line.is-context {
+  color: var(--muted);
+}
+
+.ask-draft-line.is-removed {
+  background: rgba(180, 69, 47, 0.1);
+  color: #B4452F;
+  padding: 0 6px;
+  margin: 0 -6px;
+}
+
+.ask-draft-line.is-added {
+  background: rgba(62, 138, 95, 0.12);
+  color: #2E6B49;
+  padding: 0 6px;
+  margin: 0 -6px;
+}
+
+.ask-draft-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line-3);
+}
+
+.ask-draft-footer-note {
+  font-size: 12.5px;
+  color: var(--muted);
+  flex: 1;
+}
+
+.ask-draft-btn {
+  font-size: 12.5px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.ask-draft-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ask-draft-btn-reject {
+  padding: 9px 16px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink);
+}
+
+.ask-draft-btn-reject:hover:not(:disabled) {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.ask-draft-btn-approve {
+  padding: 9px 18px;
+  background: var(--good);
+  color: #F2FBF4;
+  font-weight: 600;
+  border: none;
+}
+
+.ask-draft-btn-approve:hover:not(:disabled) {
+  background: #2E6B49;
+}
+
+.ask-draft-footer.is-published {
+  background: rgba(62, 138, 95, 0.07);
+}
+
+.ask-draft-footer.is-rejected {
+  background: rgba(180, 69, 47, 0.06);
+}
+
+.ask-draft-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+
+.ask-draft-dot.is-published {
+  background: var(--good);
+}
+
+.ask-draft-dot.is-rejected {
+  background: var(--bad);
+}
+
+.ask-draft-status-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.ask-draft-status-text.is-published {
+  color: #2E6B49;
+}
+
+.ask-draft-status-text.is-rejected {
+  color: var(--bad);
+}
+
+.ask-draft-rollback-hint {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ask-draft-undo {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ask-draft-undo:hover {
+  color: var(--ink);
+}
+
+/* ── Composer — floating pill, pinned to bottom ── */
+.ask-composer {
+  flex-shrink: 0;
+  padding: 14px 24px 24px;
+  background: var(--bg);
+}
+
+/* The pill itself: one bordered/shadowed container holding a borderless
+   input — not a plain bar with a separately-boxed textarea. */
 .ask-composer-inner {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  max-width: min(900px, 92%);
+  max-width: min(760px, 92%);
   margin: 0 auto;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 13px 15px;
+  box-shadow: 0 10px 28px rgba(50, 40, 20, 0.08);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ask-composer-inner:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(196, 112, 58, 0.15);
+}
+
+.ask-composer-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .ask-composer textarea {
   flex: 1;
   resize: none;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--line, #e5e7eb);
+  padding: 0;
+  border: none;
   font: inherit;
   font-size: 14px;
   line-height: 1.5;
-  background: var(--bg, #fff);
-  color: var(--ink, #0b0b0e);
-  transition: border-color 0.15s, box-shadow 0.15s;
-  min-height: 42px;
+  background: transparent;
+  color: var(--ink);
+  min-height: 21px;
   max-height: 200px;
   overflow-y: auto;
-  height: 42px;
+  height: 21px;
 }
 
 .ask-composer textarea:focus {
   outline: none;
-  border-color: var(--blue, #2557f6);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue, #2557f6) 12%, transparent);
 }
 
 .ask-composer button {
-  padding: 0 20px;
-  height: 42px;
+  padding: 9px 17px;
   flex-shrink: 0;
   border-radius: 8px;
   border: none;
-  background: var(--ink, #0b0b0e);
-  color: var(--bg, #fff);
-  font-size: 14px;
-  font-weight: 500;
+  background: var(--accent);
+  color: #FFF9EF;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: background 0.15s;
 }
 
-.ask-composer button:hover {
-  opacity: 0.85;
+.ask-composer button:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .ask-composer button:disabled {
@@ -450,8 +736,8 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
 .ask-usage {
   width: 220px;
   flex-shrink: 0;
-  border-left: 1px solid var(--line, #e5e7eb);
-  background: var(--bg-2, #fafafa);
+  border-left: 1px solid var(--line);
+  background: var(--bg-2);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -466,7 +752,7 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px 8px;
-  border-bottom: 1px solid var(--line, #e5e7eb);
+  border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 
@@ -475,7 +761,7 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
 }
 
 .ask-usage-toggle {
@@ -483,7 +769,7 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   border: none;
   cursor: pointer;
   font-size: 13px;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
   padding: 2px 4px;
   border-radius: 4px;
   line-height: 1;
@@ -491,8 +777,8 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
 }
 
 .ask-usage-toggle:hover {
-  color: var(--ink, #0b0b0e);
-  background: var(--bg-3, #f0f0f0);
+  color: var(--ink);
+  background: var(--bg-3);
 }
 
 .ask-usage-body {
@@ -515,7 +801,7 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -526,12 +812,12 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   text-transform: none;
   letter-spacing: 0;
   font-size: 10px;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
 }
 
 .ask-usage-value {
   font-size: 13px;
-  color: var(--ink, #0b0b0e);
+  color: var(--ink);
   word-break: break-word;
 }
 
@@ -543,29 +829,29 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
 
 .ask-usage-table td {
   padding: 2px 0;
-  color: var(--ink-soft, #3f3f46);
+  color: var(--ink-soft);
 }
 
 .ask-usage-table td:last-child {
   text-align: right;
   font-variant-numeric: tabular-nums;
-  color: var(--ink, #0b0b0e);
+  color: var(--ink);
   font-weight: 500;
 }
 
 /* ── Per-model breakdown cards ── */
 .ask-model-card {
-  border: 1px solid var(--line, #e5e7eb);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 7px 9px;
   margin-bottom: 6px;
-  background: var(--bg, #fff);
+  background: var(--bg);
 }
 
 .ask-model-card-name {
   font-size: 11px;
   font-weight: 600;
-  color: var(--ink, #0b0b0e);
+  color: var(--ink);
   margin-bottom: 4px;
   word-break: break-all;
 }
@@ -587,15 +873,15 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   justify-content: space-between;
   font-size: 11px;
   font-family: var(--mono, ui-monospace, monospace);
-  color: var(--ink-soft, #3f3f46);
+  color: var(--ink-soft);
 }
 
 .ask-tool-name-count {
   font-size: 10px;
-  background: var(--bg-3, #f0f0f0);
+  background: var(--bg-3);
   border-radius: 10px;
   padding: 0 5px;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
 }
 
 /* Toggle button when rail is closed */
@@ -604,20 +890,20 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   right: 12px;
   top: 12px;
   z-index: 10;
-  background: var(--bg, #fff);
-  border: 1px solid var(--line, #e5e7eb);
+  background: var(--bg);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 14px;
   cursor: pointer;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
   transition: color 0.12s, background 0.12s;
   line-height: 1;
 }
 
 .ask-usage-open:hover {
-  color: var(--ink, #0b0b0e);
-  background: var(--bg-2, #f3f4f6);
+  color: var(--ink);
+  background: var(--bg-2);
 }
 
 .ask-usage-open[hidden] {
@@ -626,14 +912,14 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
 
 /* ── Keys dialog ── */
 .ask-keys-dialog {
-  border: 1px solid var(--line, #e5e7eb);
+  border: 1px solid var(--line);
   border-radius: 14px;
   padding: 28px 32px;
   min-width: 380px;
   max-width: 90vw;
   box-shadow: 0 20px 40px rgba(11, 11, 14, 0.12);
-  background: var(--bg, #fff);
-  color: var(--ink, #0b0b0e);
+  background: var(--bg);
+  color: var(--ink);
 }
 
 .ask-keys-dialog h3 {
@@ -648,7 +934,7 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   margin: 14px 0;
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink-soft, #3f3f46);
+  color: var(--ink-soft);
 }
 
 .ask-keys-dialog input,
@@ -657,12 +943,12 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   width: 100%;
   margin-top: 5px;
   padding: 8px 10px;
-  border: 1px solid var(--line, #e5e7eb);
+  border: 1px solid var(--line);
   border-radius: 7px;
   font: inherit;
   font-size: 14px;
-  background: var(--bg, #fff);
-  color: var(--ink, #0b0b0e);
+  background: var(--bg);
+  color: var(--ink);
   box-sizing: border-box;
 }
 
@@ -681,16 +967,16 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid var(--line, #e5e7eb);
-  background: var(--bg, #fff);
-  color: var(--ink-soft, #3f3f46);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-soft);
   transition: background 0.12s;
 }
 
 .ask-keys-dialog menu button[value="save"] {
-  background: var(--ink, #0b0b0e);
-  color: var(--bg, #fff);
-  border-color: var(--ink, #0b0b0e);
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 .ask-keys-dialog menu button[value="save"]:hover {
@@ -698,57 +984,7 @@ html:not([data-theme="dark"]) .ask-msg-user .ask-msg-body {
 }
 
 .ask-keys-dialog menu button[value="cancel"]:hover {
-  background: var(--bg-2, #f3f4f6);
-}
-
-/* ── Dark mode ── */
-html[data-theme="dark"] .ask-history {
-  background: var(--bg-2, #111114);
-}
-
-html[data-theme="dark"] .ask-usage {
-  background: var(--bg-2, #111114);
-}
-
-html[data-theme="dark"] .ask-msg-user .ask-msg-body {
-  background: var(--surface-2, #1a1a1f);
-  border-color: var(--border, #27272a);
-  color: var(--bg, #fff);
-}
-
-html[data-theme="dark"] .ask-md code {
-  background: var(--bg-3, #222226);
-}
-
-html[data-theme="dark"] .ask-md pre {
-  background: var(--bg-3, #222226);
-}
-
-html[data-theme="dark"] .ask-md th {
-  background: var(--bg-3, #222226);
-}
-
-html[data-theme="dark"] .ask-md tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--bg-3, #222226) 50%, transparent);
-}
-
-html[data-theme="dark"] .ask-conv-item.is-active {
-  background: color-mix(in srgb, var(--accent, #4d7ce3) 15%, transparent);
-}
-
-html[data-theme="dark"] .ask-keys-dialog {
-  background: var(--bg, #0b0b0e);
-  border-color: var(--line, #2a2a2e);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-}
-
-html[data-theme="dark"] .ask-usage-open {
-  background: var(--bg, #0b0b0e);
-  border-color: var(--line, #2a2a2e);
-}
-
-html[data-theme="dark"] .ask-tool-name-count {
-  background: var(--bg-3, #222226);
+  background: var(--bg-2);
 }
 
 /* ── Responsive ── */
@@ -773,7 +1009,7 @@ html[data-theme="dark"] .ask-tool-name-count {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--text-muted, #71717a);
+  background: var(--text-muted);
   animation: ask-think-bounce 1.4s ease-in-out infinite;
 }
 .ask-thinking-dot:nth-child(1) { animation-delay: 0s; }

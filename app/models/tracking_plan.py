@@ -20,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     Text,
     UniqueConstraint,
     func,
@@ -556,3 +557,98 @@ class TPValidationRule(Base):
         ),
         Index("ix_tp_validation_rule_plan", "plan_id", "enabled"),
     )
+
+
+# Drift = live-vs-plan reconciliation. These three tables hold the OBSERVED reality
+# (from GA4 / BigQuery), computed by the drift service and read back by the serializer.
+# They are keyed by event NAME, not tp_events.id, because live analytics data speaks
+# event names — a name may be "unplanned" (seen live, no matching tp_events row) or a
+# plan event may be "broken" (defined, never firing). Rows are plan-scoped and rebuilt
+# on each drift run; they are cache, not source of truth.
+DRIFT_STATUSES = ("verified", "in_plan", "drifted", "broken", "unplanned")
+
+
+class TPEventDrift(Base):
+    """One reconciliation row per (plan, event name) — the observed state of an event."""
+
+    __tablename__ = "tp_event_drift"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    event_name: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="in_plan")
+    # Live event volume over the drift window (last 7 days). NULL when GA4 is unavailable.
+    volume_7d: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Aggregate parameter fill coverage (0–100). NULL when no BigQuery observations exist.
+    param_coverage_pct: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Human-readable drift reasons, e.g. {"reasons": ["gained unplanned param payment_provider"]}.
+    detail: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "event_name", name="uq_tp_event_drift"),
+        CheckConstraint(
+            "status IN ('verified', 'in_plan', 'drifted', 'broken', 'unplanned')",
+            name="ck_tp_event_drift_status",
+        ),
+        Index("ix_tp_event_drift_plan", "plan_id"),
+    )
+
+
+class TPParamObservation(Base):
+    """Observed presence of one parameter on one live event (BigQuery-sourced)."""
+
+    __tablename__ = "tp_param_observation"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tp_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    event_name: Mapped[str] = mapped_column(Text, nullable=False)
+    param_key: Mapped[str] = mapped_column(Text, nullable=False)
+    # Fraction of live events (0–100) that carried this parameter.
+    present_pct: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    sample_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_type_observed: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # True when the parameter fires live but is absent from the plan (the UNPLANNED row).
+    is_unplanned: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "event_name", "param_key", name="uq_tp_param_observation"),
+        Index("ix_tp_param_observation_event", "plan_id", "event_name"),
+    )
+
+
+class TPDriftConfig(Base):
+    """Per-project drift wiring: which GA4 property + BigQuery export dataset to observe.
+
+    Resolves the credential gap between GA4 (OAuth, project-scoped) and BigQuery
+    (service-account, user-scoped) — nothing else links a GA4 property to its export
+    dataset. Auto-populated best-effort on first run; users can override explicitly.
+    """
+
+    __tablename__ = "tp_drift_config"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    ga4_property_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bq_connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("bq_connections.id", ondelete="SET NULL"), nullable=True
+    )
+    bq_dataset: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (UniqueConstraint("project_id", name="uq_tp_drift_config_project"),)

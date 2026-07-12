@@ -1,22 +1,15 @@
 {% extends "base.html" %}
+{% from "partials/page_header.html" import page_header %}
 {% block title %}KPI Library — Fluxito{% endblock %}
 {% set active = 'kpi_library' %}
 {% set context_section = 'kpi' %}
 
 {% block main %}
 <main class="app-main">
-  {% include "partials/context_tabs.html" %}
+  {% set context_subline %}The business context and KPI definitions Flux loads before answering anything — so "conversion rate" means what you mean by it.{% endset %}
+  {{ page_header('Context', 'What Flux knows about <em>your business.</em>', context_subline) }}
 
-  <div class="page-head">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap">
-      <div style="flex:1;min-width:280px">
-        <span class="label">{{ 'Org-wide · catalog' if scope_type == 'organization' else 'KPI catalog' }}</span>
-        <h1>Your metrics, <em class="serif-italic">your words.</em></h1>
-        <p>Define the KPIs that matter to {{ 'your organization' if scope_type == 'organization' else 'your account' }}. Your AI reads this catalog before answering — every response uses your terminology, formulas, units, and direction.</p>
-      </div>
-      <button class="btn primary" type="button" id="kpiAddBtn">+ Add KPI</button>
-    </div>
-  </div>
+  {% include "partials/context_tabs.html" %}
 
   <div id="kpiEmpty" class="audit-empty" style="display:{% if kpis %}none{% else %}block{% endif %};">
     <h3>No KPIs yet</h3>
@@ -25,25 +18,12 @@
   </div>
 
   <div id="kpiTableWrap" style="display:{% if kpis %}block{% else %}none{% endif %};">
-    <div class="kpi-table-wrap">
-      <table class="kpi-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Category</th>
-            <th>Unit</th>
-            <th>Direction</th>
-            <th>Inputs</th>
-            <th>Owner</th>
-            <th style="width:140px"></th>
-          </tr>
-        </thead>
-        <tbody id="kpiTableBody"></tbody>
-      </table>
+    <div class="kpi-lib-head">
+      <div class="kpi-lib-label">KPI library · {{ kpis|length }} definition{{ '' if kpis|length == 1 else 's' }}</div>
+      <button class="btn btn-secondary" type="button" id="kpiAddBtn">+ Define a KPI</button>
     </div>
+    <div class="kpi-ledger" id="kpiTableBody"></div>
   </div>
-</div>
 
 {# ── Main Add/Edit Modal ── #}
 <div id="kpiModal" class="kpi-modal-backdrop" style="display:none" onclick="if(event.target===this)Fluxito.kpi.attemptClose()">
@@ -300,7 +280,7 @@
         </div>
       </div>
 
-      <p class="f-hint" id="p_error" style="color:#a50e0e;display:none"></p>
+      <p class="f-hint" id="p_error" style="color:var(--bad);display:none"></p>
 
       <div class="f-foot">
         <button type="button" class="btn" onclick="Fluxito.kpi.closePicker()">Cancel</button>
@@ -311,64 +291,61 @@
 </div>
 
 <style>
-.kpi-table-wrap { border: 1px solid var(--line); border-radius: var(--r-l); background: var(--bg); overflow: hidden; }
-.kpi-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.kpi-table thead th {
-  text-align: left; padding: 12px 16px;
-  font-family: var(--mono); font-weight: 500; font-size: 10.5px;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--muted);
-  background: var(--bg-2); border-bottom: 1px solid var(--line);
+/* KPI library sub-heading row: mono uppercase label + secondary "+Define" button
+   (Flux - Context.dc.html:92-94). */
+.kpi-lib-head { display: flex; align-items: center; margin-bottom: 12px; }
+.kpi-lib-label {
+  flex: 1; font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
 }
-.kpi-table tbody tr { border-top: 1px solid var(--line-2); }
-.kpi-table tbody tr:first-child { border-top: none; }
-.kpi-table tbody tr:hover { background: var(--bg-2); }
-.kpi-table td { padding: 14px 16px; color: var(--ink-soft); vertical-align: top; }
-.kpi-table td.k-name { font-weight: 500; color: var(--ink); }
-.kpi-table td.k-name .k-desc {
-  font-size: 12px; color: var(--muted); margin-top: 3px; max-width: 320px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+
+/* Ledger row list — no header row; 180px name | 1fr description |
+   130px right-aligned status/usage marker (Flux - Context.dc.html:96-117).
+   Secondary data (category/unit/direction/owner/inputs) lives in the row's
+   title tooltip + the full Edit modal; row actions reveal on hover/focus. */
+.kpi-ledger { border: 1px solid var(--line-2); border-radius: var(--r-lg); background: var(--card); overflow: hidden; }
+.kpi-row {
+  display: grid; grid-template-columns: 180px 1fr 130px; gap: 14px; align-items: center;
+  padding: 14px 18px; border-top: 1px solid var(--line-3);
+  cursor: pointer; position: relative; font-size: 13.5px;
 }
-.kpi-table .k-badge {
-  display: inline-block; font-size: 10.5px; font-weight: 500; font-family: var(--mono);
-  text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 2px 8px; border-radius: 4px;
-  background: var(--bg-3); color: var(--ink-soft); border: 1px solid var(--line);
+.kpi-row:first-child { border-top: none; }
+.kpi-row:hover, .kpi-row:focus-visible { background: var(--card-well); outline: none; }
+.kpi-row-name { font-family: var(--mono); font-weight: 600; font-size: 13px; color: var(--ink); }
+.kpi-row-desc {
+  font-size: 12.5px; color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.k-status-draft      { background: #f4f4f4; color: #666; }
-.k-status-approved   { background: #e6f4ea; color: #137333; border-color: #c2e0c8; }
-.k-status-deprecated { background: #fce8e6; color: #a50e0e; border-color: #f4cccc; }
-.kpi-table td.k-inputs-cell { max-width: 280px; }
-.k-inputs-wrap { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.k-input-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12px; padding: 2px 8px 2px 3px;
-  border-radius: 4px; border: 1px solid var(--line);
-  background: var(--bg-2); color: var(--ink-soft);
-  white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+.kpi-row-marker {
+  font-family: var(--mono); font-size: 10px; text-align: right;
+  text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
 }
-.k-input-src {
-  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.05em;
-  background: var(--ink); color: var(--bg);
-  padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
+.kpi-row-marker.is-good  { color: var(--good); }
+.kpi-row-marker.is-muted { color: var(--muted); }
+.kpi-row-marker.is-bad   { color: var(--bad); }
+.kpi-row-actions {
+  display: none; align-items: center; gap: 6px; justify-content: flex-end;
+  grid-column: 3; background: var(--card-well);
 }
-.k-input-more {
-  font-family: var(--mono); font-size: 11px; color: var(--muted);
-  padding: 2px 6px; border-radius: 4px;
-  background: var(--bg-2); border: 1px solid var(--line);
+.kpi-row:hover .kpi-row-marker,
+.kpi-row:focus-within .kpi-row-marker { display: none; }
+.kpi-row:hover .kpi-row-actions,
+.kpi-row:focus-within .kpi-row-actions { display: inline-flex; }
+.kpi-row-btn {
+  font-family: var(--sans); font-size: 11.5px; font-weight: 500;
+  padding: 4px 10px; border-radius: var(--r-sm); border: 1px solid var(--line-strong);
+  background: var(--card); color: var(--ink-soft); cursor: pointer;
 }
-.k-expr-raw { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-.kpi-table td.k-actions { text-align: right; white-space: nowrap; }
-.mini-btn-approve { color: #137333; border-color: #c2e0c8; }
-.mini-btn-approve:hover { background: #e6f4ea; border-color: #a8d5b0; }
+.kpi-row-btn:hover { border-color: var(--ink); color: var(--ink); }
+.kpi-row-btn.is-approve { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+.kpi-row-btn.is-approve:hover { background: color-mix(in srgb, var(--good) 10%, var(--card)); border-color: color-mix(in srgb, var(--good) 50%, transparent); }
 .btn.btn-danger-outline {
-  background: transparent; color: #a50e0e;
-  border: 1px solid #f4cccc; padding: 9px 16px;
-  font-size: 13.5px; border-radius: var(--r-m); cursor: pointer;
+  background: transparent; color: var(--bad);
+  border: 1px solid color-mix(in srgb, var(--bad) 25%, transparent); padding: 9px 16px;
+  font-size: 13.5px; border-radius: 9px; cursor: pointer;
   font-family: inherit; font-weight: 500;
 }
-.btn.btn-danger-outline:hover { background: #fce8e6; border-color: #e8a8a8; }
+.btn.btn-danger-outline:hover { background: color-mix(in srgb, var(--bad) 10%, var(--card)); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
 
 /* Modal */
 .kpi-modal-backdrop {
@@ -418,8 +395,8 @@ textarea.f-input { resize: vertical; min-height: 58px; line-height: 1.5; }
   padding: 8px 10px; font-size: 12px; border-radius: var(--r-m);
   background: var(--bg-2); border: 1px solid var(--line-2); color: var(--ink-soft);
 }
-.f-mode-hint.push-down { border-color: #c2e0c8; background: #f0faf2; color: #137333; }
-.f-mode-hint.pull-up   { border-color: #fde7b3; background: #fff9eb; color: #7a5a00; }
+.f-mode-hint.push-down { border-color: color-mix(in srgb, var(--good) 30%, transparent); background: color-mix(in srgb, var(--good) 6%, transparent); color: var(--good); }
+.f-mode-hint.pull-up   { border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warning-soft); color: var(--warn); }
 
 /* ── Bulk field picklist ── */
 .p-picklist-wrap { display: flex; flex-direction: column; gap: 0; }
@@ -456,7 +433,7 @@ textarea.f-input { resize: vertical; min-height: 58px; line-height: 1.5; }
 }
 .p-picklist-item:last-child { border-bottom: none; }
 .p-picklist-item:hover { background: var(--bg-2); }
-.p-picklist-item.is-selected { background: #f0f7ff; }
+.p-picklist-item.is-selected { background: var(--card-well); }
 .p-picklist-item input[type="checkbox"] {
   margin-top: 2px; flex-shrink: 0; cursor: pointer;
   accent-color: var(--ink);
@@ -527,7 +504,7 @@ textarea.f-input { resize: vertical; min-height: 58px; line-height: 1.5; }
 .formula-chip .c-del {
   font-size: 11px; color: var(--muted); cursor: pointer; background: none; border: none; padding: 4px;
 }
-.formula-chip .c-del:hover { color: #a50e0e; }
+.formula-chip .c-del:hover { color: var(--bad); }
 
 .btn.ghost {
   background: var(--bg); color: var(--ink-soft);
@@ -539,9 +516,8 @@ textarea.f-input { resize: vertical; min-height: 58px; line-height: 1.5; }
 
 @media (max-width: 640px) {
   .f-row { grid-template-columns: 1fr; }
-  .kpi-table td { padding: 10px 12px; }
-  .kpi-table td.k-name .k-desc { max-width: 180px; }
-  .kpi-table td.k-inputs-cell { max-width: 160px; }
+  .kpi-row { grid-template-columns: 1fr auto; row-gap: 4px; padding: 12px 14px; }
+  .kpi-row-desc { grid-column: 1 / -1; white-space: normal; }
 }
 </style>
 {% endblock %}
@@ -558,10 +534,26 @@ textarea.f-input { resize: vertical; min-height: 58px; line-height: 1.5; }
 
   function esc(s) { return (s || '').toString().replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
-  function statusBadge(status) {
-    const s = status || 'draft';
-    const label = s.charAt(0).toUpperCase() + s.slice(1);
-    return `<span class="k-badge k-status-${esc(s)}">${esc(label)}</span>`;
+  // Ledger row marker (Flux - Context.dc.html:100 "USED IN 4 DASHBOARDS" /
+  // :115 "DRAFT — REVIEW") — this deployment has no dashboard-usage count on
+  // the KPI model, so the marker reflects review status instead, using the
+  // same color/typography treatment as the design's usage marker.
+  function usageMarker(k) {
+    const status = k.status || 'draft';
+    if (status === 'approved')   return { text: 'Approved',    cls: 'is-good' };
+    if (status === 'deprecated') return { text: 'Deprecated',  cls: 'is-bad' };
+    return { text: 'Draft — review', cls: 'is-muted' };
+  }
+
+  // Secondary data not shown in the row itself (category/unit/direction/owner)
+  // surfaces as a native hover tooltip; full detail always lives in Edit.
+  function rowTooltip(k) {
+    const parts = [];
+    if (k.category)  parts.push(`Category: ${k.category}`);
+    if (k.unit)       parts.push(`Unit: ${k.unit}`);
+    if (k.direction)  parts.push(`Direction: ${directionLabel(k.direction)}`);
+    if (k.owner)      parts.push(`Owner: ${k.owner}`);
+    return parts.join(' · ');
   }
 
   function directionLabel(d) {
@@ -590,38 +582,6 @@ textarea.f-input { resize: vertical; min-height: 58px; line-height: 1.5; }
     return sourceLabel(i.source);
   }
 
-  function sourceShortLabel(s) {
-    return { ga4: 'GA4', bigquery: 'BQ', google_ads: 'G·Ads', search_console: 'SC',
-             amplitude: 'Amp', adobe_analytics: 'Adobe', meta_ads: 'Meta',
-             tiktok_ads: 'TikTok', snap_ads: 'Snap' }[s] || s;
-  }
-
-  function inputLabel(i) {
-    const b = i.binding || {};
-    if (i.source === 'ga4') return b.ui_name || b.api_name || 'field';
-    if (i.source === 'bigquery') {
-      const agg = b.aggregation && b.aggregation !== 'none' ? b.aggregation.toUpperCase() + '(' : '';
-      const close = agg ? ')' : '';
-      return `${agg}${b.field || '?'}${close}`;
-    }
-    return i.source;
-  }
-
-  function inputsCell(k) {
-    const inputs = k.inputs || [];
-    if (!inputs.length) {
-      return k.expression
-        ? `<span class="k-expr-raw">${esc(k.expression)}</span>`
-        : '—';
-    }
-    const MAX = 3;
-    const chips = inputs.slice(0, MAX).map(i =>
-      `<span class="k-input-chip"><span class="k-input-src">${esc(sourceShortLabel(i.source))}</span>${esc(inputLabel(i))}</span>`
-    ).join('');
-    const more = inputs.length > MAX ? `<span class="k-input-more">+${inputs.length - MAX}</span>` : '';
-    return `<div class="k-inputs-wrap">${chips}${more}</div>`;
-  }
-
   function render() {
     const empty = document.getElementById('kpiEmpty');
     const wrap  = document.getElementById('kpiTableWrap');
@@ -633,21 +593,24 @@ textarea.f-input { resize: vertical; min-height: 58px; line-height: 1.5; }
     }
     empty.style.display = 'none';
     wrap.style.display  = 'block';
-    body.innerHTML = state.kpis.map(k => `
-      <tr>
-        <td class="k-name">${esc(k.name)}<div class="k-desc">${esc(k.description)}</div></td>
-        <td>${statusBadge(k.status)}</td>
-        <td>${k.category ? `<span class="k-badge">${esc(k.category)}</span>` : '—'}</td>
-        <td>${esc(k.unit) || '—'}</td>
-        <td>${directionLabel(k.direction)}</td>
-        <td class="k-inputs-cell">${inputsCell(k)}</td>
-        <td>${esc(k.owner) || '—'}</td>
-        <td class="k-actions">
-          ${k.status !== 'approved' ? `<button class="mini-btn mini-btn-approve" onclick='Fluxito.kpi.approve(${JSON.stringify(k.id)})'>Approve</button>` : ''}
-          <button class="mini-btn" onclick='Fluxito.kpi.edit(${JSON.stringify(k.id)})'>Edit</button>
-        </td>
-      </tr>
-    `).join('');
+    body.innerHTML = state.kpis.map(k => {
+      const marker = usageMarker(k);
+      const tooltip = rowTooltip(k);
+      const idJson = JSON.stringify(k.id);
+      return `
+      <div class="kpi-row" role="button" tabindex="0" title="${esc(tooltip)}"
+           onclick='Fluxito.kpi.edit(${idJson})'
+           onkeydown='if(event.key==="Enter"){Fluxito.kpi.edit(${idJson})}'>
+        <span class="kpi-row-name">${esc(k.name)}</span>
+        <span class="kpi-row-desc">${esc(k.description)}</span>
+        <span class="kpi-row-marker ${marker.cls}">${esc(marker.text)}</span>
+        <span class="kpi-row-actions">
+          ${k.status !== 'approved' ? `<button type="button" class="kpi-row-btn is-approve" onclick='event.stopPropagation();Fluxito.kpi.approve(${idJson})'>Approve</button>` : ''}
+          <button type="button" class="kpi-row-btn" onclick='event.stopPropagation();Fluxito.kpi.edit(${idJson})'>Edit</button>
+        </span>
+      </div>
+    `;
+    }).join('');
   }
 
   function setVal(id, v) { document.getElementById(id).value = (v == null ? '' : v); }
@@ -1120,7 +1083,7 @@ textarea.f-input { resize: vertical; min-height: 58px; line-height: 1.5; }
               <span class="p-item-name">${esc(apiName)}</span>
             </div>
             ${desc ? `<div class="p-item-desc">${esc(desc)}</div>` : ''}
-            ${already ? `<div class="p-item-desc" style="color:#137333">Already added</div>` : ''}
+            ${already ? `<div class="p-item-desc" style="color:var(--good)">Already added</div>` : ''}
           </div>
         </label>
       `;
@@ -1206,7 +1169,7 @@ textarea.f-input { resize: vertical; min-height: 58px; line-height: 1.5; }
             <input type="checkbox" value="${esc(c.name)}" data-type="${esc(c.field_type || '')}" ${already ? 'disabled checked' : ''}>
             <div class="p-item-body">
               <span class="p-item-name">${esc(c.name)}</span>
-              ${already ? `<div class="p-item-desc" style="color:#137333">Already added</div>` : ''}
+              ${already ? `<div class="p-item-desc" style="color:var(--good)">Already added</div>` : ''}
             </div>
             <span class="p-item-type">${esc(c.field_type || '')}</span>
           </label>

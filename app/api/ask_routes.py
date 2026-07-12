@@ -12,12 +12,13 @@ from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from app import app_state
 from app.ask.context import window_history
+from app.ask.drafts import DraftPublishError, DraftService, draft_to_stream_payload
 from app.ask.harness import Harness, HarnessDeps
 from app.ask.keys import (
     delete_key,
     get_active_key,
     get_default_key,
-    list_keys,
+    list_effective_keys,
     list_providers,
     set_default,
     store_key,
@@ -33,6 +34,7 @@ from app.templating import render
 
 router = APIRouter()
 _service = ConversationService()
+_drafts = DraftService()
 
 
 def _sse_frame(payload: dict[str, Any]) -> str:
@@ -49,6 +51,34 @@ def _active_project_id(request: Request) -> str | None:
     from app.api.project_routes import get_active_project_id
 
     return get_active_project_id(request) or getattr(request.state, "active_project_id", None)
+
+
+# Sections the chat can be opened from (page_context.section). Anything else is
+# ignored — an unknown section falls back to the default read-only surface.
+_VALID_SECTIONS: frozenset[str] = frozenset(
+    {"home", "plan", "implement", "audit", "report", "context", "settings"}
+)
+
+
+def _parse_page_context(raw: Any) -> dict[str, Any] | None:
+    """Validate an optional page_context {section, route, entity} from the
+    request body. Returns a normalized dict, or None when absent/invalid.
+    An invalid section is dropped rather than rejected."""
+    if not isinstance(raw, dict):
+        return None
+    section = raw.get("section")
+    if not isinstance(section, str) or section not in _VALID_SECTIONS:
+        section = None
+    route = raw.get("route")
+    entity = raw.get("entity")
+    ctx: dict[str, Any] = {}
+    if section:
+        ctx["section"] = section
+    if isinstance(route, str):
+        ctx["route"] = route
+    if isinstance(entity, dict):
+        ctx["entity"] = entity
+    return ctx or None
 
 
 def _parse_uuid(value: str | None) -> uuid.UUID | None:
@@ -106,6 +136,8 @@ async def ask_stream(request: Request):
     if not user_text:
         return JSONResponse({"error": "Empty message."}, status_code=400)
     conv_id = body.get("conversation_id")
+    page_context = _parse_page_context(body.get("page_context"))
+    section = (page_context or {}).get("section")
 
     pid = uuid.UUID(project_id)
     uuid_user = uuid.UUID(uid)
@@ -136,7 +168,13 @@ async def ask_stream(request: Request):
         if conv is None or str(conv.user_id) != uid:
             return JSONResponse({"error": "not_found"}, status_code=404)
     else:
-        conv = await _service.create(project_id=pid, user_id=uuid_user, provider=provider_name, model=model)
+        conv = await _service.create(
+            project_id=pid,
+            user_id=uuid_user,
+            provider=provider_name,
+            model=model,
+            origin_section=section,
+        )
         # Derive title from first user message (collapse whitespace, truncate to 60 chars).
         raw = " ".join(user_text.split())
         new_conv_title = raw[:60] + ("…" if len(raw) > 60 else "")
@@ -146,11 +184,23 @@ async def ask_stream(request: Request):
 
     # Build the system prompt from the active project context.
     project_name = getattr(request.state, "active_project_name", "your project")
-    bridge = AskToolBridge(user_id=uid, project_id=project_id)
+    # Resolve the caller's RBAC permissions so the tool surface (and every
+    # dispatch) is gated by their role — not merely by the client-supplied
+    # section. Without this, any member could unlock write tools by asserting
+    # section="implement".
+    from app.auth.permissions import resolve_effective_permissions
+
+    eff = await resolve_effective_permissions(uid, project_id)
+    bridge = AskToolBridge(user_id=uid, project_id=project_id, section=section, eff=eff)
     specs = bridge.tool_specs()
     connected = _connected_labels(specs)
     role = getattr(request.state, "active_project_role", "member")
-    system = build_system_prompt(project_name=project_name, connected=connected, role=role)
+    system = build_system_prompt(
+        project_name=project_name,
+        connected=connected,
+        role=role,
+        page_context=page_context,
+    )
 
     provider = make_provider(provider_name, key.api_key, base_url=key.base_url)
     deps = HarnessDeps(
@@ -161,6 +211,9 @@ async def ask_stream(request: Request):
         model=model,
         system=system,
         history=history,
+        drafts=_drafts,
+        project_id=pid,
+        created_by=uuid_user,
     )
     harness = Harness(deps)
     user_message = LLMMessage(role="user", content=[TextBlock(text=user_text)])
@@ -237,6 +290,7 @@ async def list_conversations(request: Request):
                     "id": str(c.id),
                     "title": c.title or "New chat",
                     "last_message_at": c.last_message_at.isoformat(),
+                    "origin_section": c.origin_section,
                 }
                 for c in convs
             ]
@@ -254,6 +308,10 @@ async def get_conversation(request: Request, conversation_id: str):
     if conv is None or str(conv.user_id) != uid:
         return JSONResponse({"error": "not_found"}, status_code=404)
     history_with_usage = await _service.load_history_with_usage(conv.id)
+    # Drafts (GTM diff cards etc.) attached to this conversation, in whatever
+    # state (pending/published/rejected) they were left — the client matches
+    # each on `message_id` to re-render the card at the right spot.
+    drafts = await _drafts.list_for_conversation(conv.id)
     return JSONResponse(
         {
             "id": str(conv.id),
@@ -262,12 +320,14 @@ async def get_conversation(request: Request, conversation_id: str):
             "provider": conv.provider,
             "messages": [
                 {
+                    "id": str(msg_id),
                     "role": m.role,
                     "content": _blocks_for_ui(m),
                     **({"token_usage": usage} if usage is not None else {}),
                 }
-                for m, usage in history_with_usage
+                for msg_id, m, usage in history_with_usage
             ],
+            "drafts": [draft_to_stream_payload(d) for d in drafts],
         }
     )
 
@@ -276,6 +336,92 @@ def _blocks_for_ui(message: LLMMessage) -> list[dict[str, Any]]:
     from app.ask.providers.base import blocks_to_json
 
     return blocks_to_json(message.content)
+
+
+# ---- draft approve / reject (Conversation approve flow) -----------------
+
+
+async def _owned_draft(request: Request, draft_id: str):
+    """Load a draft the current user is allowed to act on: the draft's
+    conversation must belong to them. Returns (draft, error_response|None)."""
+    uid = _require_user_id(request)
+    if not uid:
+        return None, JSONResponse({"error": "auth"}, status_code=401)
+    draft_uuid = _parse_uuid(draft_id)
+    if not draft_uuid:
+        return None, JSONResponse({"error": "not_found"}, status_code=404)
+    draft = await _drafts.get(draft_uuid)
+    if draft is None:
+        return None, JSONResponse({"error": "not_found"}, status_code=404)
+    conv = await _service.get(draft.conversation_id)
+    if conv is None or str(conv.user_id) != uid:
+        return None, JSONResponse({"error": "not_found"}, status_code=404)
+    return draft, None
+
+
+@router.post("/api/ask/drafts/{draft_id}/approve")
+async def approve_draft(request: Request, draft_id: str):
+    draft, err = await _owned_draft(request, draft_id)
+    if err:
+        return err
+    uid = _require_user_id(request)
+    if draft.status != "pending":
+        return JSONResponse(
+            {"error": "not_pending", "draft": draft_to_stream_payload(draft)}, status_code=409
+        )
+    # Publishing to the live GTM container is a write action: gate it on the
+    # caller's RBAC role for THIS draft's project, not just conversation
+    # ownership. Otherwise a viewer / read-only member who staged the draft
+    # could approve it into a live publish.
+    from app.auth.permissions import resolve_effective_permissions
+
+    eff = await resolve_effective_permissions(uid, str(draft.project_id))
+    if not eff.allows_tool("tagmanager_write", action="publish_container"):
+        return JSONResponse(
+            {
+                "error": "forbidden",
+                "message": "You don't have permission to publish GTM changes in this project.",
+            },
+            status_code=403,
+        )
+    try:
+        updated = await _drafts.approve(draft.id, user_id=uuid.UUID(uid))
+    except DraftPublishError as exc:
+        # Publish failed — draft stays pending so the user can retry.
+        return JSONResponse(
+            {"error": "publish_failed", "message": str(exc), "draft": draft_to_stream_payload(draft)},
+            status_code=502,
+        )
+    return JSONResponse({"ok": True, "draft": draft_to_stream_payload(updated)})
+
+
+@router.post("/api/ask/drafts/{draft_id}/reject")
+async def reject_draft(request: Request, draft_id: str):
+    draft, err = await _owned_draft(request, draft_id)
+    if err:
+        return err
+    uid = _require_user_id(request)
+    if draft.status != "pending":
+        return JSONResponse(
+            {"error": "not_pending", "draft": draft_to_stream_payload(draft)}, status_code=409
+        )
+    updated = await _drafts.reject(draft.id, user_id=uuid.UUID(uid))
+    return JSONResponse({"ok": True, "draft": draft_to_stream_payload(updated)})
+
+
+@router.post("/api/ask/drafts/{draft_id}/reset")
+async def reset_draft(request: Request, draft_id: str):
+    """Undo a rejection (design's "Undo" link) — back to pending."""
+    draft, err = await _owned_draft(request, draft_id)
+    if err:
+        return err
+    uid = _require_user_id(request)
+    if draft.status != "rejected":
+        return JSONResponse(
+            {"error": "not_rejected", "draft": draft_to_stream_payload(draft)}, status_code=409
+        )
+    updated = await _drafts.reset(draft.id, user_id=uuid.UUID(uid))
+    return JSONResponse({"ok": True, "draft": draft_to_stream_payload(updated)})
 
 
 @router.post("/api/ask/conversations/{conversation_id}/archive")
@@ -294,6 +440,14 @@ async def archive_conversation(request: Request, conversation_id: str):
 # ---- minimal key setup --------------------------------------------------
 
 
+async def _can_manage_project_keys(project_id: str, uid: str) -> bool:
+    """Owners/admins may set the project-shared AI key."""
+    from app.api.project_routes import _get_membership
+
+    membership = await _get_membership(uuid.UUID(project_id), uuid.UUID(uid))
+    return membership is not None and membership.role in ("owner", "admin")
+
+
 @router.get("/api/ask/keys")
 async def get_keys(request: Request):
     uid = _require_user_id(request)
@@ -302,7 +456,9 @@ async def get_keys(request: Request):
     project_id = _active_project_id(request)
     if not project_id:
         return JSONResponse({"providers": [], "keys": [], "supported": list(SUPPORTED_PROVIDERS)})
-    infos = await list_keys(project_id=uuid.UUID(project_id), user_id=uuid.UUID(uid))
+    # Personal keys + project-shared keys the user hasn't overridden — the
+    # same effective view the chat resolution uses.
+    infos = await list_effective_keys(project_id=uuid.UUID(project_id), user_id=uuid.UUID(uid))
     providers = sorted({info.provider for info in infos})
     return JSONResponse(
         {
@@ -313,10 +469,12 @@ async def get_keys(request: Request):
                     "default_model": info.default_model,
                     "base_url": info.base_url,
                     "is_default": info.is_default,
+                    "scope": info.scope,
                 }
                 for info in infos
             ],
             "supported": list(SUPPORTED_PROVIDERS),
+            "can_manage_project_keys": await _can_manage_project_keys(project_id, uid),
         }
     )
 
@@ -341,15 +499,24 @@ async def save_key(request: Request):
     base_url = (body.get("base_url") or "").strip() or None
     if provider not in SUPPORTED_PROVIDERS:
         return JSONResponse({"error": "Invalid provider or key."}, status_code=400)
+    # scope "project" writes the shared project-default key (user_id NULL) —
+    # owners/admins only. Default scope is the caller's personal key.
+    scope = body.get("scope") or "personal"
+    if scope == "project":
+        if not await _can_manage_project_keys(project_id, uid):
+            return JSONResponse(
+                {"error": "Only project owners/admins can set the project key."}, status_code=403
+            )
+        key_user_id = None
+    else:
+        key_user_id = uuid.UUID(uid)
     default_model = body.get("default_model") or default_model_for(provider)
     key_required = provider != "lmstudio"
     if key_required and not api_key:
         # No new key supplied — update meta only if a stored key exists.
-        pid = uuid.UUID(project_id)
-        uid_uuid = uuid.UUID(uid)
         updated = await update_key_meta(
-            project_id=pid,
-            user_id=uid_uuid,
+            project_id=uuid.UUID(project_id),
+            user_id=key_user_id,
             provider=provider,
             default_model=default_model,
             base_url=base_url,
@@ -361,7 +528,7 @@ async def save_key(request: Request):
         return resp
     await store_key(
         project_id=uuid.UUID(project_id),
-        user_id=uuid.UUID(uid),
+        user_id=key_user_id,
         provider=provider,
         api_key=api_key,
         default_model=default_model,
@@ -384,7 +551,14 @@ async def remove_key(request: Request, provider: str):
         return JSONResponse({"error": "No active project."}, status_code=400)
     if provider not in SUPPORTED_PROVIDERS:
         return JSONResponse({"error": "Invalid provider."}, status_code=400)
-    await delete_key(project_id=uuid.UUID(project_id), user_id=uuid.UUID(uid), provider=provider)
+    if request.query_params.get("scope") == "project":
+        if not await _can_manage_project_keys(project_id, uid):
+            return JSONResponse(
+                {"error": "Only project owners/admins can remove the project key."}, status_code=403
+            )
+        await delete_key(project_id=uuid.UUID(project_id), user_id=None, provider=provider)
+    else:
+        await delete_key(project_id=uuid.UUID(project_id), user_id=uuid.UUID(uid), provider=provider)
     return JSONResponse({"ok": True})
 
 

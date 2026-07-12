@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -251,7 +251,14 @@ def _load_tutorial(slug: str) -> tuple[str, str]:
     return title, html_body
 
 
-# Tutorial metadata for the index page
+# Tutorial metadata for the index page.
+#
+# Tutorials in the first two categories ("Start here" / "Use Fluxito
+# features") carry a 5th `interactive` bool: it flags a guide that walks the
+# user through a live, step-by-step flow (vs. a plain reference doc), and
+# drives the "INTERACTIVE" badge + dark-card treatment on the tutorials index
+# featured grid. Every other category's tuples stay 4-wide (slug, title,
+# time, note) — `tutorials/platforms.html` unpacks those positionally.
 TUTORIAL_CATEGORIES = [
     {
         "title": "Start here",
@@ -262,30 +269,35 @@ TUTORIAL_CATEGORIES = [
                 "Projects and connections",
                 "~8 min",
                 "Create projects and connect accounts",
+                False,
             ),
             (
                 "connect-ai-mcp",
                 "Connect an AI with MCP",
                 "~10 min",
                 "Add Fluxito to Claude, ChatGPT, Cursor, or another MCP client",
+                True,
             ),
             (
                 "fluxito-skill",
                 "Add the Fluxito Skill",
                 "~5 min",
                 "Install the Agent Skill so your AI operates Fluxito the right way",
+                False,
             ),
             (
                 "platform-setup-guides",
                 "Platform setup guides",
                 "~10 min",
                 "Pick the right connector guide for each data source",
+                False,
             ),
             (
                 "business-context",
                 "Business Context",
                 "~10 min",
                 "Teach the AI your business rules and terminology",
+                False,
             ),
         ],
     },
@@ -293,25 +305,40 @@ TUTORIAL_CATEGORIES = [
         "title": "Use Fluxito features",
         "description": "Guides for the core workflows: KPIs, SDRs, dashboards, automations, and audits.",
         "tutorials": [
-            ("kpi-library", "KPI Library", "~15 min", "Define metrics, formulas, owners, and targets"),
+            (
+                "kpi-library",
+                "KPI Library",
+                "~15 min",
+                "Define metrics, formulas, owners, and targets",
+                False,
+            ),
             (
                 "sdr-generation",
                 "SDR generation",
                 "~20 min",
                 "Generate and refine your Solution Design Reference",
+                False,
             ),
             (
                 "dashboards-and-templates",
                 "Dashboards and templates",
                 "~15 min",
                 "Build live reports and deploy templates",
+                False,
             ),
-            ("automations", "Automations", "~12 min", "Install scheduled AI monitoring workflows"),
+            (
+                "automations",
+                "Automations",
+                "~12 min",
+                "Install scheduled AI monitoring workflows",
+                False,
+            ),
             (
                 "audits-and-activity",
                 "Audits and Activity Log",
                 "~12 min",
                 "Run health checks and review AI tool calls",
+                False,
             ),
         ],
     },
@@ -387,7 +414,7 @@ def _tutorial_page_context(slug: str) -> dict:
     }
 
 
-def _top_level_tutorials() -> list[tuple[str, str, str, str]]:
+def _top_level_tutorials() -> list[tuple[str, str, str, str, bool]]:
     return [item for category in TUTORIAL_CATEGORIES[:2] for item in category["tutorials"]]
 
 
@@ -624,61 +651,10 @@ async def integrations_page(request: Request):
 
 @router.get("/settings/system", response_class=HTMLResponse)
 async def system_settings_page(request: Request):
-    """Render the install-admin system settings page."""
-    from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
-
-    async with app_state.db_session_factory() as db:
-        await _require_install_admin(request, db)
-    async with app_state.db_session_factory() as db:
-        items = await list_runtime_settings(db)
-
-    user_ctx = await _resolve_user_ctx(request)
-    user_view = await _load_user_view(user_ctx) if user_ctx else None
-
-    # Group settings by category for the card-based UI
-    from collections import OrderedDict
-
-    category_meta = OrderedDict(
-        [
-            (
-                "email",
-                {
-                    "title": "Email / SMTP",
-                    "description": "Outbound email configuration for notifications and reports.",
-                },
-            ),
-            ("rate_limiting", {"title": "Rate Limiting", "description": "API throttling defaults per user."}),
-            (
-                "observability",
-                {"title": "Observability", "description": "Error tracking and performance monitoring."},
-            ),
-            (
-                "platform",
-                {
-                    "title": "Storage & Platform",
-                    "description": "Artifact storage, CORS, and tool availability.",
-                },
-            ),
-        ]
-    )
-    grouped: dict[str, list] = {k: [] for k in category_meta}
-    for item in items:
-        cat = item.get("category", "platform")
-        grouped.setdefault(cat, []).append(item)
-
-    categories = [
-        {"key": k, **category_meta[k], "settings": grouped.get(k, [])}
-        for k in category_meta
-        if grouped.get(k)
-    ]
-
-    return render(
-        request,
-        "settings/system.html",
-        {
-            "user": user_view,
-            "settings_items": items,
-            "categories": categories,
-            "active": "system_settings",
-        },
-    )
+    """The System settings page was retired (site revamp): per-project SMTP
+    lives in Project settings → Notifications, connector rate limits in
+    Project settings → API limits, and app throttling / operations / branding
+    in the superadmin /admin console. Runtime settings stay editable via the
+    /api/settings/system API (or env). Redirect old links to /admin, which
+    enforces its own access gate."""
+    return RedirectResponse(url="/admin", status_code=302)

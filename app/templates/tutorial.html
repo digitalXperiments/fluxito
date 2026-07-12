@@ -1,970 +1,520 @@
 {% extends "base.html" %}
-{% from "partials/platform_icons.html" import platform_icon %}
 {% block title %}Get Started — Fluxito{% endblock %}
-
-{% block nav %}
-{# Minimal nav during tutorial — logo only, no links #}
-<nav class="nav">
-  <div class="nav-inner">
-    <a href="/" class="wordmark" style="font-size:20px">
-      <span style="font-family:var(--mono);font-weight:500;letter-spacing:-0.02em">flux</span><em>ito</em><span style="display:inline-block;width:4px;height:4px;border-radius:99px;background:var(--blue);margin-left:3px;vertical-align:middle"></span>
-    </a>
-    <div class="nav-right" style="display:flex;align-items:center;gap:8px;">
-      <a href="/home" class="btn sm" id="tutorialSkip" onclick="fetch('/api/tutorial/complete',{method:'POST',credentials:'same-origin'})">Skip tutorial →</a>
-      <a href="/signout" class="btn sm">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Sign out
-      </a>
-    </main>
-  </div>
-</nav>
-{% endblock %}
-
+{% block nav %}{% endblock %}
 {% block footer %}{% endblock %}
 
 {% block main %}
-<main class="app-main" style="max-width:720px">
-
-  {# ── Progress stepper ── #}
-  <div class="tut-stepper" id="tutStepper">
-    <div class="tut-step-indicator is-active" data-step="0">
-      <div class="tut-step-dot">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+<div class="ob-shell">
+  <!-- ═══ LEFT RAIL ═══ -->
+  <div class="ob-rail">
+    <div class="ob-rail-word"><span>fluxito</span><span class="ob-rail-dot"></span></div>
+    <div class="ob-rail-steps" id="obRailSteps">
+      {% for s in [('Meet Flux','Your resident analyst'), ('Your role & goals','So Flux briefs you right'), ('Connect your data','GA4, GTM, ads, warehouse'), ('Add your AI','Claude, ChatGPT, Cursor — or in-app'), ('First briefing','Flux runs a live health check')] %}
+      <div class="ob-rail-item {% if loop.first %}is-current{% endif %}">
+        {% if not loop.first %}<div class="ob-rail-connector"></div>{% endif %}
+        <div class="ob-rail-row" data-goto="{{ loop.index }}">
+          <span class="ob-rail-marker">{{ loop.index }}</span>
+          <div>
+            <div class="ob-rail-title">{{ s[0] }}</div>
+            <div class="ob-rail-sub">{{ s[1] }}</div>
+          </div>
+        </div>
       </div>
-      <span class="tut-step-label">Welcome</span>
+      {% endfor %}
     </div>
-    <div class="tut-step-line"></div>
-    <div class="tut-step-indicator" data-step="1">
-      <div class="tut-step-dot">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
-      </div>
-      <span class="tut-step-label">Connect</span>
-    </div>
-    <div class="tut-step-line"></div>
-    <div class="tut-step-indicator" data-step="2">
-      <div class="tut-step-dot">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
-      </div>
-      <span class="tut-step-label">Personalize</span>
-    </div>
-    <div class="tut-step-line"></div>
-    <div class="tut-step-indicator" data-step="3">
-      <div class="tut-step-dot">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
-      </div>
-      <span class="tut-step-label">Set up AI</span>
-    </div>
-    <div class="tut-step-line"></div>
-    <div class="tut-step-indicator" data-step="4">
-      <div class="tut-step-dot">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
-      </div>
-      <span class="tut-step-label">Ask AI</span>
+    <div class="ob-rail-quote" id="obRailQuote">
+      <em>&ldquo;Nice to meet you. I promise to only ping you when it matters.&rdquo;</em><br>
+      <span class="ob-rail-quote-attr">— Flux</span>
     </div>
   </div>
 
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  {# STEP 0 — Welcome                                                   #}
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  <div class="tut-panel is-active" data-panel="0">
-    <div class="tut-intro">
-      <span class="label">Step 1 of 5</span>
-      <h1>Welcome, <em class="serif-italic">{{ (user.display_name or user.email.split('@')[0]) | title }}.</em></h1>
-      <p>Fluxito connects your marketing platforms to AI tools like Claude, ChatGPT, and Cursor — so you can ask questions about your data in natural language.</p>
+  <!-- ═══ RIGHT CONTENT ═══ -->
+  <div class="ob-content">
+    <div class="ob-utility">
+      <a href="#" id="obSkip">Skip for now →</a>
+      <a href="/signout">Sign out</a>
     </div>
 
-    <div class="tut-preview-list">
-      <div class="tut-preview-card">
-        <div class="tut-preview-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+    <!-- STEP 1 · MEET FLUX -->
+    <div class="ob-step" data-panel="1">
+      <div class="ob-eyebrow">Step 1 · Meet Flux</div>
+      <div class="ob-h1-row">
+        <span class="ob-flux-mark">F</span>
+        <h1 class="ob-h1">Hello, {{ (user.display_name or user.email.split('@')[0]) | title }}. I'm your new <em>analytics teammate.</em></h1>
+      </div>
+      <p class="ob-lede">I do the work of a senior digital analytics person — planning, implementation, auditing and reporting — across everything you connect. A quick tour of what that means:</p>
+      <div class="ob-grid-2">
+        <div class="ob-tile"><div class="ob-tile-title">I plan</div><div class="ob-tile-desc">Tracking plans &amp; SDRs generated from what's actually live — not a stale spreadsheet.</div></div>
+        <div class="ob-tile"><div class="ob-tile-title">I implement</div><div class="ob-tile-desc">GTM tags, triggers and variables — drafted for your review, never published without you.</div></div>
+        <div class="ob-tile"><div class="ob-tile-title">I audit</div><div class="ob-tile-desc">Live tag QA against 25 platform rule books. I catch double-counting before finance does.</div></div>
+        <div class="ob-tile"><div class="ob-tile-title">I report</div><div class="ob-tile-desc">Morning briefings, dashboards, scheduled recaps — with the "why", not just the numbers.</div></div>
+      </div>
+      <div class="ob-note"><span class="ob-note-dot ob-note-dot-good"></span><span><strong>Read-only by default.</strong> I can't change anything in your accounts unless you explicitly grant write access — and even then, you approve every change.</span></div>
+    </div>
+
+    <!-- STEP 2 · ROLE & GOALS -->
+    <div class="ob-step" data-panel="2" hidden>
+      <div class="ob-eyebrow">Step 2 · Your role &amp; goals</div>
+      <h1 class="ob-h1">What does your week look like?</h1>
+      <p class="ob-lede">I'll tune my briefings, defaults and tone to how you work. Pick the closest fit — change it anytime.</p>
+      <div class="ob-grid-2" id="obRoleCards">
+        <div class="ob-role-card" data-role="run_marketing">
+          <div class="ob-role-title">I run marketing</div>
+          <div class="ob-role-sub">Campaigns, budgets, ROAS. I need answers and alerts, not implementation details.</div>
         </div>
-        <div>
-          <div class="tut-preview-name">Connect your platforms</div>
-          <div class="tut-preview-desc">GA4, GTM, Google Ads, Meta, TikTok, Snap, BigQuery, and more.</div>
+        <div class="ob-role-card" data-role="implement_tracking">
+          <div class="ob-role-title">I implement tracking</div>
+          <div class="ob-role-sub">GTM, dataLayers, pixels. I want plans, diffs, and QA — with write access.</div>
+        </div>
+        <div class="ob-role-card" data-role="analyze_report">
+          <div class="ob-role-title">I analyze &amp; report</div>
+          <div class="ob-role-sub">Dashboards, deep dives, weekly narratives for stakeholders.</div>
+        </div>
+        <div class="ob-role-card" data-role="everything">
+          <div class="ob-role-title">A bit of everything</div>
+          <div class="ob-role-sub">Small team — I own the whole stack end to end.</div>
         </div>
       </div>
-      <div class="tut-preview-card">
-        <div class="tut-preview-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/><circle cx="12" cy="6" r="2"/></svg>
-        </div>
-        <div>
-          <div class="tut-preview-name">Teach AI your business</div>
-          <div class="tut-preview-desc">Templates, KPI library, and a business context doc so your AI answers in your terms.</div>
-        </div>
+      <div class="ob-sub-eyebrow">And what should I watch for you?</div>
+      <div class="ob-chips" id="obMonitorChips">
+        <span class="ob-chip" data-monitor="roas">ROAS by channel</span>
+        <span class="ob-chip" data-monitor="health">Conversion tracking health</span>
+        <span class="ob-chip" data-monitor="pacing">Budget pacing</span>
+        <span class="ob-chip" data-monitor="funnel">Funnel drop-offs</span>
+        <span class="ob-chip" data-monitor="seo">SEO movement</span>
+        <span class="ob-chip" data-monitor="comp">Competitor bidding</span>
       </div>
-      <div class="tut-preview-card">
-        <div class="tut-preview-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        </div>
-        <div>
-          <div class="tut-preview-name">Add to your favourite AI</div>
-          <div class="tut-preview-desc">One URL — works with Claude, ChatGPT, Cursor, and more.</div>
-        </div>
+    </div>
+
+    <!-- STEP 3 · CONNECT DATA -->
+    <div class="ob-step" data-panel="3" hidden>
+      <div class="ob-eyebrow">Step 3 · Connect your data</div>
+      <h1 class="ob-h1">Give Flux its <em>instruments.</em></h1>
+      <p class="ob-lede">Read-only by default. One connection is enough to start — GA4 unlocks the most. Click to connect; Flux verifies each pipe as you go.</p>
+      <div class="ob-grid-2" id="obConnCards">
+        <a class="ob-conn-card {% if conn_status.ga4 %}is-live{% endif %}" href="/connect/google" target="_blank" rel="noopener">
+          <div class="ob-conn-body"><div class="ob-conn-name">GA4</div><div class="ob-conn-sub">Events, conversions, audiences</div></div>
+          <span class="ob-conn-status">{{ '✓ Connected' if conn_status.ga4 else '+ Connect' }}</span>
+        </a>
+        <a class="ob-conn-card {% if conn_status.gtm %}is-live{% endif %}" href="/connect/google" target="_blank" rel="noopener">
+          <div class="ob-conn-body"><div class="ob-conn-name">Google Tag Manager</div><div class="ob-conn-sub">Tags, triggers, variables</div></div>
+          <span class="ob-conn-status">{{ '✓ Connected' if conn_status.gtm else '+ Connect' }}</span>
+        </a>
+        <a class="ob-conn-card {% if conn_status.gads %}is-live{% endif %}" href="/connect/google" target="_blank" rel="noopener">
+          <div class="ob-conn-body"><div class="ob-conn-name">Google Ads</div><div class="ob-conn-sub">Campaigns, spend, conversions</div></div>
+          <span class="ob-conn-status">{{ '✓ Connected' if conn_status.gads else '+ Connect' }}</span>
+        </a>
+        <a class="ob-conn-card {% if conn_status.meta %}is-live{% endif %}" href="/connect/meta" target="_blank" rel="noopener">
+          <div class="ob-conn-body"><div class="ob-conn-name">Meta Ads</div><div class="ob-conn-sub">Campaigns, pixels, CAPI</div></div>
+          <span class="ob-conn-status">{{ '✓ Connected' if conn_status.meta else '+ Connect' }}</span>
+        </a>
+        <a class="ob-conn-card {% if conn_status.bq %}is-live{% endif %}" href="/connect/bigquery" target="_blank" rel="noopener">
+          <div class="ob-conn-body"><div class="ob-conn-name">BigQuery</div><div class="ob-conn-sub">Warehouse queries</div></div>
+          <span class="ob-conn-status">{{ '✓ Connected' if conn_status.bq else '+ Connect' }}</span>
+        </a>
+        <a class="ob-conn-more" href="/connect" target="_blank" rel="noopener">
+          <div class="ob-conn-body"><div class="ob-conn-name">22 more platforms</div><div class="ob-conn-sub">Adobe, Amplitude, TikTok, Snowflake…</div></div>
+          <span class="ob-conn-more-label">BROWSE →</span>
+        </a>
       </div>
-      <div class="tut-preview-card">
-        <div class="tut-preview-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <div class="ob-note">
+        <span class="ob-note-dot ob-note-dot-accent"></span>
+        <span><strong id="obLiveCount">{{ conn_live_count }} connected.</strong> You can skip ahead and add the rest later — Flux will remind you when a question needs a source you haven't connected. <a href="/tutorial?step=3" class="ob-refresh-link">Refresh status →</a></span>
+      </div>
+    </div>
+
+    <!-- STEP 4 · ADD YOUR AI -->
+    <div class="ob-step" data-panel="4" hidden>
+      <div class="ob-eyebrow">Step 4 · Add your AI</div>
+      <h1 class="ob-h1">Where do you want to <em>talk to Flux?</em></h1>
+      <p class="ob-lede">Flux lives in this app — and in any MCP-compatible AI. Same brain, same memory, same permissions everywhere. Pick your favorite; add more later.</p>
+      <div class="ob-grid-3" id="obClientCards">
+        <div class="ob-client-card" data-client="claude"><span class="ob-client-icon" style="background:#d97757;"><img src="/static/img/logos/claude.svg" alt=""></span><div><div class="ob-client-name">Claude</div><div class="ob-client-sub">Web &amp; Desktop · native MCP</div></div></div>
+        <div class="ob-client-card" data-client="chatgpt"><span class="ob-client-icon" style="background:#10a37f;"><img src="/static/img/logos/chatgpt.svg" alt=""></span><div><div class="ob-client-name">ChatGPT</div><div class="ob-client-sub">Web &amp; Desktop</div></div></div>
+        <div class="ob-client-card" data-client="cursor"><span class="ob-client-icon" style="background:#09090b;"><img src="/static/img/logos/cursor.svg" alt=""></span><div><div class="ob-client-name">Cursor</div><div class="ob-client-sub">Code editor</div></div></div>
+        <div class="ob-client-card" data-client="windsurf"><span class="ob-client-icon" style="background:#09b6a2;"><img src="/static/img/logos/windsurf.svg" alt=""></span><div><div class="ob-client-name">Windsurf</div><div class="ob-client-sub">Code editor</div></div></div>
+        <div class="ob-client-card" data-client="lmstudio"><span class="ob-client-icon" style="background:#4338ca;"><img src="/static/img/logos/lmstudio.svg" alt=""></span><div><div class="ob-client-name">LM Studio</div><div class="ob-client-sub">Local models</div></div></div>
+        <div class="ob-client-card" data-client="inapp"><span class="ob-client-icon ob-client-icon-flux">F</span><div><div class="ob-client-name">Just the app</div><div class="ob-client-sub">Chat with Flux right here</div></div></div>
+      </div>
+      <div class="ob-mcp-box">
+        <span class="ob-mcp-url">{{ base_url }}/mcp</span>
+        <span class="ob-mcp-copy" id="obCopyUrl">Copy URL</span>
+      </div>
+      <div class="ob-mcp-hint" id="obMcpHint">Paste this into your client's MCP settings — we'll walk you through it for the tool you picked.</div>
+    </div>
+
+    <!-- STEP 5 · FIRST BRIEFING -->
+    <div class="ob-step" data-panel="5" hidden>
+      <div class="ob-eyebrow">Step 5 · First briefing</div>
+      <h1 class="ob-h1">Flux is reading your stack <em>right now.</em></h1>
+      <p class="ob-lede">A live health check across everything you connected — the same scan that runs before every morning briefing.</p>
+      <div class="ob-scan">
+        <div class="ob-scan-head">
+          <span class="ob-flux-mark ob-flux-mark-sm">F</span>
+          <span class="ob-scan-title">Health check{% if active_project_name %} · {{ active_project_name }}{% endif %}</span>
+          <span class="ob-scan-pct" id="obScanPct">0%</span>
         </div>
-        <div>
-          <div class="tut-preview-name">Ask anything about your data</div>
-          <div class="tut-preview-desc">"What were my top landing pages last week?" — just ask.</div>
+        <div class="ob-scan-bar"><div class="ob-scan-bar-fill" id="obScanBarFill"></div></div>
+        <div class="ob-scan-lines" id="obScanLines"></div>
+        <div class="ob-scan-summary" id="obScanSummary" hidden>
+          <span class="ob-flux-mark ob-flux-mark-sm" style="flex-shrink:0;">F</span>
+          <div id="obScanSummaryText"></div>
         </div>
       </div>
     </div>
 
-    <div class="tut-actions tut-actions-center">
-      <button class="btn primary tut-cta" onclick="tutNext()">
-        Let's get started
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </button>
-      <div class="tut-note">Takes about 2 minutes</div>
+    <!-- ═══ FOOTER NAV ═══ -->
+    <div class="ob-footer">
+      <span class="ob-next" id="obNext">Let's get started →</span>
+      <span class="ob-back" id="obBack" hidden>Back</span>
+      <span class="ob-time" id="obTime">~2 minutes</span>
     </div>
   </div>
-
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  {# STEP 1 — Connect a platform                                        #}
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  <div class="tut-panel" data-panel="1">
-    <div class="tut-intro">
-      <span class="label">Step 2 of 5</span>
-      <h1>Connect your <em class="serif-italic">first platform.</em></h1>
-      <p>Start with Google — it covers GA4, GTM, and Google Ads in a single sign-in. You can always add more platforms later.</p>
-    </div>
-
-    <div class="tut-section">
-      <div class="tut-section-label">Recommended</div>
-
-      <div class="tut-connect-card">
-        <div class="tut-connect-row">
-          <div class="tut-connect-icon">{{ platform_icon("google", 24) }}</div>
-          <div class="tut-connect-body">
-            <div class="tut-connect-name">Google Suite</div>
-            <div class="tut-connect-desc">GA4 + GTM + Google Ads — all in one</div>
-          </div>
-          <span class="t-flag tut-popular">Most popular</span>
-        </div>
-        <div class="tut-hint">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <span>After this tutorial, go to <strong>Connections</strong> to sign in with Google. Choose your GA4 / GTM / Ads services, then authorize access.</span>
-        </div>
-      </div>
-
-      <div class="tut-section-label tut-section-label-spaced">Also supported</div>
-
-      <div class="tut-mini-grid">
-        <div class="tut-mini-card">
-          <div class="tut-connect-icon">{{ platform_icon("meta", 24) }}</div>
-          <div class="tut-mini-name">Meta Ads</div>
-        </div>
-        <div class="tut-mini-card">
-          <div class="tut-connect-icon">{{ platform_icon("tiktok", 24) }}</div>
-          <div class="tut-mini-name">TikTok Ads</div>
-        </div>
-        <div class="tut-mini-card">
-          <div class="tut-connect-icon">{{ platform_icon("bigquery", 24) }}</div>
-          <div class="tut-mini-name">BigQuery</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tut-actions tut-actions-split">
-      <button class="btn" onclick="tutPrev()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        Back
-      </button>
-      <button class="btn primary" onclick="tutNext()">
-        Continue
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </button>
-    </div>
-  </div>
-
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  {# STEP 2 — Personalize                                              #}
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  <div class="tut-panel" data-panel="2">
-    <div class="tut-intro">
-      <span class="label">Step 3 of 5</span>
-      <h1>Make Fluxito <em class="serif-italic">yours.</em></h1>
-      <p>Every business defines metrics differently. Tell your AI assistant exactly what your KPIs mean and give it the context it needs — then reuse pre-built templates to save hours of setup.</p>
-    </div>
-
-    <div class="tut-feature-list">
-
-      <div class="tut-feature-card">
-        <div class="tut-feature-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
-        </div>
-        <div class="tut-feature-body">
-          <div class="tut-feature-name">Templates</div>
-          <div class="tut-feature-desc">Browse the Fluxito library of pre-built dashboard recipes — Ecommerce overview, PPC performance, GTM audit, and more. Deploy one with a single click or ask your AI to set it up.</div>
-          <div class="tut-hint">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <span>Find it under <strong>Insights → Templates</strong>.</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="tut-feature-card">
-        <div class="tut-feature-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/><circle cx="12" cy="6" r="2"/></svg>
-        </div>
-        <div class="tut-feature-body">
-          <div class="tut-feature-name">KPI Library</div>
-          <div class="tut-feature-desc">Define the KPIs that matter to your business — name, description, formula, data source, and owner. Your AI reads this glossary automatically so every answer uses <em>your</em> definitions, not generic ones.</div>
-          <div class="tut-example">
-            <strong>Example:</strong>
-            <code>CAC</code> = "total paid marketing spend ÷ first-time customers, excluding refunds within 30 days." Source: <code>BigQuery.finance.orders</code>. Owner: Marketing team.
-          </div>
-          <div class="tut-hint">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <span>Find it under <strong>Knowledge → KPI Library</strong>.</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="tut-feature-card">
-        <div class="tut-feature-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-        </div>
-        <div class="tut-feature-body">
-          <div class="tut-feature-name">Business Context</div>
-          <div class="tut-feature-desc">A plain-Markdown doc describing your industry, audience, seasonality, internal terminology, and any rules your AI should apply. Loaded on demand whenever you ask an analytics question.</div>
-          <div class="tut-hint">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <span>Find it under <strong>Knowledge → Business Context</strong>.</span>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <div class="tut-callout">
-      <strong>These are optional</strong> — you can skip them and add them later. But the more context your AI has, the sharper its answers get.
-    </div>
-
-    <div class="tut-actions tut-actions-split">
-      <button class="btn" onclick="tutPrev()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        Back
-      </button>
-      <button class="btn primary" onclick="tutNext()">
-        Continue
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </button>
-    </div>
-  </div>
-
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  {# STEP 3 — Add to your AI                                           #}
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  <div class="tut-panel" data-panel="3">
-    <div class="tut-intro">
-      <span class="label">Step 4 of 5</span>
-      <h1>Add Fluxito to your <em class="serif-italic">AI tool.</em></h1>
-      <p>Pick the tool you use most. We'll show you exactly where to paste the server URL.</p>
-    </div>
-
-    {# AI tool picker — tabs #}
-    <div class="tut-ai-tabs">
-      <button class="tut-ai-tab is-active" data-tool="claude" onclick="tutSelectTool(this)">
-        <div class="tut-ai-tab-icon" style="background:#d97757;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/></svg>
-        </div>
-        Claude
-      </button>
-      <button class="tut-ai-tab" data-tool="chatgpt" onclick="tutSelectTool(this)">
-        <div class="tut-ai-tab-icon" style="background:#10a37f;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M22.28 9.82a5.98 5.98 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9A6.07 6.07 0 0 0 4.98 4.18a5.98 5.98 0 0 0-4 2.9 6.05 6.05 0 0 0 .74 7.1 5.98 5.98 0 0 0 .51 4.91 6.05 6.05 0 0 0 6.51 2.9A5.98 5.98 0 0 0 13.26 24a6.06 6.06 0 0 0 5.77-4.21 5.99 5.99 0 0 0 4-2.9 6.06 6.06 0 0 0-.75-7.07z"/></svg>
-        </div>
-        ChatGPT
-      </button>
-      <button class="tut-ai-tab" data-tool="cursor" onclick="tutSelectTool(this)">
-        <div class="tut-ai-tab-icon" style="background:#09090b;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"/></svg>
-        </div>
-        Cursor
-      </button>
-    </div>
-
-    {# Instructions per tool #}
-    <div class="tut-ai-instructions">
-      <div class="tut-instruction is-active" data-instruction="claude">
-        <div class="tut-numbered-steps">
-          <div class="tut-numbered-step">
-            <div class="tut-num">1</div>
-            <div class="tut-num-body">
-              <div class="tut-num-title">Open Claude settings</div>
-              <div class="tut-num-desc">In <a href="https://claude.ai" target="_blank">claude.ai</a>, click your profile icon (bottom-left) → <strong>Settings</strong> → <strong>Integrations</strong>.</div>
-            </div>
-          </div>
-          <div class="tut-numbered-step">
-            <div class="tut-num">2</div>
-            <div class="tut-num-body">
-              <div class="tut-num-title">Add a custom integration</div>
-              <div class="tut-num-desc">Click <strong>"Add custom integration"</strong> and paste the server URL below.</div>
-            </div>
-          </div>
-          <div class="tut-numbered-step">
-            <div class="tut-num">3</div>
-            <div class="tut-num-body">
-              <div class="tut-num-title">Authorize</div>
-              <div class="tut-num-desc">Claude will open a sign-in window. Log in with your Fluxito account and approve access.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="tut-instruction" data-instruction="chatgpt">
-        <div class="tut-numbered-steps">
-          <div class="tut-numbered-step">
-            <div class="tut-num">1</div>
-            <div class="tut-num-body">
-              <div class="tut-num-title">Open ChatGPT settings</div>
-              <div class="tut-num-desc">In <a href="https://chatgpt.com" target="_blank">chatgpt.com</a>, click your profile icon → <strong>Settings</strong> → <strong>Connected apps</strong>.</div>
-            </div>
-          </div>
-          <div class="tut-numbered-step">
-            <div class="tut-num">2</div>
-            <div class="tut-num-body">
-              <div class="tut-num-title">Add a new MCP server</div>
-              <div class="tut-num-desc">Click <strong>"Add integration"</strong>, choose <strong>"MCP server"</strong>, and paste the URL below.</div>
-            </div>
-          </div>
-          <div class="tut-numbered-step">
-            <div class="tut-num">3</div>
-            <div class="tut-num-body">
-              <div class="tut-num-title">Authorize</div>
-              <div class="tut-num-desc">ChatGPT will open a sign-in window. Log in and approve access.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="tut-instruction" data-instruction="cursor">
-        <div class="tut-numbered-steps">
-          <div class="tut-numbered-step">
-            <div class="tut-num">1</div>
-            <div class="tut-num-body">
-              <div class="tut-num-title">Open Cursor settings</div>
-              <div class="tut-num-desc">In Cursor, press <code>Cmd + Shift + J</code> (Mac) or <code>Ctrl + Shift + J</code> (Windows) to open MCP settings.</div>
-            </div>
-          </div>
-          <div class="tut-numbered-step">
-            <div class="tut-num">2</div>
-            <div class="tut-num-body">
-              <div class="tut-num-title">Add a new MCP server</div>
-              <div class="tut-num-desc">Click <strong>"+ Add new MCP Server"</strong>, choose <strong>"SSE"</strong> type, and paste the URL below.</div>
-            </div>
-          </div>
-          <div class="tut-numbered-step">
-            <div class="tut-num">3</div>
-            <div class="tut-num-body">
-              <div class="tut-num-title">Enable the server</div>
-              <div class="tut-num-desc">Toggle the server on. Cursor will connect and list available tools automatically.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {# MCP URL copy box #}
-    <div class="tut-url-box">
-      <div class="tut-url-label">Your server URL</div>
-      <div class="tut-url-row">
-        <code id="tutMcpUrl">{{ base_url }}/mcp</code>
-        <button class="btn primary sm" onclick="tutCopyUrl()" id="tutCopyBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copy
-        </button>
-      </div>
-    </div>
-
-    <div class="tut-actions tut-actions-split">
-      <button class="btn" onclick="tutPrev()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        Back
-      </button>
-      <button class="btn primary" onclick="tutNext()">
-        Continue
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </button>
-    </div>
-  </div>
-
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  {# STEP 4 — Ask your first question                                  #}
-  {# ═══════════════════════════════════════════════════════════════════ #}
-  <div class="tut-panel" data-panel="4">
-    <div class="tut-intro tut-intro-center">
-      <span class="label">Step 5 of 5</span>
-      <h1>You're all <em class="serif-italic">set.</em></h1>
-      <p>Go to your AI tool and try one of these questions. Fluxito will pull the data directly from your connected platforms.</p>
-    </div>
-
-    <div class="tut-prompt-list">
-      <div class="tut-prompt-card" onclick="tutCopyPrompt(this)">
-        <div class="tut-prompt-icon">{{ platform_icon("ga4", 18) }}</div>
-        <div class="tut-prompt-body">
-          <div class="tut-prompt-q">"What were my top 5 landing pages last week?"</div>
-          <div class="tut-prompt-meta">GA4 · Traffic analysis</div>
-        </div>
-        <div class="tut-prompt-copy">Copy</div>
-      </div>
-      <div class="tut-prompt-card" onclick="tutCopyPrompt(this)">
-        <div class="tut-prompt-icon">{{ platform_icon("gtm", 18) }}</div>
-        <div class="tut-prompt-body">
-          <div class="tut-prompt-q">"Audit my GTM container for issues"</div>
-          <div class="tut-prompt-meta">GTM · Container audit</div>
-        </div>
-        <div class="tut-prompt-copy">Copy</div>
-      </div>
-      <div class="tut-prompt-card" onclick="tutCopyPrompt(this)">
-        <div class="tut-prompt-icon">{{ platform_icon("google_ads", 18) }}</div>
-        <div class="tut-prompt-body">
-          <div class="tut-prompt-q">"Compare my Google Ads campaigns — which has the best ROAS?"</div>
-          <div class="tut-prompt-meta">Google Ads · Performance</div>
-        </div>
-        <div class="tut-prompt-copy">Copy</div>
-      </div>
-      <div class="tut-prompt-card" onclick="tutCopyPrompt(this)">
-        <div class="tut-prompt-icon">{{ platform_icon("meta", 18) }}</div>
-        <div class="tut-prompt-body">
-          <div class="tut-prompt-q">"Show me my Meta Ads spend by campaign this month"</div>
-          <div class="tut-prompt-meta">Meta Ads · Spend analysis</div>
-        </div>
-        <div class="tut-prompt-copy">Copy</div>
-      </div>
-    </div>
-
-    <div class="tut-actions tut-actions-finish">
-      <a href="/home" class="btn primary tut-cta" id="tutFinish" onclick="fetch('/api/tutorial/complete',{method:'POST',credentials:'same-origin'})">
-        Go to Dashboard
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </a>
-      <div class="tut-note">You'll be able to connect platforms and manage settings from the dashboard.</div>
-    </div>
-  </div>
-
 </div>
 
 <style>
-/* ── Stepper ───────────────────────────────────────────────────── */
-.tut-stepper {
-  display: flex; align-items: center; justify-content: center;
-  gap: 0;
-  padding: 16px 0 36px;
-  margin-bottom: 8px;
-}
-.tut-step-indicator {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  opacity: 0.55;
-  transition: opacity 0.25s;
-}
-.tut-step-indicator.is-active,
-.tut-step-indicator.is-done { opacity: 1; }
-.tut-step-dot {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  color: transparent;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 0.25s, color 0.25s, border-color 0.25s;
-}
-.tut-step-indicator.is-active .tut-step-dot {
-  background: var(--ink);
-  border-color: var(--ink);
-}
-.tut-step-indicator.is-done .tut-step-dot {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
-}
-.tut-step-label {
-  font-size: 10.5px; font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.08em;
-  font-family: var(--mono);
-}
-.tut-step-indicator.is-active .tut-step-label { color: var(--ink); }
-.tut-step-line {
-  flex: 1; max-width: 48px;
-  height: 1px;
-  background: var(--line);
-  margin: 0 8px;
-  transform: translateY(-14px);
-  transition: background 0.25s;
-}
-.tut-step-line.is-done { background: var(--ink); }
+@keyframes flux-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-/* ── Panels ───────────────────────────────────────────────────── */
-.tut-panel {
-  display: none;
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.25s, transform 0.25s;
-}
-.tut-panel.is-active {
-  display: block;
-  opacity: 1;
-  transform: translateY(0);
-}
-.tut-panel.is-leaving {
-  opacity: 0;
-  transform: translateY(-8px);
-}
+/* This page has no app sidebar (nav block is suppressed) — cancel the
+   sidebar's margin-left reserved on .main so the onboarding grid is flush. */
+.has-sidebar .main { margin-left: 0; }
 
-.tut-intro {
-  padding: 8px 0 12px;
-  border-bottom: 1px solid var(--line-2);
-  margin-bottom: 28px;
-}
-.tut-intro-center { text-align: center; border-bottom: none; padding-bottom: 0; }
-.tut-intro h1 {
-  font-size: clamp(26px, 3.5vw, 34px);
-  font-weight: 500; letter-spacing: -0.02em;
-  margin: 8px 0 10px; color: var(--ink);
-  line-height: 1.15;
-}
-.tut-intro p {
-  font-size: 14.5px; color: var(--ink-soft);
-  line-height: 1.65; margin: 0;
-  max-width: 540px;
-}
-.tut-intro-center p { margin: 0 auto; }
+.ob-shell { min-height: 100vh; display: grid; grid-template-columns: 340px 1fr; }
 
-/* ── Preview cards (Step 0) ───────────────────────────────────── */
-.tut-preview-list {
-  display: flex; flex-direction: column; gap: 10px;
-  margin-bottom: 32px;
-}
-.tut-preview-card {
-  display: flex; align-items: center; gap: 14px;
-  padding: 16px 18px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
-}
-.tut-preview-icon {
-  width: 40px; height: 40px;
-  border-radius: var(--r-m);
-  background: var(--bg-2);
-  color: var(--ink);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.tut-preview-name {
-  font-size: 14.5px; font-weight: 600;
-  color: var(--ink); letter-spacing: -0.005em;
-}
-.tut-preview-desc {
-  font-size: 12.5px; color: var(--ink-soft);
-  margin-top: 3px; line-height: 1.5;
-}
+/* ── Left rail ── */
+.ob-rail { background: var(--dark-bg); color: var(--paper); padding: 36px 32px; display: flex; flex-direction: column; }
+.ob-rail-word { display: flex; align-items: baseline; gap: 2px; margin-bottom: 44px; }
+.ob-rail-word span:first-child { font-family: var(--serif); font-size: 21px; font-weight: 600; }
+.ob-rail-dot { width: 5px; height: 5px; border-radius: 99px; background: var(--accent); display: inline-block; margin-left: 3px; }
 
-/* ── Section labels ──────────────────────────────────────────── */
-.tut-section { margin-bottom: 28px; }
-.tut-section-label {
-  font-size: 10.5px; font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.08em;
-  font-family: var(--mono);
-  margin-bottom: 12px;
-}
-.tut-section-label-spaced { margin-top: 24px; }
-
-/* ── Connect card (Step 1) ───────────────────────────────────── */
-.tut-connect-card {
-  padding: 18px 20px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
-}
-.tut-connect-row {
-  display: flex; align-items: center; gap: 16px;
-}
-.tut-connect-icon {
-  width: 48px; height: 48px;
-  border-radius: var(--r-m);
-  background: var(--bg-2);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.tut-connect-body { flex: 1; min-width: 0; }
-.tut-connect-name {
-  font-size: 15px; font-weight: 600;
-  color: var(--ink); letter-spacing: -0.005em;
-}
-.tut-connect-desc {
-  font-size: 13px; color: var(--ink-soft);
-  margin-top: 3px; line-height: 1.5;
-}
-.tut-popular {
-  background: var(--ink); color: var(--bg);
-  font-size: 10.5px; padding: 4px 10px;
-  letter-spacing: 0.02em;
-}
-
-.tut-mini-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.tut-mini-card {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 10px;
-  padding: 16px 12px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
-  text-align: center;
-}
-.tut-mini-name {
-  font-size: 13.5px; font-weight: 600;
-  color: var(--ink); letter-spacing: -0.005em;
-}
-@media (max-width: 560px) {
-  .tut-mini-grid { grid-template-columns: 1fr; }
-}
-
-/* ── Hint line ───────────────────────────────────────────────── */
-.tut-hint {
-  display: flex; align-items: flex-start; gap: 8px;
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: color-mix(in srgb, var(--blue) 5%, transparent);
-  border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line));
-  border-radius: var(--r-m);
-  font-size: 12.5px; color: var(--ink-soft); line-height: 1.55;
-}
-.tut-hint svg { flex-shrink: 0; margin-top: 2px; color: var(--blue); }
-.tut-hint strong { color: var(--ink); font-weight: 600; }
-
-/* ── Feature cards (Step 2) ──────────────────────────────────── */
-.tut-feature-list {
-  display: flex; flex-direction: column; gap: 12px;
-}
-.tut-feature-card {
-  display: flex; align-items: flex-start; gap: 14px;
-  padding: 18px 20px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
-}
-.tut-feature-icon {
-  width: 40px; height: 40px;
-  border-radius: var(--r-m);
-  background: var(--bg-2);
-  color: var(--ink);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.tut-feature-body { flex: 1; min-width: 0; }
-.tut-feature-name {
-  font-size: 14.5px; font-weight: 600;
-  color: var(--ink); letter-spacing: -0.005em;
-}
-.tut-feature-desc {
-  font-size: 13px; color: var(--ink-soft);
-  margin-top: 4px; line-height: 1.6;
-}
-.tut-feature-desc em { font-style: italic; font-family: var(--serif, 'Instrument Serif', serif); }
-
-.tut-example {
-  margin-top: 10px;
-  padding: 11px 13px;
-  background: var(--bg-2);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-m);
-  font-size: 12.5px; color: var(--ink-soft); line-height: 1.55;
-}
-.tut-example strong { color: var(--ink); font-weight: 600; }
-.tut-example code {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  background: var(--bg);
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: var(--ink);
-}
-
-.tut-callout {
-  margin-top: 20px;
-  padding: 14px 18px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  font-size: 13px; color: var(--ink-soft); line-height: 1.6;
-}
-.tut-callout strong { color: var(--ink); font-weight: 600; }
-
-/* ── AI tabs (Step 3) ────────────────────────────────────────── */
-.tut-ai-tabs {
-  display: flex; gap: 6px;
-  padding: 4px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  margin-bottom: 20px;
-}
-.tut-ai-tab {
-  flex: 1;
+.ob-rail-connector { width: 1px; height: 18px; background: var(--dark-line); margin-left: 13px; }
+.ob-rail-row { display: flex; gap: 14px; padding: 12px 0; cursor: pointer; }
+.ob-rail-item { opacity: 0.55; }
+.ob-rail-item.is-current, .ob-rail-item.is-done { opacity: 1; }
+.ob-rail-marker {
+  width: 26px; height: 26px; border-radius: 99px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  gap: 8px;
-  padding: 9px 12px;
-  background: transparent;
-  border: none; border-radius: calc(var(--r-m) - 2px);
-  font: inherit; font-size: 13px; font-weight: 500;
-  color: var(--ink-soft);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  font-family: var(--mono); font-size: 12px;
+  background: transparent; border: 1px solid var(--dark-line); color: var(--paper);
 }
-.tut-ai-tab:hover { color: var(--ink); }
-.tut-ai-tab.is-active {
-  background: var(--bg);
-  color: var(--ink);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+.ob-rail-item.is-current .ob-rail-marker { background: var(--accent); border: none; }
+.ob-rail-item.is-done .ob-rail-marker { background: var(--good); border: none; }
+.ob-rail-title { font-size: 14px; font-weight: 600; }
+.ob-rail-sub { font-size: 12px; color: #9C9483; }
+.ob-rail-quote {
+  margin-top: auto; padding: 16px; border: 1px dashed var(--dark-line); border-radius: 10px;
+  font-size: 12.5px; line-height: 1.55; color: #B8B0A0;
 }
-.tut-ai-tab-icon {
-  width: 22px; height: 22px;
-  border-radius: 5px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
+.ob-rail-quote em { font-family: var(--serif); color: var(--paper); font-size: 14px; font-style: italic; }
+.ob-rail-quote-attr { font-family: var(--mono); font-size: 11px; }
 
-.tut-ai-instructions { margin-bottom: 20px; }
-.tut-instruction { display: none; }
-.tut-instruction.is-active { display: block; }
+/* ── Right content ── */
+.ob-content { padding: 24px 64px 40px; display: flex; flex-direction: column; max-width: 860px; position: relative; }
+/* In-flow (not absolutely positioned over the step content) so it never
+   overlaps the eyebrow/heading at any viewport width. */
+.ob-utility { display: flex; justify-content: flex-end; gap: 16px; margin-bottom: 32px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.ob-utility a:hover { color: var(--accent-hover); }
 
-.tut-numbered-steps {
-  display: flex; flex-direction: column; gap: 14px;
+.ob-step { display: flex; flex-direction: column; flex: 1; }
+.ob-step[hidden] { display: none; }
+.ob-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-hover); margin-bottom: 14px; }
+.ob-h1-row { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+.ob-h1 { margin: 0 0 10px; font-family: var(--serif); font-size: 40px; font-weight: 500; line-height: 1.08; color: var(--ink); }
+.ob-h1-row .ob-h1 { margin: 0; }
+.ob-h1 em { color: var(--accent-hover); font-style: italic; }
+.ob-lede { margin: 0 0 28px; font-size: 15.5px; color: var(--ink-soft); line-height: 1.65; max-width: 600px; }
+.ob-flux-mark {
+  width: 56px; height: 56px; border-radius: 14px; background: var(--ink); color: var(--paper);
+  display: inline-flex; align-items: center; justify-content: center; font-family: var(--serif); font-style: italic; font-size: 30px; flex-shrink: 0;
 }
-.tut-numbered-step {
-  display: flex; gap: 14px;
-  padding: 16px 18px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
-}
-.tut-num {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  background: var(--ink);
-  color: var(--bg);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12.5px; font-weight: 600;
-  font-family: var(--mono);
-  flex-shrink: 0;
-}
-.tut-num-body { flex: 1; min-width: 0; }
-.tut-num-title {
-  font-size: 14px; font-weight: 600;
-  color: var(--ink); letter-spacing: -0.005em;
-}
-.tut-num-desc {
-  font-size: 13px; color: var(--ink-soft);
-  margin-top: 4px; line-height: 1.55;
-}
-.tut-num-desc a {
-  color: var(--ink);
-  text-decoration: underline;
-  text-decoration-color: var(--line);
-  text-underline-offset: 2px;
-}
-.tut-num-desc a:hover { text-decoration-color: var(--ink); }
-.tut-num-desc strong { color: var(--ink); font-weight: 600; }
-.tut-num-desc code {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  background: var(--bg-2);
-  padding: 2px 7px;
-  border-radius: 4px;
-  color: var(--ink);
-}
+.ob-flux-mark-sm { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; }
 
-/* ── URL box ─────────────────────────────────────────────────── */
-.tut-url-box {
-  padding: 16px 18px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
-  margin-bottom: 20px;
-}
-.tut-url-label {
-  font-size: 10.5px; font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.08em;
-  font-family: var(--mono);
-  margin-bottom: 10px;
-}
-.tut-url-row {
-  display: flex; align-items: center; gap: 10px;
-}
-.tut-url-row code {
-  flex: 1;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--ink);
-  word-break: break-all;
-  letter-spacing: 0.01em;
-}
+.ob-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 700px; }
+.ob-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; max-width: 700px; }
+.ob-tile { padding: 20px 22px; background: var(--card); border: 1px solid var(--line-2); border-radius: 12px; }
+.ob-tile-title { font-family: var(--serif); font-size: 21px; margin-bottom: 4px; }
+.ob-tile-desc { font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
 
-/* ── Prompt cards (Step 4) ───────────────────────────────────── */
-.tut-prompt-list {
-  display: flex; flex-direction: column; gap: 10px;
-  margin-bottom: 28px;
+.ob-note {
+  display: flex; align-items: center; gap: 10px; margin-top: 22px; padding: 13px 16px;
+  background: var(--paper-2); border: 1px solid var(--line-2); border-radius: 10px; max-width: 700px; font-size: 13px; color: var(--ink-soft);
 }
-.tut-prompt-card {
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px 18px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-.tut-prompt-card:hover {
-  border-color: var(--ink);
-  background: var(--bg-2);
-}
-.tut-prompt-icon {
-  width: 32px; height: 32px;
-  border-radius: var(--r-m);
-  background: var(--bg-2);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.tut-prompt-body { flex: 1; min-width: 0; }
-.tut-prompt-q {
-  font-size: 13.5px; font-weight: 500;
-  color: var(--ink); letter-spacing: -0.005em;
-}
-.tut-prompt-meta {
-  font-size: 11.5px; color: var(--muted);
-  margin-top: 2px;
-  font-family: var(--mono); letter-spacing: 0.02em;
-}
-.tut-prompt-copy {
-  font-size: 11.5px; font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.08em;
-  font-family: var(--mono);
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  flex-shrink: 0;
-}
-.tut-prompt-copy.is-copied {
-  background: var(--ink); color: var(--bg); border-color: var(--ink);
-}
+.ob-note-dot { width: 8px; height: 8px; border-radius: 99px; flex-shrink: 0; }
+.ob-note-dot-good { background: var(--good); }
+.ob-note-dot-accent { background: var(--accent); }
+.ob-refresh-link { color: var(--accent-hover); }
 
-/* ── Actions ─────────────────────────────────────────────────── */
-.tut-actions {
-  display: flex;
-  margin-top: 32px;
-  flex-wrap: wrap;
-  gap: 12px;
+/* Step 2 */
+.ob-role-card { padding: 22px 24px; background: var(--card); border: 1px solid var(--line-2); border-radius: 12px; cursor: pointer; transition: border-color .15s; }
+.ob-role-card:hover { border-color: var(--accent); }
+.ob-role-card.is-selected { border: 2px solid var(--accent); box-shadow: 0 10px 26px rgba(196,112,58,0.14); }
+.ob-role-title { font-size: 16px; font-weight: 700; margin-bottom: 5px; }
+.ob-role-sub { font-size: 13px; color: #6B6459; line-height: 1.5; }
+.ob-sub-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 30px 0 12px; }
+.ob-chips { display: flex; flex-wrap: wrap; gap: 10px; max-width: 700px; }
+.ob-chip {
+  padding: 10px 17px; background: var(--card); border: 1px solid var(--line-strong); color: var(--ink);
+  font-size: 13.5px; font-weight: 400; border-radius: 999px; cursor: pointer;
 }
-.tut-actions-center {
-  flex-direction: column; align-items: center;
+.ob-chip.is-selected { background: var(--accent); border-color: var(--accent); color: #FFF9EF; font-weight: 600; }
+
+/* Step 3 */
+.ob-conn-card, .ob-conn-more {
+  display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: var(--card);
+  border: 1px solid var(--line-2); border-radius: 11px; cursor: pointer; text-decoration: none; color: inherit; transition: border-color .15s;
 }
-.tut-actions-split { justify-content: space-between; }
-.tut-actions-finish {
-  flex-direction: column; align-items: center; gap: 12px;
-}
-.tut-cta {
-  padding: 12px 24px;
-  font-size: 14px;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.tut-actions-finish .tut-cta {
-  width: 100%; max-width: 320px;
-}
-.tut-note {
-  font-size: 12px; color: var(--muted);
-  font-family: var(--mono); letter-spacing: 0.02em;
+.ob-conn-card:hover, .ob-conn-more:hover { border-color: var(--accent); }
+.ob-conn-card.is-live { border-color: var(--good); }
+.ob-conn-card.is-auth { border-color: var(--warn); }
+.ob-conn-more { background: transparent; border-style: dashed; border-color: var(--line-strong); }
+.ob-conn-body { flex: 1; }
+.ob-conn-name { font-size: 15px; font-weight: 700; }
+.ob-conn-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.ob-conn-status { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.ob-conn-card.is-live .ob-conn-status { color: var(--good); }
+.ob-conn-card.is-auth .ob-conn-status { color: var(--warn); animation: flux-pulse 1s ease-in-out infinite; }
+.ob-conn-more .ob-conn-name { font-size: 15px; font-weight: 600; color: var(--ink-soft); }
+.ob-conn-more-label { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+/* Step 4 */
+.ob-client-card { display: flex; align-items: center; gap: 12px; padding: 15px 16px; background: var(--card); border: 1px solid var(--line-2); border-radius: 11px; cursor: pointer; transition: border-color .15s; }
+.ob-client-card:hover { border-color: var(--accent); }
+.ob-client-card.is-selected { border: 2px solid var(--accent); box-shadow: 0 10px 26px rgba(196,112,58,0.14); }
+.ob-client-icon { width: 34px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ob-client-icon img { width: 18px; height: 18px; }
+.ob-client-icon-flux { background: var(--ink); color: var(--paper); font-family: var(--serif); font-style: italic; font-size: 16px; }
+.ob-client-name { font-size: 14px; font-weight: 700; }
+.ob-client-sub { font-size: 11.5px; color: var(--muted); }
+.ob-mcp-box { display: flex; align-items: center; gap: 12px; margin-top: 22px; padding: 14px 18px; background: var(--dark-bg); border-radius: 10px; max-width: 700px; }
+.ob-mcp-url { font-family: var(--mono); font-size: 12.5px; color: #B8B0A0; flex: 1; word-break: break-all; }
+.ob-mcp-copy { display: inline-flex; padding: 8px 15px; background: var(--accent); color: #FFF9EF; font-size: 12.5px; font-weight: 600; border-radius: 7px; cursor: pointer; flex-shrink: 0; }
+.ob-mcp-hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.ob-mcp-hint a { color: var(--accent-hover); }
+
+/* Step 5 */
+.ob-scan { max-width: 700px; background: var(--card); border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; }
+.ob-scan-head { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--line-3); }
+.ob-scan-title { font-size: 13px; font-weight: 700; flex: 1; }
+.ob-scan-pct { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.ob-scan-bar { height: 3px; background: var(--line-3); }
+.ob-scan-bar-fill { width: 0%; height: 3px; background: var(--accent); transition: width 0.1s linear; }
+.ob-scan-lines { padding: 16px 18px; display: flex; flex-direction: column; gap: 9px; min-height: 120px; }
+.ob-scan-line { display: flex; gap: 10px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; }
+.ob-scan-line .ic.good { color: var(--good); } .ob-scan-line .ic.warn { color: var(--warn); } .ob-scan-line .ic.muted { color: var(--muted); } .ob-scan-line .ic.bad { color: var(--bad); }
+.ob-scan-line .tx { color: var(--ink-soft); }
+.ob-scan-summary { padding: 16px 18px; border-top: 1px dashed var(--line-2); display: flex; gap: 12px; align-items: flex-start; font-size: 14px; color: #39332A; line-height: 1.6; }
+.ob-scan-summary[hidden] { display: none; }
+
+/* Footer nav */
+.ob-footer { display: flex; align-items: center; gap: 16px; margin-top: auto; padding-top: 36px; }
+.ob-next { display: inline-flex; align-items: center; padding: 13px 26px; background: var(--ink); color: var(--paper); font-size: 14.5px; font-weight: 600; border-radius: 9px; cursor: pointer; }
+.ob-next:hover { background: var(--ink-2); }
+.ob-back { font-size: 13.5px; color: var(--muted); cursor: pointer; }
+.ob-back:hover { color: var(--ink); }
+.ob-time { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .ob-shell { grid-template-columns: 1fr; }
+  .ob-rail { display: none; }
+  .ob-content { padding: 24px 20px 32px; }
+  .ob-grid-2, .ob-grid-3 { grid-template-columns: 1fr; }
 }
 </style>
 
 <script>
 (function(){
-  'use strict';
+  var STEP_META = [
+    { quote: '“Nice to meet you. I promise to only ping you when it matters.”', nextLabel: 'Let’s get started →', time: '~2 minutes' },
+    { quote: '“Two minutes of context saves us both a week of guessing.”', nextLabel: 'Continue →', time: '~90 seconds' },
+    { quote: '“One connection is enough to start. GA4 tells me the most.”', nextLabel: 'Continue →', time: '~60 seconds' },
+    { quote: '“Same brain everywhere — the app, Claude, ChatGPT, Cursor.”', nextLabel: 'Continue →', time: '~30 seconds' },
+    { quote: '“Give me thirty seconds. I read fast.”', nextLabel: 'Open my briefing →', time: 'Done — welcome aboard' }
+  ];
+  var step = 1;
+  var panels = document.querySelectorAll('.ob-step');
+  var railItems = document.querySelectorAll('.ob-rail-item');
+  var nextBtn = document.getElementById('obNext');
+  var backBtn = document.getElementById('obBack');
+  var timeEl = document.getElementById('obTime');
+  var quoteEl = document.getElementById('obRailQuote');
+  var skipLink = document.getElementById('obSkip');
+  var briefingStarted = false;
 
-  var currentStep = 0;
-  var totalSteps = 5;
-  var panels = document.querySelectorAll('.tut-panel');
-  var indicators = document.querySelectorAll('.tut-step-indicator');
-
-  function showStep(n) {
-    if (n < 0) n = 0;
-    if (n >= totalSteps) n = totalSteps - 1;
-
-    var oldPanel = panels[currentStep];
-    oldPanel.classList.add('is-leaving');
-    oldPanel.classList.remove('is-active');
-
-    currentStep = n;
-
-    indicators.forEach(function(ind, i) {
-      ind.classList.remove('is-active', 'is-done');
-      if (i < n) ind.classList.add('is-done');
-      if (i === n) ind.classList.add('is-active');
-    });
-
-    var lines = document.querySelectorAll('.tut-step-line');
-    lines.forEach(function(line, i) {
-      line.classList.toggle('is-done', i < n);
-    });
-
-    setTimeout(function() {
-      oldPanel.classList.remove('is-leaving');
-      panels[currentStep].classList.add('is-active');
-    }, 200);
-
-    if (n === totalSteps - 1) {
-      fetch('/api/tutorial/complete', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
-    }
+  function savePrefs(payload) {
+    fetch('/api/onboarding/preferences', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(function(){});
   }
 
-  window.tutNext = function() { showStep(currentStep + 1); };
-  window.tutPrev = function() { showStep(currentStep - 1); };
+  function completeTutorial() {
+    fetch('/api/tutorial/complete', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
+  }
+  skipLink.addEventListener('click', function(e){ e.preventDefault(); completeTutorial(); window.location.href = '/home'; });
 
-  window.tutSelectTool = function(btn) {
-    document.querySelectorAll('.tut-ai-tab').forEach(function(t) { t.classList.remove('is-active'); });
-    btn.classList.add('is-active');
-    var tool = btn.dataset.tool;
-    document.querySelectorAll('.tut-instruction').forEach(function(ins) {
-      ins.classList.toggle('is-active', ins.dataset.instruction === tool);
+  function render() {
+    panels.forEach(function(p){ p.hidden = (parseInt(p.dataset.panel, 10) !== step); });
+    railItems.forEach(function(item, i){
+      var n = i + 1;
+      item.classList.toggle('is-current', n === step);
+      item.classList.toggle('is-done', n < step);
+      var marker = item.querySelector('.ob-rail-marker');
+      marker.textContent = n < step ? '✓' : String(n);
     });
-  };
+    var meta = STEP_META[step - 1];
+    quoteEl.innerHTML = '<em>' + meta.quote + '</em><br><span class="ob-rail-quote-attr">— Flux</span>';
+    nextBtn.textContent = meta.nextLabel;
+    timeEl.textContent = meta.time;
+    backBtn.hidden = step === 1;
+    if (step === 5 && !briefingStarted) runHealthCheck();
+  }
 
-  window.tutCopyUrl = function() {
-    var url = document.getElementById('tutMcpUrl').textContent;
-    navigator.clipboard.writeText(url).then(function() {
-      var btn = document.getElementById('tutCopyBtn');
-      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="margin-right:4px;"><path d="M20 6 9 17l-5-5"/></svg>Copied!';
-      setTimeout(function() {
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy';
-      }, 2000);
+  function go(n) {
+    step = Math.max(1, Math.min(5, n));
+    render();
+  }
+
+  document.querySelectorAll('[data-goto]').forEach(function(el){
+    el.addEventListener('click', function(){ go(parseInt(el.dataset.goto, 10)); });
+  });
+
+  nextBtn.addEventListener('click', function(){
+    if (step === 5) { completeTutorial(); window.location.href = '/home'; return; }
+    go(step + 1);
+  });
+  backBtn.addEventListener('click', function(){ go(step - 1); });
+
+  // Step 2 — role (single-select) + monitors (multi-select)
+  var selectedRole = {{ (flux_role or '') | tojson }};
+  var selectedMonitors = {{ (flux_monitors or []) | tojson }};
+  document.querySelectorAll('.ob-role-card').forEach(function(card){
+    if (card.dataset.role === selectedRole) card.classList.add('is-selected');
+    card.addEventListener('click', function(){
+      document.querySelectorAll('.ob-role-card').forEach(function(c){ c.classList.remove('is-selected'); });
+      card.classList.add('is-selected');
+      selectedRole = card.dataset.role;
+      savePrefs({ role: selectedRole });
     });
-  };
-
-  window.tutCopyPrompt = function(card) {
-    var qEl = card.querySelector('.tut-prompt-q');
-    var text = qEl ? qEl.textContent.replace(/^"|"$/g, '') : '';
-    var copyEl = card.querySelector('.tut-prompt-copy');
-    navigator.clipboard.writeText(text).then(function() {
-      copyEl.textContent = 'Copied!';
-      copyEl.classList.add('is-copied');
-      setTimeout(function() {
-        copyEl.textContent = 'Copy';
-        copyEl.classList.remove('is-copied');
-      }, 2000);
+  });
+  document.querySelectorAll('.ob-chip').forEach(function(chip){
+    var label = chip.textContent;
+    function syncLabel(on) { chip.textContent = (on ? '✓ ' : '') + label; }
+    var isOn = selectedMonitors.indexOf(chip.dataset.monitor) !== -1;
+    if (isOn) chip.classList.add('is-selected');
+    syncLabel(isOn);
+    chip.addEventListener('click', function(){
+      var m = chip.dataset.monitor;
+      var idx = selectedMonitors.indexOf(m);
+      var on;
+      if (idx === -1) { selectedMonitors.push(m); chip.classList.add('is-selected'); on = true; }
+      else { selectedMonitors.splice(idx, 1); chip.classList.remove('is-selected'); on = false; }
+      syncLabel(on);
+      savePrefs({ monitors: selectedMonitors });
     });
-  };
+  });
 
+  // Step 3 — connect cards: brief "Authorizing…" pulse on click. The OAuth
+  // flow itself runs in the new tab (target="_blank"); this just gives
+  // immediate feedback in-page. Real "live" status only ever comes from the
+  // server (conn_status on load, or the "Refresh status" link), so once the
+  // pulse ends we fall back to the idle label rather than faking a connect.
+  document.querySelectorAll('.ob-conn-card').forEach(function(card){
+    card.addEventListener('click', function(){
+      if (card.classList.contains('is-live') || card.classList.contains('is-auth')) return;
+      var statusEl = card.querySelector('.ob-conn-status');
+      var idleLabel = statusEl.textContent;
+      card.classList.add('is-auth');
+      statusEl.textContent = '◌ Authorizing…';
+      setTimeout(function(){
+        card.classList.remove('is-auth');
+        statusEl.textContent = idleLabel;
+      }, 900);
+    });
+  });
+
+  // Step 4 — AI client (single-select) + copy URL
+  var selectedClient = {{ (preferred_ai_client or '') | tojson }};
+  var mcpHintEl = document.getElementById('obMcpHint');
+  function syncMcpHint() {
+    var card = document.querySelector('.ob-client-card[data-client="' + selectedClient + '"]');
+    var name = card ? card.querySelector('.ob-client-name').textContent : '';
+    if (!name) {
+      mcpHintEl.textContent = 'Paste this into your client\'s MCP settings — we\'ll walk you through it for the tool you picked.';
+    } else if (selectedClient === 'inapp') {
+      mcpHintEl.textContent = 'You picked the in-app chat — no MCP setup needed, Flux is already right here.';
+    } else {
+      mcpHintEl.innerHTML = 'Paste this into ' + name + '’s MCP settings — see the <a href="/tutorials/connect-ai-mcp">' + name + ' walkthrough</a> for exact steps.';
+    }
+  }
+  document.querySelectorAll('.ob-client-card').forEach(function(card){
+    if (card.dataset.client === selectedClient) card.classList.add('is-selected');
+    card.addEventListener('click', function(){
+      document.querySelectorAll('.ob-client-card').forEach(function(c){ c.classList.remove('is-selected'); });
+      card.classList.add('is-selected');
+      selectedClient = card.dataset.client;
+      syncMcpHint();
+      savePrefs({ ai_client: selectedClient });
+    });
+  });
+  syncMcpHint();
+  var copyBtn = document.getElementById('obCopyUrl');
+  copyBtn.addEventListener('click', function(){
+    var url = document.querySelector('.ob-mcp-url').textContent;
+    navigator.clipboard.writeText(url).then(function(){
+      var orig = copyBtn.textContent;
+      copyBtn.textContent = 'Copied!';
+      setTimeout(function(){ copyBtn.textContent = orig; }, 1500);
+    }).catch(function(){});
+  });
+
+  // Step 5 — real health-check scan (paced reveal of real data, not fake findings)
+  function runHealthCheck() {
+    briefingStarted = true;
+    var pctEl = document.getElementById('obScanPct');
+    var barFill = document.getElementById('obScanBarFill');
+    var linesEl = document.getElementById('obScanLines');
+    var summaryEl = document.getElementById('obScanSummary');
+    var summaryText = document.getElementById('obScanSummaryText');
+
+    fetch('/api/onboarding/health-check', { credentials: 'same-origin' })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var lines = data.lines || [];
+        var i = 0;
+        function tick() {
+          if (i < lines.length) {
+            var ln = lines[i];
+            var row = document.createElement('div');
+            row.className = 'ob-scan-line';
+            row.innerHTML = '<span class="ic ' + ln.color + '">' + ln.icon + '</span><span class="tx"></span>';
+            row.querySelector('.tx').textContent = ln.text;
+            linesEl.appendChild(row);
+            i++;
+            var pct = lines.length ? Math.round((i / lines.length) * 100) : 100;
+            pctEl.textContent = pct + '%';
+            barFill.style.width = pct + '%';
+            setTimeout(tick, 500);
+          } else {
+            pctEl.textContent = '100%';
+            barFill.style.width = '100%';
+            summaryText.textContent = data.summary || 'Your first briefing is ready.';
+            summaryEl.hidden = false;
+          }
+        }
+        tick();
+      })
+      .catch(function(){
+        summaryText.textContent = 'Your first briefing is ready. See you on the home screen.';
+        summaryEl.hidden = false;
+      });
+  }
+
+  // Deep-link support: /tutorial?step=3 (used by the Step 3 "refresh status" link)
+  var qsStep = parseInt(new URLSearchParams(window.location.search).get('step'), 10);
+  if (qsStep >= 1 && qsStep <= 5) step = qsStep;
+
+  render();
 })();
 </script>
 {% endblock %}

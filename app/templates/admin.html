@@ -8,16 +8,16 @@
     <div>
       <span class="label">Admin</span>
       <h1>Instance <em class="serif-italic">administration.</em></h1>
-      <p>Manage users and access requests. <span class="t-flag" style="margin-left:8px;background:var(--ink);color:var(--bg);">Super Admin</span></p>
+      <p>Users, access, limits and the machine itself. Changes apply immediately. <span class="t-flag admin-badge-pill" style="margin-left:8px;background:var(--ink);color:var(--bg);">Super Admin</span></p>
     </div>
   </div>
 
   <div class="admin-tabs">
     <div class="tabs">
       <button class="tab is-active" data-tab="users" onclick="adminTab('users')">Users</button>
-      <button class="tab" data-tab="requests" onclick="adminTab('requests')">Access Requests</button>
-      <button class="tab" data-tab="signin" onclick="adminTab('signin')">Sign-in</button>
-      <button class="tab" data-tab="ratelimits" onclick="adminTab('ratelimits')">Rate Limits</button>
+      <button class="tab" data-tab="requests" onclick="adminTab('requests')">Access requests</button>
+      <button class="tab" data-tab="signin" onclick="adminTab('signin')">Sign-in methods</button>
+      <button class="tab" data-tab="ratelimits" onclick="adminTab('ratelimits')">Rate limits</button>
       <button class="tab" data-tab="operations" onclick="adminTab('operations')">Operations</button>
       <button class="tab" data-tab="branding" onclick="adminTab('branding')">Branding</button>
       <button class="tab" data-tab="updates" onclick="adminTab('updates');if(window.__fluxRefreshUpdates)window.__fluxRefreshUpdates();">Updates</button>
@@ -37,9 +37,12 @@
   </section>
 
   <section data-panel="requests" style="display:none">
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-      <input type="checkbox" id="gateToggle" onchange="toggleGate(this.checked)" {% if gate_enabled %}checked{% endif %}>
-      Require access approval (gate open sign-up)
+    <label class="toggle-row" style="margin-bottom:22px">
+      <input type="checkbox" class="pill-toggle" id="gateToggle" onchange="toggleGate(this.checked)" {% if gate_enabled %}checked{% endif %}>
+      <span class="toggle-copy">
+        <strong>Require access approval</strong>
+        <small>Gates open sign-up — visitors request access, you approve. Hides “Create account” on the sign-in page.</small>
+      </span>
     </label>
     <div id="reqMsg" class="ps-msg" style="display:none"></div>
     <table class="ps-table"><thead><tr><th>Name</th><th>Email</th><th>Use case</th><th></th></tr></thead>
@@ -50,14 +53,22 @@
   <section data-panel="signin" style="display:none">
     <p style="color:var(--text-muted);margin-bottom:16px">Control which sign-in methods appear on the public sign-in page. At least one method must stay enabled.</p>
     <div id="amMsg" class="ps-msg" style="display:none"></div>
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-      <input type="checkbox" id="amGoogle"> Allow “Continue with Google”
+    <label class="toggle-row" style="margin-bottom:12px">
+      <input type="checkbox" class="pill-toggle" id="amGoogle">
+      <span class="toggle-copy">
+        <strong>“Continue with Google”</strong>
+        <small>OAuth sign-in via your configured Google credentials.</small>
+      </span>
     </label>
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-      <input type="checkbox" id="amPassword"> Allow email + password sign-in
+    <label class="toggle-row" style="margin-bottom:16px">
+      <input type="checkbox" class="pill-toggle" id="amPassword">
+      <span class="toggle-copy">
+        <strong>Email + password</strong>
+        <small>Classic credentials with reset-by-email.</small>
+      </span>
     </label>
     <div class="admin-btn-row"><button class="btn primary" onclick="saveAuthMethods()">Save</button></div>
-    <p style="color:var(--text-muted);margin-top:18px;font-size:12.5px">Tip: the <strong>Access Requests</strong> tab’s “Require access approval” toggle hides “Create account” on the sign-in page (invite-only beta).</p>
+    <p style="color:var(--text-muted);margin-top:18px;font-size:12.5px">Tip: the <strong>Access requests</strong> tab’s “Require access approval” toggle hides “Create account” on the sign-in page (invite-only beta).</p>
   </section>
 
   <section data-panel="ratelimits" style="display:none">
@@ -74,9 +85,12 @@
   <section data-panel="operations" style="display:none">
     <p style="color:var(--text-muted);margin-bottom:16px">Instance-wide operational controls.</p>
     <div id="opMsg" class="ps-msg" style="display:none"></div>
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-      <input type="checkbox" id="opMaintenance">
-      Maintenance mode — only super-admins can use the app; everyone else sees a maintenance page.
+    <label class="toggle-row" id="opMaintenanceRow" style="margin-bottom:16px">
+      <input type="checkbox" class="pill-toggle" id="opMaintenance" onchange="document.getElementById('opMaintenanceRow').classList.toggle('is-danger', this.checked)">
+      <span class="toggle-copy">
+        <strong>Maintenance mode</strong>
+        <small>Only super-admins can use the app; everyone else sees a maintenance page.</small>
+      </span>
     </label>
     <label class="f-field">Announcement banner (shown to all signed-in users; blank to hide)
       <textarea id="opBanner" class="f-input" rows="2" maxlength="280" placeholder="e.g. Fluxito is in beta — expect frequent changes."></textarea>
@@ -90,7 +104,16 @@
     <div style="display:flex;flex-direction:column;gap:12px">
       <label class="f-field">App name<input id="brName" class="f-input" maxlength="120"></label>
       <label class="f-field">Logo URL<input id="brLogo" class="f-input" maxlength="500" placeholder="https://…/logo.png"></label>
-      <label class="f-field">Accent colour<input id="brAccent" class="f-input" maxlength="64" placeholder="#0B0B0E"></label>
+      <div class="f-field">
+        <span>Accent colour</span>
+        <div class="accent-swatch-row">
+          <span class="accent-swatch" data-hex="#C4703A" style="background:#C4703A" onclick="pickAccentSwatch(this)" title="#C4703A"></span>
+          <span class="accent-swatch" data-hex="#3E8A5F" style="background:#3E8A5F" onclick="pickAccentSwatch(this)" title="#3E8A5F"></span>
+          <span class="accent-swatch" data-hex="#4D6FB0" style="background:#4D6FB0" onclick="pickAccentSwatch(this)" title="#4D6FB0"></span>
+          <span class="accent-swatch" data-hex="#201B14" style="background:#201B14" onclick="pickAccentSwatch(this)" title="#201B14"></span>
+          <input id="brAccent" class="f-input mono accent-hex-input" maxlength="64" placeholder="#0B0B0E" oninput="syncAccentSwatches()">
+        </div>
+      </div>
     </div>
     <div class="admin-btn-row"><button class="btn primary" onclick="saveBranding()">Save</button></div>
   </section>
@@ -99,8 +122,10 @@
     <p style="color:var(--text-muted);margin-bottom:16px">Check for and apply Fluxito updates. The instance will briefly restart during an update.</p>
     <div id="update-box" class="update-box">
       <p>Current version: <strong id="upd-current">…</strong></p>
-      <p id="upd-latest-row" style="display:none">Latest version: <strong id="upd-latest"></strong>
-        — <a id="upd-notes" href="#" target="_blank" rel="noopener">release notes</a></p>
+      <p id="upd-latest-row" style="display:none">
+        <span class="update-avail-badge"><strong id="upd-latest"></strong> AVAILABLE</span>
+        — <a id="upd-notes" href="#" target="_blank" rel="noopener">release notes</a>
+      </p>
       <p id="upd-uptodate" style="display:none">&#x2713; You're on the latest version.</p>
       <div class="update-check-row">
         <button id="upd-check" class="btn sm">Check for updates</button>
@@ -161,36 +186,101 @@
 .admin-tabs .tabs {
   margin-bottom: 0;
   border-bottom: 1px solid var(--line);
-  border-radius: var(--r-md) var(--r-md) 0 0;
-  /* Override default pill-tab background so it looks like a bottom-border style */
+  padding: 0 0 12px;
+  gap: 8px;
+  flex-wrap: wrap;
   background: transparent;
-  padding: 0;
-  gap: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 .admin-tabs .tabs::-webkit-scrollbar { display: none; }
 .admin-tabs .tabs .tab {
-  border-radius: var(--r-sm) var(--r-sm) 0 0;
-  padding: 10px 16px;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px; /* sit on top of container border-bottom */
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--muted);
+  margin-bottom: 0;
+  white-space: nowrap;
 }
 .admin-tabs .tabs .tab:hover {
   color: var(--ink);
   background: var(--bg-2);
 }
 .admin-tabs .tabs .tab.is-active {
-  background: var(--bg);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
   box-shadow: none;
-  border-bottom-color: var(--ink);
   font-weight: 600;
 }
 section[data-panel] {
   padding: 24px 0;
 }
+/* ---- 34x20 pill toggle, knob 16px; on = good/green, off = design's #D9CFBC ----
+   Design (Flux - Settings & Admin.dc.html:298-300) hardcodes bg = on ? '#3E8A5F' : '#D9CFBC'
+   for every admin toggle. #3E8A5F === var(--good). #D9CFBC has no equivalent Ledger
+   token (closest is --line-strong #C9BFA9) so it's kept literal here, scoped to Admin only. */
+.pill-toggle {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  width: 34px; height: 20px; flex-shrink: 0;
+  border-radius: 999px; background: #D9CFBC;
+  position: relative; margin: 0; cursor: pointer; outline: none;
+  transition: background 0.15s ease;
+}
+.pill-toggle::before {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 999px;
+  background: var(--card); box-shadow: 0 1px 3px rgba(50,40,20,0.25);
+  transition: left 0.15s ease;
+}
+.pill-toggle:checked { background: var(--good); }
+.pill-toggle:checked::before { left: 16px; }
+.pill-toggle:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 30%, transparent); }
+/* ---- Users table: super-admin toggle + single red Remove/Restore action ---- */
+.admin-remove-link {
+  font-family: var(--mono); font-size: 11px; cursor: pointer;
+}
+.admin-remove-link:hover { text-decoration: underline; }
+/* ---- Branding: accent-colour swatch picker (design lines 218-226) ---- */
+.accent-swatch-row { display: flex; gap: 10px; align-items: center; }
+.accent-swatch {
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+  cursor: pointer; box-sizing: border-box; border: 1px solid var(--line-2);
+}
+.accent-swatch.is-selected { border: 3px solid var(--ink); }
+.accent-hex-input { width: 110px; font-size: 12.5px; }
+/* ---- Updates tab: "vX AVAILABLE" pill (design lines 236-239) ---- */
+.update-avail-badge {
+  display: inline-flex; align-items: center;
+  font-family: var(--mono); font-size: 10px; padding: 4px 10px;
+  border: 1px solid var(--warn); color: var(--accent-hover);
+  border-radius: 999px; letter-spacing: 0.05em; text-transform: uppercase;
+}
+/* ---- Super Admin badge: pill shape per design (line 87), scoped override of shared .t-flag ---- */
+.t-flag.admin-badge-pill { border-radius: 999px; font-size: 10px; padding: 3px 9px; }
+/* ---- Toggle row (card-style clickable label wrapping a pill-toggle) ---- */
+.toggle-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 15px 18px; background: var(--card);
+  border: 1px solid var(--line-2); border-radius: 11px;
+  cursor: pointer; max-width: 640px;
+}
+.toggle-row.is-danger { border-color: var(--bad); }
+.toggle-row .toggle-copy { display: flex; flex-direction: column; gap: 2px; }
+.toggle-row .toggle-copy strong { font-size: 14px; font-weight: 700; color: var(--ink); }
+.toggle-row .toggle-copy small { font-size: 12.5px; color: var(--muted); }
+/* ---- Access-request row actions: approve = ink/good button, deny = outline text ---- */
+.approve-btn { background: var(--good); color: #F2FBF4; border-color: var(--good); font-weight: 600; }
+.approve-btn:hover { opacity: 0.88; }
+.deny-btn { background: transparent; border-color: var(--line-strong); color: var(--ink-soft); }
+.deny-btn:hover { border-color: var(--ink); color: var(--ink); }
 .ps-msg {
   padding: 8px 14px; border-radius: var(--r-m);
   font-size: 12.5px; line-height: 1.5;
@@ -263,12 +353,22 @@ async function loadUsers(){
   const tbody = document.getElementById('usersBody'); tbody.innerHTML='';
   users.forEach(u=>{
     const tr=document.createElement('tr');
-    [u.email, u.display_name||'', u.is_active?'Active':'Inactive', u.is_superadmin?'Yes':'No'].forEach(v=>{const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);});
+    [u.email, u.display_name||'', u.is_active?'Active':'Inactive'].forEach(v=>{const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);});
+    // Super-admin: 34x20 toggle switch (design: Flux - Settings & Admin.dc.html:121)
+    const tdAdmin=document.createElement('td');
+    const cb=document.createElement('input');
+    cb.type='checkbox'; cb.className='pill-toggle'; cb.checked=!!u.is_superadmin;
+    cb.setAttribute('aria-label', u.is_superadmin ? `Revoke admin for ${u.email}` : `Make ${u.email} admin`);
+    cb.onchange=()=>setSuper(u.id,cb.checked);
+    tdAdmin.appendChild(cb); tr.appendChild(tdAdmin);
+    // Action: single Remove/Restore link (design: Flux - Settings & Admin.dc.html:122)
     const act=document.createElement('td'); act.style.textAlign='right';
-    const wrap=document.createElement('div'); wrap.style.cssText='display:flex;gap:6px;justify-content:flex-end';
-    const b1=document.createElement('button'); b1.className='btn sm'; b1.textContent=u.is_active?'Deactivate':'Activate'; b1.onclick=()=>setActive(u.id,!u.is_active);
-    const b2=document.createElement('button'); b2.className='btn sm'; b2.textContent=u.is_superadmin?'Revoke admin':'Make admin'; b2.onclick=()=>setSuper(u.id,!u.is_superadmin);
-    wrap.appendChild(b1); wrap.appendChild(b2); act.appendChild(wrap); tr.appendChild(act); tbody.appendChild(tr);
+    const link=document.createElement('span');
+    link.className='admin-remove-link';
+    link.textContent=u.is_active?'Remove':'Restore';
+    link.style.color=u.is_active?'var(--bad)':'var(--good)';
+    link.onclick=()=>setActive(u.id,!u.is_active);
+    act.appendChild(link); tr.appendChild(act); tbody.appendChild(tr);
   });
 }
 async function setActive(id,v){ try{ await api(`/api/admin/users/${id}/active`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_active:v})}); loadUsers(); }catch(e){ Fluxito.toast(e.message, 'error');} }
@@ -282,8 +382,8 @@ async function loadRequests(){
     [r.name, r.email, r.use_case||''].forEach(v=>{const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);});
     const act=document.createElement('td'); act.style.textAlign='right';
     const wrap=document.createElement('div'); wrap.style.cssText='display:flex;gap:6px;justify-content:flex-end';
-    const b1=document.createElement('button'); b1.className='btn sm primary'; b1.textContent='Approve'; b1.onclick=()=>approve(r.id);
-    const b2=document.createElement('button'); b2.className='btn sm danger-outline'; b2.textContent='Reject'; b2.onclick=()=>reject(r.id);
+    const b1=document.createElement('button'); b1.className='btn sm approve-btn'; b1.textContent='Approve'; b1.onclick=()=>approve(r.id);
+    const b2=document.createElement('button'); b2.className='btn sm deny-btn'; b2.textContent='Deny'; b2.onclick=()=>reject(r.id);
     wrap.appendChild(b1); wrap.appendChild(b2); act.appendChild(wrap); tr.appendChild(act); tbody.appendChild(tr);
   });
 }
@@ -350,6 +450,7 @@ async function loadOperations(){
   try{
     const d = await api('/api/admin/settings/operations');
     document.getElementById('opMaintenance').checked = !!d.maintenance_mode;
+    document.getElementById('opMaintenanceRow').classList.toggle('is-danger', !!d.maintenance_mode);
     document.getElementById('opBanner').value = d.announcement_banner || '';
   }catch(e){ /* leave default */ }
 }
@@ -362,12 +463,23 @@ async function saveOperations(){
     m.textContent = 'Saved.'; m.style.display='block';
   }catch(e){ m.textContent = e.message; m.style.display='block'; }
 }
+function pickAccentSwatch(el){
+  document.getElementById('brAccent').value = el.dataset.hex;
+  syncAccentSwatches();
+}
+function syncAccentSwatches(){
+  const val = (document.getElementById('brAccent').value||'').trim().toLowerCase();
+  document.querySelectorAll('.accent-swatch').forEach(s=>{
+    s.classList.toggle('is-selected', s.dataset.hex.toLowerCase() === val);
+  });
+}
 async function loadBranding(){
   try{
     const d = await api('/api/admin/settings/branding');
     document.getElementById('brName').value = d.name || '';
     document.getElementById('brLogo').value = d.logo_url || '';
     document.getElementById('brAccent').value = d.accent || '';
+    syncAccentSwatches();
   }catch(e){ /* leave blank */ }
 }
 async function saveBranding(){

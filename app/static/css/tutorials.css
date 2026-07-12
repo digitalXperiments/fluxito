@@ -32,77 +32,201 @@
   color: var(--muted);
 }
 
-.tut-start-card {
+.tut-section-label {
+  margin-bottom: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.tut-section-label-spaced {
+  margin-top: 40px;
+}
+
+.tut-feature-grid {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 18px;
-  padding: 20px 22px;
-  border: 1px solid var(--ink);
-  border-radius: var(--r-m);
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.tut-feature-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 26px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
   background: var(--bg);
   color: inherit;
   text-decoration: none;
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.15s ease;
 }
 
-.tut-start-card:hover {
+.tut-feature-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 22px rgba(11, 11, 14, 0.08);
+  border-color: var(--ink);
+  box-shadow: var(--shadow-md);
 }
 
-.tut-start-body {
+.tut-feature-card h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.tut-feature-card p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.tut-feature-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-full);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-hover);
+}
+
+.tut-feature-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-hover);
+}
+
+.tut-feature-cta span {
+  transition: transform 0.15s ease;
+}
+
+.tut-feature-card:hover .tut-feature-cta span {
+  transform: translateX(3px);
+}
+
+.tut-feature-card-dark {
+  /* On-dark accent tint (spec: Flux - Tutorials.dc.html:77,81 → #E8A87C) —
+     lighter than --accent so badge/CTA text stays legible on --dark-bg;
+     scoped here pending promotion to a shared app.css token. */
+  --tut-accent-on-dark: color-mix(in srgb, var(--accent) 60%, white);
+  border-color: var(--dark-bg);
+  background: var(--dark-bg);
+}
+
+.tut-feature-card-dark h2 { color: var(--dark-text); }
+.tut-feature-card-dark p { color: var(--dark-muted); }
+
+.tut-feature-card-dark .tut-feature-badge {
+  border-color: var(--accent);
+  color: var(--tut-accent-on-dark);
+}
+
+.tut-feature-card-dark .tut-feature-cta { color: var(--tut-accent-on-dark); }
+
+.tut-feature-card-dark:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lg);
+}
+
+.tut-workflow-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--bg);
 }
 
-.tut-start-kicker,
+.tut-workflow-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  color: inherit;
+  text-decoration: none;
+  border-top: 1px solid var(--line);
+  transition: background 0.15s ease;
+}
+
+.tut-workflow-row:first-child {
+  border-top: 0;
+}
+
+.tut-workflow-row:hover {
+  background: var(--bg-2);
+}
+
+.tut-workflow-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.tut-workflow-title {
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+
+.tut-workflow-note {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.tut-workflow-time {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.tut-workflow-arrow {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.tut-workflow-row:hover .tut-workflow-arrow {
+  color: var(--ink);
+  transform: translateX(3px);
+}
+
+@media (max-width: 720px) {
+  .tut-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tut-workflow-row {
+    flex-wrap: wrap;
+    padding: 16px 18px;
+  }
+}
+
 .tut-aside-label {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-}
-
-.tut-start-title {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.tut-start-copy {
-  max-width: 720px;
-  font-size: 13.5px;
-  line-height: 1.45;
-  color: var(--ink-soft);
-}
-
-.tut-categories {
-  display: flex;
-  flex-direction: column;
-  gap: 38px;
-  margin-top: 38px;
-}
-
-.tut-cat-head {
-  margin-bottom: 14px;
-}
-
-.tut-cat-head .cat-title {
-  display: inline-block;
-  margin: 0;
-}
-
-.tut-cat-desc {
-  max-width: 680px;
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.45;
 }
 
 .tut-grid {
@@ -141,27 +265,6 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 20px;
-}
-
-.tut-guide-badge {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg-2);
-  color: var(--ink);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.tut-guide-badge span {
-  line-height: 1;
 }
 
 .tut-card .status-pill,
@@ -495,15 +598,6 @@
   .tut-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-
-  .tut-start-card {
-    grid-template-columns: auto 1fr;
-  }
-
-  .tut-start-card .btn {
-    grid-column: 1 / -1;
-    justify-content: center;
-  }
 }
 
 @media (max-width: 640px) {
@@ -512,14 +606,9 @@
     text-align: left;
   }
 
-  .tut-start-card,
   .tut-grid,
   .tut-aside {
     grid-template-columns: 1fr;
-  }
-
-  .tut-start-card {
-    align-items: flex-start;
   }
 
   .tut-card {

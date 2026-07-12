@@ -31,7 +31,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
-from sqlalchemy import desc, select
+from sqlalchemy import case, desc, func, select
 
 import app.app_state as app_state
 from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
@@ -119,6 +119,9 @@ async def audits_page(request: Request):
 
     runs = []
     score_summary: list[dict] = []
+    active_run: dict | None = None
+    open_findings: list[dict] = []
+    pages_by_run: dict[str, int] = {}
 
     if project_id:
         async with app_state.db_session_factory() as db:
@@ -150,13 +153,71 @@ async def audits_page(request: Request):
             )
             score_summary = [dict(r) for r in ss_result.mappings().all()]
 
+            # Live run card — best-effort from AuditRun.status='running'. There's
+            # no progress-telemetry table/columns yet (progress_pct, found_so_far,
+            # checking_current aren't tracked anywhere), so only title/status are
+            # real; the template already renders those sub-sections conditionally
+            # and falls back gracefully when they're absent.
+            # TODO: to fully populate the live-run feed per the design, add a
+            # lightweight progress surface (e.g. an `audit_run_progress` JSONB
+            # column updated periodically by the running audit process) and wire
+            # it into `active_run` here.
+            running_stmt = (
+                select(AuditRun)
+                .where(AuditRun.project_id == project_id, AuditRun.status == "running")
+                .order_by(desc(AuditRun.created_at))
+                .limit(1)
+            )
+            running_run = (await db.execute(running_stmt)).scalar_one_or_none()
+            if running_run:
+                active_run = {"title": running_run.title, "status": running_run.status}
+
+            # Open findings — unresolved findings from the most recent run,
+            # worst severity first. Real query against AuditFinding rows.
+            if runs:
+                severity_rank = case(
+                    (AuditFinding.severity == "critical", 0),
+                    (AuditFinding.severity == "warning", 1),
+                    (AuditFinding.severity == "info", 2),
+                    else_=3,
+                )
+                of_stmt = (
+                    select(AuditFinding)
+                    .where(AuditFinding.run_id == runs[0].id, AuditFinding.passed.is_(False))
+                    .order_by(severity_rank, AuditFinding.created_at)
+                    .limit(50)
+                )
+                of_result = await db.execute(of_stmt)
+                open_findings = [f.to_dict() for f in of_result.scalars().all()]
+
+                # Pages-tested count per run, derived from findings whose
+                # entity_type is 'page' (the convention the save_audit_result
+                # tool docs recommend for per-page entities). Runs that don't
+                # use that convention simply render "—" in the template.
+                run_ids = [r.id for r in runs]
+                pg_stmt = (
+                    select(AuditFinding.run_id, func.count(func.distinct(AuditFinding.entity_id)))
+                    .where(AuditFinding.run_id.in_(run_ids), AuditFinding.entity_type == "page")
+                    .group_by(AuditFinding.run_id)
+                )
+                pg_result = await db.execute(pg_stmt)
+                pages_by_run = {str(rid): cnt for rid, cnt in pg_result.all()}
+
+    run_dicts = []
+    for r in runs:
+        d = r.to_dict()
+        d["pages_tested"] = pages_by_run.get(str(r.id))
+        run_dicts.append(d)
+
     return render(
         request,
         "audits/index.html",
         {
             "user": user_view,
-            "runs": [r.to_dict() for r in runs],
+            "runs": run_dicts,
             "score_summary": score_summary,
+            "active_run": active_run,
+            "open_findings": open_findings,
             "platforms_summary": platforms_summary,
             "audit_type_labels": _AUDIT_TYPE_LABELS,
             "page_title": "Auditing — Fluxito",

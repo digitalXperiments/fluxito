@@ -1,415 +1,234 @@
 {% extends "base.html" %}
-{% block title %}Home — Fluxito{% endblock %}
+{% block title %}Briefing — Fluxito{% endblock %}
 {% set active = 'home' %}
-{% import "partials/rate_limit_cards.html" as rlcards %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/home.css?v={{ asset_hash('css/home.css') }}"/>
+{% endblock %}
 
 {% block main %}
-<main class="app-main home-main">
-
-  {# ── Editorial page header ── #}
-  <div class="page-head">
-    <div>
-      <span class="label">
-        {% if active_project_name %}Project · {{ active_project_name }}{% else %}Home{% endif %}
-      </span>
-      <h1>Welcome back, <em class="serif-italic">{{ (user.display_name or user.email.split('@')[0]) | title }}</em>.</h1>
-      <p>
-        {% if not nav_projects %}
-          Create a project to connect your data and start asking questions.
-        {% else %}
-          Your connections, your dashboards, your next moves — all here.
-        {% endif %}
-      </p>
-    </div>
-  </div>
-
-  {# ── Active project bar — makes the project-scoped workspace explicit ── #}
-  {% if active_project_name %}
-  {% set ns = namespace(slug=None) %}
-  {% for p in nav_projects %}{% if p.id == active_project_id %}{% set ns.slug = p.slug %}{% endif %}{% endfor %}
-  <div class="home-project-bar">
-    <span class="hpb-mark">{{ active_project_name[:2] | upper }}</span>
-    <div class="hpb-main">
-      <div class="hpb-row">
-        <span class="hpb-name">{{ active_project_name }}</span>
-        {% if user_project_role %}<span class="t-flag hpb-role">{{ user_project_role | upper }}</span>{% endif %}
-        {% if active_project_plan %}<span class="hpb-plan">{{ active_project_plan | capitalize }} plan</span>{% endif %}
-      </div>
-      <div class="hpb-sub">You're in this project — connections, dashboards, and automations below are all scoped to it.</div>
-    </div>
-    <div class="hpb-actions">
-      {% if ns.slug %}<a href="/project/{{ ns.slug }}/settings" class="btn sm">Project settings</a>{% endif %}
-      <a href="/projects" class="btn sm">All projects</a>
-    </div>
-  </div>
-  {% endif %}
-
-  {# ── Empty-state: no projects yet ── #}
-  {% if not nav_projects %}
-  <div class="empty-state">
-    <div class="empty-icon" aria-hidden="true">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
-    </div>
-    <div class="empty-body">
-      <h3>Create your first project</h3>
-      <p>A project is an isolated workspace — connectors, dashboards, templates, and billing all live inside it. You'll need one before you can connect GA4, Meta, BigQuery, or any other data source.</p>
-    </div>
-    <a href="/projects" class="btn primary">
-      New project <span class="arrow">→</span>
-    </a>
-  </div>
-  {% endif %}
-
-  {# ── KPI row ── #}
-  {% set connected_count = total_conns %}
-  {% set total_count = total_platforms %}
-  <div class="kpi-row">
-    <div class="kpi">
-      <span class="label">Connections</span>
-      <div class="val mono">{{ connected_count }} / {{ total_count }}</div>
-      <div class="meta"><a href="/connect">Connect →</a></div>
-    </div>
-    <div class="kpi">
-      <span class="label">Dashboards</span>
-      <div class="val mono">{{ dashboards_count | default(0) }}</div>
-      <div class="meta"><a href="/live-dashboards">Manage →</a></div>
-    </div>
-    <div class="kpi">
-      <span class="label">Templates</span>
-      <div class="val mono">{{ templates_count | default(0) }}</div>
-      <div class="meta"><a href="/templates">Browse →</a></div>
-    </div>
-    <div class="kpi">
-      <span class="label">Automations</span>
-      <div class="val mono">{{ automations_count | default(0) }}</div>
-      <div class="meta"><a href="/automations">Manage →</a></div>
-    </div>
-    <div class="kpi">
-      <span class="label">Tracking Plan</span>
-      <div class="val mono">{{ tp_event_count | default(0) }} events</div>
-      <div class="meta">
-        {{ tp_open_issues | default(0) }} open ·
-        {% if tp_coverage_pct is not none %}{{ tp_coverage_pct }}% covered{% else %}—{% endif %}
-        · <a href="/tracking-plan">Open →</a>
-      </div>
-    </div>
-  </div>
-
-  {# ── Add to AI + What's next ── #}
-  <div class="home-split">
-    <div class="home-card">
-      <div class="hd">
-        <span>Add Fluxito to your AI</span>
-        <a href="/docs#mcp" class="btn sm">Docs</a>
-      </div>
-      <div class="home-ai-body">
-        {% include "partials/add_to_ai.html" %}
-      </div>
-    </div>
-
-    <div class="home-card">
-      <div class="hd"><span>What to do next</span></div>
-      <div class="next-list">
-        <div class="next-item">
-          <div class="txt">
-            <h5>Install a template</h5>
-            <p>10 flagship cross-platform templates. Start with the Weekly Pulse.</p>
-          </div>
-          <a href="/templates" class="btn sm">Browse</a>
+<div class="home-shell">
+  <div class="home-center">
+    <div class="home-feed">
+      <div class="home-feed-inner">
+        <div class="home-top-row">
+          <span class="home-eyebrow">{{ briefing_now_display }}</span>
+          <a href="#" class="home-history-link">Briefing history →</a>
         </div>
-        <div class="next-item">
-          <div class="txt">
-            <h5>Add another connector</h5>
-            <p>Meta, TikTok and BigQuery unlock deeper answers.</p>
-          </div>
-          <a href="/connect" class="btn sm">Connect</a>
+        <h1 class="home-h1">
+          {{ briefing_time_of_day }}, {{ (user.display_name or user.email.split('@')[0]) | title }}.
+          {% if briefing_needs_attention > 0 %}
+            {{ briefing_needs_attention }} thing{{ 's' if briefing_needs_attention != 1 else '' }} need{{ 's' if briefing_needs_attention == 1 else '' }} you.
+          {% else %}
+            All clear for now.
+          {% endif %}
+        </h1>
+        <div class="home-sub">
+          {% if audit_checked_summary %}
+            {{ audit_checked_summary }}
+          {% elif not nav_projects %}
+            Create a project to connect your data and start asking questions.
+          {% else %}
+            Connect a platform and run an audit so Flux has something to check.
+          {% endif %}
         </div>
-        <div class="next-item">
-          <div class="txt">
-            <h5>Schedule an automation</h5>
-            <p>Daily KPI digest to Slack. 30 seconds to install.</p>
+
+        <div class="home-findings">
+          {% for f in briefing_findings %}
+          <div class="briefing-card" data-finding-key="{{ f.key }}">
+            <span class="briefing-pill sev-{{ f.severity }}">{{ f.severity }}</span>
+            <div class="briefing-body">
+              <div class="briefing-title">{{ f.title }}</div>
+              {% if f.body %}<div class="briefing-desc">{{ f.body }}</div>{% endif %}
+
+              {% if f.severity in ('urgent', 'watch') %}
+              <div class="briefing-actions">
+                {% if f.severity == 'urgent' and f.link %}
+                <a href="{{ f.link }}" class="briefing-action-primary">Review the fix</a>
+                {% endif %}
+                {% if f.evidence_link %}
+                <a href="{{ f.evidence_link }}" class="briefing-action-secondary">Show evidence</a>
+                {% else %}
+                <span class="briefing-action-secondary" data-evidence-toggle>Show evidence</span>
+                {% endif %}
+                <span class="briefing-action-tertiary" data-dismiss-btn>Dismiss</span>
+              </div>
+              {% if not f.evidence_link %}
+              <div class="briefing-evidence" hidden>
+                {% if f.evidence_meta %}
+                  {% for mk, mv in f.evidence_meta.items() %}
+                  <div class="briefing-evidence-row"><span class="briefing-evidence-key">{{ mk }}</span><span class="briefing-evidence-val">{{ mv }}</span></div>
+                  {% endfor %}
+                {% else %}
+                <div class="briefing-evidence-row briefing-evidence-empty">No additional evidence recorded for this finding.</div>
+                {% endif %}
+              </div>
+              {% endif %}
+              {% endif %}
+            </div>
           </div>
-          <a href="/automations" class="btn sm">Set up</a>
+          {% else %}
+          <div class="briefing-card">
+            <span class="briefing-pill sev-good">good</span>
+            <div class="briefing-body">
+              <div class="briefing-title">Nothing needs your attention right now.</div>
+            </div>
+          </div>
+          {% endfor %}
+
+          {% if audit_checked_summary %}
+          <div class="home-done-overnight">
+            <span class="home-done-overnight-rule"></span>
+            <span class="home-done-overnight-label">Done overnight — {{ audit_checked_summary }}</span>
+            <span class="home-done-overnight-rule"></span>
+          </div>
+          {% endif %}
+        </div>
+
+        {# ── Latest activity — merged feed across audits, test flows,
+             drafts, report sends and activity events. Hydrated client-side
+             from /api/home/feed so the initial page render stays cheap. ── #}
+        <div class="home-activity" id="home-activity" hidden>
+          <div class="home-activity-label">Latest activity</div>
+          <div class="home-activity-list" id="home-activity-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="home-composer-wrap">
+      <div class="home-composer-inner">
+        <form id="home-composer-form" class="home-composer" autocomplete="off">
+          <span class="flux-badge" aria-hidden="true">F</span>
+          <input type="text" id="home-composer-input" class="home-composer-input" data-flux-composer
+                 placeholder='Ask Flux — &quot;why did ROAS dip last week?&quot;, &quot;audit my GTM container&quot;…'>
+          <span class="home-composer-kbd">⌘K</span>
+          <button type="submit" class="btn-accent home-composer-ask">Ask</button>
+        </form>
+        <div class="home-chips">
+          <a href="/ask?q={{ 'Run a full audit of my tracking setup and summarize what needs fixing' | urlencode }}" class="home-chip">Audit my tracking setup</a>
+          <a href="/ask?q={{ 'Where are the gaps in my tracking plan and how do I close them' | urlencode }}" class="home-chip">Close tracking-plan gaps</a>
+          <a href="/ask?q={{ 'Help me build a dashboard for my key marketing metrics' | urlencode }}" class="home-chip">Build a dashboard</a>
+          <a href="/ask?q={{ 'What should I connect next to get more out of Flux' | urlencode }}" class="home-chip">What should I connect next?</a>
         </div>
       </div>
     </div>
   </div>
 
-  {# ── API limits (connected tools) ── #}
-  {% if rate_limits_connected %}
-  {% set rlns = namespace(slug=None) %}
-  {% for p in nav_projects %}{% if p.id == active_project_id %}{% set rlns.slug = p.slug %}{% endif %}{% endfor %}
-  {{ rlcards.rl_assets() }}
-  <div class="section-head home-section-head rl-home-head">
-    <div>
-      <div class="label">API limits</div>
-      <h2>How fast your tools <em class="serif-italic">burn quota.</em></h2>
+  <aside class="home-rail">
+    <div class="home-rail-label">Flux is running</div>
+    {% for a in running_automations %}
+    <div class="home-rail-card">
+      <div class="home-rail-card-row"><span class="home-rail-dot{% if a.progress_pct is not none %} is-running{% endif %}"></span><span class="home-rail-card-title">{{ a.name }}</span></div>
+      <div class="home-rail-card-meta">{{ a.detail }}</div>
+      {% if a.progress_pct is not none %}
+      <div class="home-rail-progress"><div class="home-rail-progress-fill" style="width:{{ a.progress_pct }}%"></div></div>
+      {% endif %}
     </div>
-    {% if rlns.slug %}<a href="/project/{{ rlns.slug }}/settings#limits" class="btn sm">View all limits →</a>{% endif %}
-  </div>
-  <div class="rl-list">
-    {% for c in rate_limits_connected %}{{ rlcards.rl_card(c) }}{% endfor %}
-  </div>
-  <p class="rl-home-foot">Usage is the upstream calls Fluxito made for you in the last {{ rate_limits_usage_days | default(30) }} days; cached responses aren't counted. Limits checked {{ rate_limits_reviewed }}.</p>
-  {% endif %}
+    {% else %}
+    <div class="home-rail-card home-rail-empty">Nothing scheduled yet.</div>
+    {% endfor %}
+    <a href="/automations" class="home-rail-link">Assign Flux a task →</a>
 
-  {# ── Your workspace (quickstart tiles) ── #}
-  <div class="section-head home-section-head">
-    <div class="label">Your workspace</div>
-    <h2>Everything in this <em class="serif-italic">project.</em></h2>
-  </div>
-
-  <div class="workspace-grid">
-    {# ── Knowledge ── #}
-    <a href="/tracking-plan" class="ws-tile">
-      <div class="ws-ico" style="background:color-mix(in srgb, #D97706 12%, transparent);color:#D97706;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
-      </div>
-      <h3>Tracking Plan</h3>
-      <p>Your tracking plan — events, parameters, and destinations.</p>
-    </a>
-    <a href="/kpi-library" class="ws-tile">
-      <div class="ws-ico" style="background:color-mix(in srgb, #ec4899 12%, transparent);color:#ec4899;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-      </div>
-      <h3>KPI Library</h3>
-      <p>Define the metrics your AI uses to ground answers.</p>
-    </a>
-    <a href="/business-context" class="ws-tile">
-      <div class="ws-ico" style="background:color-mix(in srgb, var(--green) 12%, transparent);color:var(--green);">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-      </div>
-      <h3>Business Context</h3>
-      <p>Markdown doc the AI loads to ground its answers.</p>
-    </a>
-    {# ── Reporting ── #}
-    <a href="/live-dashboards" class="ws-tile">
-      <div class="ws-ico" style="background:color-mix(in srgb, var(--blue) 12%, transparent);color:var(--blue);">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      </div>
-      <h3>Dashboards</h3>
-      <p>Real-time analytics across all your platforms.</p>
-    </a>
-    <a href="/templates" class="ws-tile">
-      <div class="ws-ico" style="background:color-mix(in srgb, var(--amber) 12%, transparent);color:var(--amber);">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
-      </div>
-      <h3>Templates</h3>
-      <p>Pre-built dashboard recipes. Deploy in one click.</p>
-    </a>
-    {# ── Automations ── #}
-    <a href="/automations" class="ws-tile">
-      <div class="ws-ico" style="background:color-mix(in srgb, #f59e0b 12%, transparent);color:#f59e0b;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      </div>
-      <h3>Automations</h3>
-      <p>Scheduled monitors and alerts. Zero maintenance.</p>
-    </a>
-  </div>
-
-</main>
-
-<style>
-.home-main {
-  --home-gap: 28px;
-  --home-gap-sm: 18px;
-  /* Inter-section rhythm — larger, even gap between the three remaining
-     sections (KPI row · AI+next split · workspace) now that the bottom
-     Platforms & Connections section is gone. One step up the same scale.
-     Derived from scale tokens: 28px + 18px = 46px ≈ 48px original. */
-  --home-section-gap: calc(var(--home-gap) + var(--home-gap-sm));
-  --home-card-pad-x: 20px;
-}
-
-.home-main .page-head {
-  padding-bottom: 18px;
-  margin-bottom: var(--home-gap);
-}
-
-.home-main .page-head h1 {
-  max-width: 900px;
-}
-
-/* ── Active project bar ── */
-.home-project-bar {
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px 18px; margin: 0 0 var(--home-gap);
-  background: var(--bg-2, var(--surface-2));
-  border: 1px solid var(--line, var(--border));
-  border-radius: var(--r-l, 14px);
-}
-.hpb-mark {
-  flex-shrink: 0; width: 38px; height: 38px; border-radius: 9px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #A9CDFE, #4D7CE3); color: #fff;
-  font-family: var(--mono); font-size: 13px; font-weight: 600;
-}
-.hpb-main { flex: 1; min-width: 0; }
-.hpb-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.hpb-name { font-size: 16px; font-weight: 600; color: var(--ink, var(--text)); letter-spacing: -0.01em; }
-.hpb-role {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink, var(--text));
-  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
-  padding: 2px 7px; border-radius: 5px;
-}
-.hpb-plan { font-size: 12px; color: var(--muted, var(--text-muted)); }
-.hpb-sub { margin-top: 3px; font-size: 12.5px; color: var(--muted, var(--text-muted)); }
-.hpb-actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
-@media (max-width: 720px) {
-  .home-project-bar { flex-wrap: wrap; }
-  .hpb-actions { width: 100%; justify-content: flex-start; }
-}
-
-.home-main .kpi-row {
-  margin: 0;
-}
-
-.home-main .kpi {
-  padding: 20px 22px 22px;
-}
-
-.home-main .kpi .label {
-  margin-bottom: 14px;
-}
-
-.home-main .kpi .meta {
-  margin-top: 10px;
-}
-
-/* Empty-state CTA — editorial take */
-.empty-state {
-  display: flex; align-items: center; gap: 22px;
-  padding: 24px 26px; margin: 0 0 var(--home-gap);
-  border: 1px solid var(--ink); border-radius: var(--r-l);
-  background: var(--bg-2);
-}
-.empty-state .empty-icon {
-  width: 52px; height: 52px; border-radius: var(--r-m);
-  background: var(--ink); color: #fff;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-}
-.empty-state .empty-body { flex: 1; min-width: 0; }
-.empty-state .empty-body h3 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
-.empty-state .empty-body p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
-@media (max-width: 640px) {
-  .empty-state { flex-direction: column; align-items: flex-start; text-align: left; }
-  .empty-state a.btn { width: 100%; justify-content: center; }
-}
-
-/* Section head */
-.home-section-head {
-  margin-top: var(--home-section-gap);
-  margin-bottom: var(--home-gap-sm);
-}
-.home-section-head h2 {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  line-height: 1.05;
-}
-/* Above-the-fold panels */
-.home-main .home-split {
-  gap: 24px;
-  margin-top: var(--home-section-gap);
-}
-
-.home-main .home-card {
-  border-radius: var(--r-m);
-}
-
-.home-main .home-card .hd {
-  min-height: 56px;
-  padding: 10px var(--home-card-pad-x);
-}
-
-.home-ai-body {
-  padding: 18px var(--home-card-pad-x) 0;
-}
-
-.home-ai-body .ai-connect-grid {
-  padding: 0;
-  gap: 12px;
-}
-
-.home-ai-body .mcp-help-link {
-  margin-top: 16px !important;
-  padding-left: 0 !important;
-}
-
-.home-main .next-item {
-  min-height: 76px;
-  padding: 15px var(--home-card-pad-x);
-}
-
-/* API limits — section header + footnote; cards/modal come from the shared
-   partials/rate_limit_cards.html partial (same as Project Settings). */
-.rl-home-head {
-  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
-}
-.rl-home-head .btn { flex-shrink: 0; }
-.rl-home-foot { margin: 12px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
-
-/* Workspace tiles */
-.workspace-grid {
-  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 14px;
-}
-.ws-tile {
-  display: flex; flex-direction: column; gap: 8px;
-  min-height: 166px;
-  padding: 18px 20px 19px;
-  border: 1px solid var(--line); border-radius: var(--r-m);
-  background: var(--bg); text-decoration: none; color: inherit;
-  transition: border-color 0.15s ease, transform 0.15s ease;
-}
-.ws-tile:hover { border-color: var(--ink); transform: translateY(-1px); }
-.ws-tile .ws-ico {
-  width: 36px; height: 36px; border-radius: var(--r-s);
-  display: flex; align-items: center; justify-content: center;
-  margin-bottom: 2px;
-}
-.ws-tile h3 { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
-.ws-tile p { margin: 0; font-size: 13px; color: var(--ink-soft); line-height: 1.45; }
-@media (max-width: 1100px) { .workspace-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 700px) { .workspace-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .workspace-grid { grid-template-columns: 1fr; } }
-
-@media (max-width: 700px) {
-  .home-main {
-    --home-gap: 22px;
-    --home-gap-sm: 14px;
-    /* 22px + 14px = 36px — matches original literal */
-    --home-section-gap: calc(var(--home-gap) + var(--home-gap-sm));
-  }
-  .home-main .kpi {
-    padding: 18px 20px;
-  }
-  .home-ai-body {
-    padding: 16px 16px 0;
-  }
-  .home-ai-body .ai-connect-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+    <div class="home-rail-label home-rail-label-2nd">Stack health</div>
+    <div class="home-rail-card home-stack-health">
+      <div class="hsh-row"><span>Connections</span><span class="mono">{{ total_conns }} / {{ total_platforms }}</span></div>
+      <div class="hsh-row"><span>Plan coverage</span><span class="mono">{% if tp_coverage_pct is not none %}{{ tp_coverage_pct }}%{% else %}—{% endif %}</span></div>
+      <div class="hsh-row"><span>Open issues</span><span class="mono{% if (tp_open_issues + audit_open_issues) > 0 %} hsh-danger{% endif %}">{{ tp_open_issues + audit_open_issues }}</span></div>
+      <div class="hsh-row"><span>Last full audit</span><span class="mono">{{ last_audit_display }}</span></div>
+    </div>
+    <div class="home-rail-foot">Also available in Claude, ChatGPT &amp; Cursor via MCP — same Flux, same memory.</div>
+  </aside>
+</div>
 
 <script>
 (function(){
-  var params = new URLSearchParams(window.location.search);
-  var toast = params.get('toast');
-  if (!toast) return;
-  var messages = {
-    'google_connected': 'Google Suite connected! Your GA4 properties and GTM containers are ready.',
-    'meta_connected': 'Meta Ads connected! Your campaigns are now accessible.',
-    'tiktok_connected': 'TikTok Ads connected! Your campaigns are now accessible.',
-    'snap_connected': 'Snapchat Ads connected! Your campaigns are now accessible.'
+  var form = document.getElementById('home-composer-form');
+  var input = document.getElementById('home-composer-input');
+  if (form && input) {
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var q = (input.value || '').trim();
+      if (!q) { window.location.href = '/ask'; return; }
+      window.location.href = '/ask?q=' + encodeURIComponent(q);
+    });
+  }
+
+  // "Show evidence" — expand the inline evidence block (no separate
+  // evidence deep-link exists yet, so this just toggles visibility).
+  document.querySelectorAll('[data-evidence-toggle]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var card = btn.closest('.briefing-card');
+      var block = card && card.querySelector('.briefing-evidence');
+      if (!block) return;
+      block.hidden = !block.hidden;
+    });
+  });
+
+  // "Dismiss" — persist server-side, then remove the card immediately
+  // (no animation, per spec).
+  document.querySelectorAll('[data-dismiss-btn]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var card = btn.closest('.briefing-card');
+      if (!card) return;
+      var key = card.getAttribute('data-finding-key');
+      card.remove();
+      if (!key) return;
+      fetch('/api/briefing/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ finding_key: key })
+      }).catch(function(){ /* best-effort — card is already gone client-side */ });
+    });
+  });
+
+  // ── Latest activity feed — hydrate from /api/home/feed. Best-effort:
+  // on empty or error the section simply stays hidden.
+  var ICONS = {
+    audit: '🔍', test_flow: '🧪', draft: '✎', report: '📤', activity: '•'
   };
-  var msg = messages[toast] || 'Connection successful!';
-  setTimeout(function(){ if (window.Fluxito) Fluxito.toast(msg, 'success'); }, 300);
-  window.history.replaceState({}, '', window.location.pathname);
+  function relTime(iso){
+    if (!iso) return '';
+    var t = new Date(iso).getTime();
+    if (isNaN(t)) return '';
+    var s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (s < 60) return 'just now';
+    var m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
+    var h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+    var d = Math.floor(h / 24); if (d < 7) return d + 'd ago';
+    return new Date(iso).toLocaleDateString();
+  }
+  function esc(str){
+    var d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+  }
+  fetch('/api/home/feed', { headers: { 'Accept': 'application/json' } })
+    .then(function(r){ return r.ok ? r.json() : { items: [] }; })
+    .then(function(data){
+      var items = (data && data.items) || [];
+      if (!items.length) return;
+      var wrap = document.getElementById('home-activity');
+      var list = document.getElementById('home-activity-list');
+      if (!wrap || !list) return;
+      list.innerHTML = items.map(function(it){
+        var icon = ICONS[it.kind] || '•';
+        var statusHtml = it.status
+          ? '<span class="home-activity-status is-' + esc(it.status) + '">' + esc(it.status) + '</span>'
+          : '';
+        var inner =
+          '<span class="home-activity-icon" aria-hidden="true">' + icon + '</span>' +
+          '<span class="home-activity-main">' +
+            '<span class="home-activity-title">' + esc(it.title) + statusHtml + '</span>' +
+            '<span class="home-activity-sub">' + esc(it.subtitle) + '</span>' +
+          '</span>' +
+          '<span class="home-activity-time">' + esc(relTime(it.ts)) + '</span>';
+        if (it.url) {
+          return '<a class="home-activity-item" href="' + esc(it.url) + '">' + inner + '</a>';
+        }
+        return '<div class="home-activity-item">' + inner + '</div>';
+      }).join('');
+      wrap.hidden = false;
+    })
+    .catch(function(){ /* best-effort — section stays hidden */ });
 })();
 </script>
 {% endblock %}

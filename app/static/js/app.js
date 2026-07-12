@@ -2,63 +2,7 @@
 (function () {
   'use strict';
 
-  // ---------- Theme (Auto / Light / Dark, persisted in localStorage) ----------
-  const root = document.documentElement;
-  const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  const THEME_KEY = 'theme';
-  const VALID_MODES = ['auto', 'light', 'dark'];
-
-  function getThemeMode() {
-    let stored = null;
-    try { stored = localStorage.getItem(THEME_KEY); } catch (e) {}
-    return VALID_MODES.indexOf(stored) >= 0 ? stored : 'auto';
-  }
-  function resolveTheme(mode) {
-    if (mode === 'light' || mode === 'dark') return mode;
-    return mq.matches ? 'dark' : 'light';
-  }
-  function applyTheme() {
-    const mode = getThemeMode();
-    root.setAttribute('data-theme', resolveTheme(mode));
-    root.setAttribute('data-theme-mode', mode);
-    syncThemeUi(mode);
-  }
-  function syncThemeUi(mode) {
-    const label = mode.charAt(0).toUpperCase() + mode.slice(1);
-    document.querySelectorAll('[data-theme-label]').forEach((el) => { el.textContent = label; });
-    document.querySelectorAll('[data-theme-button]').forEach((btn) => {
-      const a = btn.querySelector('.theme-icon-auto');
-      const l = btn.querySelector('.theme-icon-light');
-      const d = btn.querySelector('.theme-icon-dark');
-      if (a) a.style.display = mode === 'auto' ? '' : 'none';
-      if (l) l.style.display = mode === 'light' ? '' : 'none';
-      if (d) d.style.display = mode === 'dark' ? '' : 'none';
-    });
-  }
-  function setThemeMode(mode) {
-    if (VALID_MODES.indexOf(mode) < 0) mode = 'auto';
-    try { localStorage.setItem(THEME_KEY, mode); } catch (e) {}
-    applyTheme();
-  }
-  function cycleThemeMode() {
-    const cur = getThemeMode();
-    const next = VALID_MODES[(VALID_MODES.indexOf(cur) + 1) % VALID_MODES.length];
-    setThemeMode(next);
-  }
-  // Re-resolve when the OS preference changes — but only if the user is on auto.
-  mq.addEventListener('change', () => {
-    if (getThemeMode() === 'auto') applyTheme();
-  });
-  // Cross-tab sync — if another tab changes the mode, reflect it here.
-  window.addEventListener('storage', (e) => {
-    if (e.key === THEME_KEY) applyTheme();
-  });
-  applyTheme();
-
   window.Fluxito = window.Fluxito || {};
-  window.Fluxito.getThemeMode = getThemeMode;
-  window.Fluxito.setThemeMode = setThemeMode;
-  window.Fluxito.cycleThemeMode = cycleThemeMode;
 
   // ---------- Mobile nav ----------
   function initNav() {
@@ -196,57 +140,42 @@
     system: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
   };
 
+  // Notifications popover — markup lives in base.html next to the sidebar
+  // bell (#notifGroup / .sidebar-bell). Open/close + fixed positioning
+  // (anchored above the bell) is handled by the shared [data-nav-group]
+  // script in base.html; this only loads/renders data and wires
+  // mark-read behavior. We watch the group's class via MutationObserver
+  // instead of hooking the toggle button's click directly, so this stays
+  // correct regardless of listener registration order between the two
+  // inline scripts.
   function initNotifications() {
-    var bell = document.getElementById('notifBell');
-    var dropdown = document.getElementById('notifDropdown');
-    var badge = document.getElementById('notifBadge');
+    var group = document.getElementById('notifGroup');
+    var dot = document.getElementById('notifDot');
     var list = document.getElementById('notifList');
     var markAllBtn = document.getElementById('notifMarkAll');
-    if (!bell) return;
+    if (!group || !list) return;
 
-    // Toggle dropdown
-    bell.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var isOpen = dropdown.classList.contains('is-open');
-      dropdown.classList.toggle('is-open');
-      if (!isOpen) loadNotifications();
-    });
+    var loadedOnce = false;
 
-    // Close on outside click
-    document.addEventListener('click', function (e) {
-      if (!e.target.closest('.notif-wrap')) {
-        dropdown.classList.remove('is-open');
-      }
-    });
-
-    // Mark all read
-    markAllBtn.addEventListener('click', async function () {
-      try {
-        await fetch('/api/notifications/read-all', { method: 'POST', credentials: 'same-origin' });
-        document.querySelectorAll('.notif-item.is-unread').forEach(function (el) {
-          el.classList.remove('is-unread');
-          var dot = el.querySelector('.notif-item-dot');
-          if (dot) dot.remove();
-        });
-        _updateBadge(0);
-        toast('All notifications marked as read');
-      } catch (e) { /* silent */ }
-    });
-
-    // Load notifications
+    // Load notifications (called each time the popover opens)
     async function loadNotifications() {
       try {
-        var res = await fetch('/api/notifications?limit=20', { credentials: 'same-origin' });
+        var res = await fetch('/api/notifications?limit=8', { credentials: 'same-origin' });
         if (!res.ok) return;
         var data = await res.json();
-        _updateBadge(data.unread_count);
-        _renderNotifications(data.notifications);
+        _updateDot(data.unread_count);
+        _renderNotifications(data.notifications || []);
+        loadedOnce = true;
       } catch (e) { /* silent */ }
     }
 
     function _renderNotifications(notifs) {
       if (!notifs || notifs.length === 0) {
-        list.innerHTML = '<div class="notif-empty">No notifications yet</div>';
+        list.innerHTML = '<div class="notif-empty">'
+          + '<div class="notif-empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted)"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>'
+          + '<p class="notif-empty-title">All caught up</p>'
+          + '<p class="notif-empty-sub">New alerts from Flux, automations and system events will appear here.</p>'
+          + '</div>';
         return;
       }
       var html = '';
@@ -254,66 +183,80 @@
         var n = notifs[i];
         var icon = _notifCategoryIcons[n.category] || _notifCategoryIcons.system;
         var cls = n.is_read ? '' : ' is-unread';
-        var dot = n.is_read ? '' : '<div class="notif-item-dot"></div>';
-        html += '<div class="notif-item' + cls + '" data-id="' + n.id + '"'
-             + (n.action_url ? ' data-url="' + _escHtml(n.action_url) + '"' : '') + '>'
+        var dotEl = n.is_read ? '' : '<div class="notif-item-dot"></div>';
+        html += '<' + (n.action_url ? 'a href="' + _escHtml(n.action_url) + '"' : 'div') + ' class="notif-item' + cls + '" data-id="' + n.id + '">'
              + '<div class="notif-item-icon is-' + n.severity + '">' + icon + '</div>'
              + '<div class="notif-item-body">'
-             + '<div class="notif-item-title">' + _escHtml(n.title) + '</div>'
-             + '<div class="notif-item-msg">' + _escHtml(n.message) + '</div>'
+             + '<div class="notif-item-title"><strong>' + _escHtml(n.title) + '</strong> — ' + _escHtml(n.message) + '</div>'
              + '<div class="notif-item-time">' + Fluxito.timeAgo(n.created_at) + '</div>'
-             + '</div>' + dot + '</div>';
+             + '</div>' + dotEl + '</' + (n.action_url ? 'a' : 'div') + '>';
       }
       list.innerHTML = html;
 
-      // Click handlers for individual notifications
-      list.querySelectorAll('.notif-item').forEach(function (el) {
-        el.addEventListener('click', async function () {
+      // Mark-as-read on click (fire-and-forget; navigation via the anchor's
+      // own href happens natively, no need to intercept it).
+      list.querySelectorAll('.notif-item.is-unread').forEach(function (el) {
+        el.addEventListener('click', function () {
           var id = el.getAttribute('data-id');
-          var url = el.getAttribute('data-url');
-          if (el.classList.contains('is-unread')) {
-            el.classList.remove('is-unread');
-            var d = el.querySelector('.notif-item-dot');
-            if (d) d.remove();
-            try {
-              await fetch('/api/notifications/' + id + '/read', { method: 'POST', credentials: 'same-origin' });
-              var cur = parseInt(badge.textContent) || 0;
-              _updateBadge(Math.max(0, cur - 1));
-            } catch (e) { /* silent */ }
-          }
-          if (url) window.location.href = url;
-        });
+          el.classList.remove('is-unread');
+          var d = el.querySelector('.notif-item-dot');
+          if (d) d.remove();
+          fetch('/api/notifications/' + id + '/read', { method: 'POST', credentials: 'same-origin' }).catch(function () {});
+          _refreshDotFromDom();
+        }, { once: true });
       });
     }
 
-    function _updateBadge(count) {
-      if (count > 0) {
-        badge.textContent = count > 99 ? '99+' : count;
-        badge.style.display = '';
-      } else {
-        badge.style.display = 'none';
-      }
+    function _refreshDotFromDom() {
+      var remaining = list.querySelectorAll('.notif-item.is-unread').length;
+      _updateDot(remaining);
     }
 
-    // Initial count check
+    function _updateDot(count) {
+      if (!dot) return;
+      dot.style.display = count > 0 ? '' : 'none';
+    }
+
+    if (markAllBtn) {
+      markAllBtn.addEventListener('click', async function () {
+        try {
+          await fetch('/api/notifications/read-all', { method: 'POST', credentials: 'same-origin' });
+          list.querySelectorAll('.notif-item.is-unread').forEach(function (el) {
+            el.classList.remove('is-unread');
+            var d = el.querySelector('.notif-item-dot');
+            if (d) d.remove();
+          });
+          _updateDot(0);
+          toast('All notifications marked as read');
+        } catch (e) { /* silent */ }
+      });
+    }
+
+    // Reload every time the popover is opened (cheap — limit=8)
+    var mo = new MutationObserver(function () {
+      if (group.classList.contains('is-open')) loadNotifications();
+    });
+    mo.observe(group, { attributes: true, attributeFilter: ['class'] });
+
+    // Initial unread-count check (dot only, no fetch of full list)
     (async function () {
       try {
         var res = await fetch('/api/notifications/count', { credentials: 'same-origin' });
         if (res.ok) {
           var data = await res.json();
-          _updateBadge(data.unread_count);
+          _updateDot(data.unread_count);
         }
       } catch (e) { /* silent */ }
     })();
 
-    // Poll for new notifications every 60s
+    // Poll for new notifications every 60s (dot only; full list reloads on open)
     setInterval(async function () {
       if (document.hidden) return;
       try {
         var res = await fetch('/api/notifications/count', { credentials: 'same-origin' });
         if (res.ok) {
           var data = await res.json();
-          _updateBadge(data.unread_count);
+          _updateDot(data.unread_count);
         }
       } catch (e) { /* silent */ }
     }, 60000);
@@ -340,25 +283,11 @@
     });
   }
 
-  // ---------- Theme toggle button (in user dropdown) ----------
-  function initThemeToggle() {
-    const btn = document.getElementById('themeMenuToggle');
-    if (!btn) return;
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      cycleThemeMode();
-    });
-  }
-
   // ---------- init ----------
   function init() {
     initNav();
     initNotifications();
     initAvatarDropdown();
-    initThemeToggle();
-    // Sync the UI now in case the menu was rendered after applyTheme() ran.
-    syncThemeUi(getThemeMode());
   }
 
   if (document.readyState === 'loading') {
@@ -377,9 +306,23 @@
   // In collapsed mode the labels are hidden; expose them as native tooltips.
   function syncTitles() {
     document.querySelectorAll('.sidebar-item').forEach(function (el) {
-      var t = (el.textContent || '').trim();
+      // Exclude badge counters (e.g. "Flux's tasks" + task count) from the
+      // label text so the tooltip/collapsed-mode title stays a clean label
+      // instead of "Label\n  5".
+      var badge = el.querySelector('.sidebar-badge');
+      var t;
+      if (badge) {
+        var clone = el.cloneNode(true);
+        var badgeClone = clone.querySelector('.sidebar-badge');
+        if (badgeClone) badgeClone.remove();
+        t = (clone.textContent || '').trim();
+      } else {
+        t = (el.textContent || '').trim();
+      }
+      t = t.replace(/\s+/g, ' ');
       if (!t) return;
-      if (!el.getAttribute('title')) el.setAttribute('title', t);
+      // data-label feeds the collapsed-rail CSS tooltip only — no `title`
+      // attribute, so the expanded sidebar doesn't grow stray native tooltips.
       if (!el.getAttribute('data-label')) el.setAttribute('data-label', t);
     });
   }
@@ -395,5 +338,23 @@
     var collapsed = root.classList.toggle('sidebar-collapsed');
     try { localStorage.setItem('fx-sidebar-collapsed', collapsed ? '1' : '0'); } catch (e) {}
     label(collapsed);
+  });
+})();
+
+/* ── Global ⌘K / Ctrl+K: focus this page's Flux composer, or jump to
+   Conversations if the current page has none ───────────────────────── */
+(function () {
+  document.addEventListener('keydown', function (e) {
+    var isCmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k';
+    if (!isCmdK) return;
+    var composer = document.querySelector('[data-flux-composer]');
+    if (composer) {
+      e.preventDefault();
+      composer.focus();
+      if (typeof composer.select === 'function') composer.select();
+    } else {
+      e.preventDefault();
+      window.location.href = '/ask';
+    }
   });
 })();

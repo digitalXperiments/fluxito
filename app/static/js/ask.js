@@ -1,9 +1,17 @@
 // app/static/js/ask.js
+//
+// Full-page /ask mount. The chat mechanics (SSE transport, message rendering,
+// draft cards, conversation load/append) now live in the reusable FluxChat core
+// (flux/core.js). This file is a thin page shell: it gathers the page's element
+// IDs, hands them to FluxChat.create, and keeps the page-only surfaces — the
+// history rail, the usage panel, the thread header, and the sidebar list — in
+// sync through the core's callbacks.
 (function () {
   "use strict";
 
+  if (!window.FluxChat) return; // core failed to load
+
   var messagesEl = document.getElementById("ask-messages");
-  var messagesInner = null; // set after first use — lives inside ask-messages
   var emptyEl = document.getElementById("ask-empty");
   var setupHint = document.getElementById("ask-setup-hint");
   var form = document.getElementById("ask-composer");
@@ -11,6 +19,12 @@
   var sendBtn = document.getElementById("ask-send");
   var convListEl = document.getElementById("ask-conv-list");
   var newBtn = document.getElementById("ask-new");
+
+  // Thread header (title + mono eyebrow + status pill)
+  var threadHeaderEl = document.getElementById("ask-thread-header");
+  var threadTitleEl = document.getElementById("ask-thread-title");
+  var threadEyebrowEl = document.getElementById("ask-thread-eyebrow");
+  var threadStatusEl = document.getElementById("ask-thread-status");
 
   // Usage rail elements
   var usageEl = document.getElementById("ask-usage");
@@ -25,15 +39,17 @@
   var railModelsSection = document.getElementById("rail-models-section");
   var railModelsList = document.getElementById("rail-models-list");
 
-  var conversationId = null;
+  function el(tag, cls, text) {
+    return window.FluxChat.el(tag, cls, text);
+  }
 
   // ── Per-conversation usage state ──────────────────────────────────────────
   // modelBuckets: { "<provider> · <model>": { input: n, output: n } }
-  // currentTurnKey: the model key for the in-flight turn (set from "conversation" frame)
+  // currentTurnKey: the model key for the in-flight turn (set from "conversation")
   var usageState = {
-    currentTurnKey: null,  // "<provider> · <model>" for the live turn
-    modelBuckets: {},      // per-model token totals
-    toolCounts: {},        // { tool_name: count }
+    currentTurnKey: null,
+    modelBuckets: {},
+    toolCounts: {},
   };
 
   function resetUsageState() {
@@ -44,7 +60,7 @@
 
   function _modelKey(provider, model) {
     if (!model) return null;
-    return provider ? (provider + " · " + model) : model;
+    return provider ? provider + " · " + model : model;
   }
 
   // ── Pricing map (USD per 1M tokens, input/output) ── labeled as estimated
@@ -57,7 +73,6 @@
   };
 
   function _modelOnly(key) {
-    // Extract just the model part from "<provider> · <model>" for pricing lookup
     if (!key) return null;
     var parts = key.split(" · ");
     return parts[parts.length - 1];
@@ -84,8 +99,8 @@
 
   function renderRail() {
     try {
-      // Grand total tokens across all models
-      var totalIn = 0, totalOut = 0;
+      var totalIn = 0,
+        totalOut = 0;
       Object.values(usageState.modelBuckets).forEach(function (b) {
         totalIn += b.input;
         totalOut += b.output;
@@ -96,7 +111,6 @@
       if (railTokOut) railTokOut.textContent = grandTotal > 0 ? fmtNum(totalOut) : "—";
       if (railTokTotal) railTokTotal.textContent = grandTotal > 0 ? fmtNum(grandTotal) : "—";
 
-      // Grand total estimated cost (sum known models; note partial if any unknown)
       var totalCost = 0;
       var hasUnknown = false;
       Object.keys(usageState.modelBuckets).forEach(function (key) {
@@ -118,7 +132,6 @@
         }
       }
 
-      // Tool calls
       var totalTools = Object.values(usageState.toolCounts).reduce(function (a, b) {
         return a + b;
       }, 0);
@@ -130,13 +143,9 @@
         if (names.length > 0) {
           railToolNames.innerHTML = "";
           names.forEach(function (name) {
-            var row = document.createElement("div");
-            row.className = "ask-tool-name-row";
-            var nameSpan = document.createElement("span");
-            nameSpan.textContent = name;
-            var countSpan = document.createElement("span");
-            countSpan.className = "ask-tool-name-count";
-            countSpan.textContent = "×" + usageState.toolCounts[name];
+            var row = el("div", "ask-tool-name-row");
+            var nameSpan = el("span", null, name);
+            var countSpan = el("span", "ask-tool-name-count", "×" + usageState.toolCounts[name]);
             row.appendChild(nameSpan);
             row.appendChild(countSpan);
             railToolNames.appendChild(row);
@@ -148,7 +157,6 @@
         }
       }
 
-      // Per-model breakdown
       var keys = Object.keys(usageState.modelBuckets);
       if (railModelsSection) {
         if (keys.length > 0) {
@@ -158,23 +166,17 @@
             keys.forEach(function (key) {
               var b = usageState.modelBuckets[key];
               var bTotal = b.input + b.output;
-              var card = document.createElement("div");
-              card.className = "ask-model-card";
+              var card = el("div", "ask-model-card");
 
-              var nameDiv = document.createElement("div");
-              nameDiv.className = "ask-model-card-name";
-              nameDiv.textContent = key;
+              var nameDiv = el("div", "ask-model-card-name", key);
               card.appendChild(nameDiv);
 
-              var tbl = document.createElement("table");
-              tbl.className = "ask-usage-table";
+              var tbl = el("table", "ask-usage-table");
 
               function mkRow(label, val) {
                 var tr = document.createElement("tr");
-                var td1 = document.createElement("td");
-                td1.textContent = label;
-                var td2 = document.createElement("td");
-                td2.textContent = val;
+                var td1 = el("td", null, label);
+                var td2 = el("td", null, val);
                 tr.appendChild(td1);
                 tr.appendChild(td2);
                 return tr;
@@ -196,7 +198,7 @@
         }
       }
     } catch (e) {
-      // Never crash the stream
+      // Never crash
     }
   }
 
@@ -207,10 +209,8 @@
     if (!usageState.modelBuckets[key]) {
       usageState.modelBuckets[key] = { input: 0, output: 0 };
     }
-    usageState.modelBuckets[key].input +=
-      (usageObj.input_tokens || usageObj.prompt_tokens || 0);
-    usageState.modelBuckets[key].output +=
-      (usageObj.output_tokens || usageObj.completion_tokens || 0);
+    usageState.modelBuckets[key].input += usageObj.input_tokens || usageObj.prompt_tokens || 0;
+    usageState.modelBuckets[key].output += usageObj.output_tokens || usageObj.completion_tokens || 0;
     renderRail();
   }
 
@@ -232,358 +232,101 @@
     if (usageOpen) usageOpen.hidden = false;
   }
 
-  if (usageToggle) {
-    usageToggle.addEventListener("click", hideRail);
-  }
-  if (usageOpen) {
-    usageOpen.addEventListener("click", showRail);
-  }
+  if (usageToggle) usageToggle.addEventListener("click", hideRail);
+  if (usageOpen) usageOpen.addEventListener("click", showRail);
 
-  // ── CSRF ──────────────────────────────────────────────────────────────────
+  // ── Thread header (title + mono eyebrow + status pill) ───────────────────
 
-  function csrfToken() {
-    var m = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
-    return m ? decodeURIComponent(m[1]) : "";
+  function statusLabelForDraftStatus(status) {
+    if (status === "published") return "PUBLISHED";
+    if (status === "rejected") return "DRAFT KEPT";
+    return "AWAITING APPROVAL";
   }
 
-  // ── DOM helpers ───────────────────────────────────────────────────────────
-
-  function el(tag, cls, text) {
-    var e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text != null) e.textContent = text;
-    return e;
+  function setThreadStatusFromDraft(status) {
+    if (!threadStatusEl) return;
+    threadStatusEl.hidden = false;
+    threadStatusEl.textContent = statusLabelForDraftStatus(status);
   }
 
-  function scrollBottom() {
-    if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
-
-  function getOrCreateInner() {
-    if (!messagesInner) {
-      messagesInner = messagesEl.querySelector(".ask-messages-inner");
+  function updateThreadHeader(opts) {
+    opts = opts || {};
+    if (!threadHeaderEl) return;
+    if (!opts.title) {
+      threadHeaderEl.hidden = true;
+      return;
     }
-    return messagesInner;
-  }
-
-  // ── Markdown renderer (self-contained, XSS-safe) ─────────────────────────
-
-  function escHtml(s) {
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
-  function renderMarkdown(src) {
-    try {
-      return _renderMarkdown(src);
-    } catch (e) {
-      return "<pre>" + escHtml(src) + "</pre>";
+    threadHeaderEl.hidden = false;
+    if (threadTitleEl) threadTitleEl.textContent = opts.title;
+    if (threadEyebrowEl) {
+      var eyebrow =
+        opts.provider || opts.model
+          ? ((opts.provider || "") + (opts.provider && opts.model ? " · " : "") + (opts.model || "")).toUpperCase()
+          : "";
+      threadEyebrowEl.textContent = eyebrow;
+      threadEyebrowEl.hidden = !eyebrow;
     }
-  }
-
-  function _renderMarkdown(src) {
-    var lines = src.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-    var out = [];
-    var i = 0;
-    var n = lines.length;
-    var paraLines = [];
-
-    function flushPara() {
-      if (!paraLines.length) return;
-      var text = paraLines.join("\n");
-      out.push("<p>" + inlineMarkdown(text) + "</p>");
-      paraLines = [];
+    if (threadStatusEl) {
+      var drafts = opts.drafts || [];
+      var latestDraft = drafts.length ? drafts[drafts.length - 1] : null;
+      if (latestDraft) {
+        setThreadStatusFromDraft(latestDraft.status);
+      } else {
+        threadStatusEl.hidden = true;
+      }
     }
-
-    while (i < n) {
-      var line = lines[i];
-
-      var fenceMatch = line.match(/^(`{3,}|~{3,})(.*)/);
-      if (fenceMatch) {
-        flushPara();
-        var fence = fenceMatch[1];
-        var lang = escHtml((fenceMatch[2] || "").trim());
-        var codeLines = [];
-        i++;
-        while (i < n && lines[i].indexOf(fence) !== 0) {
-          codeLines.push(escHtml(lines[i]));
-          i++;
-        }
-        i++;
-        var langAttr = lang ? ' class="language-' + lang + '"' : "";
-        out.push("<pre><code" + langAttr + ">" + codeLines.join("\n") + "</code></pre>");
-        continue;
-      }
-
-      var hMatch = line.match(/^(#{1,6})\s+(.*)/);
-      if (hMatch) {
-        flushPara();
-        var level = hMatch[1].length;
-        out.push("<h" + level + ">" + inlineMarkdown(hMatch[2].trim()) + "</h" + level + ">");
-        i++;
-        continue;
-      }
-
-      if (line.match(/^>\s?/)) {
-        flushPara();
-        var bqLines = [];
-        while (i < n && lines[i].match(/^>\s?/)) {
-          bqLines.push(lines[i].replace(/^>\s?/, ""));
-          i++;
-        }
-        out.push("<blockquote>" + _renderMarkdown(bqLines.join("\n")) + "</blockquote>");
-        continue;
-      }
-
-      if (line.match(/^[-*]\s+/)) {
-        flushPara();
-        var ulItems = [];
-        while (i < n && lines[i].match(/^[-*]\s+/)) {
-          ulItems.push("<li>" + inlineMarkdown(lines[i].replace(/^[-*]\s+/, "")) + "</li>");
-          i++;
-        }
-        out.push("<ul>" + ulItems.join("") + "</ul>");
-        continue;
-      }
-
-      if (line.match(/^\d+\.\s+/)) {
-        flushPara();
-        var olItems = [];
-        while (i < n && lines[i].match(/^\d+\.\s+/)) {
-          olItems.push("<li>" + inlineMarkdown(lines[i].replace(/^\d+\.\s+/, "")) + "</li>");
-          i++;
-        }
-        out.push("<ol>" + olItems.join("") + "</ol>");
-        continue;
-      }
-
-      if (line.indexOf("|") !== -1 && i + 1 < n && lines[i + 1].match(/^\|?[\s\-|:]+\|/)) {
-        flushPara();
-        var tblRows = [];
-        tblRows.push(parseTableRow(line, true));
-        i += 2;
-        while (i < n && lines[i].indexOf("|") !== -1) {
-          tblRows.push(parseTableRow(lines[i], false));
-          i++;
-        }
-        out.push('<div class="ask-table-wrap"><table>' + tblRows.join("") + "</table></div>");
-        continue;
-      }
-
-      if (line.trim() === "") {
-        flushPara();
-        i++;
-        continue;
-      }
-
-      paraLines.push(line);
-      i++;
-    }
-
-    flushPara();
-    return out.join("\n");
-  }
-
-  function parseTableRow(line, isHeader) {
-    var stripped = line.replace(/^\|/, "").replace(/\|$/, "");
-    var cells = stripped.split("|");
-    var tag = isHeader ? "th" : "td";
-    var cellsHtml = cells
-      .map(function (c) {
-        return "<" + tag + ">" + inlineMarkdown(c.trim()) + "</" + tag + ">";
-      })
-      .join("");
-    return "<tr>" + cellsHtml + "</tr>";
-  }
-
-  function inlineMarkdown(s) {
-    s = escHtml(s);
-    s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
-    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
-    s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
-    s = s.replace(/_([^_\n]+)_/g, "<em>$1</em>");
-    s = s.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]*)\)/g, function (_, text, href) {
-      return '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + text + "</a>";
-    });
-    s = s.replace(/  \n/g, "<br>");
-    return s;
   }
 
   // ── Conversation sidebar ──────────────────────────────────────────────────
+
+  function relativeTime(iso) {
+    if (!iso) return "";
+    try {
+      var then = new Date(iso).getTime();
+      if (isNaN(then)) return "";
+      var mins = Math.round((Date.now() - then) / 60000);
+      if (mins < 1) return "just now";
+      if (mins < 60) return mins + "m ago";
+      var hrs = Math.round(mins / 60);
+      if (hrs < 24) return hrs + "h ago";
+      var days = Math.round(hrs / 24);
+      if (days < 7) return days + "d ago";
+      return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function makeConvItem(id, title, subtitle) {
+    var li = el("li", "ask-conv-item");
+    li.dataset.convId = id;
+    li.appendChild(el("div", "ask-conv-item-title", title));
+    if (subtitle) li.appendChild(el("div", "ask-conv-item-sub", subtitle));
+    li.addEventListener("click", function () {
+      chat.openConversation(id);
+    });
+    return li;
+  }
 
   function loadConversations() {
     fetch("/api/ask/conversations").then(function (r) {
       if (!r.ok) return;
       r.json().then(function (data) {
+        if (!convListEl) return;
         convListEl.innerHTML = "";
         (data.conversations || []).forEach(function (c) {
-          var li = el("li", "ask-conv-item", c.title);
-          li.dataset.convId = c.id;
-          li.addEventListener("click", function () {
-            openConversation(c.id);
-          });
-          convListEl.appendChild(li);
+          convListEl.appendChild(makeConvItem(c.id, c.title, relativeTime(c.last_message_at)));
         });
+        markActiveConv(chat.getConversationId());
       });
     });
   }
 
   function markActiveConv(id) {
+    if (!convListEl) return;
     var items = convListEl.querySelectorAll(".ask-conv-item");
     items.forEach(function (li) {
       li.classList.toggle("is-active", li.dataset.convId === String(id));
-    });
-  }
-
-  // ── Message helpers ───────────────────────────────────────────────────────
-
-  function ensureInner() {
-    var inner = getOrCreateInner();
-    if (!inner) {
-      // Shouldn't happen since HTML has it, but be safe
-      inner = el("div", "ask-messages-inner");
-      messagesEl.appendChild(inner);
-      messagesInner = inner;
-    }
-    return inner;
-  }
-
-  function addMessage(role) {
-    if (emptyEl) emptyEl.hidden = true;
-    var inner = ensureInner();
-    var wrap = el("div", "ask-msg ask-msg-" + role);
-    var body = el("div", "ask-msg-body");
-    wrap.appendChild(body);
-    inner.appendChild(wrap);
-    scrollBottom();
-    return body;
-  }
-
-  // ── Tool chip factory (inline, pill style) ────────────────────────────────
-
-  function makeToolChip(name, done) {
-    var chip = el("div", "ask-tool-chip" + (done ? " is-done" : ""));
-    if (!done) {
-      var dot = el("span", "ask-tool-dot");
-      chip.appendChild(dot);
-    }
-    var label = el("span", "", done ? "✓ " + name : "● " + name);
-    chip.appendChild(label);
-    return chip;
-  }
-
-  // ── Collapse chips into a summary line on turn completion ─────────────────
-
-  function collapseChipsToSummary(chipsRow, toolNames) {
-    if (!chipsRow || !toolNames || toolNames.length === 0) return;
-
-    // Build summary counts
-    var counts = {};
-    toolNames.forEach(function (name) {
-      counts[name] = (counts[name] || 0) + 1;
-    });
-    var total = toolNames.length;
-
-    // Replace chips row content with summary toggle
-    chipsRow.innerHTML = "";
-    chipsRow.classList.remove("ask-chips-row");
-    chipsRow.className = "ask-tools-summary";
-
-    var icon = el("span", "", "🔧");
-    var label = el("span", "", total + " tool call" + (total !== 1 ? "s" : ""));
-    var caret = el("span", "ask-tools-summary-caret", "⌄");
-
-    chipsRow.appendChild(icon);
-    chipsRow.appendChild(label);
-    chipsRow.appendChild(caret);
-
-    // Build detail row (hidden by default)
-    var detail = el("div", "ask-tools-detail");
-    detail.hidden = true;
-    Object.keys(counts).forEach(function (name) {
-      var chip = el("div", "ask-tool-chip-summary", "✓ " + name + (counts[name] > 1 ? " ×" + counts[name] : ""));
-      detail.appendChild(chip);
-    });
-
-    // Insert detail after summary
-    chipsRow.parentNode.insertBefore(detail, chipsRow.nextSibling);
-
-    // Toggle expand/collapse
-    chipsRow.addEventListener("click", function () {
-      var open = !detail.hidden;
-      detail.hidden = open;
-      chipsRow.classList.toggle("is-open", !open);
-    });
-  }
-
-  // ── Open persisted conversation ───────────────────────────────────────────
-
-  function openConversation(id) {
-    fetch("/api/ask/conversations/" + id).then(function (r) {
-      if (!r.ok) return;
-      r.json().then(function (data) {
-        conversationId = id;
-        var inner = ensureInner();
-        inner.innerHTML = "";
-
-        // Re-attach empty state (hidden)
-        if (emptyEl) {
-          inner.appendChild(emptyEl);
-          emptyEl.hidden = true;
-        }
-
-        markActiveConv(id);
-
-        // Reset and rebuild usage state from persisted data
-        resetUsageState();
-
-        (data.messages || []).forEach(function (m) {
-          if (m.role === "tool") return;
-
-          // Accumulate token usage from persisted assistant messages — grouped
-          // by the model/provider stored alongside the usage in the DB.
-          if (m.role === "assistant" && m.token_usage) {
-            var u = m.token_usage;
-            // Prefer the model/provider annotated on the stored usage; fall
-            // back to the conversation-level model if the row predates Fix 3.
-            var msgModel = u.model || data.model || null;
-            var msgProvider = u.provider || data.provider || null;
-            var key = _modelKey(msgProvider, msgModel);
-            if (key) {
-              addUsageFromTokens(u, key);
-            }
-          }
-
-          var body = addMessage(m.role === "assistant" ? "assistant" : "user");
-          // Render blocks in order, keeping tool-call chips inline (consecutive
-          // tool calls group into one chips row) — mirrors the live stream.
-          var openChips = null;
-          (m.content || []).forEach(function (b) {
-            if (b.type === "text") {
-              openChips = null;
-              var mdDiv = el("div", "ask-md");
-              mdDiv.innerHTML = renderMarkdown(b.text || "");
-              body.appendChild(mdDiv);
-            } else if (b.type === "tool_use") {
-              addToolToUsage(b.name || "tool");
-              if (!openChips) {
-                openChips = el("div", "ask-chips-row");
-                body.appendChild(openChips);
-              }
-              openChips.appendChild(makeToolChip(b.name || "tool", true));
-            }
-          });
-        });
-
-        renderRail();
-        showRail();
-        scrollBottom();
-      });
     });
   }
 
@@ -599,251 +342,120 @@
     });
   }
 
+  // ── FluxChat core wiring ──────────────────────────────────────────────────
+
+  var chat = window.FluxChat.create({
+    elements: {
+      messages: messagesEl,
+      empty: emptyEl,
+      input: input,
+      form: form,
+      sendBtn: sendBtn,
+    },
+    options: {
+      placeholders: { fresh: "Ask Flux…", reply: "Reply to Flux…" },
+
+      onStreamEnd: function () {
+        loadConversations();
+      },
+
+      onToolCall: function (name) {
+        addToolToUsage(name);
+      },
+
+      onUsage: function (usageObj, meta) {
+        addUsageFromTokens(usageObj, meta ? _modelKey(meta.provider, meta.model) : null);
+      },
+
+      onDraftStatus: function (status) {
+        setThreadStatusFromDraft(status);
+      },
+
+      // Live "conversation" frame — every turn reports its model; new
+      // conversations additionally carry a title.
+      onConversation: function (info) {
+        markActiveConv(info.conversationId);
+        if (info.model) {
+          usageState.currentTurnKey = _modelKey(info.provider, info.model);
+        }
+        renderRail();
+        showRail();
+
+        if (info.isNew) {
+          updateThreadHeader({ title: info.title, provider: info.provider, model: info.model, drafts: [] });
+          if (convListEl) {
+            var existing = convListEl.querySelector('[data-conv-id="' + info.conversationId + '"]');
+            if (!existing) {
+              var li = makeConvItem(info.conversationId, info.title, "just now");
+              li.classList.add("is-active");
+              convListEl.insertBefore(li, convListEl.firstChild);
+            } else {
+              var existingTitle = existing.querySelector(".ask-conv-item-title");
+              if (existingTitle) existingTitle.textContent = info.title;
+              existing.classList.add("is-active");
+            }
+          }
+        }
+      },
+
+      // Persisted conversation opened — reset the rail, then per-message
+      // onUsage/onToolCall callbacks rebuild it during render.
+      onConversationLoaded: function (data, id) {
+        markActiveConv(id);
+        updateThreadHeader({
+          title: data.title,
+          provider: data.provider,
+          model: data.model,
+          drafts: data.drafts,
+        });
+        resetUsageState();
+      },
+
+      onConversationRendered: function () {
+        renderRail();
+        showRail();
+      },
+
+      onReset: function () {
+        markActiveConv(null);
+        updateThreadHeader({});
+        resetUsageState();
+        renderRail();
+        // Don't hide the rail on new chat — just show empty state
+      },
+    },
+  });
+
   // ── New chat button ───────────────────────────────────────────────────────
 
   if (newBtn) {
     newBtn.addEventListener("click", function () {
-      conversationId = null;
-      var inner = ensureInner();
-      inner.innerHTML = "";
-      if (emptyEl) {
-        inner.appendChild(emptyEl);
-        emptyEl.hidden = false;
-      }
-      markActiveConv(null);
-      resetUsageState();
-      renderRail();
-      // Don't hide the rail on new chat — just show empty state
-    });
-  }
-
-  // ── Auto-grow textarea ────────────────────────────────────────────────────
-
-  if (input) {
-    input.addEventListener("input", function () {
-      input.style.height = "auto";
-      var capped = Math.min(input.scrollHeight, 200);
-      input.style.height = capped + "px";
-    });
-  }
-
-  // ── Send / stream ─────────────────────────────────────────────────────────
-
-  if (form) {
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var text = input.value.trim();
-      if (!text) return;
-      input.value = "";
-      input.style.height = "auto";
-      sendBtn.disabled = true;
-
-      // Render user message
-      var userBody = addMessage("user");
-      var userMd = el("div", "ask-md");
-      userMd.innerHTML = renderMarkdown(text);
-      userBody.appendChild(userMd);
-
-      // Prepare assistant turn container
-      var assistantBody = addMessage("assistant");
-      var thinkingEl = el("div", "ask-thinking");
-      for (var di = 0; di < 3; di++) {
-        thinkingEl.appendChild(el("span", "ask-thinking-dot"));
-      }
-      assistantBody.appendChild(thinkingEl);
-
-      // Streaming state per turn
-      var currentTextEl = null;
-      var currentTextSrc = "";
-      var chipMap = {};     // tool_id → chip DOM element
-      var chipsRow = null;  // single .ask-chips-row for this turn
-      var turnToolNames = []; // ordered list for collapse
-
-      fetch("/api/ask/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken(),
-        },
-        body: JSON.stringify({ message: text, conversation_id: conversationId }),
-      })
-        .then(function (resp) {
-          if (!resp.ok) {
-            resp
-              .json()
-              .catch(function () {
-                return {};
-              })
-              .then(function (j) {
-                if (thinkingEl && thinkingEl.parentNode) {
-                  thinkingEl.remove();
-                  thinkingEl = null;
-                }
-                var errDiv = el("div", "ask-error", j.message || "Error: " + resp.status);
-                assistantBody.appendChild(errDiv);
-                if (j.error === "no_key") window.location.href = "/settings?tab=ai";
-                sendBtn.disabled = false;
-              });
-            return;
-          }
-
-          var reader = resp.body.getReader();
-          var decoder = new TextDecoder();
-          var buf = "";
-
-          function pump() {
-            reader
-              .read()
-              .then(function (result) {
-                if (result.done) {
-                  removeThinking();
-                  sendBtn.disabled = false;
-                  loadConversations();
-                  return;
-                }
-                buf += decoder.decode(result.value, { stream: true });
-                var idx;
-                while ((idx = buf.indexOf("\n\n")) >= 0) {
-                  var frame = buf.slice(0, idx);
-                  buf = buf.slice(idx + 2);
-                  var lines = frame.split("\n");
-                  var dataLine = null;
-                  for (var i = 0; i < lines.length; i++) {
-                    if (lines[i].indexOf("data:") === 0) {
-                      dataLine = lines[i];
-                      break;
-                    }
-                  }
-                  if (!dataLine) continue;
-                  var payload;
-                  try {
-                    payload = JSON.parse(dataLine.slice(5).trim());
-                  } catch (err) {
-                    continue;
-                  }
-                  handleEvent(payload);
-                }
-                pump();
-              })
-              .catch(function () {
-                sendBtn.disabled = false;
-              });
-          }
-          pump();
-        })
-        .catch(function () {
-          removeThinking();
-          var errDiv = el("div", "ask-error", "Network error.");
-          assistantBody.appendChild(errDiv);
-          sendBtn.disabled = false;
-        });
-
-      // ── Thinking indicator ────────────────────────────────────────────────
-
-      var thinkingRemoved = false;
-      function removeThinking() {
-        if (thinkingRemoved) return;
-        thinkingRemoved = true;
-        if (thinkingEl && thinkingEl.parentNode) {
-          thinkingEl.remove();
-          thinkingEl = null;
-        }
-      }
-
-      // ── SSE event handler ─────────────────────────────────────────────────
-
-      function handleEvent(p) {
-        try {
-          if (p.type === "conversation") {
-            conversationId = p.conversation_id;
-            markActiveConv(conversationId);
-
-            // Record which model/provider this turn uses so message_done
-            // can credit the right bucket.
-            if (p.model) {
-              usageState.currentTurnKey = _modelKey(p.provider || null, p.model);
-            }
-            renderRail();
-            showRail();
-
-            // New conversations: prepend to sidebar
-            if (p.title) {
-              var existing = convListEl.querySelector('[data-conv-id="' + conversationId + '"]');
-              if (!existing) {
-                var li = el("li", "ask-conv-item is-active", p.title);
-                li.dataset.convId = conversationId;
-                li.addEventListener("click", function () {
-                  openConversation(conversationId);
-                });
-                convListEl.insertBefore(li, convListEl.firstChild);
-              } else {
-                existing.textContent = p.title;
-                existing.classList.add("is-active");
-              }
-            }
-          } else if (p.type === "text_delta") {
-            removeThinking();
-            // Seal any open chips row so text and chips don't interleave visually
-            if (!currentTextEl) {
-              currentTextEl = el("div", "ask-md");
-              currentTextSrc = "";
-              assistantBody.appendChild(currentTextEl);
-            }
-            currentTextSrc += p.text || "";
-            currentTextEl.innerHTML = renderMarkdown(currentTextSrc);
-          } else if (p.type === "tool_call_start") {
-            removeThinking();
-            // Start a new text block after tool chips
-            currentTextEl = null;
-            currentTextSrc = "";
-
-            // Lazily create chips row for this turn
-            if (!chipsRow) {
-              chipsRow = el("div", "ask-chips-row");
-              assistantBody.appendChild(chipsRow);
-            }
-
-            var chip = makeToolChip(p.tool_name || "tool", false);
-            chipMap[p.tool_id] = chip;
-            chipsRow.appendChild(chip);
-
-            // Track for rail + collapse
-            turnToolNames.push(p.tool_name || "tool");
-            addToolToUsage(p.tool_name || "tool");
-          } else if (p.type === "tool_call_end") {
-            var doneChip = chipMap[p.tool_id];
-            if (doneChip) {
-              doneChip.classList.add("is-done");
-              var dotEl = doneChip.querySelector(".ask-tool-dot");
-              if (dotEl) dotEl.remove();
-              var lblEl = doneChip.querySelector("span");
-              if (lblEl) {
-                // Extract name from "● name" → "✓ name"
-                var nameText = (lblEl.textContent || "").replace(/^[●✓]\s*/, "");
-                lblEl.textContent = "✓ " + nameText;
-              }
-            }
-          } else if (p.type === "message_done") {
-            // Keep the tool-call chips inline in the thread (they show the context
-            // of when each call was made). The right rail carries the aggregate.
-            // Accumulate token usage from the terminal message_done.
-            if (p.usage) {
-              addUsageFromTokens(p.usage);
-            }
-          } else if (p.type === "error") {
-            removeThinking();
-            var errDiv = el("div", "ask-error", p.error || "Something went wrong.");
-            assistantBody.appendChild(errDiv);
-          }
-        } catch (err) {
-          // Never crash the stream
-        }
-        scrollBottom();
-      }
+      chat.newChat();
     });
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
+
+  // Prefill from a Home composer / suggestion-chip handoff (?q=...). Prefill
+  // only — never auto-send — so the user reviews before it goes out.
+  (function prefillFromQuery() {
+    var q = new URLSearchParams(window.location.search).get("q");
+    if (q && input) {
+      input.value = q;
+      input.focus();
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  })();
+
+  // Deep-link into a specific conversation (the docked panel's "Expand" link
+  // points here: /ask?conversation={id}). Additive — nothing set this before.
+  (function openFromQuery() {
+    var convId = new URLSearchParams(window.location.search).get("conversation");
+    if (convId) {
+      chat.openConversation(convId);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  })();
 
   loadConversations();
   checkKeys();
