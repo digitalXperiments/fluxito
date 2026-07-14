@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from app.ask.providers.base import (
+    ContentBlock,
     LLMMessage,
     StopReason,
     StreamEvent,
@@ -17,7 +18,9 @@ from app.ask.providers.base import (
     ToolResultBlock,
     ToolSpec,
     ToolUseBlock,
+    messages_for_provider,
 )
+from app.ask.tools import VIRTUAL_TOOL_NAMES, dispatch_virtual_tool
 
 
 class _Provider(Protocol):
@@ -35,6 +38,9 @@ class _Provider(Protocol):
 
 
 class _Bridge(Protocol):
+    user_id: str
+    project_id: str
+
     def tool_specs(self) -> list[ToolSpec]: ...
 
     async def dispatch(self, name: str, params: dict[str, Any]) -> tuple[str, bool]: ...
@@ -125,7 +131,7 @@ class Harness:
             async for ev in d.provider.stream(
                 model=d.model,
                 system=d.system,
-                messages=messages,
+                messages=messages_for_provider(messages),
                 tools=tools,
                 max_tokens=d.max_tokens,
             ):
@@ -185,23 +191,54 @@ class Harness:
                     unattached_drafts.clear()
 
             if stop == StopReason.TOOL_USE and order:
-                # Execute all tool calls concurrently, preserving order.
-                parsed_args = [_safe_json(pending[tid].args) for tid in order]
-                results = await asyncio.gather(
-                    *[d.bridge.dispatch(pending[tid].name, parsed_args[i]) for i, tid in enumerate(order)]
-                )
+                # Ask-side virtual tools (propose_card, ask_choices) are intercepted here,
+                # before any MCP dispatch — they never reach d.bridge.dispatch.
+                real_tids = [tid for tid in order if pending[tid].name not in VIRTUAL_TOOL_NAMES]
+                virtual_tids = [tid for tid in order if pending[tid].name in VIRTUAL_TOOL_NAMES]
+
+                tool_results: dict[str, tuple[str, bool]] = {}
+
+                if real_tids:
+                    parsed_args = [_safe_json(pending[tid].args) for tid in real_tids]
+                    results = await asyncio.gather(
+                        *[
+                            d.bridge.dispatch(pending[tid].name, parsed_args[i])
+                            for i, tid in enumerate(real_tids)
+                        ]
+                    )
+                    for tid, (content, is_err) in zip(real_tids, results, strict=True):
+                        tool_results[tid] = (content, is_err)
+
+                display_blocks: list[ContentBlock] = []
+                for tid in virtual_tids:
+                    pt = pending[tid]
+                    vres = await dispatch_virtual_tool(
+                        user_id=d.bridge.user_id,
+                        project_id=d.bridge.project_id,
+                        name=pt.name,
+                        params=_safe_json(pt.args),
+                    )
+                    tool_results[tid] = (vres.content, vres.is_error)
+                    if vres.event is not None:
+                        yield vres.event
+                    if vres.block is not None:
+                        display_blocks.append(vres.block)
+
                 tool_blocks = [
-                    ToolResultBlock(tool_use_id=tid, content=content, is_error=is_err)
-                    for tid, (content, is_err) in zip(order, results, strict=True)
+                    ToolResultBlock(
+                        tool_use_id=tid, content=tool_results[tid][0], is_error=tool_results[tid][1]
+                    )
+                    for tid in order
                 ]
                 tool_msg = LLMMessage(role="tool", content=tool_blocks)
                 messages.append(tool_msg)
                 await d.service.append(d.conversation_id, tool_msg)
-
                 # Turn any successful GTM propose_change into a pending FluxDraft
                 # and stream a `draft` frame so the client renders the diff card.
-                if d.drafts is not None:
-                    for i, tid in enumerate(order):
+                # (Indexed over real_tids/results — GTM writes are never virtual
+                # tools, so this never needs to see the virtual-tool slice.)
+                if d.drafts is not None and real_tids:
+                    for i, tid in enumerate(real_tids):
                         content, is_err = results[i]
                         if is_err or pending[tid].name != "tagmanager_write":
                             continue
@@ -215,6 +252,14 @@ class Harness:
                             continue
                         unattached_drafts.append(draft.id)
                         yield StreamEvent(type="draft", draft=_draft_payload(draft))
+
+                if display_blocks:
+                    # Persisted as their own assistant-role message (existing
+                    # blocks_to_json path) so the UI can render/round-trip them
+                    # independently of the text/tool_use turn that requested them.
+                    display_msg = LLMMessage(role="assistant", content=display_blocks)
+                    messages.append(display_msg)
+                    await d.service.append(d.conversation_id, display_msg)
 
                 continue  # next iteration: feed results back to the model
 

@@ -138,6 +138,49 @@ class ConversationService:
                 for r in rows
             ]
 
+    async def find_block(self, conversation_id: uuid.UUID, block_id: str) -> dict | None:
+        """Scan a conversation's persisted messages for a content block by id.
+
+        Returns the raw JSONB block dict (e.g. a card_preview block), or None.
+        """
+        async with app_state.db_session_factory() as db:
+            rows = (
+                (await db.execute(select(ChatMessage).where(ChatMessage.conversation_id == conversation_id)))
+                .scalars()
+                .all()
+            )
+            for row in rows:
+                for block in row.content or []:
+                    if isinstance(block, dict) and block.get("id") == block_id:
+                        return block
+        return None
+
+    async def set_block_state(self, conversation_id: uuid.UUID, block_id: str, state: str) -> bool:
+        """Update a persisted content block's ``state`` field in place (e.g. card_preview's
+
+        proposed -> added/discarded), rewriting the owning ChatMessage row. Returns True if a
+        matching block was found and updated.
+        """
+        async with app_state.db_session_factory() as db:
+            rows = (
+                (await db.execute(select(ChatMessage).where(ChatMessage.conversation_id == conversation_id)))
+                .scalars()
+                .all()
+            )
+            for row in rows:
+                found = False
+                new_content: list[dict] = []
+                for block in row.content or []:
+                    if isinstance(block, dict) and block.get("id") == block_id:
+                        block = {**block, "state": state}
+                        found = True
+                    new_content.append(block)
+                if found:
+                    row.content = new_content
+                    await db.commit()
+                    return True
+        return False
+
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None:
         async with app_state.db_session_factory() as db:
             await db.execute(

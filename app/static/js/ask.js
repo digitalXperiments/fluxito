@@ -43,6 +43,93 @@
     return window.FluxChat.el(tag, cls, text);
   }
 
+  var renderMarkdown = window.FluxChat.renderMarkdown;
+  var csrfToken = window.FluxChat.csrfToken;
+
+  // Builder (chat-based dashboard builder) context banner
+  var builderBanner = document.getElementById("ask-builder-banner");
+  var builderBannerText = document.getElementById("ask-builder-banner-text");
+  var builderBannerClose = document.getElementById("ask-builder-banner-close");
+
+  // ── Builder context (?builder=1&dashboard=<slug>) ─────────────────────────
+  // Wiring choice: ask_routes.py's /api/ask/stream body has no dedicated
+  // "context" field (out of this file's scope to add one), so the least
+  // invasive way to hand the model the builder's target dashboard is to
+  // prepend a short context line to the *outgoing* message text itself —
+  // once, on the first message of a fresh conversation — while the chat
+  // bubble the user sees keeps showing their original, unmodified text.
+  var builderCtx = (function () {
+    var params = new URLSearchParams(window.location.search);
+    return {
+      enabled: params.get("builder") === "1",
+      slug: params.get("dashboard") || null,
+      contextSent: false,
+    };
+  })();
+
+  function initBuilderBanner() {
+    if (!builderCtx.enabled || !builderBanner) return;
+    if (builderBannerText) {
+      builderBannerText.textContent = builderCtx.slug
+        ? "Building dashboard: " + builderCtx.slug
+        : "Dashboard builder";
+    }
+    builderBanner.hidden = false;
+  }
+
+  if (builderBannerClose) {
+    builderBannerClose.addEventListener("click", function () {
+      builderBanner.hidden = true;
+    });
+  }
+
+  // ── Embedded (drawer/iframe) compact layout ───────────────────────────────
+  function initEmbeddedMode() {
+    var embedded = false;
+    try {
+      embedded = window.parent !== window;
+    } catch (e) {
+      embedded = true;
+    }
+    if (embedded) {
+      document.documentElement.classList.add("fx-ask-embedded");
+    }
+    return embedded;
+  }
+
+  var isEmbedded = initEmbeddedMode();
+
+  // ── Card-preview chart bookkeeping ─────────────────────────────────────────
+  // Fluxito.mountCharts() disposes *every* previously mounted chart instance
+  // and remounts whatever [data-card-id] elements it can find under the given
+  // root (exactly like live_view.html's renderAll → mountCharts each refresh).
+  // So every time a new card_preview block is rendered we remount the full set
+  // of preview cards seen so far in this conversation, not just the new one —
+  // otherwise earlier previews in the same thread would go blank.
+  var previewRegistry = {}; // block.id -> {card, block, wrapEl, footerEl}
+  var previewOrder = []; // ordered list of block.id, oldest first
+
+  function resetPreviewState() {
+    previewRegistry = {};
+    previewOrder = [];
+  }
+
+  function remountAllPreviewCharts() {
+    if (!window.Fluxito || !Fluxito.mountCharts) return;
+    var cards = previewOrder
+      .map(function (id) {
+        var entry = previewRegistry[id];
+        return entry ? entry.card : null;
+      })
+      .filter(Boolean);
+    if (!cards.length) return;
+    try {
+      Fluxito.mountCharts(cards, document);
+    } catch (e) {
+      // Never crash the stream on a chart-mount failure
+    }
+  }
+
   // ── Per-conversation usage state ──────────────────────────────────────────
   // modelBuckets: { "<provider> · <model>": { input: n, output: n } }
   // currentTurnKey: the model key for the in-flight turn (set from "conversation")
@@ -330,6 +417,302 @@
     });
   }
 
+  // ── Confirm-action (add/discard a proposed card) ───────────────────────────
+  //
+  // NOTE: message-list rendering (text/tool-call/draft blocks), the messages
+  // inner container, and per-turn scrolling now live in FluxChat (flux/core.js)
+  // — `chat`, created below. This page only supplies the two Ask-side display
+  // blocks core.js doesn't know how to render (card_preview / choices) via the
+  // `onDisplayBlock` hook, plus their action handlers (confirm-action, the
+  // dashboard picker, discard).
+
+  function confirmAction(blockId, action, dashboardSlug) {
+    var body = { conversation_id: chat.getConversationId(), block_id: blockId, action: action };
+    if (dashboardSlug) body.dashboard_slug = dashboardSlug;
+    return fetch("/api/ask/confirm-action", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken(),
+      },
+      body: JSON.stringify(body),
+    }).then(function (r) {
+      return r
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (j) {
+          return { ok: r.ok, status: r.status, data: j };
+        });
+    });
+  }
+
+  // ── Card preview block (propose_card → CardPreviewBlock) ───────────────────
+
+  function buildCardDom(cardObj) {
+    var holder = document.createElement("div");
+    try {
+      holder.innerHTML =
+        window.Fluxito && Fluxito.renderCard ? Fluxito.renderCard(cardObj) : "";
+    } catch (e) {
+      holder.innerHTML = "";
+    }
+    return (
+      holder.firstElementChild ||
+      el("div", "data-card", "This card could not be rendered.")
+    );
+  }
+
+  function renderPreviewFooter(entry) {
+    var footer = entry.footerEl;
+    footer.innerHTML = "";
+    var state = entry.block.state || "proposed";
+
+    if (state === "added") {
+      footer.appendChild(el("span", "ask-card-preview-added", "✓ Added"));
+      if (entry.block.dashboard_slug) {
+        var link = document.createElement("a");
+        link.href = "/live-dashboards/" + encodeURIComponent(entry.block.dashboard_slug);
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.className = "ask-card-preview-link";
+        link.textContent = "View dashboard →";
+        footer.appendChild(link);
+      }
+      return;
+    }
+
+    if (state === "discarded") {
+      footer.appendChild(el("span", "ask-card-preview-discarded", "Discarded"));
+      return;
+    }
+
+    // proposed
+    var addBtn = el("button", "ask-btn ask-btn-primary", "Add to dashboard");
+    addBtn.type = "button";
+    addBtn.addEventListener("click", function () {
+      if (entry.block.dashboard_slug) {
+        doAddCard(entry, null);
+      } else {
+        showDashboardPicker(entry);
+      }
+    });
+
+    var adjustBtn = el("button", "ask-btn", "Adjust");
+    adjustBtn.type = "button";
+    adjustBtn.addEventListener("click", function () {
+      if (!input) return;
+      input.value = "Adjust this card: ";
+      input.focus();
+      input.dispatchEvent(new Event("input"));
+    });
+
+    var discardBtn = el("button", "ask-btn ask-btn-danger", "Discard");
+    discardBtn.type = "button";
+    discardBtn.addEventListener("click", function () {
+      onDiscardCard(entry);
+    });
+
+    footer.appendChild(addBtn);
+    footer.appendChild(adjustBtn);
+    footer.appendChild(discardBtn);
+  }
+
+  function showDashboardPicker(entry) {
+    var footer = entry.footerEl;
+    footer.innerHTML = "";
+    var row = el("div", "ask-card-picker");
+
+    var slugInput = document.createElement("input");
+    slugInput.type = "text";
+    slugInput.className = "ask-card-picker-input";
+    slugInput.placeholder = "existing dashboard slug…";
+
+    var addExistingBtn = el("button", "ask-btn ask-btn-primary", "Add");
+    addExistingBtn.type = "button";
+    addExistingBtn.addEventListener("click", function () {
+      var slug = (slugInput.value || "").trim();
+      if (!slug) {
+        slugInput.focus();
+        return;
+      }
+      doAddCard(entry, slug);
+    });
+
+    var newDashBtn = el("button", "ask-btn", "New dashboard");
+    newDashBtn.type = "button";
+    newDashBtn.addEventListener("click", function () {
+      doAddCard(entry, "__new__");
+    });
+
+    var cancelBtn = el("button", "ask-btn ask-btn-ghost", "Cancel");
+    cancelBtn.type = "button";
+    cancelBtn.addEventListener("click", function () {
+      renderPreviewFooter(entry);
+    });
+
+    row.appendChild(slugInput);
+    row.appendChild(addExistingBtn);
+    row.appendChild(newDashBtn);
+    row.appendChild(cancelBtn);
+    footer.appendChild(row);
+    slugInput.focus();
+  }
+
+  function showCardActionError(entry, message) {
+    var footer = entry.footerEl;
+    footer.innerHTML = "";
+    footer.appendChild(el("span", "ask-card-preview-error", message || "Something went wrong."));
+    var retryBtn = el("button", "ask-btn", "Back");
+    retryBtn.type = "button";
+    retryBtn.addEventListener("click", function () {
+      renderPreviewFooter(entry);
+    });
+    footer.appendChild(retryBtn);
+  }
+
+  function doAddCard(entry, dashboardSlugOverride) {
+    var footer = entry.footerEl;
+    footer.innerHTML = "";
+    footer.appendChild(el("span", "ask-card-preview-pending", "Adding…"));
+    confirmAction(entry.block.id, "add", dashboardSlugOverride)
+      .then(function (res) {
+        if (res.ok && res.data && res.data.status === "added") {
+          entry.block.state = "added";
+          entry.block.dashboard_slug = res.data.dashboard_slug || entry.block.dashboard_slug;
+          renderPreviewFooter(entry);
+          if (isEmbedded) {
+            try {
+              window.parent.postMessage(
+                {
+                  type: "fluxito:card-added",
+                  dashboardSlug: entry.block.dashboard_slug,
+                  cardKey: res.data.card_key,
+                },
+                window.location.origin
+              );
+            } catch (e) {
+              // Never crash the UI on a cross-frame postMessage failure
+            }
+          }
+        } else {
+          showCardActionError(entry, res.data && res.data.error);
+        }
+      })
+      .catch(function () {
+        showCardActionError(entry, "Network error.");
+      });
+  }
+
+  function onDiscardCard(entry) {
+    var footer = entry.footerEl;
+    footer.innerHTML = "";
+    footer.appendChild(el("span", "ask-card-preview-pending", "Discarding…"));
+    confirmAction(entry.block.id, "discard")
+      .then(function (res) {
+        if (res.ok) entry.block.state = "discarded";
+        renderPreviewFooter(entry);
+      })
+      .catch(function () {
+        renderPreviewFooter(entry);
+      });
+  }
+
+  function renderCardPreviewBlock(body, block) {
+    var wrap = el("div", "ask-card-preview");
+    var cardObj = {
+      id: block.id,
+      title: (block.card && block.card.title) || "Untitled card",
+      platform: (block.card && block.card.platform) || "",
+      card_type: (block.snap && block.snap.card_type) || undefined,
+      snap: block.snap || {},
+    };
+    wrap.appendChild(buildCardDom(cardObj));
+
+    if (block.warnings && block.warnings.length) {
+      var warn = el("ul", "ask-card-preview-warnings");
+      block.warnings.forEach(function (w) {
+        warn.appendChild(el("li", "", w));
+      });
+      wrap.appendChild(warn);
+    }
+
+    var footer = el("div", "ask-card-preview-footer");
+    wrap.appendChild(footer);
+
+    var entry = { card: cardObj, block: block, wrapEl: wrap, footerEl: footer };
+    previewRegistry[block.id] = entry;
+    if (previewOrder.indexOf(block.id) === -1) previewOrder.push(block.id);
+
+    body.appendChild(wrap);
+    renderPreviewFooter(entry);
+    remountAllPreviewCharts();
+    return wrap;
+  }
+
+  // ── Choices block (ask_choices → ChoicesBlock) ──────────────────────────────
+
+  function renderChoicesBlock(body, block, forceDisabled) {
+    var wrap = el("div", "ask-choices");
+    wrap.appendChild(el("div", "ask-choices-question", block.question || ""));
+
+    var chipsRow = el("div", "ask-choices-chips");
+    wrap.appendChild(chipsRow);
+
+    var selected = {}; // value -> label, multi mode only
+
+    function disableAll() {
+      Array.prototype.forEach.call(chipsRow.querySelectorAll("button"), function (b) {
+        b.disabled = true;
+      });
+      wrap.classList.add("is-answered");
+    }
+
+    (block.options || []).forEach(function (opt) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "ask-choice-chip";
+      chip.textContent = opt.label || opt.value || "";
+      chip.addEventListener("click", function () {
+        if (wrap.classList.contains("is-answered")) return;
+        if (block.multi) {
+          chip.classList.toggle("is-selected");
+          if (chip.classList.contains("is-selected")) {
+            selected[opt.value] = opt.label || opt.value;
+          } else {
+            delete selected[opt.value];
+          }
+        } else {
+          disableAll();
+          sendTurn(opt.value != null ? String(opt.value) : opt.label || "");
+        }
+      });
+      chipsRow.appendChild(chip);
+    });
+
+    if (block.multi) {
+      var sendChip = document.createElement("button");
+      sendChip.type = "button";
+      sendChip.className = "ask-choice-chip ask-choice-send";
+      sendChip.textContent = "Send";
+      sendChip.addEventListener("click", function () {
+        var labels = Object.keys(selected).map(function (k) {
+          return selected[k];
+        });
+        if (!labels.length) return;
+        disableAll();
+        sendTurn(labels.join(", "));
+      });
+      chipsRow.appendChild(sendChip);
+    }
+
+    if (forceDisabled) disableAll();
+
+    body.appendChild(wrap);
+    return wrap;
+  }
+
   // ── Provider key check ────────────────────────────────────────────────────
 
   function checkKeys() {
@@ -355,6 +738,27 @@
     options: {
       placeholders: { fresh: "Ask Flux…", reply: "Reply to Flux…" },
 
+      // Builder context (?builder=1&dashboard=<slug>): prepend a hidden
+      // context line to the *outgoing* message only, once, on the first
+      // message of a fresh conversation — see the builderCtx comment above
+      // for why (no dedicated context field on the /api/ask/stream body).
+      // The rendered chat bubble always shows the user's original,
+      // unmodified text (core.js keeps that separate from the API payload).
+      beforeSend: function (text) {
+        if (builderCtx.enabled && builderCtx.slug && chat.getConversationId() === null && !builderCtx.contextSent) {
+          builderCtx.contextSent = true;
+          return (
+            'Context: the user is using the chat-based dashboard builder for dashboard "' +
+            builderCtx.slug +
+            '". If you propose a card via propose_card, set dashboard_slug to "' +
+            builderCtx.slug +
+            '" so it can be added to that dashboard directly.\n\n' +
+            text
+          );
+        }
+        return text;
+      },
+
       onStreamEnd: function () {
         loadConversations();
       },
@@ -369,6 +773,18 @@
 
       onDraftStatus: function (status) {
         setThreadStatusFromDraft(status);
+      },
+
+      // core.js knows how to render text/tool_use/draft blocks but not the
+      // Ask-side display blocks the dashboard builder adds (card_preview,
+      // choices) — it hands those to us verbatim, live or on history replay.
+      // `isLast` disables re-answering an already-superseded choices prompt.
+      onDisplayBlock: function (body, block, isLast) {
+        if (block.type === "card_preview") {
+          renderCardPreviewBlock(body, block);
+        } else if (block.type === "choices") {
+          renderChoicesBlock(body, block, !isLast);
+        }
       },
 
       // Live "conversation" frame — every turn reports its model; new
@@ -409,6 +825,7 @@
           drafts: data.drafts,
         });
         resetUsageState();
+        resetPreviewState();
       },
 
       onConversationRendered: function () {
@@ -420,6 +837,7 @@
         markActiveConv(null);
         updateThreadHeader({});
         resetUsageState();
+        resetPreviewState();
         renderRail();
         // Don't hide the rail on new chat — just show empty state
       },
@@ -432,6 +850,20 @@
     newBtn.addEventListener("click", function () {
       chat.newChat();
     });
+  }
+
+  // Composer auto-grow, form submit, and the SSE receive loop are all owned
+  // by the `chat` FluxChat instance created above (it was handed `input` and
+  // `form` in `elements`) — including card_preview / choices rendering via
+  // the `onDisplayBlock` hook and the builder-context injection via
+  // `beforeSend`, both wired into that `options` object.
+
+  // ── Choice chips send through the same path as the composer ───────────────
+  // (renderChoicesBlock below calls this; declared here, after `chat` exists,
+  // but hoisted so the forward reference from render is safe.)
+  function sendTurn(text) {
+    if (!text) return;
+    chat.send(text);
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
@@ -457,6 +889,7 @@
     }
   })();
 
+  initBuilderBanner();
   loadConversations();
   checkKeys();
 })();

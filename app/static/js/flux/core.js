@@ -460,9 +460,11 @@
           });
 
           var lastAssistantBody = null;
+          var totalMessages = (data.messages || []).length;
 
-          (data.messages || []).forEach(function (m) {
+          (data.messages || []).forEach(function (m, mIdx) {
             if (m.role === "tool") return;
+            var isLastMessage = mIdx === totalMessages - 1;
 
             if (m.role === "assistant" && m.token_usage) {
               var u = m.token_usage;
@@ -490,6 +492,11 @@
                   body.appendChild(openLines);
                 }
                 openLines.appendChild(makeToolLine(b.name || "tool", summarizeToolInput(b.input), true));
+              } else {
+                // Blocks core.js doesn't render itself (e.g. the dashboard
+                // builder's card_preview / choices) — handed to the page.
+                openLines = null;
+                hook("onDisplayBlock", body, b, isLastMessage);
               }
             });
 
@@ -569,7 +576,13 @@
       }
 
       var extra = typeof opts.extraBody === "function" ? opts.extraBody() : opts.extraBody;
-      var reqBody = { message: text, conversation_id: conversationId };
+      // beforeSend(text) lets the page swap in a different *outgoing* message
+      // (e.g. the dashboard builder prepending hidden context) while the
+      // rendered bubble above always shows the user's original, unmodified
+      // text. Return non-string/falsy to send `text` unchanged.
+      var payloadText = hook("beforeSend", text);
+      if (typeof payloadText !== "string" || !payloadText) payloadText = text;
+      var reqBody = { message: payloadText, conversation_id: conversationId };
       if (extra && typeof extra === "object") {
         Object.keys(extra).forEach(function (k) {
           reqBody[k] = extra[k];
@@ -719,6 +732,17 @@
               assistantBody.appendChild(renderDraftCard(p.draft));
               hook("onDraftStatus", p.draft.status || "pending");
             }
+          } else if (p.type === "card_preview" || p.type === "choices") {
+            // Ask-side display blocks core.js doesn't know how to render
+            // itself (the dashboard builder's propose_card / ask_choices) —
+            // seal any open text/tool-lines so the block renders as its own
+            // turn element, then hand it to the page. `isLast` is always true
+            // here — it's the block for the turn in progress.
+            removeThinking();
+            currentTextEl = null;
+            currentTextSrc = "";
+            toolLines = null;
+            if (p.block) hook("onDisplayBlock", assistantBody, p.block, true);
           } else if (p.type === "message_done") {
             if (p.usage) {
               hook("onUsage", p.usage, null);

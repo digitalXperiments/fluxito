@@ -2,6 +2,7 @@
 {% block title %}Ask Flux — {{ brand().name }}{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/ask.css?v={{ asset_hash('css/ask.css') }}"/>
+<script src="/static/vendor/echarts-5.5.0.min.js?v={{ asset_hash('vendor/echarts-5.5.0.min.js') }}" defer></script>
 {% endblock %}
 {% block main %}
 <div class="ask-shell" id="ask-shell">
@@ -19,6 +20,10 @@
         <div class="ask-thread-eyebrow" id="ask-thread-eyebrow" hidden></div>
       </div>
       <span class="ask-thread-status" id="ask-thread-status" hidden></span>
+    </div>
+    <div class="ask-builder-banner" id="ask-builder-banner" hidden>
+      <span id="ask-builder-banner-text"></span>
+      <button type="button" class="ask-builder-banner-close" id="ask-builder-banner-close" aria-label="Dismiss">✕</button>
     </div>
     <div class="ask-messages" id="ask-messages">
       <div class="ask-messages-inner">
@@ -74,6 +79,17 @@
   <button class="ask-usage-open" id="ask-usage-open" title="Show run info" aria-label="Show run info">⊞</button>
 </div>
 
+{#
+  Chart stack for card_preview rendering — loaded the same way (non-deferred,
+  script tags, same asset_hash pattern) as partials/card_renderer_js.html +
+  partials/card_charts.html so live-view and chat previews stay pixel-identical.
+  Order matches those partials: cards.js (renderCard) before charts.js/theme.js
+  (mountCharts). ask.js is loaded with `defer` in the scripts block below, so
+  by the time it runs (after DOMContentLoaded) window.Fluxito is fully populated.
+#}
+<script src="/static/js/dashboard/cards.js?v={{ asset_hash('js/dashboard/cards.js') }}"></script>
+<script src="/static/js/dashboard/charts.js?v={{ asset_hash('js/dashboard/charts.js') }}"></script>
+<script src="/static/js/dashboard/theme.js?v={{ asset_hash('js/dashboard/theme.js') }}"></script>
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/flux/core.js?v={{ asset_hash('js/flux/core.js') }}" defer></script>

@@ -43,7 +43,40 @@ class ToolResultBlock:
     type: Literal["tool_result"] = "tool_result"
 
 
-ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock
+@dataclass
+class CardPreviewBlock:
+    """Assistant-side display block: a proposed (not-yet-added) dashboard card.
+
+    Emitted by the ``propose_card`` virtual tool. Never sent back to the LLM
+    provider as-is — see ``blocks_to_provider_text`` for the compact text form
+    used when rebuilding provider messages from history.
+    """
+
+    id: str
+    card: dict[str, Any]
+    snap: dict[str, Any]
+    warnings: list[str]
+    dashboard_slug: str | None
+    state: Literal["proposed", "added", "discarded"] = "proposed"
+    type: Literal["card_preview"] = "card_preview"
+
+
+@dataclass
+class ChoicesBlock:
+    """Assistant-side display block: a structured quick-reply question.
+
+    Emitted by the ``ask_choices`` virtual tool. Never sent back to the LLM
+    provider as-is — see ``blocks_to_provider_text``.
+    """
+
+    id: str
+    question: str
+    options: list[dict[str, str]]
+    multi: bool = False
+    type: Literal["choices"] = "choices"
+
+
+ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock | CardPreviewBlock | ChoicesBlock
 
 
 @dataclass
@@ -72,6 +105,8 @@ class StreamEvent:
         "message_done",
         "error",
         "draft",  # a Flux-proposed change (e.g. GTM diff) — see app/ask/drafts.py
+        "card_preview",  # a CardPreviewBlock was emitted by propose_card; carried in `block`
+        "choices",  # a ChoicesBlock was emitted by ask_choices; carried in `block`
     ]
     text: str | None = None
     tool_id: str | None = None
@@ -83,6 +118,7 @@ class StreamEvent:
     # Populated only for type == "draft"; see app.ask.drafts.draft_to_stream_payload
     # for the exact shape (kind/title/status/payload/published_version/...).
     draft: dict[str, Any] | None = None
+    block: dict[str, Any] | None = None
 
 
 def blocks_to_json(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
@@ -100,6 +136,28 @@ def blocks_to_json(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
                     "tool_use_id": b.tool_use_id,
                     "content": b.content,
                     "is_error": b.is_error,
+                }
+            )
+        elif isinstance(b, CardPreviewBlock):
+            out.append(
+                {
+                    "type": "card_preview",
+                    "id": b.id,
+                    "card": b.card,
+                    "snap": b.snap,
+                    "warnings": b.warnings,
+                    "dashboard_slug": b.dashboard_slug,
+                    "state": b.state,
+                }
+            )
+        elif isinstance(b, ChoicesBlock):
+            out.append(
+                {
+                    "type": "choices",
+                    "id": b.id,
+                    "question": b.question,
+                    "options": b.options,
+                    "multi": b.multi,
                 }
             )
         else:  # pragma: no cover - exhaustive guard
@@ -124,8 +182,61 @@ def blocks_from_json(raw: list[dict[str, Any]]) -> list[ContentBlock]:
                     is_error=bool(d.get("is_error", False)),
                 )
             )
+        elif t == "card_preview":
+            out.append(
+                CardPreviewBlock(
+                    id=d["id"],
+                    card=d.get("card") or {},
+                    snap=d.get("snap") or {},
+                    warnings=d.get("warnings") or [],
+                    dashboard_slug=d.get("dashboard_slug"),
+                    state=d.get("state", "proposed"),
+                )
+            )
+        elif t == "choices":
+            out.append(
+                ChoicesBlock(
+                    id=d["id"],
+                    question=d["question"],
+                    options=d.get("options") or [],
+                    multi=bool(d.get("multi", False)),
+                )
+            )
         else:
             raise ValueError(f"Unknown content block type: {t!r}")
+    return out
+
+
+def block_to_provider_text(block: ContentBlock) -> ContentBlock:
+    """Return the compact, provider-safe representation of a display block.
+
+    CardPreviewBlock / ChoicesBlock are Ask-side display blocks and must never
+    reach an LLM provider adapter as-is (they'd crash the vendor-specific
+    ``_block_to_json`` translators, which only know Text/ToolUse/ToolResult).
+    Every other block type passes through unchanged.
+    """
+    if isinstance(block, CardPreviewBlock):
+        title = block.card.get("title") or "Untitled"
+        chart_type = block.card.get("chart_type") or "?"
+        return TextBlock(text=f"[proposed card: {title}, {chart_type}]")
+    if isinstance(block, ChoicesBlock):
+        return TextBlock(text=f"[asked user to choose: {block.question}]")
+    return block
+
+
+def messages_for_provider(messages: list[LLMMessage]) -> list[LLMMessage]:
+    """Sanitize a message history for a provider call: strip display blocks.
+
+    Never mutates the input; returns new LLMMessage objects only for messages
+    that actually contain a display block, so callers can keep the original
+    (persisted) message objects for everything else.
+    """
+    out: list[LLMMessage] = []
+    for m in messages:
+        if any(isinstance(b, CardPreviewBlock | ChoicesBlock) for b in m.content):
+            out.append(LLMMessage(role=m.role, content=[block_to_provider_text(b) for b in m.content]))
+        else:
+            out.append(m)
     return out
 
 
