@@ -9,6 +9,7 @@ Authenticated (requires signed uid cookie):
   GET  /live-dashboards                   — Live dashboard hub (HTML)
   GET  /live-dashboards/{slug}            — Live dashboard view (HTML)
   GET  /live-dashboards/{slug}/scopes     — Scope management page (HTML)
+  GET  /api/saved-dashboards              — List the user's dashboards (JSON)
   DELETE /api/saved-dashboards/{id}       — Delete a dashboard
   PATCH /api/saved-dashboards/{id}/share  — Toggle sharing
   GET/PUT /api/saved-dashboards/{id}/scopes — Manage query_scopes
@@ -512,6 +513,35 @@ async def _user_in_project(db, project_id, user_uuid) -> bool:
         )
     )
     return result.scalar_one_or_none() is not None
+
+
+@router.get("/api/saved-dashboards")
+async def list_saved_dashboards(request: Request):
+    """List the current user's dashboards (slug, title, card_count) scoped to
+    the active project. Powers the 'add to existing dashboard' picker in the
+    Ask Fluxito chat UI — avoids making users type a dashboard slug by hand."""
+    uid = get_uid_from_request(request)
+    if not uid:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    active_project_id = request.cookies.get("active_project_id")
+    async with app_state.db_session_factory() as db:
+        q = select(Dashboard).where(Dashboard.user_id == uuid.UUID(uid)).order_by(Dashboard.updated_at.desc())
+        if active_project_id:
+            try:
+                q = q.where(Dashboard.project_id == uuid.UUID(active_project_id))
+            except ValueError:
+                pass
+        result = await db.execute(q)
+        dashboards = result.scalars().all()
+
+        out = []
+        for d in dashboards:
+            cards_result = await db.execute(select(DashboardCard).where(DashboardCard.dashboard_id == d.id))
+            card_count = len(list(cards_result.scalars().all()))
+            out.append({"slug": d.share_slug, "title": d.title, "card_count": card_count})
+
+    return JSONResponse({"dashboards": out})
 
 
 @router.delete("/api/saved-dashboards/{dashboard_id}")

@@ -51,6 +51,9 @@
   var builderBannerText = document.getElementById("ask-builder-banner-text");
   var builderBannerClose = document.getElementById("ask-builder-banner-close");
 
+  // Bulk add-to-dashboard bar (shown once 2+ cards are pending in this thread)
+  var bulkAddBar = document.getElementById("ask-bulk-add-bar");
+
   // ── Builder context (?builder=1&dashboard=<slug>) ─────────────────────────
   // Wiring choice: ask_routes.py's /api/ask/stream body has no dedicated
   // "context" field (out of this file's scope to add one), so the least
@@ -112,6 +115,11 @@
   function resetPreviewState() {
     previewRegistry = {};
     previewOrder = [];
+    _bulkAddInProgress = false;
+    if (bulkAddBar) {
+      bulkAddBar.hidden = true;
+      bulkAddBar.innerHTML = "";
+    }
   }
 
   function remountAllPreviewCharts() {
@@ -465,6 +473,10 @@
   }
 
   function renderPreviewFooter(entry) {
+    // Every state transition (proposed/added/discarded) can change the count
+    // of pending cards, so keep the bulk-add bar in sync from one place.
+    updateBulkAddBar();
+
     var footer = entry.footerEl;
     footer.innerHTML = "";
     var state = entry.block.state || "proposed";
@@ -519,45 +531,93 @@
     footer.appendChild(discardBtn);
   }
 
-  function showDashboardPicker(entry) {
-    var footer = entry.footerEl;
-    footer.innerHTML = "";
+  // ── Dashboard list (existing dashboards, for the picker + bulk-add bar) ────
+  // Typing a slug by hand isn't feasible — slugs are opaque IDs the user never
+  // sees elsewhere. Fetch the real list once per thread and let them pick by name.
+  var _dashboardListCache = null;
+
+  function fetchDashboardList(forceRefresh) {
+    if (_dashboardListCache && !forceRefresh) return Promise.resolve(_dashboardListCache);
+    return fetch("/api/saved-dashboards", { credentials: "same-origin" })
+      .then(function (r) {
+        return r.ok ? r.json() : { dashboards: [] };
+      })
+      .then(function (j) {
+        _dashboardListCache = (j && j.dashboards) || [];
+        return _dashboardListCache;
+      })
+      .catch(function () {
+        return _dashboardListCache || [];
+      });
+  }
+
+  // Shared "pick a dashboard" row (select of existing dashboards + New + Cancel).
+  // onPick(slug) fires with a real slug or "__new__"; onCancel() fires on Cancel.
+  function buildDashboardPickerRow(dashboards, onPick, onCancel) {
     var row = el("div", "ask-card-picker");
 
-    var slugInput = document.createElement("input");
-    slugInput.type = "text";
-    slugInput.className = "ask-card-picker-input";
-    slugInput.placeholder = "existing dashboard slug…";
+    var select = document.createElement("select");
+    select.className = "ask-card-picker-select";
+    var placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = dashboards.length ? "Choose a dashboard…" : "No existing dashboards yet";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    select.appendChild(placeholder);
+    dashboards.forEach(function (d) {
+      var opt = document.createElement("option");
+      opt.value = d.slug;
+      opt.textContent = d.title + " · " + d.card_count + (d.card_count === 1 ? " card" : " cards");
+      select.appendChild(opt);
+    });
 
     var addExistingBtn = el("button", "ask-btn ask-btn-primary", "Add");
     addExistingBtn.type = "button";
+    addExistingBtn.disabled = !dashboards.length;
     addExistingBtn.addEventListener("click", function () {
-      var slug = (slugInput.value || "").trim();
-      if (!slug) {
-        slugInput.focus();
+      if (!select.value) {
+        select.focus();
         return;
       }
-      doAddCard(entry, slug);
+      onPick(select.value);
     });
 
     var newDashBtn = el("button", "ask-btn", "New dashboard");
     newDashBtn.type = "button";
     newDashBtn.addEventListener("click", function () {
-      doAddCard(entry, "__new__");
+      onPick("__new__");
     });
 
     var cancelBtn = el("button", "ask-btn ask-btn-ghost", "Cancel");
     cancelBtn.type = "button";
-    cancelBtn.addEventListener("click", function () {
-      renderPreviewFooter(entry);
-    });
+    cancelBtn.addEventListener("click", onCancel);
 
-    row.appendChild(slugInput);
+    row.appendChild(select);
     row.appendChild(addExistingBtn);
     row.appendChild(newDashBtn);
     row.appendChild(cancelBtn);
-    footer.appendChild(row);
-    slugInput.focus();
+    return row;
+  }
+
+  function showDashboardPicker(entry) {
+    var footer = entry.footerEl;
+    footer.innerHTML = "";
+    footer.appendChild(el("span", "ask-card-preview-pending", "Loading dashboards…"));
+    fetchDashboardList().then(function (dashboards) {
+      if (entry.block.state !== "proposed") return; // user already acted while this was loading
+      footer.innerHTML = "";
+      footer.appendChild(
+        buildDashboardPickerRow(
+          dashboards,
+          function (slug) {
+            doAddCard(entry, slug);
+          },
+          function () {
+            renderPreviewFooter(entry);
+          }
+        )
+      );
+    });
   }
 
   function showCardActionError(entry, message) {
@@ -576,7 +636,7 @@
     var footer = entry.footerEl;
     footer.innerHTML = "";
     footer.appendChild(el("span", "ask-card-preview-pending", "Adding…"));
-    confirmAction(entry.block.id, "add", dashboardSlugOverride)
+    return confirmAction(entry.block.id, "add", dashboardSlugOverride)
       .then(function (res) {
         if (res.ok && res.data && res.data.status === "added") {
           entry.block.state = "added";
@@ -621,12 +681,21 @@
 
   function renderCardPreviewBlock(body, block) {
     var wrap = el("div", "ask-card-preview");
+    // dashboard_card_preview's snap never carries chart_type (only the deployed
+    // /api/saved-dashboards/{slug}/data path stamps it) — without it,
+    // Fluxito.renderCard's legacy-format fallback overrides real rendered data
+    // with "Data temporarily unavailable" on every proposed card. Backfill it
+    // from the tool-call's own chart_type so the preview renders like the real thing.
+    var previewSnap = block.snap || {};
+    if (!previewSnap.chart_type && block.card && block.card.chart_type) {
+      previewSnap = Object.assign({}, previewSnap, { chart_type: block.card.chart_type });
+    }
     var cardObj = {
       id: block.id,
       title: (block.card && block.card.title) || "Untitled card",
       platform: (block.card && block.card.platform) || "",
       card_type: (block.snap && block.snap.card_type) || undefined,
-      snap: block.snap || {},
+      snap: previewSnap,
     };
     wrap.appendChild(buildCardDom(cardObj));
 
@@ -649,6 +718,104 @@
     renderPreviewFooter(entry);
     remountAllPreviewCharts();
     return wrap;
+  }
+
+  // ── Bulk add-to-dashboard bar ────────────────────────────────────────────
+  // A single card proposal is fine to add one at a time via its own footer,
+  // but a batch of 5+ (e.g. "build me a full dashboard") means clicking
+  // Add-to-dashboard → pick a dashboard → confirm, five separate times. Once
+  // 2+ cards are pending in the thread, offer one control that adds them all
+  // to a single dashboard in one go.
+
+  function pendingPreviewEntries() {
+    return previewOrder
+      .map(function (id) {
+        return previewRegistry[id];
+      })
+      .filter(function (entry) {
+        return entry && entry.block.state === "proposed";
+      });
+  }
+
+  // While a bulk add is running, each card's own success handler calls
+  // renderPreviewFooter → updateBulkAddBar for that card. Without this guard
+  // that would stomp the "Adding X of Y…" progress bar with the idle bar
+  // after the first card finishes, and re-expose the "Add all" button mid-batch.
+  var _bulkAddInProgress = false;
+
+  function updateBulkAddBar() {
+    if (!bulkAddBar || _bulkAddInProgress) return;
+    var pending = pendingPreviewEntries();
+    if (pending.length < 2) {
+      bulkAddBar.hidden = true;
+      bulkAddBar.innerHTML = "";
+      return;
+    }
+    bulkAddBar.hidden = false;
+    renderBulkAddBarIdle(pending.length);
+  }
+
+  function renderBulkAddBarIdle(count) {
+    bulkAddBar.innerHTML = "";
+    bulkAddBar.appendChild(el("span", "ask-bulk-add-label", count + " cards proposed"));
+
+    var pickBtn = el("button", "ask-btn ask-btn-primary", "Add all to dashboard");
+    pickBtn.type = "button";
+    pickBtn.addEventListener("click", function () {
+      bulkAddBar.innerHTML = "";
+      bulkAddBar.appendChild(el("span", "ask-bulk-add-label", "Loading dashboards…"));
+      fetchDashboardList().then(function (dashboards) {
+        bulkAddBar.innerHTML = "";
+        bulkAddBar.appendChild(
+          buildDashboardPickerRow(dashboards, runBulkAdd, updateBulkAddBar)
+        );
+      });
+    });
+
+    var dismissBtn = el("button", "ask-btn ask-btn-ghost", "Dismiss");
+    dismissBtn.type = "button";
+    dismissBtn.addEventListener("click", function () {
+      bulkAddBar.hidden = true;
+      bulkAddBar.innerHTML = "";
+    });
+
+    bulkAddBar.appendChild(pickBtn);
+    bulkAddBar.appendChild(dismissBtn);
+  }
+
+  function runBulkAdd(slugOrNew) {
+    var entries = pendingPreviewEntries();
+    if (!entries.length) {
+      updateBulkAddBar();
+      return;
+    }
+    // "__new__" only creates a dashboard on the *first* card; once we know the
+    // real slug it created, every subsequent card in this batch reuses it —
+    // otherwise each card would spawn its own new dashboard.
+    var resolvedSlug = slugOrNew;
+    var done = 0;
+    _bulkAddInProgress = true;
+    bulkAddBar.innerHTML = "";
+    var progressLabel = el("span", "ask-bulk-add-label", "Adding 0 of " + entries.length + "…");
+    bulkAddBar.appendChild(progressLabel);
+
+    var chain = Promise.resolve();
+    entries.forEach(function (entry) {
+      chain = chain.then(function () {
+        return doAddCard(entry, resolvedSlug).then(function () {
+          done += 1;
+          if (entry.block.state === "added" && entry.block.dashboard_slug) {
+            resolvedSlug = entry.block.dashboard_slug;
+          }
+          progressLabel.textContent = "Adding " + done + " of " + entries.length + "…";
+        });
+      });
+    });
+    chain.then(function () {
+      _bulkAddInProgress = false;
+      _dashboardListCache = null; // a new dashboard may have been created, or card counts changed
+      updateBulkAddBar();
+    });
   }
 
   // ── Choices block (ask_choices → ChoicesBlock) ──────────────────────────────

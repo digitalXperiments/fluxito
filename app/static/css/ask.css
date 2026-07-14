@@ -1192,9 +1192,9 @@
   width: 100%;
 }
 
-.ask-card-picker-input {
-  flex: 1 1 180px;
-  min-width: 140px;
+.ask-card-picker-select {
+  flex: 1 1 220px;
+  min-width: 160px;
   padding: 6px 10px;
   border-radius: 7px;
   border: 1px solid var(--line, #e5e7eb);
@@ -1204,9 +1204,27 @@
   color: var(--ink, #0b0b0e);
 }
 
-.ask-card-picker-input:focus {
+.ask-card-picker-select:focus {
   outline: none;
   border-color: var(--blue, #2557f6);
+}
+
+/* ── Bulk add-to-dashboard bar — appears above the composer once 2+ cards
+   are proposed in the same thread, so users aren't stuck adding one at a time. */
+.ask-bulk-add-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line, #e5e7eb);
+  background: var(--bg-2, #f3f4f6);
+  font-size: 12.5px;
+}
+
+.ask-bulk-add-label {
+  font-weight: 500;
+  color: var(--ink-soft, #3f3f46);
 }
 
 /* ── Choices block (ask_choices → tappable chips) ── */

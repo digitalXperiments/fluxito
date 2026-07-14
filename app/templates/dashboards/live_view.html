@@ -651,9 +651,21 @@ document.documentElement.classList.add('print-mode');
         `[live-refresh] card "${card.title}" (${card.id}) failed:`,
         {error_type: le.error_type, message: le.message, detail: le.detail, platform: card.platform}
       );
+      var msg = le.message || 'Could not refresh this card';
+      // Connector auth failures (expired/revoked token) always end up in a
+      // message that tells the user to reconnect — surface that as a real
+      // link instead of leaving it as inert text next to a Retry that will
+      // just fail again the same way.
+      var reconnectLink = /reconnect/i.test(msg)
+        ? ' · <a href="/settings/connections" class="lv-reconnect" style="text-decoration:underline;color:inherit;font-weight:600;">Reconnect →</a>'
+        : '';
       const notice = '<div class="lv-card-error" style="margin:0 0 8px;padding:6px 10px;border:1px solid var(--danger);border-radius:6px;background:var(--danger-soft);color:var(--danger);font-size:12px;">⚠️ '
-        + Fluxito.esc(le.message || 'Could not refresh this card') + ' · <a href="#" class="lv-retry" style="text-decoration:underline;color:inherit;">Retry</a></div>';
+        + Fluxito.esc(msg) + ' · <a href="#" class="lv-retry" style="text-decoration:underline;color:inherit;">Retry</a>' + reconnectLink + '</div>';
       html = html.replace('<div class="card-body">', '<div class="card-body">' + notice);
+      // The banner above already explains why data is missing — drop the
+      // generic empty-state paragraph underneath it so the card doesn't show
+      // two conflicting messages at once.
+      html = html.replace(/<p class="empty">[^<]*<\/p>/, '');
     }
     return html;
   }
