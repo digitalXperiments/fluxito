@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-07-14
+
+The dashboard platform, rebuilt. Dashboards go from basic spreadsheet-style
+charts to a rich, themed visualization layer — and you can now build them
+card-by-card from a conversation.
+
+### Added
+- **19 chart types** (up from 7): area, stacked bar, horizontal bar, donut,
+  combo (bar + line), scatter, heatmap, funnel, treemap, radar, gauge, and
+  waterfall join the existing scorecard, bar, line, pie, table, audit, and
+  list cards. All types render in the live view, public shares, and PDF
+  exports, and are styled by a shared ECharts theme built from the app's
+  design-system palette.
+- **Chat-based dashboard builder.** Ask Fluxito can now propose dashboard
+  cards in conversation: it runs the query, renders a live chart preview
+  right in the chat, and asks clarifying questions with tappable choice
+  chips. Nothing is saved until you click **Add** — you pick the target
+  dashboard (or create a new one) and the card appears immediately.
+- **"+ Add card" on every dashboard.** Owners get a built-in builder drawer
+  on the dashboard page itself; cards added in the drawer refresh the
+  dashboard in place.
+- **Incremental dashboard MCP tools** for AI clients: `dashboard_create`
+  (empty shell), `dashboard_card_preview` (execute a card spec and return
+  chart-ready data without saving), `dashboard_card_upsert` (add or edit a
+  single card), and `dashboard_card_remove`. Previously dashboards could
+  only be deployed as a whole batch.
+- **Validated chart specs.** Card configurations are now validated by a
+  typed schema with per-chart-type rules, so misconfigured cards fail with
+  actionable errors at deploy time instead of rendering blank.
+
+### Changed
+- **ECharts is now vendored** and served from the app instead of a CDN —
+  dashboards render offline and in air-gapped installs.
+- **Faster, more reliable PDF exports.** The renderer now waits for charts
+  to actually finish animating instead of a fixed delay.
+- Card queries across the live view, hydration, and public endpoints now
+  run through a single shared query engine.
+- README revamped around the Plan → Implement → Audit → Report loop.
+
+### Removed
+- Legacy artifact-dashboard code paths (GCS/local snapshot storage and the
+  old executor), superseded by the card-native dashboard model.
+
+### Security
+- Dashboard write tools invoked from Ask Fluxito's confirm flow now route
+  through the full MCP permission pipeline (RBAC backstop, circuit breaker,
+  audit log) instead of calling tools directly.
+
 ## [1.2.6] — 2026-07-05
 
 ### Added

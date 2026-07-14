@@ -47,6 +47,9 @@ test_results
 .claude
 # Marketing site material lives in parked/ until it moves to its own static-site repo
 parked/
+# Local design / marketing site revamp mockups (not shipped with the app)
+fluxito_site_revamp/
+
 .commandcode
 .gstack
 ~/.codex/*
