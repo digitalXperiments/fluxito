@@ -313,7 +313,7 @@ async def public_dashboard_json(slug: str, request: Request):
 
     Public dashboards open to all; private ones owner-only.
     """
-    from app.dashboards.filter_hooks import apply_overrides
+    from app.dashboards import query_engine
 
     uid = get_uid_from_request(request)
     start_date = _resolve_relative_date(request.query_params.get("date_range_start") or "")
@@ -418,39 +418,20 @@ async def public_dashboard_json(slug: str, request: Request):
                 return _fallback()
 
             try:
-                legacy = getattr(tm, "_legacy_tools", {})
-                tool = legacy.get(tool_name) or tm._tools.get(tool_name)
+                tool = query_engine.resolve_tool(tm, tool_name)
                 if tool is None:
                     return _fallback()
 
                 # Respect date_locked cards — don't override their range.
-                card_date_locked = _as_bool(spec.get("date_locked"))
-                if card_date_locked:
-                    merged_spec = spec
-                else:
-                    merged_spec = apply_overrides(spec, filter_overrides)
-
-                _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
-                call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
-                action = spec.get("action")
-                if action is not None:
-                    call_args["action"] = action
-                is_warehouse = tool_name == "warehouse_query"
+                card_date_locked = query_engine.is_date_locked(spec)
+                overrides = None if card_date_locked else filter_overrides
+                call_args = query_engine.build_call_args(spec, overrides, spec.get("action"))
+                is_warehouse = query_engine.apply_warehouse_renames(tool_name, platform, call_args)
                 if is_warehouse:
-                    call_args.setdefault("engine", platform)
-                    if "sql" in call_args and "query" not in call_args:
-                        call_args["query"] = call_args.pop("sql")
-                    if "query" in call_args:
-                        q = call_args["query"]
-                        for _k, _v in call_args.items():
-                            if _k == "query" or not isinstance(_v, str):
-                                continue
-                            resolved = _resolve_relative_date(_v)
-                            q = q.replace("{" + _k + "}", resolved)
-                        call_args["query"] = q
+                    query_engine.substitute_date_placeholders(call_args, _resolve_relative_date)
 
                 async with _sem:
-                    raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_PUBLIC_CARD_TIMEOUT_S)
+                    raw_result = await query_engine.dispatch(tool, call_args, _PUBLIC_CARD_TIMEOUT_S)
                 if not isinstance(raw_result, dict):
                     raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
 
@@ -1129,7 +1110,7 @@ async def live_dashboard_data(slug: str, request: Request):
     """
 
     from app.auth.mcp_session_manager import build_refresh_context
-    from app.dashboards.filter_hooks import apply_overrides
+    from app.dashboards import query_engine
     from app.dashboards.filter_translators import apply_card_filters
 
     uid = get_uid_from_request(request)
@@ -1289,33 +1270,21 @@ async def live_dashboard_data(slug: str, request: Request):
                 return snap, False, {"error_type": "no_tool", "message": "Card has no registered tool."}
 
             try:
-                legacy = getattr(tm, "_legacy_tools", {})
-                tool = legacy.get(tool_name) or tm._tools.get(tool_name)
+                tool = query_engine.resolve_tool(tm, tool_name)
                 if tool is None:
                     raise ValueError(f"Tool '{tool_name}' not registered")
 
                 # Merge date + legacy overrides (respecting the date_locked flag).
                 # Typed filters are excluded here and applied via translate() below.
-                card_date_locked = _as_bool(spec.get("date_locked"))
+                card_date_locked = query_engine.is_date_locked(spec)
                 if card_date_locked:
                     # Strip only date-related keys; non-date dimension filters pass through.
                     safe_overrides = {k: v for k, v in ov_for_apply.items() if "date" not in k.lower()}
-                    merged_spec = apply_overrides(spec, safe_overrides)
+                    call_args = query_engine.build_call_args(spec, safe_overrides, action)
                 else:
-                    merged_spec = apply_overrides(spec, ov_for_apply)
-                # Params are stored flattened in query_params — exclude spec metadata keys.
-                # NOTE: "platform" is intentionally NOT excluded — it is a required named
-                # parameter for analytics_read, marketing_read, etc.
-                _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
-                call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
-                if action is not None:
-                    call_args["action"] = action
+                    call_args = query_engine.build_call_args(spec, ov_for_apply, action)
                 # warehouse_query needs 'engine' (= platform) and uses 'query' not 'sql'
-                is_warehouse = tool_name == "warehouse_query"
-                if is_warehouse:
-                    call_args.setdefault("engine", platform)
-                    if "sql" in call_args and "query" not in call_args:
-                        call_args["query"] = call_args.pop("sql")
+                is_warehouse = query_engine.apply_warehouse_renames(tool_name, platform, call_args)
 
                 # Apply typed dashboard filters (GA4 dimension/metric_filter,
                 # warehouse {placeholder} substitution, marketing params). Runs
@@ -1331,20 +1300,12 @@ async def live_dashboard_data(slug: str, request: Request):
                     )
 
                 # Substitute remaining {placeholder} tokens in the SQL template
-                # (date ranges, card-param defaults). Targeted str.replace (not
-                # format_map) so other curly-brace patterns in the SQL don't raise
-                # KeyError and silently swallow all substitutions.
-                if is_warehouse and "query" in call_args:
-                    q = call_args["query"]
-                    for _k, _v in call_args.items():
-                        if _k == "query" or not isinstance(_v, str):
-                            continue
-                        resolved = _resolve_relative_date(_v)
-                        q = q.replace("{" + _k + "}", resolved)
-                    call_args["query"] = q
+                # (date ranges, card-param defaults).
+                if is_warehouse:
+                    query_engine.substitute_date_placeholders(call_args, _resolve_relative_date)
 
                 async with _sem:
-                    raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_LIVE_CARD_TIMEOUT_S)
+                    raw_result = await query_engine.dispatch(tool, call_args, _LIVE_CARD_TIMEOUT_S)
                 if not isinstance(raw_result, dict):
                     raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
 

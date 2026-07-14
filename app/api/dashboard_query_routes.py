@@ -42,7 +42,7 @@ from sqlalchemy import select
 
 import app.app_state as app_state
 from app.auth.mcp_session_manager import build_refresh_context
-from app.dashboards.filter_hooks import apply_overrides
+from app.dashboards import query_engine
 from app.dashboards.scope import is_authorized
 from app.models.dashboard import Dashboard, DashboardCard, DashboardQueryLog
 
@@ -293,12 +293,7 @@ async def batch_query(slug: str, body: BatchRequest, request: Request):
                 if not tool_name:
                     raise HTTPException(409, f"Card {req.card_id} has no 'tool' in its spec")
 
-                merged = apply_overrides(spec, req.overrides)
-                # Params are stored flattened in query_params — exclude spec metadata keys.
-                # NOTE: "platform" is intentionally kept — it is a required named parameter
-                # for analytics_read, marketing_read, etc.
-                _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
-                merged_params = {k: v for k, v in merged.items() if k not in _META_KEYS}
+                merged_params = query_engine.build_call_args(spec, req.overrides)
                 resource_id = str(
                     merged_params.get("property_id")
                     or merged_params.get("connection_id")
@@ -327,8 +322,7 @@ async def batch_query(slug: str, body: BatchRequest, request: Request):
                     continue
 
                 # Dispatch through the MCP tool registry
-                legacy = getattr(tm, "_legacy_tools", {})
-                tool = legacy.get(tool_name) or tm._tools.get(tool_name)
+                tool = query_engine.resolve_tool(tm, tool_name)
                 if tool is None:
                     raise HTTPException(
                         500, f"Tool '{tool_name}' not registered; cannot refresh card {req.card_id}"
@@ -338,7 +332,7 @@ async def batch_query(slug: str, body: BatchRequest, request: Request):
                 if action is not None:
                     call_args["action"] = action
 
-                raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_QUERY_TIMEOUT_S)
+                raw_result = await query_engine.dispatch(tool, call_args, _QUERY_TIMEOUT_S)
                 normalized = _normalize_result(platform, raw_result)
                 if normalized.get("error"):
                     error_str = normalized["error"]

@@ -35,14 +35,6 @@ logger = logging.getLogger(__name__)
 _HYDRATE_CARD_TIMEOUT_S = 30
 
 
-def _as_bool(value) -> bool:
-    """Coerce a stored flag to bool — ``bool("false")`` is ``True``, so a
-    string-persisted flag must be parsed explicitly."""
-    if isinstance(value, str):
-        return value.strip().lower() in ("1", "true", "yes", "on")
-    return bool(value)
-
-
 # --------------------------------------------------------------------------- #
 # Public API
 # --------------------------------------------------------------------------- #
@@ -72,7 +64,6 @@ async def hydrate_dashboard_cards(
         False if it fell back to cache or the execution errored.
     """
     from app.auth.mcp_session_manager import build_refresh_context
-    from app.dashboards.filter_hooks import apply_overrides
 
     # Late import to avoid circular dep with app.main
     from app.main import mcp_server
@@ -82,7 +73,7 @@ async def hydrate_dashboard_cards(
     refresh_ctx = await build_refresh_context(str(dash.id))
 
     async with refresh_ctx:
-        tasks = [_hydrate_one_card(card, tm, date_filter, apply_overrides) for card in cards]
+        tasks = [_hydrate_one_card(card, tm, date_filter) for card in cards]
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
@@ -90,9 +81,10 @@ async def _hydrate_one_card(
     card: DashboardCard,
     tm: Any,
     date_filter: dict[str, str] | None,
-    apply_overrides,
 ) -> None:
     """Hydrate a single card in place. Never raises — falls back to cache on error."""
+    from app.dashboards import query_engine
+
     spec = card.query_params or {}
     tool_name = spec.get("tool") or card.tool_name
     action = spec.get("action")
@@ -103,8 +95,7 @@ async def _hydrate_one_card(
         return
 
     try:
-        legacy = getattr(tm, "_legacy_tools", {})
-        tool = legacy.get(tool_name) or tm._tools.get(tool_name)
+        tool = query_engine.resolve_tool(tm, tool_name)
         if tool is None:
             logger.warning("hydrate: tool '%s' not registered for card %s", tool_name, card.id)
             card._live_result = card.result_cache or {}
@@ -112,18 +103,11 @@ async def _hydrate_one_card(
             return
 
         # Merge date overrides (respecting date_locked flag on the card)
-        card_date_locked = _as_bool(spec.get("date_locked"))
+        card_date_locked = query_engine.is_date_locked(spec)
         overrides = date_filter if (date_filter and not card_date_locked) else None
-        merged_spec = apply_overrides(spec, overrides)
-        # Params are stored flattened in query_params — exclude spec metadata keys.
-        # NOTE: "platform" is intentionally kept in call_args — it is a required
-        # named parameter for analytics_read, marketing_read, etc.
-        _META_KEYS = {"key", "tool", "filter_hooks", "filter_options", "date_locked"}
-        call_args: dict = {k: v for k, v in merged_spec.items() if k not in _META_KEYS}
-        if action is not None:
-            call_args["action"] = action
+        call_args = query_engine.build_call_args(spec, overrides, action)
 
-        raw_result = await asyncio.wait_for(tool.run(call_args), timeout=_HYDRATE_CARD_TIMEOUT_S)
+        raw_result = await query_engine.dispatch(tool, call_args, _HYDRATE_CARD_TIMEOUT_S)
         if not isinstance(raw_result, dict):
             raw_result = {"card_type": "UNKNOWN", "raw": raw_result}
 

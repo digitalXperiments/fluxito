@@ -113,8 +113,10 @@ def test_validate_card_specs_normalizes_filter_hooks():
 
 def test_deploy_batch_rejects_invalid_chart_type():
     cards = _valid_batch()
-    cards[0]["chart_type"] = "heatmap"  # not in VALID_CHART_TYPES
-    with pytest.raises(ValueError, match="chart_type 'heatmap' is not valid"):
+    # "heatmap" became a first-class chart_type in the dashboard revamp
+    # (Phase 1) — use a type that is genuinely not in VALID_CHART_TYPES.
+    cards[0]["chart_type"] = "not_a_real_chart_type"
+    with pytest.raises(ValueError, match="chart_type 'not_a_real_chart_type' is not valid"):
         _validate_card_specs(cards)
 
 

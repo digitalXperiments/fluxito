@@ -5,7 +5,7 @@
 {% set page_loading_text = 'Loading ' ~ dash.title ~ '…' %}
 
 {% block head_extra %}
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js" defer></script>
+<script src="/static/vendor/echarts-5.5.0.min.js?v={{ asset_hash('vendor/echarts-5.5.0.min.js') }}" defer></script>
 <script type="importmap">
 {
   "imports": {
@@ -287,6 +287,12 @@ document.documentElement.classList.add('print-mode');
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           Scopes
         </a>
+        {% if not print_mode %}
+        <button class="btn primary sm" id="btnAddCard" type="button" title="Build a new card with Ask Fluxito">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add card
+        </button>
+        {% endif %}
         {% endif %}
         <button class="btn primary sm" id="btnApply" type="button">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15A9 9 0 1 1 5.64 5.64L1 10"/></svg>
@@ -345,6 +351,22 @@ document.documentElement.classList.add('print-mode');
 </div>
 
 <div id="toastHost"></main>
+
+{% if is_owner and not print_mode %}
+<!-- Chat-based card builder drawer (dashboard revamp Phase 3) -->
+<div id="addCardBackdrop" class="lv-drawer-backdrop"></div>
+<div id="addCardDrawer" class="lv-drawer" role="dialog" aria-modal="true" aria-label="Build a card with Ask Fluxito">
+  <div class="lv-drawer-head">
+    <span class="lv-drawer-title">Add card · Ask Fluxito</span>
+    <button type="button" class="lv-drawer-close" id="addCardClose" aria-label="Close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="lv-drawer-body">
+    <iframe id="addCardFrame" title="Ask Fluxito — build a card" src="about:blank"></iframe>
+  </div>
+</div>
+{% endif %}
 
 <script type="application/json" id="initialCardsData">{{ cards | tojson }}</script>
 <script type="application/json" id="dashMeta">{{ {"slug": slug, "start": current_start, "end": current_end} | tojson }}</script>
@@ -492,7 +514,11 @@ document.documentElement.classList.add('print-mode');
     return true;
   };
 
-  // ── Dark mode toggle ──────────────────────────────────────────────────
+  // Dark mode toggle removed — the Ledger design system (site revamp #24) is
+  // light-only and dropped the #btnDarkMode control along with any
+  // [data-theme="dark"] CSS. charts.js/theme.js still thread an `isDark`
+  // param end-to-end (harmless dead branches) in case dark mode returns.
+
   if (filterBar) {
     // ── Date range chips ─────────────────────────────────────────────────
     filterBar.querySelectorAll('.dash-filter-chip[data-range-start]').forEach(function(chip) {
@@ -636,12 +662,44 @@ document.documentElement.classList.add('print-mode');
     if (grid) Fluxito.mountCharts(cards, grid);
   }
 
+  // Deterministic PDF-ready signal (dashboard revamp Phase 1): rather than a
+  // fixed sleep, the PDF renderer waits on window.__chartsSettled, which we
+  // only flip to true once every mounted ECharts instance has fired its
+  // 'finished' event at least once (i.e. it has painted). A 5s per-page
+  // safety timeout sets it anyway so one stuck chart (e.g. a hidden/zero-size
+  // container) can never hang the export. Re-armed on every mount, including
+  // the dark-mode toggle's re-render below, so a stale `true` from a prior
+  // render never lets the PDF renderer capture mid-repaint.
+  function armChartsSettled(){
+    window.__chartsSettled = false;
+    var instances = (window.Fluxito && Fluxito.getChartInstances) ? Fluxito.getChartInstances() : {};
+    var list = Object.values(instances);
+    if (!list.length) { window.__chartsSettled = true; return; }
+    var pending = list.length;
+    var settled = false;
+    function settle(){
+      if (settled) return;
+      settled = true;
+      window.__chartsSettled = true;
+    }
+    list.forEach(function(inst){
+      var onFinished = function(){
+        inst.off('finished', onFinished);
+        pending -= 1;
+        if (pending <= 0) settle();
+      };
+      inst.on('finished', onFinished);
+    });
+    setTimeout(settle, 5000);
+  }
+
   function renderAll(cards){
-    if (!grid) return;
+    if (!grid) { window.__chartsSettled = true; return; }
     currentCards = cards;
     cardCountLabel.textContent = cards.length;
     if (!cards.length) {
       grid.innerHTML = '<div class="audit-empty" style="grid-column:1/-1;"><h3>No cards to show</h3><p>Try refreshing.</p></div>';
+      window.__chartsSettled = true;
       if (window.__dismissPageLoader) window.__dismissPageLoader();
       return;
     }
@@ -653,8 +711,8 @@ document.documentElement.classList.add('print-mode');
       }
     });
     grid.innerHTML = htmlParts.join('');
-    try { mountCharts(cards); }
-    catch(err){ console.error('[mountCharts] failed', err); }
+    try { mountCharts(cards); armChartsSettled(); }
+    catch(err){ console.error('[mountCharts] failed', err); window.__chartsSettled = true; }
     if (window.__dismissPageLoader) window.__dismissPageLoader();
   }
 
@@ -765,6 +823,9 @@ document.documentElement.classList.add('print-mode');
       if (mySeq !== _loadSeq) return;  // a newer request owns the UI now
       console.error('[loadCards] error', e, e && e.stack);
       if (grid) grid.innerHTML = `<div class="audit-empty" style="grid-column:1/-1;"><h3>Failed to load data</h3><p>${Fluxito.esc(e.message||'')}</p><button class="btn primary" style="margin-top:14px" type="button" onclick="location.reload()">Reload</button></div>`;
+      // No charts were mounted on this path — don't leave the PDF renderer
+      // waiting on __chartsSettled forever.
+      window.__chartsSettled = true;
     }
     if (window.__dismissPageLoader) window.__dismissPageLoader();
     // Signal the PDF renderer (headless Chromium) that the initial card +
@@ -827,6 +888,51 @@ document.documentElement.classList.add('print-mode');
   if (btnSchedules && window.Scheds) {
     btnSchedules.addEventListener('click', () => window.Scheds.open());
   }
+
+  // ── Add card drawer (dashboard revamp Phase 3 — chat-based builder) ────
+  // Right-side slide-over embedding /ask?builder=1&dashboard=<slug>. Owner-only
+  // markup (see is_owner gate in the template); guarded again here in case the
+  // elements aren't present (non-owner / print mode never render them).
+  const btnAddCard = document.getElementById('btnAddCard');
+  const addCardDrawer = document.getElementById('addCardDrawer');
+  const addCardBackdrop = document.getElementById('addCardBackdrop');
+  const addCardFrame = document.getElementById('addCardFrame');
+  const addCardClose = document.getElementById('addCardClose');
+
+  function openAddCardDrawer() {
+    if (!addCardDrawer || !addCardBackdrop) return;
+    // Lazy-load the iframe on first open so the ask page isn't fetched until needed.
+    if (addCardFrame && addCardFrame.getAttribute('src') === 'about:blank') {
+      addCardFrame.src = '/ask?builder=1&dashboard=' + encodeURIComponent(SLUG);
+    }
+    addCardDrawer.classList.add('is-open');
+    addCardBackdrop.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeAddCardDrawer() {
+    if (!addCardDrawer || !addCardBackdrop) return;
+    addCardDrawer.classList.remove('is-open');
+    addCardBackdrop.classList.remove('is-open');
+    document.body.style.overflow = '';
+  }
+  if (btnAddCard) btnAddCard.addEventListener('click', openAddCardDrawer);
+  if (addCardClose) addCardClose.addEventListener('click', closeAddCardDrawer);
+  if (addCardBackdrop) addCardBackdrop.addEventListener('click', closeAddCardDrawer);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && addCardDrawer && addCardDrawer.classList.contains('is-open')) closeAddCardDrawer();
+  });
+
+  // Pinned cross-agent contract: on a confirmed "add" inside the embedded
+  // builder, ask.js posts {type:'fluxito:card-added', dashboardSlug, cardKey}
+  // to window.parent. Re-run loadCards() so the new card appears without a
+  // full page reload. Origin-checked — only accept messages from same origin.
+  window.addEventListener('message', function(e) {
+    if (e.origin !== window.location.origin) return;
+    const data = e.data;
+    if (!data || data.type !== 'fluxito:card-added') return;
+    if (data.dashboardSlug && data.dashboardSlug !== SLUG) return;
+    loadCards();
+  });
 
   // Load card data asynchronously on page init.
   // Fetch filter options first (if any lazy selects exist), then load cards —

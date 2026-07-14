@@ -8,9 +8,16 @@ unit-tested in isolation.
 Rendering per card type (the template reads these augmented fields):
   scorecard -> each metric gains ``previous`` / ``delta_pct`` / ``delta_abs``
   table     -> each numeric cell gains ``<col>__prev`` and ``<col>__delta_pct``
-  line/bar  -> ``compare_series`` maps each numeric col -> previous values, aligned
-               by relative index (day 1 vs day 1)
-  pie/list/audit -> no overlay comparison (explicit no-op)
+  line/bar/area/stacked_bar/hbar/combo ->
+               ``compare_series`` maps each numeric col -> previous values,
+               aligned by relative index (day 1 vs day 1) — an overlay makes
+               sense for any series-over-a-shared-axis chart family.
+  pie/donut/scatter/heatmap/funnel/treemap/radar/gauge/waterfall/list/audit ->
+               no overlay comparison (explicit no-op) — these either have no
+               shared axis to align previous-period values against (pie,
+               donut, scatter, heatmap, funnel, treemap, radar), show a single
+               point-in-time value already covered by scorecard-style deltas
+               (gauge), or aren't chart types at all (list, audit).
 """
 
 from __future__ import annotations
@@ -84,9 +91,12 @@ def merge_compare(current: dict | None, previous: dict | None, chart_type: str |
         _merge_scorecard(out, prev)
     elif ct == "table":
         _merge_table(out, prev)
-    elif ct in ("line", "bar", "area"):
+    elif ct in ("line", "bar", "area", "stacked_bar", "hbar", "combo"):
         _merge_series(out, prev)
-    # pie / list / audit: comparison overlay is not meaningful — no-op.
+    # pie / donut / scatter / heatmap / funnel / treemap / radar / gauge /
+    # waterfall / list / audit: comparison overlay is not meaningful — no-op.
+    # (out is returned unaugmented for these; templates fall back to
+    # rendering the current snap alone, same as pie does today.)
     out["compare"] = True
     return out
 

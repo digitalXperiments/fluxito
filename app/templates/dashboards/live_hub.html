@@ -11,7 +11,11 @@
 {% block main %}
 <main class="app-main">
 
-  {{ page_header('Report', '<em>Dashboards.</em>', 'Start from a template or ask Flux to build one — every live dashboard and its scheduled deliveries, in one place.') }}
+  {% call page_header('Report', '<em>Dashboards.</em>', 'Start from a template or ask Flux to build one — every live dashboard and its scheduled deliveries, in one place.') %}
+    <div class="lh-head-actions">
+      <a href="/ask?builder=1" class="btn primary sm">⚡ Build with Ask Fluxito</a>
+    </div>
+  {% endcall %}
 
   {# ── In-page tabs (hash-driven): Dashboards | Scheduled reports ── #}
   <div class="sub-tabs" id="lhTabs">
@@ -92,6 +96,9 @@
     {% if has_connections %}
     <p>Your platforms are connected — now ask your AI to build one.<br>
        Try: <em>"Create a dashboard showing GA4 sessions and Google Ads spend for the last 7 days."</em></p>
+    <div style="margin-top:18px;">
+      <a href="/ask?builder=1" class="btn primary">⚡ Build with Ask Fluxito</a>
+    </div>
     <div style="max-width:720px;margin:24px auto 0;text-align:left;">
       {% include "partials/add_to_ai.html" %}
     </div>
@@ -101,7 +108,10 @@
     {% else %}
     <p>Connect a platform first, then ask your AI to build a dashboard.<br>
        <em>"Create a dashboard showing GA4 sessions and Google Ads spend for the last 7 days."</em></p>
-    <a href="/connect" class="btn primary" style="margin-top:16px">Connect your first platform <span class="arrow">→</span></a>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px;">
+      <a href="/connect" class="btn primary">Connect your first platform <span class="arrow">→</span></a>
+      <a href="/ask?builder=1" class="btn">⚡ Build with Ask Fluxito</a>
+    </div>
     {% endif %}
   </div>
   {% endif %}
@@ -206,6 +216,8 @@
 }
 .lh-composer-input::placeholder { color: var(--muted-2); }
 .lh-composer-btn { padding: 9px 17px; font-size: 13px; }
+
+.lh-head-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 /* Live dashboard hub grid */
 .lh-grid {

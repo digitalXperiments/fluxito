@@ -5450,3 +5450,58 @@ body.flux-dock-open .site-footer {
   body.flux-dock-open .main,
   body.flux-dock-open .site-footer { margin-right: 0; }
 }
+
+/* ── Live-view "Add card" builder drawer (dashboard revamp Phase 3) ──
+   Right-side slide-over that embeds /ask?builder=1&dashboard=<slug> in an
+   iframe so owners/editors can build cards by chat without leaving the
+   dashboard. Backdrop click / ESC closes it (wired in live_view.html). */
+.lv-drawer-backdrop {
+  position: fixed; inset: 0; z-index: 9998;
+  background: rgba(11, 11, 14, 0.45);
+  backdrop-filter: blur(2px);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.lv-drawer-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+.lv-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 480px; max-width: 100vw;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.14);
+  z-index: 9999;
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.22s cubic-bezier(.16,1,.3,1);
+}
+.lv-drawer.is-open { transform: translateX(0); }
+
+.lv-drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.lv-drawer-title {
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  font-family: var(--mono); letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.lv-drawer-close {
+  background: none; border: 1px solid var(--line); border-radius: var(--r-m);
+  color: var(--muted); cursor: pointer; padding: 5px 8px;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.12s, color 0.12s;
+}
+.lv-drawer-close:hover { border-color: var(--ink); color: var(--ink); }
+
+.lv-drawer-body { flex: 1; min-height: 0; }
+.lv-drawer-body iframe {
+  width: 100%; height: 100%; border: 0; display: block;
+  background: var(--bg);
+}
+
+@media (max-width: 560px) {
+  .lv-drawer { width: 100vw; }
+}

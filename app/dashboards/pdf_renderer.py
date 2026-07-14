@@ -187,10 +187,19 @@ async def _render_via_chromium(
                 page = await context.new_page()
                 await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
 
-                # The view hydrates its cards asynchronously, then sets the flag.
-                await page.wait_for_function("window.__pdfReady === true", timeout=timeout_ms)
-                # Let ECharts paint its final frame before capture.
-                await page.wait_for_timeout(700)
+                # The view hydrates its cards asynchronously, then sets
+                # window.__pdfReady. Deterministic chart-paint signal (dashboard
+                # revamp Phase 1): live_view.html also flips __chartsSettled
+                # only after every mounted ECharts instance has fired its
+                # 'finished' event once (or a 5s per-page safety timeout), so
+                # waiting on both together replaces the old fixed 700ms sleep
+                # that was prone to capturing heavier chart types mid-paint.
+                await page.wait_for_function(
+                    "window.__pdfReady === true && window.__chartsSettled === true",
+                    timeout=timeout_ms,
+                )
+                # Small buffer for the final paint to actually hit the compositor.
+                await page.wait_for_timeout(150)
 
                 # Render with screen media so the PDF matches the live view
                 # (page.pdf() defaults to print media).

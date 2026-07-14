@@ -46,6 +46,10 @@ _DURATION_COL_RE = re.compile(
 )
 
 # chart_type → the base card_type the PDF / Slack renderers dispatch on.
+# Every chart-like family (anything ECharts draws from rows/series, as opposed
+# to a single headline number, a grid, a findings list, or a plain item list)
+# maps to "CHART" — the renderers already dispatch on card_type, not chart_type,
+# so new chart families need no renderer changes here, only in charts.js.
 _CHART_TYPE_TO_CARD_TYPE = {
     "scorecard": "METRIC",
     "table": "TABLE",
@@ -54,6 +58,18 @@ _CHART_TYPE_TO_CARD_TYPE = {
     "bar": "CHART",
     "line": "CHART",
     "pie": "CHART",
+    "area": "CHART",
+    "combo": "CHART",
+    "stacked_bar": "CHART",
+    "hbar": "CHART",
+    "donut": "CHART",
+    "scatter": "CHART",
+    "heatmap": "CHART",
+    "funnel": "CHART",
+    "treemap": "CHART",
+    "radar": "CHART",
+    "gauge": "CHART",
+    "waterfall": "CHART",
 }
 
 
