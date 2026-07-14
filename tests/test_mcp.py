@@ -65,6 +65,11 @@ EXPECTED_TOOLS = {
     "dashboard_deploy_batch",
     "dashboard_manage_scopes",
     "dashboard_rotate_token",
+    # Incremental card tools (dashboard revamp Phase 2 — chat/MCP build-as-you-go)
+    "dashboard_card_preview",
+    "dashboard_create",
+    "dashboard_card_upsert",
+    "dashboard_card_remove",
     # Project management
     "set_active_project",
     "list_my_projects",

@@ -17,11 +17,16 @@ DOMAIN_TOOLS: dict[str, dict[str, set[str]]] = {
     "seo": {"read": {"seo_read"}, "write": {"seo_write"}},
     "warehouse": {"read": {"warehouse_read", "warehouse_query"}, "write": set()},
     "dashboards": {
-        "read": {"dashboard_read"},
+        # dashboard_card_preview only executes a query + validates a chart
+        # spec — it persists nothing, so it's read-level like dashboard_read.
+        "read": {"dashboard_read", "dashboard_card_preview"},
         "write": {
             "dashboard_deploy_batch",
             "dashboard_manage_scopes",
             "dashboard_rotate_token",
+            "dashboard_create",
+            "dashboard_card_upsert",
+            "dashboard_card_remove",
             "template_deploy",
             "template_save",
         },

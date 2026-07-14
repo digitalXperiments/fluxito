@@ -33,6 +33,30 @@ Match each card's params to what the underlying read tool needs — confirm with
 `dashboard_id` to update in place. Use `query_token_required` + `filter_presets` if the
 schema offers them.
 
+## 3b. Or build incrementally, card-by-card
+
+Prefer this over step 3 when the user wants to see a card before committing it, or
+wants to keep adding cards over several turns (a chat-based build). These are direct
+tools — call `get_session_context(tool_name=…)` for each one's exact schema.
+
+1. `dashboard_create(title=…)` — makes an empty dashboard shell (zero cards is fine;
+   it renders normally everywhere). Returns `dashboard_id`, `slug`, `url`.
+2. `dashboard_card_preview(platform, tool, action, params, chart_type, chart_config?)`
+   — runs the query and validates the chart spec, returns a live `snap` + the
+   normalized spec. **Persists nothing** — no dashboard needed, safe to call
+   repeatedly while iterating on chart_type/params with the user.
+3. Once the user approves the preview, `dashboard_card_upsert(dashboard_slug, card)`
+   — adds it (or updates it, if `card.key` matches an existing card) to the dashboard
+   from step 1. This also auto-extends the dashboard's `query_scopes` for that card's
+   data source — no separate `dashboard_manage_scopes` call needed for cards you just
+   added. Repeat steps 2–3 for each additional card (cap: 20 cards/dashboard).
+4. `dashboard_card_remove(dashboard_slug, card_key)` — drops a card by its `key` if
+   the user wants to take one back out.
+
+Same card shape and per-platform param rules as `dashboard_deploy_batch` (step 2 above)
+apply to `dashboard_card_preview`/`dashboard_card_upsert`'s `card`/`params` — only the
+call cadence differs (one card at a time vs. the whole batch up front).
+
 ## 4. Share & rotate
 
 - `dashboard_manage_scopes` controls who can see it.

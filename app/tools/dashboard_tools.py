@@ -12,18 +12,42 @@ Tools exposed to the AI (via the ``dashboard_*`` surface in unified.py):
                               dashboard_get implementations preserved in
                               ``tool_manager._legacy_tools``)
 
+─── Incremental card tools (chat/MCP build-as-you-go flow) ──────────────────
+  dashboard_card_preview    — run a card's query + validate its chart spec
+                              WITHOUT persisting anything (no dashboard needed)
+  dashboard_create          — empty dashboard shell to build onto card-by-card
+  dashboard_card_upsert     — add/update ONE card on an existing dashboard by key
+  dashboard_card_remove     — delete ONE card from a dashboard by key
+See ``dashboard_deploy_batch`` for the full per-platform param reference these
+tools' ``card``/``params`` arguments share.
+
 ─── Card Schema System ────────────────────────────────────────────────────────
 Every card is stored as a structured spec (key, title, chart_type, platform,
 tool, action, params, chart_config, filter_hooks). The frontend renders cards
 natively — no HTML generation required.
 
-  scorecard — single metric highlight
-  bar       — bar chart
-  line      — line chart
-  pie       — pie/donut chart
-  table     — tabular data
-  audit     — findings/issues list
-  list      — simple item list
+  scorecard   — single metric highlight
+  bar         — bar chart
+  line        — line chart
+  pie         — pie/donut chart
+  table       — tabular data
+  audit       — findings/issues list
+  list        — simple item list
+  area        — filled line chart
+  combo       — bar+line combo, optional dual axis
+  stacked_bar — stacked bar chart
+  hbar        — horizontal bar chart
+  donut       — donut chart
+  scatter     — XY scatter (optional bubble size)
+  heatmap     — 2D heatmap (x/y categories, value intensity)
+  funnel      — funnel chart
+  treemap     — treemap (optional nested hierarchy)
+  radar       — radar/spider chart
+  gauge       — single-value gauge (optional min/max/target)
+  waterfall   — waterfall chart
+
+See ``app/dashboards/chart_spec.py`` for the formal per-type ``chart_config``
+schema (also the source of ``validate_chart_config`` used below).
 
 Sharing (public links), scheduling (email/Slack sends), and PDF export are
 strictly user-triggered actions from the /live-dashboards/{slug} web UI — there is no
@@ -38,6 +62,10 @@ from datetime import UTC, datetime
 
 import app.app_state as state
 from app.config import settings
+from app.dashboards import query_engine
+from app.dashboards.chart_spec import validate_chart_config
+from app.dashboards.scope import fingerprint
+from app.dashboards.snapshot import normalize_snap
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -78,7 +106,31 @@ VALID_TOOLS = {
     "seo_read",
     "seo_write",
 }
-VALID_CHART_TYPES = {"scorecard", "bar", "line", "pie", "table", "audit", "list"}
+VALID_CHART_TYPES = {
+    # legacy 7 — exposed end-to-end since the original dashboard launch
+    "scorecard",
+    "bar",
+    "line",
+    "pie",
+    "table",
+    "audit",
+    "list",
+    # first-class as of the dashboard revamp (Phase 1) — previously only
+    # reachable as a chart_config.type sub-mode of bar/line/pie
+    "area",
+    "stacked_bar",
+    "hbar",
+    "donut",
+    # net-new chart families (ECharts already supports these; wiring is new)
+    "combo",
+    "scatter",
+    "heatmap",
+    "funnel",
+    "treemap",
+    "radar",
+    "gauge",
+    "waterfall",
+}
 MAX_CARDS_PER_DASHBOARD = 20
 
 MAX_TITLE_LEN = 120
@@ -122,6 +174,22 @@ _CARD_PARAM_REQUIREMENTS: dict[tuple[str, str], list[str]] = {
     ("google_ads", "get_campaign_performance"): ["customer_id", "start_date", "end_date"],
     ("search_console", "get_search_analytics"): ["site_url", "start_date", "end_date"],
     ("search_console", "list_sites"): [],
+    # gtm cards dispatch through tagmanager_read(platform="gtm", ...) — verified
+    # against app/tools/tagmanager_tools.py: every action below hard-requires
+    # account_id + container_id there ("account_id and container_id are
+    # required for '{action}'"); list_accounts/list_containers need neither
+    # and are intentionally NOT listed here (no hard requirement to enforce).
+    ("gtm", "get_container_summary"): ["account_id", "container_id"],
+    ("gtm", "list_workspaces"): ["account_id", "container_id"],
+    ("gtm", "list_tags"): ["account_id", "container_id"],
+    ("gtm", "list_triggers"): ["account_id", "container_id"],
+    ("gtm", "list_variables"): ["account_id", "container_id"],
+    # adobe_launch cards dispatch through tagmanager_read(platform="adobe_launch").
+    # Verified against tagmanager_tools.py: list_properties needs account_id
+    # (=company_id), get_property/list_rules need container_id (=property_id).
+    ("adobe_launch", "list_properties"): ["account_id"],
+    ("adobe_launch", "get_property"): ["container_id"],
+    ("adobe_launch", "list_rules"): ["container_id"],
 }
 
 # Fields whose value must be a non-empty list (not just non-None).
@@ -242,6 +310,107 @@ def _suggest_filters(validated_cards: list[dict]) -> list[dict]:
     return list(seen.values())
 
 
+def _validate_one_card_spec(i: int, c: dict, seen_keys: set[str]) -> tuple[dict, list[str], list[str]]:
+    """Validate + normalize ONE card spec — the per-card body shared by both
+    ``_validate_card_specs`` (a whole ``cards`` batch, dashboard_deploy_batch)
+    and ``_validate_single_card_spec`` (one card, dashboard_card_preview /
+    dashboard_card_upsert).
+
+    Two-tier error model, same as the batch validator:
+      * Structural errors (missing/wrong-typed ``key``/``title``/``chart_type``/
+        ``platform``/``tool``/``params``/etc.) raise ``ValueError`` immediately —
+        these mean the caller sent a malformed object, not a fixable data issue.
+      * Per-tool param errors (unknown platform/tool, missing required params,
+        invalid chart_config) are returned in the ``errors`` list so the caller
+        can aggregate them (a batch call surfaces all card errors in one retry).
+
+    Returns ``(normalized_card, errors, chart_warnings)``:
+      normalized_card — dict with defaults applied, ready to store/dispatch
+      errors          — non-fatal per-tool validation errors (caller raises)
+      chart_warnings  — non-fatal chart_config warnings (e.g. unknown chart_type)
+    """
+    key = c.get("key")
+    if not isinstance(key, str) or not key.strip():
+        raise ValueError(f"cards[{i}].key must be a non-empty string")
+    key = key.strip()
+    if key in seen_keys:
+        raise ValueError(f"cards[{i}].key duplicates an earlier card: {key!r}")
+    seen_keys.add(key)
+
+    title = c.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError(f"cards[{i}] ({key}): title must be a non-empty string")
+
+    chart_type = c.get("chart_type")
+    if not isinstance(chart_type, str) or not chart_type:
+        raise ValueError(f"cards[{i}] ({key}): chart_type must be a non-empty string")
+    if chart_type not in VALID_CHART_TYPES:
+        raise ValueError(
+            f"cards[{i}] ({key}): chart_type '{chart_type}' is not valid. "
+            f"Must be one of: {', '.join(sorted(VALID_CHART_TYPES))}"
+        )
+
+    param_errors: list[str] = []
+
+    platform = c.get("platform")
+    tool = c.get("tool")
+    params = c.get("params")
+    if not isinstance(platform, str) or not platform:
+        raise ValueError(f"cards[{i}] ({key}): platform must be a non-empty string")
+    if platform not in VALID_PLATFORMS:
+        param_errors.append(
+            f"cards[{i}] ({key}): unknown platform '{platform}', must be one of: {sorted(VALID_PLATFORMS)}"
+        )
+    if not isinstance(tool, str) or not tool:
+        raise ValueError(f"cards[{i}] ({key}): tool must be a non-empty string")
+    if tool not in VALID_TOOLS:
+        param_errors.append(
+            f"cards[{i}] ({key}): unknown tool '{tool}', must be one of: {sorted(VALID_TOOLS)}"
+        )
+    if not isinstance(params, dict):
+        raise ValueError(f"cards[{i}] ({key}): params must be an object")
+    action = c.get("action")
+    if action is not None and not isinstance(action, str):
+        raise ValueError(f"cards[{i}] ({key}): action must be a string or omitted")
+    hooks = c.get("filter_hooks")
+    if hooks is not None and not isinstance(hooks, dict):
+        raise ValueError(f"cards[{i}] ({key}): filter_hooks must be an object or omitted")
+    filter_options = c.get("filter_options")
+    if filter_options is not None and not isinstance(filter_options, dict):
+        raise ValueError(f"cards[{i}] ({key}): filter_options must be an object or omitted")
+    chart_config = c.get("chart_config")
+    if chart_config is not None and not isinstance(chart_config, dict):
+        raise ValueError(f"cards[{i}] ({key}): chart_config must be an object or omitted")
+
+    # Per-(platform, action) required-params check. Collect all errors so
+    # Claude can fix every card in one retry.
+    param_errors.extend(_check_params_for_action(key, platform, action, params))
+
+    # chart_config schema validation — normalize against the chart_type's
+    # formal model; aggregate failures the same way as param_errors so a
+    # single retry can fix every card.
+    chart_warnings: list[str] = []
+    try:
+        normalized_chart_config, chart_warnings = validate_chart_config(chart_type, chart_config)
+    except ValueError as exc:
+        param_errors.append(f"cards[{i}] ({key}): {exc}")
+        normalized_chart_config = chart_config or {}
+
+    normalized = {
+        "key": key,
+        "title": str(title).strip()[:MAX_TITLE_LEN],
+        "chart_type": chart_type,
+        "platform": platform,
+        "tool": tool,
+        "action": action,
+        "params": params,
+        "chart_config": normalized_chart_config or {},
+        "filter_hooks": hooks or {},
+        "filter_options": filter_options or {},
+    }
+    return normalized, param_errors, chart_warnings
+
+
 def _validate_card_specs(cards: list | None) -> list[dict]:
     """Validate the ``cards`` list passed to dashboard_deploy_batch.
 
@@ -255,10 +424,17 @@ def _validate_card_specs(cards: list | None) -> list[dict]:
          fields (e.g. ``metrics`` + ``dimensions`` for GA4 ``run_report``)
          are present and non-empty.
       4. ``filter_hooks`` is an object if supplied.
+      5. chart_config — validated + normalized against the chart_type's
+         formal schema (``app.dashboards.chart_spec``). Legacy shapes (e.g.
+         chart_type='bar' + chart_config.type='stacked_bar') are accepted
+         unchanged; only genuinely malformed shapes are rejected.
 
     Raises ``ValueError`` with *all* missing-field errors aggregated so Claude
     can fix every card in one retry instead of rediscovering issues on live
     refresh.
+
+    Per-card validation lives in ``_validate_one_card_spec`` (shared with the
+    single-card path used by dashboard_card_preview / dashboard_card_upsert).
     """
     if cards is None:
         return []
@@ -272,80 +448,34 @@ def _validate_card_specs(cards: list | None) -> list[dict]:
     for i, c in enumerate(cards):
         if not isinstance(c, dict):
             raise ValueError(f"cards[{i}] must be an object")
-        key = c.get("key")
-        if not isinstance(key, str) or not key.strip():
-            raise ValueError(f"cards[{i}].key must be a non-empty string")
-        key = key.strip()
-        if key in seen_keys:
-            raise ValueError(f"cards[{i}].key duplicates an earlier card: {key!r}")
-        seen_keys.add(key)
-
-        title = c.get("title")
-        if not isinstance(title, str) or not title.strip():
-            raise ValueError(f"cards[{i}] ({key}): title must be a non-empty string")
-
-        chart_type = c.get("chart_type")
-        if not isinstance(chart_type, str) or not chart_type:
-            raise ValueError(f"cards[{i}] ({key}): chart_type must be a non-empty string")
-        if chart_type not in VALID_CHART_TYPES:
-            raise ValueError(
-                f"cards[{i}] ({key}): chart_type '{chart_type}' is not valid. "
-                f"Must be one of: {', '.join(sorted(VALID_CHART_TYPES))}"
-            )
-
-        platform = c.get("platform")
-        tool = c.get("tool")
-        params = c.get("params")
-        if not isinstance(platform, str) or not platform:
-            raise ValueError(f"cards[{i}] ({key}): platform must be a non-empty string")
-        if platform not in VALID_PLATFORMS:
-            param_errors.append(
-                f"cards[{i}] ({key}): unknown platform '{platform}', must be one of: {sorted(VALID_PLATFORMS)}"
-            )
-        if not isinstance(tool, str) or not tool:
-            raise ValueError(f"cards[{i}] ({key}): tool must be a non-empty string")
-        if tool not in VALID_TOOLS:
-            param_errors.append(
-                f"cards[{i}] ({key}): unknown tool '{tool}', must be one of: {sorted(VALID_TOOLS)}"
-            )
-        if not isinstance(params, dict):
-            raise ValueError(f"cards[{i}] ({key}): params must be an object")
-        action = c.get("action")
-        if action is not None and not isinstance(action, str):
-            raise ValueError(f"cards[{i}] ({key}): action must be a string or omitted")
-        hooks = c.get("filter_hooks")
-        if hooks is not None and not isinstance(hooks, dict):
-            raise ValueError(f"cards[{i}] ({key}): filter_hooks must be an object or omitted")
-        filter_options = c.get("filter_options")
-        if filter_options is not None and not isinstance(filter_options, dict):
-            raise ValueError(f"cards[{i}] ({key}): filter_options must be an object or omitted")
-        chart_config = c.get("chart_config")
-        if chart_config is not None and not isinstance(chart_config, dict):
-            raise ValueError(f"cards[{i}] ({key}): chart_config must be an object or omitted")
-
-        # Per-(platform, action) required-params check. Collect all errors so
-        # Claude can fix every card in one retry.
-        param_errors.extend(_check_params_for_action(key, platform, action, params))
-
-        out.append(
-            {
-                "key": key,
-                "title": str(title).strip()[:MAX_TITLE_LEN],
-                "chart_type": chart_type,
-                "platform": platform,
-                "tool": tool,
-                "action": action,
-                "params": params,
-                "chart_config": chart_config or {},
-                "filter_hooks": hooks or {},
-                "filter_options": filter_options or {},
-            }
-        )
+        # Chart warnings (e.g. unknown chart_type, already a hard error above)
+        # are non-fatal and simply dropped in the batch path, same as before.
+        normalized, errs, _chart_warnings = _validate_one_card_spec(i, c, seen_keys)
+        out.append(normalized)
+        param_errors.extend(errs)
 
     if param_errors:
         raise ValueError("Card spec validation failed:\n  - " + "\n  - ".join(param_errors))
 
     return out
+
+
+def _validate_single_card_spec(card: dict) -> tuple[dict, list[str]]:
+    """Validate ONE card spec (dashboard_card_preview / dashboard_card_upsert).
+
+    Same checks as a single entry of ``_validate_card_specs`` minus the
+    key-uniqueness check (only meaningful across a batch). Raises
+    ``ValueError`` for structural errors or aggregated param/chart_config
+    errors, matching the batch validator's error format.
+
+    Returns ``(normalized_card, chart_warnings)``.
+    """
+    if not isinstance(card, dict):
+        raise ValueError("card must be an object")
+    normalized, errors, chart_warnings = _validate_one_card_spec(0, card, set())
+    if errors:
+        raise ValueError("Card spec validation failed:\n  - " + "\n  - ".join(errors))
+    return normalized, chart_warnings
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +587,9 @@ def register_dashboard_tools(mcp_server):
         Each card in 'cards' must be a dict with:
           key (str): stable snake_case ID, unique within this batch (e.g. "sessions_score")
           title (str): human-readable card title
-          chart_type (str): one of — scorecard, bar, line, pie, table, audit, list
+          chart_type (str): one of — scorecard, bar, line, pie, table, audit, list,
+                          area, combo, stacked_bar, hbar, donut, scatter, heatmap,
+                          funnel, treemap, radar, gauge, waterfall
           platform (str): one of — ga4, bigquery, redshift, snowflake, meta_ads, tiktok_ads,
                           snap_ads, apple_ads, google_ads, amplitude, adobe_analytics, search_console,
                           gtm, adobe_launch
@@ -846,6 +978,356 @@ def register_dashboard_tools(mcp_server):
                 "Token rotated. Call dashboard_deploy_batch with query_token_required=True "
                 "to update the dashboard if needed."
             ),
+        }
+
+    # -------------------------------------------------------------------------
+    # dashboard_card_preview  — incremental build: try before you buy
+    # -------------------------------------------------------------------------
+
+    @mcp_server.tool("dashboard_card_preview")
+    async def dashboard_card_preview(
+        platform: str,
+        tool: str,
+        action: str,
+        params: dict,
+        chart_type: str,
+        chart_config: dict | None = None,
+        title: str | None = None,
+    ) -> dict:
+        """Preview ONE card's live data + chart spec. Persists nothing.
+
+        Runs the exact query/normalize path a deployed card would use (via
+        ``app.dashboards.query_engine`` + ``normalize_snap``) and validates
+        ``chart_config`` against ``chart_type``'s formal schema
+        (``app.dashboards.chart_spec``). Use this to show a live preview
+        before calling dashboard_card_upsert to actually add the card — no
+        dashboard needs to exist yet, and nothing is written to the database.
+
+        Parameters mirror one card spec from dashboard_deploy_batch's `cards`
+        list — see that tool's docstring for the full per-platform param
+        reference (required params by platform, filter_hooks rules, etc.):
+          platform, tool, action, params — the tool call to execute
+          chart_type, chart_config       — the display spec to validate
+          title                          — optional, cosmetic only (echoed
+                                            back in normalized_spec)
+
+        Returns:
+          snap (dict): normalized query result (see app.dashboards.snapshot)
+          normalized_spec (dict): the validated card spec (key="__preview__"),
+                                   chart_config normalized against its schema
+          warnings (list[str]): non-fatal chart_config warnings
+        """
+        fake_card = {
+            "key": "__preview__",
+            "title": (title or "Preview").strip()[:MAX_TITLE_LEN] or "Preview",
+            "chart_type": chart_type,
+            "platform": platform,
+            "tool": tool,
+            "action": action,
+            "params": params,
+            "chart_config": chart_config,
+        }
+        try:
+            validated, warnings = _validate_single_card_spec(fake_card)
+        except ValueError as exc:
+            return {"error": True, "error_type": "invalid_card_spec", "message": str(exc)}
+
+        tm = mcp_server._tool_manager
+        try:
+            raw_result = await query_engine.run_card(
+                tm,
+                validated,
+                tool_name=validated["tool"],
+                action=validated["action"],
+            )
+        except ValueError as exc:
+            return {"error": True, "error_type": "tool_not_registered", "message": str(exc)}
+        except TimeoutError:
+            return {
+                "error": True,
+                "error_type": "timeout",
+                "message": "Query timed out after 25s.",
+            }
+        except Exception as exc:  # connector/auth/upstream error — surface, don't persist
+            return {"error": True, "error_type": "query_failed", "message": str(exc)}
+
+        snap = normalize_snap(raw_result, validated["chart_type"], validated["chart_config"])
+
+        return {
+            "snap": snap,
+            "normalized_spec": validated,
+            "warnings": warnings,
+        }
+
+    # -------------------------------------------------------------------------
+    # dashboard_create — empty dashboard shell for build-as-you-go
+    # -------------------------------------------------------------------------
+
+    @mcp_server.tool("dashboard_create")
+    async def dashboard_create(title: str, description: str | None = None) -> dict:
+        """Create an empty live dashboard — zero cards.
+
+        Use this to start a build-as-you-go dashboard: create it once, then
+        add cards one at a time with dashboard_card_upsert (each call auto-
+        extends query_scopes for that card's data source). A card-less
+        dashboard renders fine everywhere (live view, public share, PDF) —
+        the card grid is simply empty until the first upsert.
+
+        Returns:
+          dashboard_id (str), url (str), slug (str)
+        """
+        if not title or not title.strip():
+            return {"error": True, "message": "title must be a non-empty string."}
+
+        u = _user()
+        if not u:
+            return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+        uid = uuid.UUID(u.user_id)
+        proj_ctx = state.current_project_ctx.get()
+        project_id = uuid.UUID(proj_ctx.project_id) if proj_ctx else None
+
+        from app.models.dashboard import Dashboard
+
+        dash = Dashboard(
+            user_id=uid,
+            project_id=project_id,
+            owner_email=u.email or "",
+            owner_name=getattr(u, "display_name", None),
+            title=title.strip()[:MAX_TITLE_LEN],
+            description=(description or "")[:MAX_DESC_LEN] or None,
+            share_slug=_make_slug(),
+            is_public=True,
+            query_scopes=[],
+            filter_presets=[],
+            filters=[],
+            query_token=None,
+            query_token_required=False,
+        )
+        async with state.db_session_factory() as db:
+            db.add(dash)
+            await db.commit()
+            await db.refresh(dash)
+
+        base = settings.APP_BASE_URL
+        return {
+            "dashboard_id": str(dash.id),
+            "url": f"{base}/live-dashboards/{dash.share_slug}",
+            "slug": dash.share_slug,
+        }
+
+    # -------------------------------------------------------------------------
+    # dashboard_card_upsert — add/update ONE card by key
+    # -------------------------------------------------------------------------
+
+    @mcp_server.tool("dashboard_card_upsert")
+    async def dashboard_card_upsert(dashboard_slug: str, card: dict) -> dict:
+        """Add or update ONE card on an existing dashboard, keyed by ``card.key``.
+
+        Companion to dashboard_create + dashboard_card_preview for the
+        incremental build flow: create an empty dashboard, preview a card,
+        then upsert it one at a time — instead of assembling the whole
+        `cards` list upfront for dashboard_deploy_batch.
+
+        Parameters:
+          dashboard_slug (str): the dashboard's share_slug (from
+                                 dashboard_create or dashboard_deploy_batch's
+                                 `slug` response field)
+          card (dict): one card spec — same shape as an entry in
+                       dashboard_deploy_batch's `cards` list (key, title,
+                       chart_type, platform, tool, action, params,
+                       chart_config, filter_hooks, filter_options). See that
+                       tool's docstring for the full per-platform param
+                       reference.
+
+        Behaviour:
+          * A card whose `key` matches an existing card on this dashboard is
+            UPDATED in place (same position); a new key is APPENDED.
+          * `query_scopes` is auto-extended with this card's (platform,
+            params) fingerprint if not already covered — no separate
+            dashboard_manage_scopes call needed for cards you're adding.
+          * Enforces the 20-card-per-dashboard cap (a card being UPDATED
+            doesn't count against the cap; only new cards do).
+
+        Returns:
+          card_key (str), dashboard_url (str), position (int)
+        """
+        if not isinstance(card, dict):
+            return {"error": True, "message": "card must be an object."}
+
+        try:
+            validated, _warnings = _validate_single_card_spec(card)
+        except ValueError as exc:
+            return {"error": True, "error_type": "invalid_card_spec", "message": str(exc)}
+
+        u = _user()
+        if not u:
+            return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+        uid = uuid.UUID(u.user_id)
+
+        from sqlalchemy import select as sa_select
+
+        from app.models.dashboard import Dashboard, DashboardCard
+
+        async with state.db_session_factory() as db:
+            result = await db.execute(
+                sa_select(Dashboard).where(
+                    Dashboard.share_slug == dashboard_slug,
+                    Dashboard.user_id == uid,
+                )
+            )
+            dash = result.scalar_one_or_none()
+            if not dash:
+                return {
+                    "error": True,
+                    "message": f"Dashboard '{dashboard_slug}' not found or not yours.",
+                }
+
+            existing_result = await db.execute(
+                sa_select(DashboardCard).where(DashboardCard.dashboard_id == dash.id)
+            )
+            existing_cards = list(existing_result.scalars().all())
+            existing_by_key: dict[str, DashboardCard] = {}
+            for ec in existing_cards:
+                ec_key = (ec.query_params or {}).get("key")
+                if ec_key:
+                    existing_by_key[ec_key] = ec
+
+            is_update = validated["key"] in existing_by_key
+            if not is_update and len(existing_cards) >= MAX_CARDS_PER_DASHBOARD:
+                return {
+                    "error": True,
+                    "error_type": "card_limit_reached",
+                    "message": (
+                        f"Dashboard '{dashboard_slug}' already has {len(existing_cards)} cards "
+                        f"(max {MAX_CARDS_PER_DASHBOARD}). Remove a card first with "
+                        "dashboard_card_remove."
+                    ),
+                }
+
+            card_query_params = {
+                "key": validated["key"],
+                "platform": validated["platform"],
+                "tool": validated["tool"],
+                "action": validated["action"],
+                **validated["params"],
+                "filter_hooks": validated["filter_hooks"],
+                "filter_options": validated["filter_options"],
+            }
+
+            if is_update:
+                card_row = existing_by_key[validated["key"]]
+                card_row.title = validated["title"]
+                card_row.platform = validated["platform"]
+                card_row.tool_name = validated["tool"]
+                card_row.chart_type = validated["chart_type"]
+                card_row.chart_config = validated["chart_config"]
+                card_row.query_params = card_query_params
+                position = card_row.position
+            else:
+                position = max((c.position for c in existing_cards), default=-1) + 1
+                card_row = DashboardCard(
+                    dashboard_id=dash.id,
+                    title=validated["title"],
+                    platform=validated["platform"],
+                    tool_name=validated["tool"],
+                    chart_type=validated["chart_type"],
+                    chart_config=validated["chart_config"],
+                    query_params=card_query_params,
+                    position=position,
+                )
+                db.add(card_row)
+
+            # Auto-extend query_scopes with this card's fingerprint, mirroring
+            # dashboard_deploy_batch's scope-update behaviour, so a card added
+            # incrementally is immediately authorized for live refresh without
+            # a separate dashboard_manage_scopes call.
+            fp = fingerprint(validated["platform"], validated["params"])
+            scopes = list(dash.query_scopes or [])
+            if fp not in scopes:
+                scopes.append(fp)
+                dash.query_scopes = scopes
+
+            dash.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            await db.commit()
+            await db.refresh(dash)
+
+        base = settings.APP_BASE_URL
+        return {
+            "card_key": validated["key"],
+            "dashboard_url": f"{base}/live-dashboards/{dash.share_slug}",
+            "position": position,
+        }
+
+    # -------------------------------------------------------------------------
+    # dashboard_card_remove — delete ONE card by key
+    # -------------------------------------------------------------------------
+
+    @mcp_server.tool("dashboard_card_remove")
+    async def dashboard_card_remove(dashboard_slug: str, card_key: str) -> dict:
+        """Remove ONE card from a dashboard by its stable key.
+
+        Parameters:
+          dashboard_slug (str): the dashboard's share_slug
+          card_key (str): the card's `key` (as set on dashboard_deploy_batch /
+                          dashboard_card_upsert) — NOT its UUID.
+
+        Note: an earlier revision of the tracking-plan schema (migration 063)
+        linked tp_metrics rows to a dashboard card via tp_metrics.dashboard_card_id,
+        which would have needed nulling out here to avoid a dangling reference.
+        Migration 064 (tp_members_type_cleanup) dropped that column entirely —
+        TPMetric no longer carries measurement/dashboard-link columns — so there
+        is nothing to clear; this tool does not touch tp_metrics.
+
+        Returns:
+          success (bool), removed_card_key (str), remaining_cards (int)
+        """
+        u = _user()
+        if not u:
+            return {"error": True, "error_type": "unauthenticated", "message": "No active session."}
+        uid = uuid.UUID(u.user_id)
+
+        from sqlalchemy import select as sa_select
+
+        from app.models.dashboard import Dashboard, DashboardCard
+
+        async with state.db_session_factory() as db:
+            result = await db.execute(
+                sa_select(Dashboard).where(
+                    Dashboard.share_slug == dashboard_slug,
+                    Dashboard.user_id == uid,
+                )
+            )
+            dash = result.scalar_one_or_none()
+            if not dash:
+                return {
+                    "error": True,
+                    "message": f"Dashboard '{dashboard_slug}' not found or not yours.",
+                }
+
+            existing_result = await db.execute(
+                sa_select(DashboardCard).where(DashboardCard.dashboard_id == dash.id)
+            )
+            existing_cards = list(existing_result.scalars().all())
+
+            target = None
+            for ec in existing_cards:
+                if (ec.query_params or {}).get("key") == card_key:
+                    target = ec
+                    break
+            if target is None:
+                return {
+                    "error": True,
+                    "message": f"No card with key '{card_key}' on dashboard '{dashboard_slug}'.",
+                }
+
+            await db.delete(target)
+            dash.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            await db.commit()
+
+        return {
+            "success": True,
+            "removed_card_key": card_key,
+            "remaining_cards": len(existing_cards) - 1,
         }
 
     # -------------------------------------------------------------------------
