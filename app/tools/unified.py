@@ -79,6 +79,8 @@ ANALYTICS_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "get_metrics": ("analytics_read", "get_metrics"),
     "get_segments": ("analytics_read", "get_segments"),
     "get_calculated_metrics": ("analytics_read", "get_calculated_metrics"),
+    "list_projects": ("analytics_read", "list_projects"),
+    "get_project": ("analytics_read", "get_project"),
 }
 
 # analytics_write
@@ -92,6 +94,11 @@ ANALYTICS_WRITE_ROUTES: dict[str, tuple[str, str | None]] = {
     "create_segment": ("analytics_write", "create_segment"),
     "delete_segment": ("analytics_write", "delete_segment"),
     "delete_calculated_metric": ("analytics_write", "delete_calculated_metric"),
+    # Adobe Analysis Workspace projects
+    "create_project": ("analytics_write", "create_project"),
+    "update_project": ("analytics_write", "update_project"),
+    "delete_project": ("analytics_write", "delete_project"),
+    "copy_project": ("analytics_write", "copy_project"),
     # Amplitude / Mixpanel / PostHog event-type CRUD
     "create_event_type": ("analytics_write", "create_event_type"),
     "update_event_type": ("analytics_write", "update_event_type"),
@@ -533,7 +540,7 @@ Actions (pass via `action`, required params inside `params`):
     get_conversion_events, list_cohorts, list_events, get_event_detail,
     get_event_properties, get_user_properties, list_report_suites,
     list_companies, get_dimensions, get_metrics, get_segments,
-    get_calculated_metrics
+    get_calculated_metrics, list_projects, get_project
 
 Return shape: {rows/data/items: [...], ...} or {error, error_type, message}.
 """
@@ -554,6 +561,14 @@ Actions:
   update_segment             — params: platform, property_id, config={segment_id, updates}
   delete_segment             — params: platform, property_id, config={segment_id}
   delete_calculated_metric   — params: platform, property_id, config={metric_id}
+  create_project             — Adobe Workspace. params: platform, config={name, rsid, definition}
+  update_project             — Adobe Workspace. Partial PUT of supplied fields only (no pre-GET).
+                               Set merge_definition=true to GET+local-deep-merge definition. params: platform,
+                               config={project_id, name?, description?, rsid?, definition?, merge_definition?, ...}
+  delete_project             — Adobe Workspace. Destructive; explicit project_id only.
+                               params: platform, config={project_id}
+  copy_project               — Adobe Workspace. GET source + POST under a new name.
+                               params: platform, config={project_id, name}
   create_event_type          — params: platform (amplitude|mixpanel|posthog), config={event_type, description?, category?}
   update_event_type          — params: platform (amplitude|mixpanel|posthog), config={event_type, new_name?, description?, category?}
   delete_event_type          — params: platform (amplitude|mixpanel|posthog), config={event_type}

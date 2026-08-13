@@ -427,6 +427,55 @@
   },
   {
     "tool": "analytics_read",
+    "action": "get_project",
+    "summary": "Adobe-only: fetch one Analysis Workspace project by id. Always requests expansion=definition so the full project JSON is available for editing.",
+    "group": "CATALOG / METADATA",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "adobe_analytics",
+        "doc": "Adobe only."
+      },
+      {
+        "name": "project_id",
+        "type": "string",
+        "required": true,
+        "example": "6091a10005c7706c0acdd751",
+        "doc": "Adobe Workspace project id (from list_projects). Required. Letters, digits, underscore, hyphen only (1-128 chars). NOT a Fluxito project id.",
+        "platforms": [
+          "adobe_analytics"
+        ]
+      },
+      {
+        "name": "expansion",
+        "type": "array",
+        "required": false,
+        "item_type": "string",
+        "example": [
+          "definition",
+          "reportSuiteName",
+          "ownerFullName"
+        ],
+        "doc": "Adobe expansion fields. definition is always included even if omitted so the result is editable."
+      }
+    ],
+    "platforms": [
+      "adobe_analytics"
+    ],
+    "returns": "Full Adobe Workspace project object including definition | {error,error_type,message,adobe_error_code?}",
+    "scope": "analytics_read"
+  },
+  {
+    "tool": "analytics_read",
     "action": "get_realtime",
     "summary": "GA4-only: real-time active-user/event snapshot for a property (cached 30s). property_id only.",
     "group": "CATALOG / METADATA",
@@ -873,6 +922,74 @@
       "ga4"
     ],
     "returns": "GA4 list_properties dict (properties[] with id/display_name) | {error,message}",
+    "scope": "analytics_read"
+  },
+  {
+    "tool": "analytics_read",
+    "action": "list_projects",
+    "summary": "Adobe-only: list Analysis Workspace projects. Compact summaries (id/name/rsid/owner). Default expansion is reportSuiteName,ownerFullName — definition is NOT included unless requested. Query params are limited to Adobe's published set: expansion, includeType, locale, limit, page.",
+    "group": "CATALOG / METADATA",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "adobe_analytics",
+        "doc": "Adobe only."
+      },
+      {
+        "name": "expansion",
+        "type": "array",
+        "required": false,
+        "item_type": "string",
+        "example": [
+          "reportSuiteName",
+          "ownerFullName"
+        ],
+        "doc": "Adobe expansion. Default reportSuiteName,ownerFullName. Include definition only when the full Workspace JSON is needed (token-heavy). Official parameter: https://developer.adobe.com/analytics-apis/docs/2.0/guides/endpoints/projects/parameters"
+      },
+      {
+        "name": "include_type",
+        "type": "string",
+        "required": false,
+        "example": "all",
+        "doc": "Adobe includeType (official): all | shared. See https://developer.adobe.com/analytics-apis/docs/2.0/guides/endpoints/projects/parameters"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Page size (Adobe limit; official pagination parameter)."
+      },
+      {
+        "name": "page",
+        "type": "integer",
+        "required": false,
+        "example": 0,
+        "doc": "0-based Adobe page index (official pagination parameter)."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": false,
+        "example": {
+          "locale": "en_US"
+        },
+        "doc": "Optional official extras: locale (en_US, fr_FR, ...). Undocumented Adobe params (filterByIds, ownerId, sortProperty, sortDirection) are not sent."
+      }
+    ],
+    "platforms": [
+      "adobe_analytics"
+    ],
+    "returns": "{projects:[{id,name,rsid,owner,...}], total, page, total_pages, limit} | {error,error_type,message,adobe_error_code?}",
     "scope": "analytics_read"
   },
   {
