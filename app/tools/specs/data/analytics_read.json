@@ -427,7 +427,7 @@
   },
   {
     "tool": "analytics_read",
-    "action": "get_project",
+    "action": "adobe_workspace_get_project",
     "summary": "Adobe-only: fetch one Analysis Workspace project by id. Always requests expansion=definition so the full project JSON is available for editing.",
     "group": "CATALOG / METADATA",
     "params": [
@@ -450,7 +450,7 @@
         "type": "string",
         "required": true,
         "example": "6091a10005c7706c0acdd751",
-        "doc": "Adobe Workspace project id (from list_projects). Required. Letters, digits, underscore, hyphen only (1-128 chars). NOT a Fluxito project id.",
+        "doc": "Adobe Workspace project id (from adobe_workspace_list_projects). Required. Letters, digits, underscore, hyphen only (1-128 chars). NOT a Fluxito project id.",
         "platforms": [
           "adobe_analytics"
         ]
@@ -926,7 +926,7 @@
   },
   {
     "tool": "analytics_read",
-    "action": "list_projects",
+    "action": "adobe_workspace_list_projects",
     "summary": "Adobe-only: list Analysis Workspace projects. Compact summaries (id/name/rsid/owner). Default expansion is reportSuiteName,ownerFullName — definition is NOT included unless requested. Query params are limited to Adobe's published set: expansion, includeType, locale, limit, page.",
     "group": "CATALOG / METADATA",
     "params": [

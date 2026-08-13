@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.5] — 2026-08-13
+
+### Changed
+- **Clear Adobe Analysis Workspace MCP actions.** The generic project actions are now
+  advertised as `adobe_workspace_list_projects`, `adobe_workspace_get_project`,
+  `adobe_workspace_create_project`, `adobe_workspace_update_project`,
+  `adobe_workspace_delete_project`, and `adobe_workspace_copy_project`, making the
+  capability unambiguous to AI clients. Existing generic action names remain accepted
+  as hidden compatibility aliases for saved automations and older clients.
+
 ## [2.0.0] — 2026-07-14
 
 The dashboard platform, rebuilt. Dashboards go from basic spreadsheet-style

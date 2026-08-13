@@ -262,7 +262,7 @@
   },
   {
     "tool": "analytics_write",
-    "action": "create_project",
+    "action": "adobe_workspace_create_project",
     "summary": "Adobe-only: create an Analysis Workspace project. Requires config{name, rsid, definition}. Only writable fields are sent (name, rsid, definition, type=project, optional description/tags/shares). Server-managed fields (owner, id, created, modified) are not forwarded.",
     "group": "",
     "params": [
@@ -310,7 +310,7 @@
   },
   {
     "tool": "analytics_write",
-    "action": "copy_project",
+    "action": "adobe_workspace_copy_project",
     "summary": "Adobe-only: duplicate a Workspace project (GET source with definition, POST under a new name using writable fields only). Requires config{project_id, name}. project_id must match [A-Za-z0-9_-]{1,128}.",
     "group": "",
     "params": [
@@ -422,7 +422,7 @@
   },
   {
     "tool": "analytics_write",
-    "action": "delete_project",
+    "action": "adobe_workspace_delete_project",
     "summary": "Adobe-only: permanently hide/delete one Analysis Workspace project. IRREVERSIBLE. Requires an explicit config.project_id matching [A-Za-z0-9_-]{1,128} — no wildcard, path, or bulk delete.",
     "group": "",
     "params": [
@@ -573,7 +573,7 @@
   },
   {
     "tool": "analytics_write",
-    "action": "update_project",
+    "action": "adobe_workspace_update_project",
     "summary": "Adobe-only: edit a Workspace project via Adobe's documented partial PUT. Sends only the caller-supplied writable fields (no pre-GET). A name-only update is PUT {\"name\": ...}. Set merge_definition=true to opt into GET+merge of the definition subtree only. project_id must match [A-Za-z0-9_-]{1,128}.",
     "group": "",
     "params": [

@@ -79,8 +79,8 @@ ANALYTICS_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "get_metrics": ("analytics_read", "get_metrics"),
     "get_segments": ("analytics_read", "get_segments"),
     "get_calculated_metrics": ("analytics_read", "get_calculated_metrics"),
-    "list_projects": ("analytics_read", "list_projects"),
-    "get_project": ("analytics_read", "get_project"),
+    "adobe_workspace_list_projects": ("analytics_read", "list_projects"),
+    "adobe_workspace_get_project": ("analytics_read", "get_project"),
 }
 
 # analytics_write
@@ -95,14 +95,31 @@ ANALYTICS_WRITE_ROUTES: dict[str, tuple[str, str | None]] = {
     "delete_segment": ("analytics_write", "delete_segment"),
     "delete_calculated_metric": ("analytics_write", "delete_calculated_metric"),
     # Adobe Analysis Workspace projects
-    "create_project": ("analytics_write", "create_project"),
-    "update_project": ("analytics_write", "update_project"),
-    "delete_project": ("analytics_write", "delete_project"),
-    "copy_project": ("analytics_write", "copy_project"),
+    "adobe_workspace_create_project": ("analytics_write", "create_project"),
+    "adobe_workspace_update_project": ("analytics_write", "update_project"),
+    "adobe_workspace_delete_project": ("analytics_write", "delete_project"),
+    "adobe_workspace_copy_project": ("analytics_write", "copy_project"),
     # Amplitude / Mixpanel / PostHog event-type CRUD
     "create_event_type": ("analytics_write", "create_event_type"),
     "update_event_type": ("analytics_write", "update_event_type"),
     "delete_event_type": ("analytics_write", "delete_event_type"),
+}
+
+# Public action names were made Adobe-specific so models do not confuse Analysis
+# Workspace projects with Fluxito, Amplitude, Mixpanel, or PostHog projects. Keep
+# the original generic names callable (but absent from tools/list) while existing
+# clients and saved automations migrate.
+DEPRECATED_ACTION_ALIASES: dict[str, dict[str, str]] = {
+    "analytics_read": {
+        "list_projects": "adobe_workspace_list_projects",
+        "get_project": "adobe_workspace_get_project",
+    },
+    "analytics_write": {
+        "create_project": "adobe_workspace_create_project",
+        "update_project": "adobe_workspace_update_project",
+        "delete_project": "adobe_workspace_delete_project",
+        "copy_project": "adobe_workspace_copy_project",
+    },
 }
 
 # tagmanager_read (GTM + Adobe Launch) — catalog only.
@@ -540,7 +557,8 @@ Actions (pass via `action`, required params inside `params`):
     get_conversion_events, list_cohorts, list_events, get_event_detail,
     get_event_properties, get_user_properties, list_report_suites,
     list_companies, get_dimensions, get_metrics, get_segments,
-    get_calculated_metrics, list_projects, get_project
+    get_calculated_metrics, adobe_workspace_list_projects,
+    adobe_workspace_get_project
 
 Return shape: {rows/data/items: [...], ...} or {error, error_type, message}.
 """
@@ -561,13 +579,13 @@ Actions:
   update_segment             — params: platform, property_id, config={segment_id, updates}
   delete_segment             — params: platform, property_id, config={segment_id}
   delete_calculated_metric   — params: platform, property_id, config={metric_id}
-  create_project             — Adobe Workspace. params: platform, config={name, rsid, definition}
-  update_project             — Adobe Workspace. Partial PUT of supplied fields only (no pre-GET).
+  adobe_workspace_create_project — Adobe Workspace. params: platform, config={name, rsid, definition}
+  adobe_workspace_update_project — Adobe Workspace. Partial PUT of supplied fields only (no pre-GET).
                                Set merge_definition=true to GET+local-deep-merge definition. params: platform,
                                config={project_id, name?, description?, rsid?, definition?, merge_definition?, ...}
-  delete_project             — Adobe Workspace. Destructive; explicit project_id only.
+  adobe_workspace_delete_project — Adobe Workspace. Destructive; explicit project_id only.
                                params: platform, config={project_id}
-  copy_project               — Adobe Workspace. GET source + POST under a new name.
+  adobe_workspace_copy_project — Adobe Workspace. GET source + POST under a new name.
                                params: platform, config={project_id, name}
   create_event_type          — params: platform (amplitude|mixpanel|posthog), config={event_type, description?, category?}
   update_event_type          — params: platform (amplitude|mixpanel|posthog), config={event_type, new_name?, description?, category?}
@@ -1030,14 +1048,19 @@ def _make_dispatcher(routes: dict, surface_name: str):
             if action == DESCRIBE_ACTION or params.get("describe") is True:
                 sp = _specs.specs_for(surface_name)
                 target = params.get("action") if action == DESCRIBE_ACTION else action
+                target = DEPRECATED_ACTION_ALIASES.get(surface_name, {}).get(target, target)
                 return describe_payload(surface_name, sp, target, resolve_platform(params))
 
+        # Deprecated generic Adobe Workspace names remain runtime-compatible,
+        # but only their explicit replacements are advertised in tools/list.
+        requested_action = action
+        action = DEPRECATED_ACTION_ALIASES.get(surface_name, {}).get(action, action)
         route = routes.get(action)
         if route is None:
             err = {
                 "error": True,
                 "error_type": "unknown_action",
-                "message": f"Unknown action '{action}' for {surface_name}.",
+                "message": f"Unknown action '{requested_action}' for {surface_name}.",
                 "available_actions": sorted(routes.keys()),
             }
             if _has_specs:
@@ -1103,7 +1126,7 @@ def _make_dispatcher(routes: dict, surface_name: str):
     # so a bare ``string`` action + ``anyOf: [object, null]`` params left them
     # guessing or timing out. Runtime stays permissive — the dispatcher body
     # still tolerates a missing/None ``params`` and unknown actions.
-    _action_set = set(routes.keys())
+    _action_set = set(routes.keys()) | set(DEPRECATED_ACTION_ALIASES.get(surface_name, {}))
     # Tools backed by the spec engine also accept the reserved "describe" action.
     # It must be in the runtime Literal or pydantic arg-validation rejects the
     # call before the dispatcher body can answer it.

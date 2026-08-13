@@ -83,28 +83,30 @@ Once the connection works, Fluxito can list, fetch, create, edit, copy, and dele
 
 | Tool | Action | What it does |
 |---|---|---|
-| `analytics_read` | `list_projects` | Compact project list. Official Adobe query params only: `expansion` (default `reportSuiteName,ownerFullName`), `include_type`, `limit`, `page`, `locale`. Does **not** include the full definition unless you ask for `expansion=["definition"]`. |
-| `analytics_read` | `get_project` | One project by `project_id` (`[A-Za-z0-9_-]{1,128}`). Always fetches `expansion=definition` so the full Workspace JSON is available for editing. |
-| `analytics_write` | `create_project` | `config={name, rsid, definition}`. Optional `description`, `tags`, `shares`. Server-managed fields (`owner`, `id`, `created`, `modified`) are not sent. |
-| `analytics_write` | `update_project` | `config={project_id, ...partial fields}`. Adobe PUT supports partial updates, so Fluxito sends **only the fields you supply** — a rename is `PUT {"name": "..."}` with no prior GET. Set `merge_definition=true` to opt into GET+merge of the `definition` subtree only. |
-| `analytics_write` | `delete_project` | Destructive. Requires an explicit `config.project_id` matching `[A-Za-z0-9_-]{1,128}` — no wildcard, path, or bulk delete. |
-| `analytics_write` | `copy_project` | GET the source (with definition) and POST a new project under `config.name` using writable fields only. |
+| `analytics_read` | `adobe_workspace_list_projects` | Compact project list. Official Adobe query params only: `expansion` (default `reportSuiteName,ownerFullName`), `include_type`, `limit`, `page`, `locale`. Does **not** include the full definition unless you ask for `expansion=["definition"]`. |
+| `analytics_read` | `adobe_workspace_get_project` | One project by `project_id` (`[A-Za-z0-9_-]{1,128}`). Always fetches `expansion=definition` so the full Workspace JSON is available for editing. |
+| `analytics_write` | `adobe_workspace_create_project` | `config={name, rsid, definition}`. Optional `description`, `tags`, `shares`. Server-managed fields (`owner`, `id`, `created`, `modified`) are not sent. |
+| `analytics_write` | `adobe_workspace_update_project` | `config={project_id, ...partial fields}`. Adobe PUT supports partial updates, so Fluxito sends **only the fields you supply** — a rename is `PUT {"name": "..."}` with no prior GET. Set `merge_definition=true` to opt into GET+merge of the `definition` subtree only. |
+| `analytics_write` | `adobe_workspace_delete_project` | Destructive. Requires an explicit `config.project_id` matching `[A-Za-z0-9_-]{1,128}` — no wildcard, path, or bulk delete. |
+| `analytics_write` | `adobe_workspace_copy_project` | GET the source (with definition) and POST a new project under `config.name` using writable fields only. |
+
+The former generic action names (`list_projects`, `get_project`, `create_project`, `update_project`, `delete_project`, and `copy_project`) remain accepted as deprecated compatibility aliases, but they are no longer advertised to MCP clients.
 
 Examples:
 
 ```
-analytics_read(action="list_projects", params={
+analytics_read(action="adobe_workspace_list_projects", params={
   "platform": "adobe_analytics",
   "limit": 20,
   "include_type": "all"
 })
 
-analytics_read(action="get_project", params={
+analytics_read(action="adobe_workspace_get_project", params={
   "platform": "adobe_analytics",
   "project_id": "6091a10005c7706c0acdd751"
 })
 
-analytics_write(action="update_project", params={
+analytics_write(action="adobe_workspace_update_project", params={
   "platform": "adobe_analytics",
   "config": {"project_id": "6091a10005c7706c0acdd751", "name": "Renamed project"}
 })

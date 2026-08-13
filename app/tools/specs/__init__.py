@@ -71,6 +71,7 @@ HEADERS: dict[str, str] = {
         "an action on the wrong platform returns an 'unknown action' error.\n"
         "For audits / anomaly checks / tracking regressions use `run_audit`; for "
         "cross-platform blends / attribution use `run_analysis`.\n"
+        "Adobe Analysis Workspace actions are explicitly prefixed `adobe_workspace_`.\n"
         'Pass metrics/dimensions as plain strings (e.g. ["sessions","country"]); the '
         'GA4 object form [{"name":"sessions"}] is also accepted and coerced.'
     ),
@@ -88,6 +89,7 @@ HEADERS: dict[str, str] = {
         "dimensions/metrics, conversion events; Adobe segments, calculated metrics, "
         "and Analysis Workspace projects.\n"
         "Pass `platform` in params. Mutating — requires the analytics write scope. "
+        "Adobe Analysis Workspace actions are explicitly prefixed `adobe_workspace_`. "
         "Use analytics_read for reads, run_audit for audits."
     ),
     "tagmanager_read": (

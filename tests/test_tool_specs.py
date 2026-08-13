@@ -161,6 +161,33 @@ async def test_describe_lists_all_actions(tool_manager):
     assert "describe" not in actions
 
 
+def test_adobe_workspace_actions_are_explicit_and_deprecated_aliases_are_hidden(tool_manager):
+    read_enum = set(tool_manager._tools["analytics_read"].parameters["properties"]["action"]["enum"])
+    write_enum = set(tool_manager._tools["analytics_write"].parameters["properties"]["action"]["enum"])
+
+    assert {"adobe_workspace_list_projects", "adobe_workspace_get_project"} <= read_enum
+    assert {
+        "adobe_workspace_create_project",
+        "adobe_workspace_update_project",
+        "adobe_workspace_delete_project",
+        "adobe_workspace_copy_project",
+    } <= write_enum
+    assert {"list_projects", "get_project"}.isdisjoint(read_enum)
+    assert {"create_project", "update_project", "delete_project", "copy_project"}.isdisjoint(write_enum)
+
+
+async def test_deprecated_adobe_workspace_aliases_remain_callable(tool_manager):
+    # No params intentionally: reaching the canonical spec's validation proves
+    # the hidden alias survived the runtime Literal and was translated.
+    out = await tool_manager._tools["analytics_read"].run({"action": "list_projects"})
+    assert "adobe_workspace_list_projects" in str(out)
+
+    described = await tool_manager._tools["analytics_read"].fn(
+        action="describe", params={"action": "get_project"}
+    )
+    assert described["spec"]["action"] == "adobe_workspace_get_project"
+
+
 async def test_describe_single_action_has_full_spec(tool_manager):
     tool = tool_manager._tools["analytics_read"]
     out = await tool.fn(action="describe", params={"action": "run_report"})

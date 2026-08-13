@@ -798,12 +798,17 @@ def test_unified_project_routes_map_to_connector_methods():
     from app.connectors.adobe_analytics import AdobeAnalyticsConnector
     from app.tools.unified import ANALYTICS_READ_ROUTES, ANALYTICS_WRITE_ROUTES
 
-    for action in ("list_projects", "get_project"):
+    for action in ("adobe_workspace_list_projects", "adobe_workspace_get_project"):
         tool, legacy = ANALYTICS_READ_ROUTES[action]
         assert tool == "analytics_read"
         assert hasattr(AdobeAnalyticsConnector, legacy)
 
-    for action in ("create_project", "update_project", "delete_project", "copy_project"):
+    for action in (
+        "adobe_workspace_create_project",
+        "adobe_workspace_update_project",
+        "adobe_workspace_delete_project",
+        "adobe_workspace_copy_project",
+    ):
         tool, legacy = ANALYTICS_WRITE_ROUTES[action]
         assert tool == "analytics_write"
         assert hasattr(AdobeAnalyticsConnector, legacy)
