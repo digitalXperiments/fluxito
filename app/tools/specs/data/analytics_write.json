@@ -262,6 +262,92 @@
   },
   {
     "tool": "analytics_write",
+    "action": "create_project",
+    "summary": "Adobe-only: create an Analysis Workspace project. Requires config{name, rsid, definition}. Only writable fields are sent (name, rsid, definition, type=project, optional description/tags/shares). Server-managed fields (owner, id, created, modified) are not forwarded.",
+    "group": "",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "adobe_analytics",
+        "doc": "Adobe only."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "name": "Weekly traffic",
+          "rsid": "myrsid",
+          "definition": {
+            "version": "31"
+          }
+        },
+        "doc": "Must contain truthy name, rsid, and definition (Workspace project definition object). Optional description, tags, and shares are forwarded; other top-level keys (owner, type, id, created, modified) are ignored."
+      },
+      {
+        "name": "config.description",
+        "type": "string",
+        "required": false,
+        "example": "",
+        "doc": "Optional project description."
+      }
+    ],
+    "platforms": [
+      "adobe_analytics"
+    ],
+    "returns": "{success, project_id, name, rsid, message} | {error,error_type,message,adobe_error_code?}",
+    "scope": "analytics_write",
+    "reversible": true
+  },
+  {
+    "tool": "analytics_write",
+    "action": "copy_project",
+    "summary": "Adobe-only: duplicate a Workspace project (GET source with definition, POST under a new name using writable fields only). Requires config{project_id, name}. project_id must match [A-Za-z0-9_-]{1,128}.",
+    "group": "",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "adobe_analytics",
+        "doc": "Adobe only."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "project_id": "6091a10005c7706c0acdd751",
+          "name": "Weekly traffic (copy)"
+        },
+        "doc": "Must contain a valid project_id (source; letters/digits/_/- only) and name (new project name). Copy posts only writable fields — never owner/type/created/modified from the GET."
+      }
+    ],
+    "platforms": [
+      "adobe_analytics"
+    ],
+    "returns": "{success, project_id, name, rsid, copied_from, message} | {error,error_type,message,adobe_error_code?}",
+    "scope": "analytics_write",
+    "reversible": true
+  },
+  {
+    "tool": "analytics_write",
     "action": "delete_calculated_metric",
     "summary": "Adobe-only: delete a calculated metric by id. IRREVERSIBLE real delete. Requires config.metric_id.",
     "group": "",
@@ -331,6 +417,43 @@
       "adobe_analytics"
     ],
     "returns": "Adobe delete_segment dict | {error,message}",
+    "scope": "analytics_write",
+    "reversible": false
+  },
+  {
+    "tool": "analytics_write",
+    "action": "delete_project",
+    "summary": "Adobe-only: permanently hide/delete one Analysis Workspace project. IRREVERSIBLE. Requires an explicit config.project_id matching [A-Za-z0-9_-]{1,128} — no wildcard, path, or bulk delete.",
+    "group": "",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "adobe_analytics",
+        "doc": "Adobe only."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "project_id": "6091a10005c7706c0acdd751"
+        },
+        "doc": "Must contain a valid project_id (letters, digits, underscore, hyphen; 1-128 chars). Values such as '*', '../projects', or ids containing '/' are rejected before any HTTP call."
+      }
+    ],
+    "platforms": [
+      "adobe_analytics"
+    ],
+    "returns": "{success, project_id, message} | {error,error_type,message,adobe_error_code?}",
     "scope": "analytics_write",
     "reversible": false
   },
@@ -445,6 +568,90 @@
       "adobe_analytics"
     ],
     "returns": "Adobe update_segment dict | {error,message}",
+    "scope": "analytics_write",
+    "reversible": true
+  },
+  {
+    "tool": "analytics_write",
+    "action": "update_project",
+    "summary": "Adobe-only: edit a Workspace project via Adobe's documented partial PUT. Sends only the caller-supplied writable fields (no pre-GET). A name-only update is PUT {\"name\": ...}. Set merge_definition=true to opt into GET+merge of the definition subtree only. project_id must match [A-Za-z0-9_-]{1,128}.",
+    "group": "",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "adobe_analytics",
+        "doc": "Adobe only."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "project_id": "6091a10005c7706c0acdd751",
+          "name": "Renamed project"
+        },
+        "doc": "Must contain a valid project_id (letters/digits/_/- only). Optional name, description, rsid, owner, definition, tags, shares. Only those writable fields are PUT — the stored project is not fetched or resent. Unknown keys are ignored."
+      },
+      {
+        "name": "config.name",
+        "type": "string",
+        "required": false,
+        "example": "Renamed project",
+        "doc": "Optional new name."
+      },
+      {
+        "name": "config.description",
+        "type": "string",
+        "required": false,
+        "example": "",
+        "doc": "Optional new description."
+      },
+      {
+        "name": "config.rsid",
+        "type": "string",
+        "required": false,
+        "example": "myrsid",
+        "doc": "Optional new report suite id."
+      },
+      {
+        "name": "config.definition",
+        "type": "object",
+        "required": false,
+        "example": {
+          "version": "31"
+        },
+        "doc": "Definition object sent as-is in the partial PUT; it may replace the stored definition subtree (Adobe's partial-update contract is top-level, not a recursive merge inside definition). Use merge_definition=true when you only want to change nested fields and keep the rest of the stored definition."
+      },
+      {
+        "name": "config.merge_definition",
+        "type": "boolean",
+        "required": false,
+        "example": false,
+        "doc": "Opt-in. When true and definition is provided, GET the current definition, deep-merge the caller's keys into that subtree, and PUT {definition: merged, ...other caller fields}. Never resends owner/type/modified or the full GET representation."
+      },
+      {
+        "name": "config.owner",
+        "type": "object",
+        "required": false,
+        "example": {
+          "id": 622291
+        },
+        "doc": "Optional owner object sent as a caller-supplied partial-PUT field. Not fetched or merged from GET unless you include it here."
+      }
+    ],
+    "platforms": [
+      "adobe_analytics"
+    ],
+    "returns": "{success, project_id, name, rsid, updated_fields, merged_definition, message} | {error,error_type,message,adobe_error_code?}",
     "scope": "analytics_write",
     "reversible": true
   },

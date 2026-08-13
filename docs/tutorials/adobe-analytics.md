@@ -77,6 +77,41 @@ Ask Claude to list report suites. If the service account is configured correctly
 
 ---
 
+## Workspace projects (Analysis Workspace)
+
+Once the connection works, Fluxito can list, fetch, create, edit, copy, and delete Analysis Workspace projects through the Adobe Analytics 2.0 Projects API.
+
+| Tool | Action | What it does |
+|---|---|---|
+| `analytics_read` | `list_projects` | Compact project list. Official Adobe query params only: `expansion` (default `reportSuiteName,ownerFullName`), `include_type`, `limit`, `page`, `locale`. Does **not** include the full definition unless you ask for `expansion=["definition"]`. |
+| `analytics_read` | `get_project` | One project by `project_id` (`[A-Za-z0-9_-]{1,128}`). Always fetches `expansion=definition` so the full Workspace JSON is available for editing. |
+| `analytics_write` | `create_project` | `config={name, rsid, definition}`. Optional `description`, `tags`, `shares`. Server-managed fields (`owner`, `id`, `created`, `modified`) are not sent. |
+| `analytics_write` | `update_project` | `config={project_id, ...partial fields}`. Adobe PUT supports partial updates, so Fluxito sends **only the fields you supply** — a rename is `PUT {"name": "..."}` with no prior GET. Set `merge_definition=true` to opt into GET+merge of the `definition` subtree only. |
+| `analytics_write` | `delete_project` | Destructive. Requires an explicit `config.project_id` matching `[A-Za-z0-9_-]{1,128}` — no wildcard, path, or bulk delete. |
+| `analytics_write` | `copy_project` | GET the source (with definition) and POST a new project under `config.name` using writable fields only. |
+
+Examples:
+
+```
+analytics_read(action="list_projects", params={
+  "platform": "adobe_analytics",
+  "limit": 20,
+  "include_type": "all"
+})
+
+analytics_read(action="get_project", params={
+  "platform": "adobe_analytics",
+  "project_id": "6091a10005c7706c0acdd751"
+})
+
+analytics_write(action="update_project", params={
+  "platform": "adobe_analytics",
+  "config": {"project_id": "6091a10005c7706c0acdd751", "name": "Renamed project"}
+})
+```
+
+---
+
 ## Troubleshooting
 
 | Error | Fix |

@@ -85,7 +85,8 @@ HEADERS: dict[str, str] = {
     ),
     "analytics_write": (
         "Create / update / delete analytics definitions — GA4 audiences, custom "
-        "dimensions/metrics, conversion events; Adobe segments + calculated metrics.\n"
+        "dimensions/metrics, conversion events; Adobe segments, calculated metrics, "
+        "and Analysis Workspace projects.\n"
         "Pass `platform` in params. Mutating — requires the analytics write scope. "
         "Use analytics_read for reads, run_audit for audits."
     ),

@@ -16,6 +16,7 @@ from pydantic import BeforeValidator
 import app.app_state as state
 from app.cache import cached_tool_response
 from app.config import settings
+from app.connectors.adobe_analytics import validate_project_id
 from app.tools.shared_helpers import (
     decrypt_field,
     get_current_user,
@@ -173,6 +174,11 @@ def register_analytics_tools(mcp_server):
         days_back: int = 30,
         previous_start: str | None = None,
         previous_end: str | None = None,
+        config: dict[str, Any] | None = None,
+        project_id: CoercedStr | None = None,
+        expansion: CoercedStrList | None = None,
+        include_type: str | None = None,
+        page: int | None = None,
     ) -> dict:
         """Reads analytics data. Use analytics_audit for health checks, analytics_write for config changes.
 
@@ -202,7 +208,10 @@ def register_analytics_tools(mcp_server):
 
         Adobe actions (property_id=rsid):
           list_report_suites, get_dimensions(rsid), get_metrics(rsid),
-          run_report(rsid+dims+metrics+dates), get_segments, get_calculated_metrics
+          run_report(rsid+dims+metrics+dates), get_segments, get_calculated_metrics,
+          list_projects (Workspace; optional expansion/include_type/page/locale
+            via config — Adobe-documented GET params only), get_project(+project_id;
+            always returns expansion=definition; id must be [A-Za-z0-9_-]+)
         """
         if not platform:
             return {
@@ -685,6 +694,39 @@ def register_analytics_tools(mcp_server):
                     org_id,
                     property_id,
                 )
+            elif action == "list_projects":
+                cfg = config or {}
+                return await adobe.list_projects(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    expansion=expansion if expansion is not None else cfg.get("expansion"),
+                    include_type=include_type
+                    if include_type is not None
+                    else (cfg.get("include_type") or cfg.get("includeType")),
+                    limit=cfg.get("limit", limit),
+                    page=page if page is not None else cfg.get("page"),
+                    locale=cfg.get("locale"),
+                )
+            elif action == "get_project":
+                cfg = config or {}
+                pid = project_id or cfg.get("project_id") or cfg.get("id")
+                if not pid:
+                    return {
+                        "error": True,
+                        "error_type": "missing_required_param",
+                        "message": "project_id is required for get_project",
+                    }
+                id_err = validate_project_id(pid)
+                if id_err:
+                    return id_err
+                return await adobe.get_project(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    str(pid),
+                    expansion=expansion if expansion is not None else cfg.get("expansion"),
+                )
             return {"error": True, "message": f"Unknown action '{action}' for Adobe Analytics analytics_read"}
 
         return {"error": True, "message": f"Unknown platform '{platform}'"}
@@ -967,7 +1009,13 @@ def register_analytics_tools(mcp_server):
         Mixpanel: create_event_type{event_type}, update_event_type{event_type}, delete_event_type{event_type}
         PostHog: create_event_type{event_type}, update_event_type{event_type}, delete_event_type{event_type}
         Adobe: create_segment{name,rsid,definition}, update_segment{segment_id},
-          delete_segment{segment_id}, create_calculated_metric{name,rsid,definition}, delete_calculated_metric{metric_id}
+          delete_segment{segment_id}, create_calculated_metric{name,rsid,definition},
+          delete_calculated_metric{metric_id},
+          create_project{name,rsid,definition} (writable fields only: tags/shares extra),
+          update_project{project_id} (partial PUT of caller fields only; set
+          merge_definition=true to GET+merge the definition subtree),
+          delete_project{project_id} (destructive; explicit [A-Za-z0-9_-] id only),
+          copy_project{project_id,name}
         """
         if not platform:
             return {
@@ -1205,6 +1253,96 @@ def register_analytics_tools(mcp_server):
                     return {"error": True, "message": "config.metric_id is required"}
                 return await adobe.delete_calculated_metric(
                     client_id, client_secret, org_id, config["metric_id"]
+                )
+            elif action == "create_project":
+                required = ["name", "rsid", "definition"]
+                missing = [k for k in required if not config.get(k)]
+                if missing:
+                    return {
+                        "error": True,
+                        "error_type": "missing_required_param",
+                        "message": f"config missing required keys: {missing}",
+                    }
+                if not isinstance(config.get("definition"), dict):
+                    return {
+                        "error": True,
+                        "error_type": "invalid_param",
+                        "message": "config.definition must be a JSON object (Workspace project definition).",
+                    }
+                extra = {k: v for k, v in config.items() if k in {"tags", "shares"}}
+                return await adobe.create_project(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    name=config["name"],
+                    rsid=config["rsid"],
+                    definition=config["definition"],
+                    description=config.get("description"),
+                    extra=extra or None,
+                )
+            elif action == "update_project":
+                pid = config.get("project_id") or config.get("id")
+                if not pid:
+                    return {
+                        "error": True,
+                        "error_type": "missing_required_param",
+                        "message": (
+                            "config.project_id is required (explicit Adobe Workspace id; "
+                            "letters/digits/_/- only — no bulk or wildcard update)"
+                        ),
+                    }
+                id_err = validate_project_id(pid)
+                if id_err:
+                    return id_err
+                extra_updates = {k: v for k, v in config.items() if k in {"tags", "shares"}}
+                return await adobe.update_project(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    str(pid),
+                    name=config.get("name"),
+                    description=config.get("description"),
+                    rsid=config.get("rsid"),
+                    definition=config.get("definition"),
+                    owner=config.get("owner"),
+                    updates=extra_updates or None,
+                    merge_definition=bool(config.get("merge_definition")),
+                )
+            elif action == "delete_project":
+                pid = config.get("project_id") or config.get("id")
+                if not pid:
+                    return {
+                        "error": True,
+                        "error_type": "missing_required_param",
+                        "message": (
+                            "config.project_id is required (explicit Adobe Workspace id; "
+                            "letters/digits/_/- only — no bulk or wildcard delete)"
+                        ),
+                    }
+                id_err = validate_project_id(pid)
+                if id_err:
+                    return id_err
+                return await adobe.delete_project(client_id, client_secret, org_id, str(pid))
+            elif action == "copy_project":
+                pid = config.get("project_id") or config.get("id")
+                new_name = config.get("name")
+                if not pid:
+                    return {
+                        "error": True,
+                        "error_type": "missing_required_param",
+                        "message": "config.project_id is required for copy_project",
+                    }
+                id_err = validate_project_id(pid)
+                if id_err:
+                    return id_err
+                if not new_name:
+                    return {
+                        "error": True,
+                        "error_type": "missing_required_param",
+                        "message": "config.name is required for copy_project (name of the duplicate)",
+                    }
+                return await adobe.copy_project(
+                    client_id, client_secret, org_id, str(pid), name=str(new_name)
                 )
             return {
                 "error": True,
