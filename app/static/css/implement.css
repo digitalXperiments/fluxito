@@ -3,10 +3,7 @@
    Uses the shared Ledger tokens from app.css (var(--ink), --good…).
    ========================================================== */
 
-/* Fixed-width centered content column — the page-head title, stat strip and
-   panels all share it — matching the tracking-plan screens (1040px). Overrides
-   the wider app-wide .app-main cap (1240px). */
-[data-page="implement"] .app-main { max-width: 1040px; }
+/* Content column uses the shared .app-main max-width (var(--max)). */
 
 .impl-hero-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
 

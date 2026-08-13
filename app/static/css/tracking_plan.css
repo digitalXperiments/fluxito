@@ -47,7 +47,8 @@
   /* Single content-column width shared by EVERY full-page screen (overview,
      detail editors, sources, review, versions, diff, issues) so pages stop
      landing at random widths/offsets. Always paired with margin: 0 auto. */
-  --tp-page-w: 1040px;
+  /* Match the app-wide content column (.app-main → var(--max)). */
+  --tp-page-w: var(--max);
 
   height: 100%;
   font-family: var(--tp-sans);

@@ -710,6 +710,13 @@ body {
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
+/* Conversations + Context — secondary links under the lifecycle rail */
+.sidebar-cluster-secondary {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  gap: 2px;
+}
 .sidebar-cluster-label {
   font-family: var(--mono);
   font-size: 10px;

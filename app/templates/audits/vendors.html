@@ -5,149 +5,236 @@
 {% set audit_tab = 'vendors' %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="/static/css/audit_flows.css?v={{ asset_hash('css/audit_flows.css') }}"/>
+<link rel="stylesheet" href="/static/css/audit_flows.css?v={{ asset_hash('css/audit_flows.css') }}&av=3"/>
 {% endblock %}
 
 {% block main %}
 <div class="app-main" id="afVendors">
 
-  {% call page_header('Audit vendors', 'Every vendor, its <em>rule book.</em>', 'Each vendor bundles its beacon profile, the platform rule book Flux validates against, and your custom rules — configure once, reuse in every test flow and audit.') %}
+  {% call page_header(
+    'Audit setup',
+    'Which tags should Flux <em>check?</em>',
+    'Add the pixels and tags that fire on your site. Each one ships with a built-in rule book Flux uses in live audits and test flows — then optionally layer your own business rules on top.'
+  ) %}
     <div class="af-builder-actions">
+      <a href="/audits" class="btn ghost sm">View runs</a>
       <a href="/audits/flows" class="btn ghost sm">Test flows</a>
+      <button type="button" class="btn primary sm" id="avAddOpen">+ Add tag</button>
     </div>
   {% endcall %}
 
   {% include "partials/audit_tabs.html" %}
 
-  <div class="af-vendors">
-    {# ── Left rail ── #}
-    <div class="af-vrail">
-      <div class="af-vrail-head">
-        <span class="af-card-title" style="margin:0;">Vendors</span>
-        <button type="button" class="btn ghost sm" id="afVAddBtn">+ Add</button>
+  <div class="av-howto" id="avHowto">
+    <div class="av-howto-step">
+      <span class="av-howto-n">1</span>
+      <div>
+        <div class="av-howto-title">Add the tags you fire</div>
+        <div class="av-howto-sub">GA4, Meta Pixel, Ads conversions…</div>
       </div>
-      <div class="af-vlist" id="afVList"></div>
-
-      <div class="af-card-title af-catalog-title">Add from catalog</div>
-      <div class="af-catalog-picks" id="afVCatalog"></div>
     </div>
-
-    {# ── Vendor detail: Profile | Rule book | Custom rules ── #}
-    <div class="af-card">
-      <div class="af-vdetail-head">
-        <div class="af-card-title" id="afVFormTitle" style="margin:0;">Vendor</div>
-        <div class="af-vdetail-badges" id="afVDetailBadges"></div>
+    <div class="av-howto-arrow" aria-hidden="true">→</div>
+    <div class="av-howto-step">
+      <span class="av-howto-n">2</span>
+      <div>
+        <div class="av-howto-title">Review the rule book</div>
+        <div class="av-howto-sub">Built-in checks + your custom rules</div>
       </div>
-
-      <div class="af-vtabs" id="afVTabs">
-        <button type="button" class="af-vtab is-active" data-vtab="profile">Profile</button>
-        <button type="button" class="af-vtab" data-vtab="rulebook">Rule book <span class="af-vtab-count" id="afVRbCount" hidden></span></button>
-        <button type="button" class="af-vtab" data-vtab="custom">Custom rules <span class="af-vtab-count" id="afVCrCount" hidden></span></button>
-      </div>
-
-      {# ── Tab: Profile ── #}
-      <div data-vpane="profile">
-        <div class="af-field">
-          <label class="af-label" for="afVName">Name</label>
-          <input type="text" id="afVName" class="af-input" placeholder="e.g. GA4 Measurement Protocol"/>
-        </div>
-        <div class="af-field">
-          <label class="af-label" for="afVSlug">Slug</label>
-          <input type="text" id="afVSlug" class="af-input mono" placeholder="ga4"/>
-          <div class="af-help">Unique per project. Lowercase identifier.</div>
-        </div>
-        <div class="af-field">
-          <label class="af-label" for="afVPlatform">Rule book platform</label>
-          <select id="afVPlatform" class="af-select">
-            <option value="">— none —</option>
-          </select>
-          <div class="af-help">Links this vendor to a built-in platform rule book: validation rules, event specs, and custom rules all follow it.</div>
-        </div>
-        <div class="af-field">
-          <label class="af-label" for="afVPattern">URL pattern</label>
-          <input type="text" id="afVPattern" class="af-input mono" placeholder="google-analytics.com/g/collect"/>
-          <div class="af-help">Substring matched against request URLs.</div>
-        </div>
-        <div class="af-field">
-          <label class="af-label" for="afVDesc">Description</label>
-          <textarea id="afVDesc" class="af-textarea" placeholder="Optional notes"></textarea>
-        </div>
-
-        <div class="af-field">
-          <label class="af-label">Known parameters</label>
-          <table class="af-ptable">
-            <thead>
-              <tr><th>Label</th><th>Key</th><th>Source</th><th>Default</th><th>Hint</th><th></th></tr>
-            </thead>
-            <tbody id="afVParams"></tbody>
-          </table>
-          <button type="button" class="af-mini-add" id="afVAddParam">+ Add parameter</button>
-          <button type="button" class="af-mini-add" id="afVSeedBtn" hidden>⤓ Seed pattern &amp; params from rule book</button>
-        </div>
-
-        <div class="af-builder-actions" style="margin-top:16px;justify-content:flex-end;">
-          <button type="button" class="btn ghost sm" id="afVDeleteBtn" hidden>Delete</button>
-          <button type="button" class="btn primary sm" id="afVSaveBtn">Save vendor</button>
-        </div>
-      </div>
-
-      {# ── Tab: Rule book (read-only platform spec) ── #}
-      <div data-vpane="rulebook" hidden>
-        <div id="afVRulebook" class="af-rulebook">
-          <div class="af-empty-inline">Link a rule book platform on the Profile tab to see its spec here.</div>
-        </div>
-      </div>
-
-      {# ── Tab: Custom rules (project rules scoped to this vendor's platform) ── #}
-      <div data-vpane="custom" hidden>
-        <p class="af-help" style="margin:0 0 12px">
-          Custom rules extend the platform rule book with your business requirements.
-          They are stored per platform, so every flow and audit that touches this
-          vendor validates against them automatically.
-        </p>
-        <div id="afVCustomList" class="af-crlist"></div>
-
-        <div class="af-crform" id="afVCrForm">
-          <div class="af-card-title" style="margin-bottom:10px">Add custom rule</div>
-          <div class="af-crform-grid">
-            <div class="af-field">
-              <label class="af-label" for="afCrName">Name</label>
-              <input type="text" id="afCrName" class="af-input" placeholder="e.g. purchase must carry value"/>
-            </div>
-            <div class="af-field">
-              <label class="af-label" for="afCrEvent">Event</label>
-              <input type="text" id="afCrEvent" class="af-input mono" placeholder="* (any event)"/>
-            </div>
-            <div class="af-field">
-              <label class="af-label" for="afCrSeverity">Severity</label>
-              <select id="afCrSeverity" class="af-select">
-                <option value="warning" selected>warning</option>
-                <option value="critical">critical</option>
-                <option value="info">info</option>
-              </select>
-            </div>
-            <div class="af-field">
-              <label class="af-label" for="afCrRequired">Required params <span class="af-help" style="display:inline">(comma-separated)</span></label>
-              <input type="text" id="afCrRequired" class="af-input mono" placeholder="value, currency"/>
-            </div>
-            <div class="af-field">
-              <label class="af-label" for="afCrForbidden">Forbidden params</label>
-              <input type="text" id="afCrForbidden" class="af-input mono" placeholder="test_event_code"/>
-            </div>
-            <div class="af-field">
-              <label class="af-label" for="afCrRemediation">Remediation</label>
-              <input type="text" id="afCrRemediation" class="af-input" placeholder="How to fix this if it fails"/>
-            </div>
-          </div>
-          <div class="af-builder-actions" style="justify-content:flex-end;">
-            <button type="button" class="btn primary sm" id="afCrSaveBtn">Save rule</button>
-          </div>
-        </div>
+    </div>
+    <div class="av-howto-arrow" aria-hidden="true">→</div>
+    <div class="av-howto-step">
+      <span class="av-howto-n">3</span>
+      <div>
+        <div class="av-howto-title">Run an audit or flow</div>
+        <div class="av-howto-sub">Flux validates beacons against them</div>
       </div>
     </div>
   </div>
 
-</div>{# /app-main #}
+  <div class="av-layout">
+    <aside class="av-rail">
+      <div class="av-rail-head">
+        <div>
+          <div class="af-card-title" style="margin:0;">Your tags</div>
+          <div class="av-rail-count" id="avRailCount"></div>
+        </div>
+        <button type="button" class="btn ghost sm" id="avAddOpenRail">+ Add</button>
+      </div>
+      <div class="av-list" id="avList"></div>
+      <p class="av-rail-hint">
+        These profiles tell Flux which network requests to capture and which rule books to apply.
+      </p>
+    </aside>
+
+    {# Single main stage — only the editor lives here. Add-tag is a modal.
+       Use <div> not <section>: app.css markets `section { padding: 96px 0 }`
+       which was creating a huge empty band above the editor. #}
+    <div class="av-main">
+      <div class="av-pane av-editor" id="avEditor">
+        <div class="av-editor-head">
+          <div class="av-editor-identity">
+            <div class="eyebrow" id="avEditKicker">Configured tag</div>
+            <h2 class="av-pane-title" id="avFormTitle">Vendor</h2>
+            <div class="av-editor-badges" id="avDetailBadges"></div>
+          </div>
+          <div class="av-editor-actions">
+            <button type="button" class="btn ghost sm" id="avDeleteBtn" hidden>Remove</button>
+            <button type="button" class="btn primary sm" id="avSaveBtn">Save changes</button>
+          </div>
+        </div>
+
+        <div class="av-essentials">
+          <div class="af-field">
+            <label class="af-label" for="avName">Display name</label>
+            <input type="text" id="avName" class="af-input" placeholder="e.g. GA4 production"/>
+          </div>
+          <div class="af-field">
+            <label class="af-label" for="avPlatform">Rule book</label>
+            <select id="avPlatform" class="af-select">
+              <option value="">— none (custom only) —</option>
+            </select>
+            <div class="af-help">Flux validates beacons for this tag against the selected platform rule book.</div>
+          </div>
+        </div>
+
+        <div class="av-tabs" id="avTabs" role="tablist">
+          <button type="button" class="av-tab is-active" data-vtab="rulebook" role="tab">
+            Rule book <span class="av-tab-count" id="avRbCount" hidden></span>
+          </button>
+          <button type="button" class="av-tab" data-vtab="custom" role="tab">
+            Custom rules <span class="av-tab-count" id="avCrCount" hidden></span>
+          </button>
+          <button type="button" class="av-tab" data-vtab="advanced" role="tab">
+            Detection &amp; params
+          </button>
+        </div>
+
+        <div data-vpane="rulebook">
+          <div id="avRulebook" class="af-rulebook">
+            <div class="af-empty-inline">Select a rule book above to preview what Flux checks.</div>
+          </div>
+        </div>
+
+        <div data-vpane="custom" hidden>
+          <p class="av-tab-intro">
+            Custom rules capture <em>your</em> requirements on top of the platform book —
+            e.g. “purchase must send <code>value</code> and <code>currency</code>”.
+            They apply automatically in every audit and test flow that hits this tag.
+          </p>
+          <div id="avCustomList" class="af-crlist"></div>
+
+          <div class="af-crform" id="avCrForm">
+            <div class="af-card-title" style="margin-bottom:10px">Add a custom rule</div>
+            <div class="af-crform-grid">
+              <div class="af-field">
+                <label class="af-label" for="avCrName">Name</label>
+                <input type="text" id="avCrName" class="af-input" placeholder="e.g. purchase must carry value"/>
+              </div>
+              <div class="af-field">
+                <label class="af-label" for="avCrEvent">Event</label>
+                <input type="text" id="avCrEvent" class="af-input mono" placeholder="* (any event)"/>
+              </div>
+              <div class="af-field">
+                <label class="af-label" for="avCrSeverity">Severity</label>
+                <select id="avCrSeverity" class="af-select">
+                  <option value="warning" selected>warning</option>
+                  <option value="critical">critical</option>
+                  <option value="info">info</option>
+                </select>
+              </div>
+              <div class="af-field">
+                <label class="af-label" for="avCrRequired">Required params</label>
+                <input type="text" id="avCrRequired" class="af-input mono" placeholder="value, currency"/>
+              </div>
+              <div class="af-field">
+                <label class="af-label" for="avCrForbidden">Forbidden params</label>
+                <input type="text" id="avCrForbidden" class="af-input mono" placeholder="test_event_code"/>
+              </div>
+              <div class="af-field">
+                <label class="af-label" for="avCrRemediation">How to fix</label>
+                <input type="text" id="avCrRemediation" class="af-input" placeholder="Shown when the rule fails"/>
+              </div>
+            </div>
+            <div class="af-builder-actions" style="justify-content:flex-end;">
+              <button type="button" class="btn primary sm" id="avCrSaveBtn">Save rule</button>
+            </div>
+          </div>
+        </div>
+
+        <div data-vpane="advanced" hidden>
+          <p class="av-tab-intro">
+            Most teams leave these as seeded by the rule book. Adjust only if your
+            container uses a non-standard endpoint or you need extra param labels in flows.
+          </p>
+          <div class="af-field">
+            <label class="af-label" for="avSlug">Slug</label>
+            <input type="text" id="avSlug" class="af-input mono" placeholder="ga4"/>
+            <div class="af-help">Stable id used in flows and APIs. Lowercase, unique in this project.</div>
+          </div>
+          <div class="af-field">
+            <label class="af-label" for="avPattern">URL detection pattern</label>
+            <input type="text" id="avPattern" class="af-input mono" placeholder="google-analytics.com/g/collect"/>
+            <div class="af-help">
+              Substring or regex matched against network request URLs during an audit or flow run.
+              <button type="button" class="av-link-btn" id="avSeedBtn" hidden>Re-seed from rule book</button>
+            </div>
+          </div>
+          <div class="af-field">
+            <label class="af-label" for="avDesc">Notes</label>
+            <textarea id="avDesc" class="af-textarea" placeholder="Optional — e.g. which container / GTM workspace this maps to"></textarea>
+          </div>
+
+          <div class="af-field">
+            <label class="af-label">Known parameters</label>
+            <p class="af-help" style="margin:0 0 8px">
+              Labels used when asserting on beacons in test flows. Seeded from the rule book’s required params.
+            </p>
+            <table class="af-ptable">
+              <thead>
+                <tr><th>Label</th><th>Key</th><th>Source</th><th>Default</th><th>Hint</th><th></th></tr>
+              </thead>
+              <tbody id="avParams"></tbody>
+            </table>
+            <button type="button" class="af-mini-add" id="avAddParam">+ Add parameter</button>
+          </div>
+        </div>
+      </div>
+
+      {# Empty project — only shown when there are zero tags #}
+      <div class="av-pane av-empty" id="avEmpty" hidden>
+        <div class="av-empty-icon" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h2 class="av-pane-title">No tags configured yet</h2>
+        <p class="av-pane-lede">Pick the pixels and tags that fire on your site. Flux attaches a rule book to each one for live audits and test flows.</p>
+        <button type="button" class="btn primary sm" id="avEmptyAdd">+ Add your first tag</button>
+      </div>
+    </div>
+  </div>
+
+  {# Add-tag modal — overlays the page; never sits in the layout flow #}
+  <div class="av-modal" id="avPicker" hidden>
+    <div class="av-modal-backdrop" data-av-close></div>
+    <div class="av-modal-panel" role="dialog" aria-modal="true" aria-labelledby="avPickerTitle">
+      <div class="av-modal-head">
+        <div>
+          <div class="eyebrow">Add a tag</div>
+          <h2 class="av-pane-title" id="avPickerTitle">Pick a platform Flux can validate</h2>
+          <p class="av-pane-lede">One click enables the rule book for this project. You can fine-tune detection afterward.</p>
+        </div>
+        <button type="button" class="btn ghost sm" id="avPickerClose" data-av-close>Close</button>
+      </div>
+      <div class="av-picker-tools">
+        <input type="search" id="avPickerSearch" class="af-input" placeholder="Search platforms — GA4, Meta, TikTok…" autocomplete="off"/>
+        <button type="button" class="btn ghost sm" id="avCustomBtn">Custom URL pattern…</button>
+      </div>
+      <div class="av-platform-grid" id="avPlatformGrid">
+        <div class="af-empty-inline">Loading platforms…</div>
+      </div>
+    </div>
+  </div>
+
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -155,5 +242,5 @@
   window.__VENDORS__ = {{ vendors | tojson }};
   window.__VENDOR_CATALOG__ = {{ catalog | tojson }};
 </script>
-<script src="/static/js/audit_flows.js?v={{ asset_hash('js/audit_flows.js') }}" defer></script>
+<script src="/static/js/audit_flows.js?v={{ asset_hash('js/audit_flows.js') }}&av=3" defer></script>
 {% endblock %}

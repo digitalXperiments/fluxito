@@ -256,64 +256,103 @@
   }
 
   /* ==========================================================
-     VENDORS — profile + rule book + custom rules, per vendor
+     VENDORS — audit setup: pick platforms, review rule books,
+     layer custom rules. Primary path is one-click enable from
+     the rule-book catalog (not the raw connector list).
      ========================================================== */
   function initVendors() {
     var root = document.getElementById('afVendors');
     if (!root) return;
 
     var VENDORS = (window.__VENDORS__ || []).slice();
-    var CATALOG = window.__VENDOR_CATALOG__ || [];
-    var PLATFORMS = [];      // rule-book summaries from /api/tag-rulebook/platforms
-    var PLATFORM_INDEX = {}; // platform slug -> summary
-    var RB_CACHE = {};       // platform slug -> full serialized rule book
-    var CUSTOM_RULES = null; // all project custom rules (lazy)
-    var current = null;      // selected vendor object, or null = new
+    var PLATFORMS = [];
+    var PLATFORM_INDEX = {};
+    var RB_CACHE = {};
+    var CUSTOM_RULES = null;
+    var current = null;       // selected vendor, or null
+    var mode = 'editor';       // editor | empty
+    var pickerQuery = '';
+    var enabling = null;      // platform slug being created
 
     var els = {
-      list: document.getElementById('afVList'),
-      catalog: document.getElementById('afVCatalog'),
-      title: document.getElementById('afVFormTitle'),
-      badges: document.getElementById('afVDetailBadges'),
-      tabs: document.getElementById('afVTabs'),
-      name: document.getElementById('afVName'),
-      slug: document.getElementById('afVSlug'),
-      platform: document.getElementById('afVPlatform'),
-      pattern: document.getElementById('afVPattern'),
-      desc: document.getElementById('afVDesc'),
-      params: document.getElementById('afVParams'),
-      seed: document.getElementById('afVSeedBtn'),
-      del: document.getElementById('afVDeleteBtn'),
-      rbPane: document.getElementById('afVRulebook'),
-      rbCount: document.getElementById('afVRbCount'),
-      crCount: document.getElementById('afVCrCount'),
-      crList: document.getElementById('afVCustomList')
+      list: document.getElementById('avList'),
+      railCount: document.getElementById('avRailCount'),
+      picker: document.getElementById('avPicker'),
+      editor: document.getElementById('avEditor'),
+      empty: document.getElementById('avEmpty'),
+      grid: document.getElementById('avPlatformGrid'),
+      search: document.getElementById('avPickerSearch'),
+      title: document.getElementById('avFormTitle'),
+      kicker: document.getElementById('avEditKicker'),
+      badges: document.getElementById('avDetailBadges'),
+      tabs: document.getElementById('avTabs'),
+      name: document.getElementById('avName'),
+      slug: document.getElementById('avSlug'),
+      platform: document.getElementById('avPlatform'),
+      pattern: document.getElementById('avPattern'),
+      desc: document.getElementById('avDesc'),
+      params: document.getElementById('avParams'),
+      seed: document.getElementById('avSeedBtn'),
+      del: document.getElementById('avDeleteBtn'),
+      rbPane: document.getElementById('avRulebook'),
+      rbCount: document.getElementById('avRbCount'),
+      crCount: document.getElementById('avCrCount'),
+      crList: document.getElementById('avCustomList')
     };
 
-    // ── Tabs ──
+    // Main stage is either the editor or the empty-state card.
+    // Platform picker is a fixed modal — never in the layout flow, so it
+    // cannot leave a blank white panel under/beside the editor.
+    function showStage(m) {
+      mode = m;
+      var isEditor = m === 'editor';
+      var isEmpty = m === 'empty';
+      if (els.editor) {
+        els.editor.hidden = !isEditor;
+        els.editor.style.display = isEditor ? '' : 'none';
+      }
+      if (els.empty) {
+        els.empty.hidden = !isEmpty;
+        els.empty.style.display = isEmpty ? '' : 'none';
+      }
+    }
+
+    function setPickerOpen(open) {
+      if (!els.picker) return;
+      els.picker.hidden = !open;
+      // Modal uses display:flex when open; [hidden] alone can lose to that.
+      els.picker.style.display = open ? 'flex' : 'none';
+      document.body.style.overflow = open ? 'hidden' : '';
+      if (open) {
+        renderPlatformGrid();
+        if (els.search) {
+          els.search.value = pickerQuery;
+          setTimeout(function () { try { els.search.focus(); } catch (e) {} }, 0);
+        }
+      }
+    }
+
     function setTab(name) {
       root.querySelectorAll('[data-vpane]').forEach(function (p) {
         p.hidden = p.getAttribute('data-vpane') !== name;
       });
-      els.tabs.querySelectorAll('.af-vtab').forEach(function (t) {
+      els.tabs.querySelectorAll('.av-tab').forEach(function (t) {
         t.classList.toggle('is-active', t.getAttribute('data-vtab') === name);
       });
       if (name === 'rulebook') renderRulebookPane();
       if (name === 'custom') renderCustomPane();
     }
     els.tabs.addEventListener('click', function (ev) {
-      var t = ev.target.closest('.af-vtab');
+      var t = ev.target.closest('.av-tab');
       if (t) setTab(t.getAttribute('data-vtab'));
     });
 
-    // ── Platform helpers ──
     function vendorPlatform(v) {
       if (!v) return null;
       if (v.catalog_slug && PLATFORM_INDEX[v.catalog_slug]) return v.catalog_slug;
       if (v.slug && PLATFORM_INDEX[v.slug]) return v.slug;
       return null;
     }
-    // Live value while editing (the Profile select is the source of truth).
     function selectedPlatform() { return (els.platform.value || '').trim() || null; }
 
     function fetchRb(platform) {
@@ -325,26 +364,151 @@
     }
 
     function populatePlatformSelect() {
-      var opts = ['<option value="">— none —</option>'].concat(PLATFORMS.map(function (p) {
+      var opts = ['<option value="">— none (custom only) —</option>'].concat(PLATFORMS.map(function (p) {
         return '<option value="' + esc(p.platform) + '">' + esc(p.display_name) +
-          ' (' + p.event_count + ' events · ' + p.global_rule_count + ' rules)</option>';
+          ' · ' + p.event_count + ' events · ' + p.global_rule_count + ' rules</option>';
       }));
       var cur = els.platform.value;
       els.platform.innerHTML = opts.join('');
       els.platform.value = cur || '';
     }
 
-    // ── Header badges + tab counts ──
+    function slugify(s) {
+      return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    }
+
+    function uniqueSlug(base) {
+      var s = slugify(base) || 'vendor';
+      var taken = {};
+      VENDORS.forEach(function (v) {
+        if (!current || v.id !== current.id) taken[v.slug] = true;
+      });
+      if (!taken[s]) return s;
+      var i = 2;
+      while (taken[s + '_' + i]) i++;
+      return s + '_' + i;
+    }
+
+    function seedParamsFromRb(rb, existing) {
+      var have = {};
+      (existing || []).forEach(function (p) { if (p && p.key) have[p.key] = true; });
+      var out = (existing || []).slice();
+      var added = 0;
+      (rb.events || []).forEach(function (ev) {
+        (ev.required_params || []).forEach(function (p) {
+          if (have[p.name] || added >= 15) return;
+          have[p.name] = true;
+          added++;
+          out.push({ label: p.name, key: p.name, source: 'query', hint: p.type || '' });
+        });
+      });
+      return out;
+    }
+
+    // ── Rail list ──
+    function renderList() {
+      var n = VENDORS.length;
+      if (els.railCount) {
+        els.railCount.textContent = n ? (n + ' configured') : 'None yet';
+      }
+      if (!n) {
+        els.list.innerHTML =
+          '<div class="av-list-empty"><strong>No tags yet</strong>' +
+          'Add the pixels you fire so Flux knows what to validate.</div>';
+        return;
+      }
+      els.list.innerHTML = VENDORS.map(function (v) {
+        var platform = vendorPlatform(v);
+        var pInfo = platform && PLATFORM_INDEX[platform];
+        var ready = !!pInfo;
+        var pc = (v.params || []).length;
+        return '<button type="button" class="av-item' +
+          (current && current.id === v.id ? ' is-active' : '') +
+          '" data-vid="' + esc(v.id) + '">' +
+          '<div class="av-item-top">' +
+            '<span class="av-item-name">' + esc(v.name) + '</span>' +
+            '<span class="av-item-ready' + (ready ? '' : ' is-custom') + '">' +
+              (ready ? 'Rule book' : 'Custom') +
+            '</span>' +
+          '</div>' +
+          '<div class="av-item-sub">' + esc(v.url_pattern || '—') + '</div>' +
+          '<div class="av-item-meta">' +
+            (pInfo ? '<span class="av-chip">' + esc(pInfo.display_name) + '</span>' : '') +
+            '<span class="av-chip">' + pc + ' param' + (pc === 1 ? '' : 's') + '</span>' +
+          '</div>' +
+        '</button>';
+      }).join('');
+    }
+
+    // ── Platform picker grid (rule books only) ──
+    function addedPlatformSlugs() {
+      var set = {};
+      VENDORS.forEach(function (v) {
+        var p = vendorPlatform(v);
+        if (p) set[p] = v;
+        if (v.slug) set[v.slug] = v;
+        if (v.catalog_slug) set[v.catalog_slug] = v;
+      });
+      return set;
+    }
+
+    function renderPlatformGrid() {
+      var q = (pickerQuery || '').trim().toLowerCase();
+      var added = addedPlatformSlugs();
+      var rows = PLATFORMS.filter(function (p) {
+        if (!q) return true;
+        return (p.display_name || '').toLowerCase().indexOf(q) >= 0 ||
+          (p.platform || '').toLowerCase().indexOf(q) >= 0;
+      });
+      if (!rows.length) {
+        els.grid.innerHTML = '<div class="af-empty-inline">No platforms match “' + esc(pickerQuery) + '”.</div>';
+        return;
+      }
+      els.grid.innerHTML = rows.map(function (p) {
+        var isAdded = !!added[p.platform];
+        var busy = enabling === p.platform;
+        return '<button type="button" class="av-plat' + (isAdded ? ' is-added' : '') + '"' +
+          ' data-platform="' + esc(p.platform) + '"' +
+          (busy ? ' disabled' : '') + '>' +
+          '<div class="av-plat-name">' + esc(p.display_name) + '</div>' +
+          '<div class="av-plat-meta">' + (p.event_count || 0) + ' events · ' +
+            (p.global_rule_count || 0) + ' global rules</div>' +
+          '<div class="av-plat-foot">' +
+            '<span>' + (busy ? 'Enabling…' : isAdded ? 'Open' : 'Enable') + '</span>' +
+            (p.spec_version ? '<span class="av-plat-ver">' + esc(p.spec_version) + '</span>' : '') +
+          '</div>' +
+        '</button>';
+      }).join('');
+    }
+
+    function openPicker() {
+      setPickerOpen(true);
+    }
+
+    function closePicker() {
+      setPickerOpen(false);
+    }
+
+    function showEmptyOrFirst() {
+      current = null;
+      renderList();
+      if (VENDORS.length) loadForm(VENDORS[0], { tab: 'rulebook' });
+      else showStage('empty');
+    }
+
+    // ── Editor ──
     function renderBadges() {
       var platform = selectedPlatform();
       var bits = [];
       if (platform && PLATFORM_INDEX[platform]) {
         var p = PLATFORM_INDEX[platform];
-        bits.push('<span class="af-vbadge">' + esc(p.display_name) + '</span>');
-        if (p.spec_version) bits.push('<span class="af-vbadge af-vbadge-muted">' + esc(p.spec_version) + '</span>');
+        bits.push('<span class="av-badge av-badge-good">Rule book linked</span>');
+        bits.push('<span class="av-badge">' + esc(p.display_name) + '</span>');
+        if (p.spec_version) bits.push('<span class="av-badge av-badge-muted">' + esc(p.spec_version) + '</span>');
         els.rbCount.hidden = false;
         els.rbCount.textContent = String((p.event_count || 0) + (p.global_rule_count || 0));
       } else {
+        bits.push('<span class="av-badge av-badge-muted">No rule book</span>');
         els.rbCount.hidden = true;
       }
       els.badges.innerHTML = bits.join('');
@@ -354,68 +518,24 @@
       if (filtered && filtered.length) els.crCount.textContent = String(filtered.length);
     }
 
-    // ── Left rail ──
-    function renderList() {
-      if (!VENDORS.length) {
-        els.list.innerHTML = '<div class="af-empty-inline" style="padding:8px 2px;">No vendors yet.</div>';
-      } else {
-        els.list.innerHTML = VENDORS.map(function (v) {
-          var pc = (v.params || []).length;
-          var platform = vendorPlatform(v);
-          var badge = platform && PLATFORM_INDEX[platform]
-            ? '<span class="af-vitem-badge">' + esc(PLATFORM_INDEX[platform].display_name) + '</span>'
-            : '';
-          return '<button type="button" class="af-vitem' + (current && current.id === v.id ? ' is-active' : '') +
-            '" data-vid="' + esc(v.id) + '">' +
-            '<div class="af-vitem-name">' + esc(v.name) + badge + '</div>' +
-            '<div class="af-vitem-sub">' + esc(v.url_pattern) + ' · ' + pc + ' param' + (pc === 1 ? '' : 's') + '</div>' +
-            '</button>';
-        }).join('');
-      }
-    }
-
-    function renderCatalog() {
-      els.catalog.innerHTML = CATALOG.slice(0, 40).map(function (c) {
-        return '<button type="button" class="af-catalog-pick" data-slug="' + esc(c.slug) +
-          '" data-name="' + esc(c.display_name) + '">' + esc(c.display_name) + '</button>';
-      }).join('');
-    }
-
-    // ── Profile form ──
     function paramRow(p) {
       p = p || {};
       var srcQuery = (p.source || 'query') === 'query';
       return '<tr>' +
-        '<td><input class="af-input af-input-sm p-label" value="' + esc(p.label || '') + '" placeholder="Event name"/></td>' +
-        '<td><input class="af-input af-input-sm mono p-key" value="' + esc(p.key || '') + '" placeholder="en"/></td>' +
+        '<td><input class="af-input af-input-sm p-label" value="' + esc(p.label || '') + '" placeholder="Label"/></td>' +
+        '<td><input class="af-input af-input-sm mono p-key" value="' + esc(p.key || '') + '" placeholder="key"/></td>' +
         '<td><select class="af-select af-input-sm p-source">' +
           '<option value="query"' + (srcQuery ? ' selected' : '') + '>query</option>' +
           '<option value="auto"' + (!srcQuery ? ' selected' : '') + '>auto</option>' +
         '</select></td>' +
         '<td><input class="af-input af-input-sm p-default" value="' + esc(p.default || '') + '" placeholder="—"/></td>' +
-        '<td><input class="af-input af-input-sm p-hint" value="' + esc(p.hint || '') + '" placeholder="optional"/></td>' +
+        '<td><input class="af-input af-input-sm p-hint" value="' + esc(p.hint || '') + '" placeholder="type"/></td>' +
         '<td><button type="button" class="af-remove-x p-remove" title="Remove">&times;</button></td>' +
       '</tr>';
     }
 
     function renderParams(params) {
       els.params.innerHTML = (params || []).map(paramRow).join('');
-    }
-
-    function loadForm(v) {
-      current = v;
-      els.title.textContent = v ? ('Editing: ' + v.name) : 'New vendor';
-      els.name.value = v ? v.name : '';
-      els.slug.value = v ? v.slug : '';
-      els.platform.value = (v && vendorPlatform(v)) || (v && v.catalog_slug) || '';
-      if (els.platform.value && !PLATFORM_INDEX[els.platform.value]) els.platform.value = '';
-      els.pattern.value = v ? v.url_pattern : '';
-      els.desc.value = v ? (v.description || '') : '';
-      renderParams(v ? v.params : []);
-      els.del.hidden = !v;
-      renderList();
-      renderBadges();
-      setTab('profile');
     }
 
     function collectParams() {
@@ -437,30 +557,51 @@
       return out;
     }
 
-    function slugify(s) {
-      return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    function loadForm(v, opts) {
+      opts = opts || {};
+      current = v;
+      showStage('editor');
+      closePicker();
+      els.kicker.textContent = v && v.id ? 'Configured tag' : 'New custom vendor';
+      els.title.textContent = v ? v.name : 'Custom vendor';
+      els.name.value = v ? v.name : '';
+      els.slug.value = v ? v.slug : '';
+      els.platform.value = (v && vendorPlatform(v)) || (v && v.catalog_slug) || '';
+      if (els.platform.value && !PLATFORM_INDEX[els.platform.value]) els.platform.value = '';
+      els.pattern.value = v ? (v.url_pattern || '') : '';
+      els.desc.value = v ? (v.description || '') : '';
+      renderParams(v ? v.params : []);
+      els.del.hidden = !(v && v.id);
+      renderList();
+      renderBadges();
+      setTab(opts.tab || (v && v.id ? 'rulebook' : 'advanced'));
     }
 
     // ── Rule book pane ──
     function renderRulebookPane() {
       var platform = selectedPlatform();
       if (!platform) {
-        els.rbPane.innerHTML = '<div class="af-empty-inline">Link a rule book platform on the Profile tab to see its spec here.</div>';
+        els.rbPane.innerHTML =
+          '<div class="af-empty-inline">No rule book linked. Pick one in the essentials bar above, ' +
+          'or enable a platform from <button type="button" class="av-link-btn" id="avRbAddTag">Add tag</button>.</div>';
+        var btn = document.getElementById('avRbAddTag');
+        if (btn) btn.addEventListener('click', openPicker);
         return;
       }
       els.rbPane.innerHTML = '<div class="af-empty-inline">Loading rule book…</div>';
       fetchRb(platform).then(function (rb) {
-        if (selectedPlatform() !== platform) return; // switched away meanwhile
+        if (selectedPlatform() !== platform) return;
         var html = '';
         html += '<div class="af-rb-head">' +
           '<div><div class="af-rb-title">' + esc(rb.display_name) + '</div>' +
           '<div class="af-rb-sub">' + esc(rb.spec_version || '') +
             (rb.docs_url ? ' · <a href="' + esc(rb.docs_url) + '" target="_blank" rel="noopener">Docs ↗</a>' : '') +
           '</div></div>' +
-          '<div class="af-rb-stats">' + (rb.event_count || 0) + ' events · ' + (rb.global_rules || []).length + ' global rules</div>' +
+          '<div class="af-rb-stats">' + (rb.event_count || 0) + ' events · ' +
+            (rb.global_rules || []).length + ' global rules</div>' +
         '</div>';
         if ((rb.detection_patterns || []).length) {
-          html += '<div class="af-rb-section">Detection patterns</div>' +
+          html += '<div class="af-rb-section">How Flux detects this tag</div>' +
             '<div class="af-rb-patterns">' + rb.detection_patterns.map(function (p) {
               return '<code>' + esc(p) + '</code>';
             }).join(' ') + '</div>';
@@ -495,31 +636,27 @@
       });
     }
 
-    // ── Seed profile from rule book ──
+    function applySeed(rb, opts) {
+      opts = opts || {};
+      if (opts.forcePattern || !els.pattern.value.trim()) {
+        if ((rb.detection_patterns || []).length) {
+          els.pattern.value = rb.detection_patterns[0];
+        }
+      }
+      var next = seedParamsFromRb(rb, opts.replaceParams ? [] : collectParams());
+      renderParams(next);
+    }
+
     els.seed.addEventListener('click', function () {
       var platform = selectedPlatform();
       if (!platform) return;
       fetchRb(platform).then(function (rb) {
-        if (!els.pattern.value.trim() && (rb.detection_patterns || []).length) {
-          els.pattern.value = rb.detection_patterns[0];
-        }
-        // Merge unique required params across event specs into the params table.
-        var have = {};
-        collectParams().forEach(function (p) { have[p.key] = true; });
-        var added = 0;
-        (rb.events || []).forEach(function (ev) {
-          (ev.required_params || []).forEach(function (p) {
-            if (have[p.name] || added >= 15) return;
-            have[p.name] = true;
-            added++;
-            els.params.insertAdjacentHTML('beforeend', paramRow({ label: p.name, key: p.name, source: 'query', hint: p.type || '' }));
-          });
-        });
-        toast(added ? ('Seeded ' + added + ' params from ' + rb.display_name) : 'Nothing new to seed');
+        applySeed(rb, { forcePattern: true });
+        toast('Re-seeded detection + params from ' + rb.display_name);
       }).catch(function () { toast('Could not load the rule book', 'error'); });
     });
 
-    // ── Custom rules pane ──
+    // ── Custom rules ──
     function filteredCustomRules() {
       if (CUSTOM_RULES === null) return null;
       var platform = selectedPlatform();
@@ -542,7 +679,8 @@
       run.then(function () {
         var rules = filteredCustomRules() || [];
         if (!rules.length) {
-          els.crList.innerHTML = '<div class="af-empty-inline">No custom rules for this vendor yet — add one below.</div>';
+          els.crList.innerHTML =
+            '<div class="af-empty-inline">No custom rules yet — add one below when the platform book is not enough.</div>';
           return;
         }
         els.crList.innerHTML = rules.map(function (r) {
@@ -577,8 +715,8 @@
       }).catch(function (e) { toast(e.message, 'error'); });
     });
 
-    document.getElementById('afCrSaveBtn').addEventListener('click', function () {
-      var name = document.getElementById('afCrName').value.trim();
+    document.getElementById('avCrSaveBtn').addEventListener('click', function () {
+      var name = document.getElementById('avCrName').value.trim();
       if (!name) { toast('Rule name is required', 'error'); return; }
       var platform = selectedPlatform() || (current && current.slug) || '*';
       var csv = function (id) {
@@ -587,20 +725,20 @@
       var body = {
         rule_id: 'custom.' + slugify(name),
         platform: platform,
-        event: document.getElementById('afCrEvent').value.trim() || '*',
+        event: document.getElementById('avCrEvent').value.trim() || '*',
         name: name,
-        severity: document.getElementById('afCrSeverity').value,
-        required_params: csv('afCrRequired'),
-        forbidden_params: csv('afCrForbidden'),
+        severity: document.getElementById('avCrSeverity').value,
+        required_params: csv('avCrRequired'),
+        forbidden_params: csv('avCrForbidden'),
         param_assertions: [],
-        remediation: document.getElementById('afCrRemediation').value.trim() || null
+        remediation: document.getElementById('avCrRemediation').value.trim() || null
       };
       jfetch('/api/custom-rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       }).then(function () {
-        ['afCrName', 'afCrEvent', 'afCrRequired', 'afCrForbidden', 'afCrRemediation'].forEach(function (id) {
+        ['avCrName', 'avCrEvent', 'avCrRequired', 'avCrForbidden', 'avCrRemediation'].forEach(function (id) {
           document.getElementById(id).value = '';
         });
         return loadCustomRules();
@@ -610,20 +748,32 @@
       }).catch(function (e) { toast(e.message, 'error'); });
     });
 
-    // ── Save vendor ──
-    document.getElementById('afVSaveBtn').addEventListener('click', function () {
-      var name = els.name.value.trim();
-      var vslug = els.slug.value.trim().toLowerCase();
-      var pattern = els.pattern.value.trim();
-      if (!name) { toast('Name is required', 'error'); return; }
-      if (!vslug) { toast('Slug is required', 'error'); return; }
-      if (!pattern) { toast('URL pattern is required', 'error'); return; }
-      var body = {
-        name: name, slug: vslug, url_pattern: pattern,
+    // ── Persist vendor ──
+    function upsertLocal(v) {
+      var found = false;
+      for (var i = 0; i < VENDORS.length; i++) {
+        if (VENDORS[i].id === v.id) { VENDORS[i] = v; found = true; break; }
+      }
+      if (!found) VENDORS.push(v);
+      VENDORS.sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
+    }
+
+    function saveVendorBody() {
+      return {
+        name: els.name.value.trim(),
+        slug: els.slug.value.trim().toLowerCase(),
+        url_pattern: els.pattern.value.trim(),
         description: els.desc.value.trim() || null,
         params: collectParams(),
         catalog_slug: selectedPlatform()
       };
+    }
+
+    document.getElementById('avSaveBtn').addEventListener('click', function () {
+      var body = saveVendorBody();
+      if (!body.name) { toast('Name is required', 'error'); return; }
+      if (!body.slug) { toast('Slug is required (Detection & params tab)', 'error'); setTab('advanced'); return; }
+      if (!body.url_pattern) { toast('URL pattern is required (Detection & params tab)', 'error'); setTab('advanced'); return; }
       var editing = current && current.id;
       var url = editing ? '/api/audit/vendors/' + current.id : '/api/audit/vendors';
       jfetch(url, {
@@ -631,33 +781,115 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       }).then(function (v) {
-        if (editing) {
-          for (var i = 0; i < VENDORS.length; i++) if (VENDORS[i].id === v.id) VENDORS[i] = v;
-        } else {
-          VENDORS.push(v);
-        }
-        VENDORS.sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
-        loadForm(v);
-        toast('Vendor saved');
+        upsertLocal(v);
+        loadForm(v, { tab: 'rulebook' });
+        toast(editing ? 'Tag updated' : 'Tag saved');
       }).catch(function (e) { toast(e.message, 'error'); });
     });
 
-    // ── Delete vendor ──
     els.del.addEventListener('click', function () {
       if (!current || !current.id) return;
-      if (!confirm('Delete vendor "' + current.name + '"?')) return;
+      if (!confirm('Remove "' + current.name + '" from this project? Audits and flows stop using it.')) return;
       jfetch('/api/audit/vendors/' + current.id, { method: 'DELETE' }).then(function () {
         VENDORS = VENDORS.filter(function (v) { return v.id !== current.id; });
-        loadForm(null);
-        toast('Vendor deleted');
+        toast('Tag removed');
+        showEmptyOrFirst();
       }).catch(function (e) { toast(e.message, 'error'); });
     });
 
-    // ── Add new ──
-    document.getElementById('afVAddBtn').addEventListener('click', function () { loadForm(null); });
+    // ── One-click enable from rule-book platform ──
+    function enablePlatform(platformSlug) {
+      var existing = addedPlatformSlugs()[platformSlug];
+      if (existing && existing.id) {
+        loadForm(existing, { tab: 'rulebook' });
+        return;
+      }
+      var summary = PLATFORM_INDEX[platformSlug];
+      if (!summary) { toast('Unknown platform', 'error'); return; }
+      enabling = platformSlug;
+      renderPlatformGrid();
+      fetchRb(platformSlug).then(function (rb) {
+        var pattern = ((rb.detection_patterns || [])[0]) || platformSlug;
+        var params = seedParamsFromRb(rb, []);
+        var body = {
+          name: rb.display_name || summary.display_name || platformSlug,
+          slug: uniqueSlug(platformSlug),
+          url_pattern: pattern,
+          description: null,
+          params: params,
+          catalog_slug: platformSlug
+        };
+        return jfetch('/api/audit/vendors', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      }).then(function (v) {
+        upsertLocal(v);
+        enabling = null;
+        loadForm(v, { tab: 'rulebook' });
+        toast(v.name + ' enabled — review the rule book below');
+      }).catch(function (e) {
+        enabling = null;
+        renderPlatformGrid();
+        toast(e.message || 'Could not enable platform', 'error');
+      });
+    }
 
-    // ── Add param row ──
-    document.getElementById('afVAddParam').addEventListener('click', function () {
+    els.grid.addEventListener('click', function (ev) {
+      var card = ev.target.closest('.av-plat');
+      if (!card || card.disabled) return;
+      enablePlatform(card.getAttribute('data-platform'));
+    });
+
+    if (els.search) {
+      els.search.addEventListener('input', function () {
+        pickerQuery = els.search.value || '';
+        renderPlatformGrid();
+      });
+    }
+
+    // ── Custom vendor (blank form) ──
+    function startCustom() {
+      current = null;
+      loadForm({
+        name: '',
+        slug: '',
+        url_pattern: '',
+        description: '',
+        params: [],
+        catalog_slug: null
+      }, { tab: 'advanced' });
+      els.kicker.textContent = 'Custom vendor';
+      els.title.textContent = 'New custom vendor';
+      els.del.hidden = true;
+      els.slug.value = '';
+      els.pattern.focus();
+    }
+
+    // ── Wiring ──
+    function wireAdd(id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('click', openPicker);
+    }
+    wireAdd('avAddOpen');
+    wireAdd('avAddOpenRail');
+    wireAdd('avEmptyAdd');
+    if (els.picker) {
+      els.picker.querySelectorAll('[data-av-close]').forEach(function (el) {
+        el.addEventListener('click', closePicker);
+      });
+      document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && els.picker && !els.picker.hidden) closePicker();
+      });
+    }
+    var customBtn = document.getElementById('avCustomBtn');
+    if (customBtn) customBtn.addEventListener('click', function () {
+      closePicker();
+      startCustom();
+    });
+
+    document.getElementById('avAddParam').addEventListener('click', function () {
       els.params.insertAdjacentHTML('beforeend', paramRow({}));
     });
     els.params.addEventListener('click', function (ev) {
@@ -665,48 +897,47 @@
       if (rm) rm.closest('tr').remove();
     });
 
-    // ── Select existing vendor ──
     els.list.addEventListener('click', function (ev) {
-      var item = ev.target.closest('.af-vitem');
+      var item = ev.target.closest('.av-item');
       if (!item) return;
       var vid = item.getAttribute('data-vid');
       var v = VENDORS.filter(function (x) { return x.id === vid; })[0];
-      if (v) loadForm(v);
+      if (v) loadForm(v, { tab: 'rulebook' });
     });
 
-    // ── Catalog quick-pick: link + seed from the rule book when one matches ──
-    els.catalog.addEventListener('click', function (ev) {
-      var pick = ev.target.closest('.af-catalog-pick');
-      if (!pick) return;
-      loadForm(null);
-      var cslug = pick.getAttribute('data-slug');
-      els.name.value = pick.getAttribute('data-name');
-      els.slug.value = slugify(cslug);
-      if (PLATFORM_INDEX[cslug]) {
-        els.platform.value = cslug;
-        renderBadges();
-        els.seed.click(); // pre-fill url_pattern + params from the rule book
-      } else {
-        els.pattern.focus();
-      }
+    els.platform.addEventListener('change', function () {
+      renderBadges();
+      var platform = selectedPlatform();
+      if (!platform) return;
+      // Auto-seed empty detection fields when linking a book
+      fetchRb(platform).then(function (rb) {
+        if (!els.pattern.value.trim() || !collectParams().length) {
+          applySeed(rb, { forcePattern: !els.pattern.value.trim() });
+        }
+        if (mode === 'editor') renderRulebookPane();
+      }).catch(function () {});
     });
 
-    // ── Platform select change ──
-    els.platform.addEventListener('change', function () { renderBadges(); });
-
-    // ── Boot: load rule-book platform list, then render ──
+    // ── Boot ──
     jfetch('/api/tag-rulebook/platforms').then(function (data) {
       PLATFORMS = data.platforms || [];
       PLATFORMS.forEach(function (p) { PLATFORM_INDEX[p.platform] = p; });
       populatePlatformSelect();
       renderList();
-      loadForm(current || VENDORS[0] || null);
-    }).catch(function () { /* keep the basic editor working without rule books */ });
+      if (!VENDORS.length) {
+        showStage('empty');
+        openPicker();
+      } else {
+        loadForm(VENDORS[0], { tab: 'rulebook' });
+      }
+    }).catch(function () {
+      renderList();
+      if (!VENDORS.length) showStage('empty');
+      else loadForm(VENDORS[0], { tab: 'advanced' });
+    });
 
     loadCustomRules();
     renderList();
-    renderCatalog();
-    loadForm(VENDORS[0] || null);
   }
 
   function boot() { initFlows(); initVendors(); }
