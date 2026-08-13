@@ -47,7 +47,10 @@ PyJWT>=2.10.1,<3.0
 # ── Pydantic — must be >=2.8.0 for mcp>=1.0 ──────────────────────────────
 # pydantic bumped to match mcp 1.20+ requirements (needs >=2.11)
 pydantic>=2.11,<3.0
-pydantic-settings>=2.7
+# 2.15 surfaces MCP 1.29's unresolved generic `lifespan` annotation as an
+# IncompleteFieldDefinitionWarning; pytest promotes warnings to errors during
+# app.main collection. Remove the cap once MCP rebuilds its Settings model.
+pydantic-settings>=2.7,<2.15
 
 # ── Markdown parsing (SDR feature — YAML frontmatter extraction) ──────────
 python-frontmatter==1.1.0
