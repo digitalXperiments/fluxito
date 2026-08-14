@@ -263,8 +263,8 @@
   {
     "tool": "analytics_write",
     "action": "adobe_workspace_create_project",
-    "summary": "Adobe-only: create an Analysis Workspace project. Requires config{name, rsid, definition}. Only writable fields are sent (name, rsid, definition, type=project, optional description/tags/shares). Server-managed fields (owner, id, created, modified) are not forwarded.",
-    "group": "",
+    "summary": "Adobe-only: create an Analysis Workspace project. Prefer config{name, rsid, tables:[{metrics, dimension?}]}. Fluxito builds a valid Workspace definition (do NOT invent raw definition JSON). Optional date_range (thisMonth, last30Days, YYYY-MM-DD/YYYY-MM-DD). A raw definition is accepted if it already contains workspaces+version. Validates against the report suite before POST unless config.validate=false.",
+    "group": "ADOBE WORKSPACE",
     "params": [
       {
         "name": "platform",
@@ -287,11 +287,16 @@
         "example": {
           "name": "Weekly traffic",
           "rsid": "myrsid",
-          "definition": {
-            "version": "31"
-          }
+          "date_range": "thisMonth",
+          "tables": [
+            {
+              "name": "Traffic",
+              "metrics": ["visits", "pageviews"],
+              "dimension": "page"
+            }
+          ]
         },
-        "doc": "Must contain truthy name, rsid, and definition (Workspace project definition object). Optional description, tags, and shares are forwarded; other top-level keys (owner, type, id, created, modified) are ignored."
+        "doc": "Required: name, rsid. Preferred: tables (array of {name?, metrics[], dimension?}) — Fluxito expands this into Adobe's Workspace JSON. Alternative: a full definition with workspaces+version. Incomplete definitions (e.g. {version:31} only) are expanded to a Visits/thisMonth template. Optional description, tags, shares, date_range, validate (default true)."
       },
       {
         "name": "config.description",
@@ -312,7 +317,7 @@
     "tool": "analytics_write",
     "action": "adobe_workspace_copy_project",
     "summary": "Adobe-only: duplicate a Workspace project (GET source with definition, POST under a new name using writable fields only). Requires config{project_id, name}. project_id must match [A-Za-z0-9_-]{1,128}.",
-    "group": "",
+    "group": "ADOBE WORKSPACE",
     "params": [
       {
         "name": "platform",
@@ -424,7 +429,7 @@
     "tool": "analytics_write",
     "action": "adobe_workspace_delete_project",
     "summary": "Adobe-only: permanently hide/delete one Analysis Workspace project. IRREVERSIBLE. Requires an explicit config.project_id matching [A-Za-z0-9_-]{1,128} — no wildcard, path, or bulk delete.",
-    "group": "",
+    "group": "ADOBE WORKSPACE",
     "params": [
       {
         "name": "platform",
@@ -574,8 +579,8 @@
   {
     "tool": "analytics_write",
     "action": "adobe_workspace_update_project",
-    "summary": "Adobe-only: edit a Workspace project via Adobe's documented partial PUT. Sends only the caller-supplied writable fields (no pre-GET). A name-only update is PUT {\"name\": ...}. Set merge_definition=true to opt into GET+merge of the definition subtree only. project_id must match [A-Za-z0-9_-]{1,128}.",
-    "group": "",
+    "summary": "Adobe-only: edit a Workspace project via Adobe's documented partial PUT. A rename is PUT {name}. To rebuild visualizations pass config.tables (Fluxito builds the definition). Set merge_definition=true to GET+merge a partial definition. project_id must match [A-Za-z0-9_-]{1,128}.",
+    "group": "ADOBE WORKSPACE",
     "params": [
       {
         "name": "platform",
@@ -599,7 +604,21 @@
           "project_id": "6091a10005c7706c0acdd751",
           "name": "Renamed project"
         },
-        "doc": "Must contain a valid project_id (letters/digits/_/- only). Optional name, description, rsid, owner, definition, tags, shares. Only those writable fields are PUT — the stored project is not fetched or resent. Unknown keys are ignored."
+        "doc": "Must contain a valid project_id (letters/digits/_/- only). Optional name, description, rsid, owner, definition, tables, date_range, tags, shares. tables rebuilds the Workspace definition (preferred over inventing raw definition JSON). Only writable fields are PUT."
+      },
+      {
+        "name": "config.tables",
+        "type": "array",
+        "required": false,
+        "item_type": "object",
+        "example": [
+          {
+            "name": "Traffic",
+            "metrics": ["visits"],
+            "dimension": "page"
+          }
+        ],
+        "doc": "Compact freeform tables. When set, Fluxito builds a full Workspace definition and PUTs it."
       },
       {
         "name": "config.name",

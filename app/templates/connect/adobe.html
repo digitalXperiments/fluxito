@@ -25,9 +25,9 @@
     {% if editing %}<div class="label-hint">Leave blank to keep your existing client secret</div>{% endif %}
   </div>
   <div class="form-group">
-    <label class="label" for="adobeCompanyId">Company ID (optional)</label>
-    <input class="input" id="adobeCompanyId" placeholder="Required for Analytics report API calls" value="{{ editing.company_id if editing else '' }}"/>
-    <div class="label-hint">Your Adobe Analytics Global Company ID</div>
+    <label class="label" for="adobeCompanyId">Analytics Company ID (optional)</label>
+    <input class="input" id="adobeCompanyId" placeholder="Leave blank to auto-detect" value="{{ editing.company_id if editing else '' }}"/>
+    <div class="label-hint">Adobe Analytics <strong>globalCompanyId</strong> used in API paths — not the IMS Organization ID (the one ending in @AdobeOrg). Leave blank and Fluxito will detect it from Adobe on save.</div>
   </div>
 
   <div class="section-divider"></div>

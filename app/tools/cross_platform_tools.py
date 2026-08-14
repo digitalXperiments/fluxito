@@ -746,7 +746,7 @@ async def _adapter_adobe_analytics(
     try:
         from app.tools.shared_helpers import get_adobe_analytics_creds
 
-        _, client_id, client_secret, resolved_org = await get_adobe_analytics_creds(
+        _, client_id, client_secret, resolved_org, company_id = await get_adobe_analytics_creds(
             str(getattr(user, "id", "")), adobe_org_id
         )
         org_id = resolved_org
@@ -763,6 +763,7 @@ async def _adapter_adobe_analytics(
             metrics=["metrics/revenue", "metrics/orders", "metrics/visits"],
             date_range={"start": date_start, "end": date_end},
             limit=200,
+            company_id=company_id,
         )
     except Exception as exc:
         out["error"] = f"Adobe run_report failed: {exc}"

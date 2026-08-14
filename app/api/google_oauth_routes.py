@@ -5519,6 +5519,23 @@ async def connect_adobe_page(request: Request):
     )
 
 
+async def _discover_adobe_company_id(client_id: str, client_secret: str, org_id: str) -> str | None:
+    """Best-effort Analytics globalCompanyId from GET /discovery/me."""
+    adobe = getattr(app_state, "adobe_analytics_connector", None)
+    if adobe is None:
+        return None
+    try:
+        resolved = await adobe.resolve_company_id(client_id, client_secret, org_id)
+    except Exception:
+        logger.exception("Adobe company-id discovery failed")
+        return None
+    if resolved.get("error"):
+        logger.info("Adobe company-id discovery: %s", resolved.get("message"))
+        return None
+    company_id = resolved.get("company_id")
+    return str(company_id) if company_id else None
+
+
 class AdobeUploadRequest(BaseModel):
     display_name: str
     org_id: str
@@ -5546,6 +5563,11 @@ async def add_adobe_connection(payload: AdobeUploadRequest, request: Request):
     encrypted_client_id = _encrypt(payload.client_id)
     encrypted_client_secret = _encrypt(payload.client_secret)
     active_project_id = request.query_params.get("project_id") or request.cookies.get("active_project_id")
+    company_id = payload.company_id
+    if payload.has_analytics and not (company_id or "").strip():
+        company_id = await _discover_adobe_company_id(
+            payload.client_id, payload.client_secret, payload.org_id
+        )
 
     db_session = app_state.db_session_factory()
     async with db_session as db:
@@ -5554,7 +5576,7 @@ async def add_adobe_connection(payload: AdobeUploadRequest, request: Request):
             project_id=active_project_id,
             display_name=payload.display_name,
             org_id=payload.org_id,
-            company_id=payload.company_id,
+            company_id=company_id,
             client_id_encrypted=encrypted_client_id,
             client_secret_encrypted=encrypted_client_secret,
             has_analytics=payload.has_analytics,
@@ -5583,14 +5605,21 @@ async def update_adobe_connection(conn_id: str, payload: AdobeUploadRequest, req
     if not user_ctx:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
+    company_id = (payload.company_id or "").strip() or None
+    if payload.has_analytics and not company_id and payload.client_secret:
+        company_id = await _discover_adobe_company_id(
+            payload.client_id, payload.client_secret, payload.org_id
+        )
+
     values: dict = {
         "display_name": payload.display_name,
         "org_id": payload.org_id,
         "client_id_encrypted": _encrypt(payload.client_id),
-        "company_id": payload.company_id,
         "has_analytics": payload.has_analytics,
         "has_launch": payload.has_launch,
     }
+    if company_id:
+        values["company_id"] = company_id
     if payload.client_secret:
         values["client_secret_encrypted"] = _encrypt(payload.client_secret)
 

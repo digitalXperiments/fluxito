@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.6] — 2026-08-14
+
+### Fixed
+- **Adobe Analytics API calls now use the real company ID.** Every Analytics 2.0 request
+  was sending the IMS org (`…@AdobeOrg`) as `{company_id}` in `/api/{id}/…` and
+  `x-proxy-global-company-id`. Fluxito now resolves `globalCompanyId` from the saved
+  connection, `GET /discovery/me`, or the optional Company ID field — which is what
+  Adobe actually accepts. That unblocks report-suite lists, reports, and Workspace
+  create/edit/delete.
+- **Reports send a valid Analytics 2.0 body.** `run_report` now puts the date range in
+  `globalFilters` and metrics as `metrics/{id}` with numeric `columnId`s, instead of a
+  top-level `dateRange` string that Adobe rejects.
+
+### Added
+- **Workspace create from compact tables.** `adobe_workspace_create_project` accepts
+  `config.tables=[{metrics, dimension?}]` and Fluxito builds the Analysis Workspace
+  JSON. Models no longer have to invent a raw `definition`. Updates can rebuild
+  visualizations the same way. New read actions `adobe_workspace_build_definition` and
+  `adobe_workspace_validate_project` inspect the result before writing.
+- **Company ID auto-detect on connect.** Saving an Adobe Analytics connection discovers
+  `globalCompanyId` when the field is left blank.
+
 ## [2.0.5] — 2026-08-13
 
 ### Changed

@@ -30,6 +30,10 @@ in its own reference; this is the shared mechanics.
 | Tag rule book / live tag test | `tag_rulebook`, `live_tag_test` | same | same |
 | Automations | `automation_read` | `automation_write` | — |
 
+Adobe Analysis Workspace lives on `analytics_read` / `analytics_write` as
+**`adobe_workspace_*` actions** (the ADOBE WORKSPACE group in `describe`). Create with
+`config.tables=[{metrics, dimension?}]` — do **not** invent raw Workspace JSON.
+
 Cheap catalog reads live in the `*_read` tools; **heavier audits live in `run_audit`** so
 reads stay fast. Audits return `findings[]` with severity + recommendation.
 

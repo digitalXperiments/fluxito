@@ -244,22 +244,22 @@ async def get_amplitude_creds(user_id: str) -> tuple[str | None, str | None, str
 
 async def get_adobe_analytics_creds(
     user_id: str, org_id: str | None = None
-) -> tuple[str | None, str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, str | None, str | None, str | None]:
     """
     Fetch user's active Adobe Analytics connection and return
-    (conn_id, client_id, client_secret, org_id).
-    Returns (None, None, None, None) if no active connection.
+    (conn_id, client_id, client_secret, org_id, company_id).
+    Returns (None, None, None, None, None) if no active connection.
     """
     from app.models.credential_connection import AdobeConnection
 
     extra = [AdobeConnection.has_analytics == True] if org_id is None else None
     conn = await get_encrypted_credential_conn(AdobeConnection, user_id, extra_filters=extra)
     if not conn:
-        return None, None, None, None
+        return None, None, None, None, None
     client_id = decrypt_field(conn.client_id_encrypted)
     client_secret = decrypt_field(conn.client_secret_encrypted)
     resolved_org = org_id or conn.org_id
-    return str(conn.id), client_id, client_secret, resolved_org
+    return str(conn.id), client_id, client_secret, resolved_org, conn.company_id
 
 
 async def get_mixpanel_creds(

@@ -428,8 +428,8 @@
   {
     "tool": "analytics_read",
     "action": "adobe_workspace_get_project",
-    "summary": "Adobe-only: fetch one Analysis Workspace project by id. Always requests expansion=definition so the full project JSON is available for editing.",
-    "group": "CATALOG / METADATA",
+    "summary": "Adobe-only: fetch one Analysis Workspace project by id, including the full definition JSON needed before an edit.",
+    "group": "ADOBE WORKSPACE",
     "params": [
       {
         "name": "platform",
@@ -927,8 +927,8 @@
   {
     "tool": "analytics_read",
     "action": "adobe_workspace_list_projects",
-    "summary": "Adobe-only: list Analysis Workspace projects. Compact summaries (id/name/rsid/owner). Default expansion is reportSuiteName,ownerFullName — definition is NOT included unless requested. Query params are limited to Adobe's published set: expansion, includeType, locale, limit, page.",
-    "group": "CATALOG / METADATA",
+    "summary": "Adobe-only: list Analysis Workspace projects (id/name/rsid/owner). Default expansion omits definition. Official query params only: expansion, includeType, locale, limit, page.",
+    "group": "ADOBE WORKSPACE",
     "params": [
       {
         "name": "platform",
@@ -994,8 +994,114 @@
   },
   {
     "tool": "analytics_read",
+    "action": "adobe_workspace_build_definition",
+    "summary": "Adobe-only: build a valid Analysis Workspace definition JSON from a compact tables spec. Use this to inspect the JSON, or skip it — adobe_workspace_create_project builds the same thing automatically from config.tables.",
+    "group": "ADOBE WORKSPACE",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "adobe_analytics",
+        "doc": "Adobe only."
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": false,
+        "example": "myrsid",
+        "doc": "Report suite id (rsid). Used when config.rsid is omitted.",
+        "platforms": [
+          "adobe_analytics"
+        ]
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "rsid": "myrsid",
+          "date_range": "thisMonth",
+          "tables": [
+            {
+              "name": "Traffic",
+              "metrics": ["visits", "pageviews"],
+              "dimension": "page"
+            }
+          ]
+        },
+        "doc": "rsid required (or property_id). Optional date_range (thisMonth, last30Days, or YYYY-MM-DD/YYYY-MM-DD). tables is an array of {name?, metrics[], dimension?}. Bare metric/dimension names are prefixed (visits → metrics/visits)."
+      }
+    ],
+    "platforms": [
+      "adobe_analytics"
+    ],
+    "returns": "{rsid, definition, message} | {error,error_type,message}",
+    "scope": "analytics_read"
+  },
+  {
+    "tool": "analytics_read",
+    "action": "adobe_workspace_validate_project",
+    "summary": "Adobe-only: validate a Workspace definition (or compact tables spec) against a report suite via POST /projects/validate. Call this before create if you are sending a raw definition.",
+    "group": "ADOBE WORKSPACE",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "ga4",
+          "amplitude",
+          "mixpanel",
+          "posthog",
+          "adobe_analytics"
+        ],
+        "example": "adobe_analytics",
+        "doc": "Adobe only."
+      },
+      {
+        "name": "property_id",
+        "type": "string",
+        "required": false,
+        "example": "myrsid",
+        "doc": "Report suite id (rsid). Used when config.rsid is omitted.",
+        "platforms": [
+          "adobe_analytics"
+        ]
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "rsid": "myrsid",
+          "tables": [
+            {
+              "metrics": ["visits"],
+              "dimension": "page"
+            }
+          ]
+        },
+        "doc": "rsid required. Pass either definition (full Workspace JSON) or tables (compact spec). Fluxito expands compact specs before calling Adobe validate."
+      }
+    ],
+    "platforms": [
+      "adobe_analytics"
+    ],
+    "returns": "{valid, rsid, validator_version, message} | {error,error_type,message,adobe_error_code?}",
+    "scope": "analytics_read"
+  },
+  {
+    "tool": "analytics_read",
     "action": "list_report_suites",
-    "summary": "Adobe-only: list report suites for the org (cached 600s). No property_id needed.",
+    "summary": "Adobe-only: list report suites for the Analytics company (cached 600s). Uses discovery/me for globalCompanyId. No property_id needed.",
     "group": "CATALOG / METADATA",
     "params": [
       {

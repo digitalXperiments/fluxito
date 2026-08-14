@@ -81,6 +81,8 @@ ANALYTICS_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "get_calculated_metrics": ("analytics_read", "get_calculated_metrics"),
     "adobe_workspace_list_projects": ("analytics_read", "list_projects"),
     "adobe_workspace_get_project": ("analytics_read", "get_project"),
+    "adobe_workspace_build_definition": ("analytics_read", "build_definition"),
+    "adobe_workspace_validate_project": ("analytics_read", "validate_project"),
 }
 
 # analytics_write
@@ -558,7 +560,8 @@ Actions (pass via `action`, required params inside `params`):
     get_event_properties, get_user_properties, list_report_suites,
     list_companies, get_dimensions, get_metrics, get_segments,
     get_calculated_metrics, adobe_workspace_list_projects,
-    adobe_workspace_get_project
+    adobe_workspace_get_project, adobe_workspace_build_definition,
+    adobe_workspace_validate_project
 
 Return shape: {rows/data/items: [...], ...} or {error, error_type, message}.
 """
@@ -579,10 +582,11 @@ Actions:
   update_segment             — params: platform, property_id, config={segment_id, updates}
   delete_segment             — params: platform, property_id, config={segment_id}
   delete_calculated_metric   — params: platform, property_id, config={metric_id}
-  adobe_workspace_create_project — Adobe Workspace. params: platform, config={name, rsid, definition}
+  adobe_workspace_create_project — Adobe Workspace. Prefer config={name, rsid, tables:[{metrics, dimension?}]}.
+                               Fluxito builds the Workspace JSON. Do NOT invent a raw definition.
   adobe_workspace_update_project — Adobe Workspace. Partial PUT of supplied fields only (no pre-GET).
-                               Set merge_definition=true to GET+local-deep-merge definition. params: platform,
-                               config={project_id, name?, description?, rsid?, definition?, merge_definition?, ...}
+                               Rename: config={project_id, name}. Rebuild tables: config={project_id, tables:[...]}.
+                               Set merge_definition=true to GET+local-deep-merge definition.
   adobe_workspace_delete_project — Adobe Workspace. Destructive; explicit project_id only.
                                params: platform, config={project_id}
   adobe_workspace_copy_project — Adobe Workspace. GET source + POST under a new name.

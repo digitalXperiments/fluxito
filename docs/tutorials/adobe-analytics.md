@@ -67,6 +67,7 @@ If report suites span multiple product profiles, add the Technical Account email
    - **Client ID** — from Step 4
    - **Client Secret** — from Step 4
    - **Organization ID** — from Step 4 (include the `@AdobeOrg` suffix)
+   - **Analytics Company ID** — leave blank unless you already know the `globalCompanyId`. Fluxito discovers it from Adobe (`GET /discovery/me`) on save. This is **not** the IMS Organization ID.
 4. Click **Save**.
 
 ---
@@ -81,12 +82,16 @@ Ask Claude to list report suites. If the service account is configured correctly
 
 Once the connection works, Fluxito can list, fetch, create, edit, copy, and delete Analysis Workspace projects through the Adobe Analytics 2.0 Projects API.
 
+All of these actions are advertised on `analytics_read` / `analytics_write` under the **ADOBE WORKSPACE** group (call `action="describe"` to see the full param list).
+
 | Tool | Action | What it does |
 |---|---|---|
 | `analytics_read` | `adobe_workspace_list_projects` | Compact project list. Official Adobe query params only: `expansion` (default `reportSuiteName,ownerFullName`), `include_type`, `limit`, `page`, `locale`. Does **not** include the full definition unless you ask for `expansion=["definition"]`. |
 | `analytics_read` | `adobe_workspace_get_project` | One project by `project_id` (`[A-Za-z0-9_-]{1,128}`). Always fetches `expansion=definition` so the full Workspace JSON is available for editing. |
-| `analytics_write` | `adobe_workspace_create_project` | `config={name, rsid, definition}`. Optional `description`, `tags`, `shares`. Server-managed fields (`owner`, `id`, `created`, `modified`) are not sent. |
-| `analytics_write` | `adobe_workspace_update_project` | `config={project_id, ...partial fields}`. Adobe PUT supports partial updates, so Fluxito sends **only the fields you supply** — a rename is `PUT {"name": "..."}` with no prior GET. Set `merge_definition=true` to opt into GET+merge of the `definition` subtree only. |
+| `analytics_read` | `adobe_workspace_build_definition` | Build a valid Workspace definition from `config.tables` so you can inspect it. Create/update do this automatically — you do not have to call this first. |
+| `analytics_read` | `adobe_workspace_validate_project` | `POST /projects/validate` against an rsid. Create also validates unless `config.validate=false`. |
+| `analytics_write` | `adobe_workspace_create_project` | **Prefer** `config={name, rsid, tables:[{metrics, dimension?}]}`. Fluxito builds Adobe's Workspace JSON. Do not invent a raw `definition`. Optional `date_range` (`thisMonth`, `last30Days`, or `YYYY-MM-DD/YYYY-MM-DD`). |
+| `analytics_write` | `adobe_workspace_update_project` | Partial PUT of supplied fields only. A rename is `PUT {"name": "..."}`. Rebuild visualizations with `config.tables`. Set `merge_definition=true` to GET+merge a partial `definition`. |
 | `analytics_write` | `adobe_workspace_delete_project` | Destructive. Requires an explicit `config.project_id` matching `[A-Za-z0-9_-]{1,128}` — no wildcard, path, or bulk delete. |
 | `analytics_write` | `adobe_workspace_copy_project` | GET the source (with definition) and POST a new project under `config.name` using writable fields only. |
 
@@ -106,6 +111,18 @@ analytics_read(action="adobe_workspace_get_project", params={
   "project_id": "6091a10005c7706c0acdd751"
 })
 
+analytics_write(action="adobe_workspace_create_project", params={
+  "platform": "adobe_analytics",
+  "config": {
+    "name": "Weekly traffic",
+    "rsid": "examplersid",
+    "date_range": "thisMonth",
+    "tables": [
+      {"name": "Traffic", "metrics": ["visits", "pageviews"], "dimension": "page"}
+    ]
+  }
+})
+
 analytics_write(action="adobe_workspace_update_project", params={
   "platform": "adobe_analytics",
   "config": {"project_id": "6091a10005c7706c0acdd751", "name": "Renamed project"}
@@ -122,3 +139,5 @@ analytics_write(action="adobe_workspace_update_project", params={
 | `403 Forbidden` / `insufficient_access` | The service account (Technical Account email) hasn't been added to an Analytics product profile. Complete Step 5. |
 | Report suites list is empty | The product profile the service account belongs to has no report suites assigned. Check the profile's Permissions tab in the Admin Console. |
 | `Organization ID format issue` | The `@AdobeOrg` suffix was omitted. Include the full string, e.g. `ABCDE12345@AdobeOrg`. |
+| `404` / unknown Workspace project / empty report suites | Fluxito is calling `/api/{globalCompanyId}/…`. If discovery failed, save the Analytics **Company ID** (not the IMS org) on the connection. |
+| Create project `400` / invalid definition | Do not hand-write Workspace JSON. Pass `config.tables` (metrics + optional dimension) and let Fluxito build the definition. |

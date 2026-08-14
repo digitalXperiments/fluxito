@@ -17,8 +17,24 @@ from app.tools import analytics_tools
 _CLIENT_ID = "cid"
 _CLIENT_SECRET = "csecret"
 _ORG = "ABCDE@AdobeOrg"
+_COMPANY = "exampleco"
 _TOKEN = "adobe-access-token"
 _PROJECT_ID = "6091a10005c7706c0acdd751"
+_DISCOVERY = {
+    "imsUserId": "user@AdobeID",
+    "imsOrgs": [
+        {
+            "imsOrgId": _ORG,
+            "companies": [
+                {
+                    "globalCompanyId": _COMPANY,
+                    "companyName": "Example Co",
+                    "apiRateLimitPolicy": "standard",
+                }
+            ],
+        }
+    ],
+}
 
 _FULL_DEFINITION = {
     "version": "31",
@@ -93,6 +109,8 @@ def _install_client(monkeypatch, *, get=None, post=None, put=None, delete=None):
         async def get(self, url, **kwargs):
             if "/ims/token" in url:
                 return _resp(200, {"access_token": _TOKEN, "expires_in": 3600})
+            if "/discovery/me" in url:
+                return _resp(200, _DISCOVERY)
             calls.append({"method": "GET", "url": url, **kwargs})
             if get is None:
                 raise AssertionError(f"unexpected GET {url}")
@@ -122,7 +140,7 @@ def _install_client(monkeypatch, *, get=None, post=None, put=None, delete=None):
 @pytest.mark.asyncio
 async def test_list_projects_sends_query_params_and_summarizes(monkeypatch):
     def get(url, **kwargs):
-        assert url == f"https://analytics.adobe.io/api/{_ORG}/projects"
+        assert url == f"https://analytics.adobe.io/api/{_COMPANY}/projects"
         params = kwargs.get("params") or {}
         assert params["expansion"] == "reportSuiteName,ownerFullName,definition"
         assert params["includeType"] == "all"
@@ -136,7 +154,7 @@ async def test_list_projects_sends_query_params_and_summarizes(monkeypatch):
         headers = kwargs.get("headers") or {}
         assert headers["Authorization"] == f"Bearer {_TOKEN}"
         assert headers["x-api-key"] == _CLIENT_ID
-        assert headers["x-proxy-global-company-id"] == _ORG
+        assert headers["x-proxy-global-company-id"] == _COMPANY
         return _resp(
             200,
             {
@@ -267,7 +285,7 @@ async def test_update_project_requires_writable_field_without_http(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_project_always_requests_definition(monkeypatch):
     def get(url, **kwargs):
-        assert url == f"https://analytics.adobe.io/api/{_ORG}/projects/{_PROJECT_ID}"
+        assert url == f"https://analytics.adobe.io/api/{_COMPANY}/projects/{_PROJECT_ID}"
         assert "definition" in (kwargs.get("params") or {}).get("expansion", "")
         return _resp(200, _STORED_PROJECT)
 
@@ -309,7 +327,7 @@ async def test_create_project_posts_writable_fields_only(monkeypatch):
         },
     )
 
-    assert captured["url"] == f"https://analytics.adobe.io/api/{_ORG}/projects"
+    assert captured["url"] == f"https://analytics.adobe.io/api/{_COMPANY}/projects"
     body = captured["json"]
     assert body["name"] == "Fresh"
     assert body["rsid"] == "examplersid"
@@ -329,7 +347,7 @@ async def test_update_project_name_only_is_single_partial_put(monkeypatch):
     """A rename is PUT {\"name\": ...} with no prior GET and no other keys."""
 
     def put(url, **kwargs):
-        assert url == f"https://analytics.adobe.io/api/{_ORG}/projects/{_PROJECT_ID}"
+        assert url == f"https://analytics.adobe.io/api/{_COMPANY}/projects/{_PROJECT_ID}"
         return _resp(200, {"id": _PROJECT_ID, "name": "Renamed", "rsid": "examplersid"})
 
     conn, calls = _install_client(monkeypatch, put=put)
@@ -373,11 +391,11 @@ async def test_update_project_merge_definition_puts_merged_subtree_only(monkeypa
     """Opt-in merge GETs definition, then PUTs merged definition + caller fields."""
 
     def get(url, **kwargs):
-        assert url == f"https://analytics.adobe.io/api/{_ORG}/projects/{_PROJECT_ID}"
+        assert url == f"https://analytics.adobe.io/api/{_COMPANY}/projects/{_PROJECT_ID}"
         return _resp(200, _STORED_PROJECT)
 
     def put(url, **kwargs):
-        assert url == f"https://analytics.adobe.io/api/{_ORG}/projects/{_PROJECT_ID}"
+        assert url == f"https://analytics.adobe.io/api/{_COMPANY}/projects/{_PROJECT_ID}"
         return _resp(200, {"id": _PROJECT_ID, "name": "Renamed"})
 
     conn, calls = _install_client(monkeypatch, get=get, put=put)
@@ -430,7 +448,7 @@ async def test_update_project_whitelists_writable_extra_keys(monkeypatch):
 @pytest.mark.asyncio
 async def test_delete_project_requires_explicit_id_and_calls_delete(monkeypatch):
     def delete(url, **kwargs):
-        assert url == f"https://analytics.adobe.io/api/{_ORG}/projects/{_PROJECT_ID}"
+        assert url == f"https://analytics.adobe.io/api/{_COMPANY}/projects/{_PROJECT_ID}"
         return _resp(200, {"result": "success"})
 
     conn, calls = _install_client(monkeypatch, delete=delete)
@@ -438,7 +456,7 @@ async def test_delete_project_requires_explicit_id_and_calls_delete(monkeypatch)
     assert result["success"] is True
     assert result["project_id"] == _PROJECT_ID
     assert [c["method"] for c in calls] == ["DELETE"]
-    assert calls[0]["url"] == f"https://analytics.adobe.io/api/{_ORG}/projects/{_PROJECT_ID}"
+    assert calls[0]["url"] == f"https://analytics.adobe.io/api/{_COMPANY}/projects/{_PROJECT_ID}"
 
     empty = await conn.delete_project(_CLIENT_ID, _CLIENT_SECRET, _ORG, "  ")
     assert empty["error"] is True
@@ -635,6 +653,15 @@ class _StubAdobe:
         self.calls.append(("copy_project", args, kwargs))
         return {"success": True, "project_id": "copy-id", "copied_from": args[3]}
 
+    async def build_project_definition(self, *args, **kwargs):
+        self.calls.append(("build_project_definition", args, kwargs))
+        rsid = kwargs.get("rsid") or (args[0] if args else "rsid")
+        return {"rsid": rsid, "definition": {"version": "31", "workspaces": [{"panels": []}]}}
+
+    async def validate_project(self, *args, **kwargs):
+        self.calls.append(("validate_project", args, kwargs))
+        return {"valid": True, "rsid": kwargs.get("rsid")}
+
 
 @pytest.fixture
 def wired_tools(monkeypatch):
@@ -647,7 +674,7 @@ def wired_tools(monkeypatch):
     monkeypatch.setattr(analytics_tools, "_user", lambda: _User())
 
     async def fake_conn(user_id):
-        return ("conn-1", _CLIENT_ID, _CLIENT_SECRET, _ORG)
+        return ("conn-1", _CLIENT_ID, _CLIENT_SECRET, _ORG, _COMPANY)
 
     monkeypatch.setattr(analytics_tools, "_get_adobe_conn", fake_conn)
     return mcp, stub
@@ -798,7 +825,12 @@ def test_unified_project_routes_map_to_connector_methods():
     from app.connectors.adobe_analytics import AdobeAnalyticsConnector
     from app.tools.unified import ANALYTICS_READ_ROUTES, ANALYTICS_WRITE_ROUTES
 
-    for action in ("adobe_workspace_list_projects", "adobe_workspace_get_project"):
+    for action in (
+        "adobe_workspace_list_projects",
+        "adobe_workspace_get_project",
+        "adobe_workspace_build_definition",
+        "adobe_workspace_validate_project",
+    ):
         tool, legacy = ANALYTICS_READ_ROUTES[action]
         assert tool == "analytics_read"
         assert hasattr(AdobeAnalyticsConnector, legacy)
@@ -812,3 +844,94 @@ def test_unified_project_routes_map_to_connector_methods():
         tool, legacy = ANALYTICS_WRITE_ROUTES[action]
         assert tool == "analytics_write"
         assert hasattr(AdobeAnalyticsConnector, legacy)
+
+
+@pytest.mark.asyncio
+async def test_create_project_expands_incomplete_definition(monkeypatch):
+    captured = {}
+
+    def post(url, **kwargs):
+        captured["json"] = kwargs.get("json")
+        return _resp(200, {"id": "new-id", "name": "Fresh", "rsid": "examplersid"})
+
+    conn, _ = _install_client(monkeypatch, post=post)
+    result = await conn.create_project(
+        _CLIENT_ID,
+        _CLIENT_SECRET,
+        _ORG,
+        name="Fresh",
+        rsid="examplersid",
+        definition={"version": "31"},
+    )
+    assert result["success"] is True
+    definition = captured["json"]["definition"]
+    assert definition["version"] == "31"
+    assert definition["workspaces"][0]["panels"]
+    assert definition["workspaces"][0]["panels"][0]["reportSuite"]["id"] == "examplersid"
+
+
+@pytest.mark.asyncio
+async def test_create_project_from_tables_builds_definition(monkeypatch):
+    captured = {}
+
+    def post(url, **kwargs):
+        captured["url"] = url
+        captured["json"] = kwargs.get("json")
+        return _resp(200, {"id": "tbl-id", "name": "Traffic", "rsid": "examplersid"})
+
+    conn, _ = _install_client(monkeypatch, post=post)
+    result = await conn.create_project(
+        _CLIENT_ID,
+        _CLIENT_SECRET,
+        _ORG,
+        name="Traffic",
+        rsid="examplersid",
+        tables=[{"name": "Pages", "metrics": ["visits", "pageviews"], "dimension": "page"}],
+        date_range="thisMonth",
+    )
+    assert result["success"] is True
+    assert captured["url"] == f"https://analytics.adobe.io/api/{_COMPANY}/projects"
+    body = captured["json"]
+    assert body["name"] == "Traffic"
+    assert "workspaces" in body["definition"]
+    reportlet = body["definition"]["workspaces"][0]["panels"][0]["subPanels"][0]["reportlet"]
+    metric_ids = [n["component"]["id"] for n in reportlet["columnTree"]["nodes"]]
+    assert "metrics/visits" in metric_ids
+    assert "metrics/pageviews" in metric_ids
+
+
+@pytest.mark.asyncio
+async def test_analytics_write_create_project_accepts_tables(wired_tools):
+    mcp, stub = wired_tools
+    created = await mcp.tools["analytics_write"](
+        platform="adobe_analytics",
+        action="create_project",
+        config={
+            "name": "Traffic",
+            "rsid": "examplersid",
+            "tables": [{"metrics": ["visits"], "dimension": "page"}],
+        },
+    )
+    assert created["success"] is True
+    assert stub.calls[-1][0] == "create_project"
+    assert stub.calls[-1][2]["tables"][0]["metrics"] == ["visits"]
+
+
+@pytest.mark.asyncio
+async def test_analytics_read_build_and_validate_actions(wired_tools):
+    mcp, stub = wired_tools
+    built = await mcp.tools["analytics_read"](
+        platform="adobe_analytics",
+        action="build_definition",
+        config={"rsid": "examplersid", "tables": [{"metrics": ["visits"]}]},
+    )
+    assert built["definition"]["version"] == "31"
+    assert stub.calls[0][0] == "build_project_definition"
+
+    checked = await mcp.tools["analytics_read"](
+        platform="adobe_analytics",
+        action="validate_project",
+        config={"rsid": "examplersid", "tables": [{"metrics": ["visits"]}]},
+    )
+    assert checked["valid"] is True
+    assert stub.calls[-1][0] == "validate_project"

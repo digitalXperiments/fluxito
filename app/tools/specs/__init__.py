@@ -71,7 +71,10 @@ HEADERS: dict[str, str] = {
         "an action on the wrong platform returns an 'unknown action' error.\n"
         "For audits / anomaly checks / tracking regressions use `run_audit`; for "
         "cross-platform blends / attribution use `run_analysis`.\n"
-        "Adobe Analysis Workspace actions are explicitly prefixed `adobe_workspace_`.\n"
+        "Adobe Analysis Workspace actions are explicitly prefixed `adobe_workspace_` "
+        "and listed under ADOBE WORKSPACE. Create with config.tables "
+        "([{metrics, dimension?}]) — Fluxito builds the Workspace JSON. "
+        "Do not invent a raw `definition`.\n"
         'Pass metrics/dimensions as plain strings (e.g. ["sessions","country"]); the '
         'GA4 object form [{"name":"sessions"}] is also accepted and coerced.'
     ),
@@ -89,7 +92,9 @@ HEADERS: dict[str, str] = {
         "dimensions/metrics, conversion events; Adobe segments, calculated metrics, "
         "and Analysis Workspace projects.\n"
         "Pass `platform` in params. Mutating — requires the analytics write scope. "
-        "Adobe Analysis Workspace actions are explicitly prefixed `adobe_workspace_`. "
+        "Adobe Analysis Workspace actions are explicitly prefixed `adobe_workspace_` "
+        "and listed under ADOBE WORKSPACE. Prefer adobe_workspace_create_project with "
+        "config.tables (not a hand-written definition). "
         "Use analytics_read for reads, run_audit for audits."
     ),
     "tagmanager_read": (

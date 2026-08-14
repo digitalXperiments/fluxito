@@ -105,7 +105,10 @@ async def _get_amplitude_conn(user_id: str):
 
 
 async def _get_adobe_conn(user_id: str):
-    """Fetch user's active Adobe connection and decrypt credentials."""
+    """Fetch user's active Adobe connection and decrypt credentials.
+
+    Returns (conn_id, client_id, client_secret, org_id, company_id).
+    """
     from app.models.credential_connection import AdobeConnection
 
     conn = await get_encrypted_credential_conn(
@@ -114,10 +117,67 @@ async def _get_adobe_conn(user_id: str):
         extra_filters=[AdobeConnection.has_analytics == True],
     )
     if not conn:
-        return None, None, None, None
+        return None, None, None, None, None
     client_id = decrypt_field(conn.client_id_encrypted)
     client_secret = decrypt_field(conn.client_secret_encrypted)
-    return str(conn.id), client_id, client_secret, conn.org_id
+    return str(conn.id), client_id, client_secret, conn.org_id, conn.company_id
+
+
+async def _persist_adobe_company_id(conn_id: str, company_id: str) -> None:
+    """Best-effort: store a discovered globalCompanyId on the connection."""
+    if not conn_id or not company_id:
+        return
+    try:
+        import uuid as _uuid
+
+        from sqlalchemy import update
+
+        from app.models.credential_connection import AdobeConnection
+
+        factory = getattr(state, "db_session_factory", None)
+        if factory is None:
+            return
+        async with factory() as db:
+            await db.execute(
+                update(AdobeConnection)
+                .where(AdobeConnection.id == _uuid.UUID(str(conn_id)))
+                .values(company_id=company_id)
+            )
+            await db.commit()
+    except Exception:
+        logger = __import__("logging").getLogger(__name__)
+        logger.warning("Could not persist Adobe company_id for conn %s", conn_id, exc_info=True)
+
+
+async def _adobe_session(user):
+    """Resolve connector + creds + globalCompanyId, or an error envelope."""
+    if not user or not getattr(user, "has_adobe_analytics", False):
+        return None, _no_adobe_analytics()
+    conn_id, client_id, client_secret, org_id, company_id = await _get_adobe_conn(user.user_id)
+    if not client_id:
+        return None, _no_adobe_analytics()
+    adobe = state.adobe_analytics_connector
+    if adobe is None:
+        return None, {
+            "error": True,
+            "error_type": "server_error",
+            "message": "adobe_analytics_connector is not initialised.",
+        }
+    if not company_id:
+        resolved = await adobe.resolve_company_id(client_id, client_secret, org_id)
+        if resolved.get("error"):
+            return None, resolved
+        company_id = resolved.get("company_id")
+        if company_id:
+            await _persist_adobe_company_id(str(conn_id), str(company_id))
+    return {
+        "adobe": adobe,
+        "conn_id": conn_id,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "org_id": org_id,
+        "company_id": company_id,
+    }, None
 
 
 def _no_mixpanel():
@@ -209,9 +269,10 @@ def register_analytics_tools(mcp_server):
         Adobe actions (property_id=rsid):
           list_report_suites, get_dimensions(rsid), get_metrics(rsid),
           run_report(rsid+dims+metrics+dates), get_segments, get_calculated_metrics,
-          list_projects (Workspace; optional expansion/include_type/page/locale
-            via config — Adobe-documented GET params only), get_project(+project_id;
-            always returns expansion=definition; id must be [A-Za-z0-9_-]+)
+          adobe_workspace_list_projects (optional expansion/include_type/page/locale),
+          adobe_workspace_get_project(+project_id; always expansion=definition),
+          adobe_workspace_build_definition(config.tables or definition),
+          adobe_workspace_validate_project(config.rsid + definition or tables)
         """
         if not platform:
             return {
@@ -613,12 +674,15 @@ def register_analytics_tools(mcp_server):
             return {"error": True, "message": f"Unknown action '{action}' for PostHog analytics_read"}
 
         elif platform == "adobe_analytics":
-            if not u or not u.has_adobe_analytics:
-                return _no_adobe_analytics()
-            conn_id, client_id, client_secret, org_id = await _get_adobe_conn(u.user_id)
-            if not client_id:
-                return _no_adobe_analytics()
-            adobe = state.adobe_analytics_connector
+            session, sess_err = await _adobe_session(u)
+            if sess_err:
+                return sess_err
+            adobe = session["adobe"]
+            conn_id = session["conn_id"]
+            client_id = session["client_id"]
+            client_secret = session["client_secret"]
+            org_id = session["org_id"]
+            company_id = session["company_id"]
 
             if action == "list_report_suites":
                 return await cached_tool_response(
@@ -628,6 +692,7 @@ def register_analytics_tools(mcp_server):
                     client_id,
                     client_secret,
                     org_id,
+                    company_id=company_id,
                 )
             elif action == "get_dimensions":
                 if not property_id:
@@ -640,6 +705,7 @@ def register_analytics_tools(mcp_server):
                     client_secret,
                     org_id,
                     property_id,
+                    company_id=company_id,
                 )
             elif action == "get_metrics":
                 if not property_id:
@@ -652,6 +718,7 @@ def register_analytics_tools(mcp_server):
                     client_secret,
                     org_id,
                     property_id,
+                    company_id=company_id,
                 )
             elif action == "run_report":
                 if not property_id:
@@ -659,20 +726,21 @@ def register_analytics_tools(mcp_server):
                 err = _require_dates(action, start_date, end_date)
                 if err:
                     return err
-                if not dimensions or not metrics:
+                if not metrics:
                     return {
                         "error": True,
-                        "message": "dimensions and metrics lists are required for run_report",
+                        "message": "metrics list is required for run_report (e.g. ['visits'] or ['metrics/visits'])",
                     }
                 return await adobe.run_report(
                     client_id,
                     client_secret,
                     org_id,
                     property_id,
-                    dimensions=dimensions,
+                    dimensions=dimensions or [],
                     metrics=metrics,
-                    date_range=f"{start_date}/{end_date}",
+                    date_range={"start": start_date, "end": end_date},
                     limit=limit,
+                    company_id=company_id,
                 )
             elif action == "get_segments":
                 return await cached_tool_response(
@@ -683,6 +751,7 @@ def register_analytics_tools(mcp_server):
                     client_secret,
                     org_id,
                     property_id,
+                    company_id=company_id,
                 )
             elif action == "get_calculated_metrics":
                 return await cached_tool_response(
@@ -693,6 +762,7 @@ def register_analytics_tools(mcp_server):
                     client_secret,
                     org_id,
                     property_id,
+                    company_id=company_id,
                 )
             elif action == "list_projects":
                 cfg = config or {}
@@ -707,6 +777,7 @@ def register_analytics_tools(mcp_server):
                     limit=cfg.get("limit", limit),
                     page=page if page is not None else cfg.get("page"),
                     locale=cfg.get("locale"),
+                    company_id=company_id,
                 )
             elif action == "get_project":
                 cfg = config or {}
@@ -715,7 +786,7 @@ def register_analytics_tools(mcp_server):
                     return {
                         "error": True,
                         "error_type": "missing_required_param",
-                        "message": "project_id is required for get_project",
+                        "message": "project_id is required for adobe_workspace_get_project",
                     }
                 id_err = validate_project_id(pid)
                 if id_err:
@@ -726,6 +797,48 @@ def register_analytics_tools(mcp_server):
                     org_id,
                     str(pid),
                     expansion=expansion if expansion is not None else cfg.get("expansion"),
+                    company_id=company_id,
+                )
+            elif action == "build_definition":
+                cfg = config or {}
+                rsid = cfg.get("rsid") or property_id
+                if not rsid:
+                    return {
+                        "error": True,
+                        "error_type": "missing_required_param",
+                        "message": "config.rsid (or property_id) is required for adobe_workspace_build_definition",
+                    }
+                return await adobe.build_project_definition(
+                    rsid=str(rsid),
+                    tables=cfg.get("tables") if isinstance(cfg.get("tables"), list) else None,
+                    date_range=cfg.get("date_range"),
+                    definition=cfg.get("definition") if isinstance(cfg.get("definition"), dict) else None,
+                )
+            elif action == "validate_project":
+                cfg = config or {}
+                rsid = cfg.get("rsid") or property_id
+                if not rsid:
+                    return {
+                        "error": True,
+                        "error_type": "missing_required_param",
+                        "message": "config.rsid (or property_id) is required for adobe_workspace_validate_project",
+                    }
+                built = await adobe.build_project_definition(
+                    rsid=str(rsid),
+                    tables=cfg.get("tables") if isinstance(cfg.get("tables"), list) else None,
+                    date_range=cfg.get("date_range"),
+                    definition=cfg.get("definition") if isinstance(cfg.get("definition"), dict) else None,
+                )
+                if built.get("error"):
+                    return built
+                return await adobe.validate_project(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    rsid=str(rsid),
+                    definition=built["definition"],
+                    company_id=company_id,
+                    name=cfg.get("name"),
                 )
             return {"error": True, "message": f"Unknown action '{action}' for Adobe Analytics analytics_read"}
 
@@ -955,12 +1068,15 @@ def register_analytics_tools(mcp_server):
             return {"error": True, "message": f"Unknown action '{action}' for PostHog analytics_audit"}
 
         elif platform == "adobe_analytics":
-            if not u or not u.has_adobe_analytics:
-                return _no_adobe_analytics()
-            conn_id, client_id, client_secret, org_id = await _get_adobe_conn(u.user_id)
-            if not client_id:
-                return _no_adobe_analytics()
-            adobe = state.adobe_analytics_connector
+            session, sess_err = await _adobe_session(u)
+            if sess_err:
+                return sess_err
+            adobe = session["adobe"]
+            conn_id = session["conn_id"]
+            client_id = session["client_id"]
+            client_secret = session["client_secret"]
+            org_id = session["org_id"]
+            company_id = session["company_id"]
 
             if action == "audit_report_suite":
                 if not property_id:
@@ -973,12 +1089,18 @@ def register_analytics_tools(mcp_server):
                     client_secret,
                     org_id,
                     property_id,
+                    company_id=company_id,
                 )
             elif action == "check_data_quality":
                 if not property_id:
                     return {"error": True, "message": "property_id (rsid) is required for check_data_quality"}
                 return await adobe.check_data_quality(
-                    client_id, client_secret, org_id, property_id, days_back=days_back
+                    client_id,
+                    client_secret,
+                    org_id,
+                    property_id,
+                    days_back=days_back,
+                    company_id=company_id,
                 )
             return {
                 "error": True,
@@ -1011,11 +1133,11 @@ def register_analytics_tools(mcp_server):
         Adobe: create_segment{name,rsid,definition}, update_segment{segment_id},
           delete_segment{segment_id}, create_calculated_metric{name,rsid,definition},
           delete_calculated_metric{metric_id},
-          create_project{name,rsid,definition} (writable fields only: tags/shares extra),
-          update_project{project_id} (partial PUT of caller fields only; set
-          merge_definition=true to GET+merge the definition subtree),
-          delete_project{project_id} (destructive; explicit [A-Za-z0-9_-] id only),
-          copy_project{project_id,name}
+          adobe_workspace_create_project{name,rsid, tables[] OR definition},
+          adobe_workspace_update_project{project_id} (partial PUT; tables rebuilds
+          the definition; merge_definition=true GET+merges definition),
+          adobe_workspace_delete_project{project_id},
+          adobe_workspace_copy_project{project_id,name}
         """
         if not platform:
             return {
@@ -1197,12 +1319,14 @@ def register_analytics_tools(mcp_server):
             return {"error": True, "message": f"Unknown action '{action}' for PostHog analytics_write"}
 
         elif platform == "adobe_analytics":
-            if not u or not u.has_adobe_analytics:
-                return _no_adobe_analytics()
-            conn_id, client_id, client_secret, org_id = await _get_adobe_conn(u.user_id)
-            if not client_id:
-                return _no_adobe_analytics()
-            adobe = state.adobe_analytics_connector
+            session, sess_err = await _adobe_session(u)
+            if sess_err:
+                return sess_err
+            adobe = session["adobe"]
+            client_id = session["client_id"]
+            client_secret = session["client_secret"]
+            org_id = session["org_id"]
+            company_id = session["company_id"]
 
             if action == "create_segment":
                 required = ["name", "rsid", "definition"]
@@ -1217,6 +1341,7 @@ def register_analytics_tools(mcp_server):
                     description=config.get("description", ""),
                     rsid=config["rsid"],
                     definition=config["definition"],
+                    company_id=company_id,
                 )
             elif action == "update_segment":
                 if not config.get("segment_id"):
@@ -1229,11 +1354,14 @@ def register_analytics_tools(mcp_server):
                     name=config.get("name"),
                     description=config.get("description"),
                     definition=config.get("definition"),
+                    company_id=company_id,
                 )
             elif action == "delete_segment":
                 if not config.get("segment_id"):
                     return {"error": True, "message": "config.segment_id is required"}
-                return await adobe.delete_segment(client_id, client_secret, org_id, config["segment_id"])
+                return await adobe.delete_segment(
+                    client_id, client_secret, org_id, config["segment_id"], company_id=company_id
+                )
             elif action == "create_calculated_metric":
                 required = ["name", "rsid", "definition"]
                 missing = [k for k in required if not config.get(k)]
@@ -1247,27 +1375,35 @@ def register_analytics_tools(mcp_server):
                     description=config.get("description", ""),
                     rsid=config["rsid"],
                     definition=config["definition"],
+                    company_id=company_id,
                 )
             elif action == "delete_calculated_metric":
                 if not config.get("metric_id"):
                     return {"error": True, "message": "config.metric_id is required"}
                 return await adobe.delete_calculated_metric(
-                    client_id, client_secret, org_id, config["metric_id"]
+                    client_id, client_secret, org_id, config["metric_id"], company_id=company_id
                 )
             elif action == "create_project":
-                required = ["name", "rsid", "definition"]
-                missing = [k for k in required if not config.get(k)]
+                missing = [k for k in ("name", "rsid") if not config.get(k)]
                 if missing:
                     return {
                         "error": True,
                         "error_type": "missing_required_param",
                         "message": f"config missing required keys: {missing}",
                     }
-                if not isinstance(config.get("definition"), dict):
+                definition = config.get("definition")
+                tables = config.get("tables")
+                if definition is not None and not isinstance(definition, dict):
                     return {
                         "error": True,
                         "error_type": "invalid_param",
-                        "message": "config.definition must be a JSON object (Workspace project definition).",
+                        "message": "config.definition must be a JSON object when provided.",
+                    }
+                if tables is not None and not isinstance(tables, list):
+                    return {
+                        "error": True,
+                        "error_type": "invalid_param",
+                        "message": "config.tables must be an array of {name?, metrics[], dimension?} objects.",
                     }
                 extra = {k: v for k, v in config.items() if k in {"tags", "shares"}}
                 return await adobe.create_project(
@@ -1276,9 +1412,13 @@ def register_analytics_tools(mcp_server):
                     org_id,
                     name=config["name"],
                     rsid=config["rsid"],
-                    definition=config["definition"],
+                    definition=definition if isinstance(definition, dict) else None,
                     description=config.get("description"),
                     extra=extra or None,
+                    tables=tables if isinstance(tables, list) else None,
+                    date_range=config.get("date_range"),
+                    validate=bool(config.get("validate", True)),
+                    company_id=company_id,
                 )
             elif action == "update_project":
                 pid = config.get("project_id") or config.get("id")
@@ -1295,6 +1435,13 @@ def register_analytics_tools(mcp_server):
                 if id_err:
                     return id_err
                 extra_updates = {k: v for k, v in config.items() if k in {"tags", "shares"}}
+                tables = config.get("tables")
+                if tables is not None and not isinstance(tables, list):
+                    return {
+                        "error": True,
+                        "error_type": "invalid_param",
+                        "message": "config.tables must be an array of {name?, metrics[], dimension?} objects.",
+                    }
                 return await adobe.update_project(
                     client_id,
                     client_secret,
@@ -1303,10 +1450,15 @@ def register_analytics_tools(mcp_server):
                     name=config.get("name"),
                     description=config.get("description"),
                     rsid=config.get("rsid"),
-                    definition=config.get("definition"),
+                    definition=config.get("definition")
+                    if isinstance(config.get("definition"), dict)
+                    else None,
                     owner=config.get("owner"),
                     updates=extra_updates or None,
                     merge_definition=bool(config.get("merge_definition")),
+                    tables=tables if isinstance(tables, list) else None,
+                    date_range=config.get("date_range"),
+                    company_id=company_id,
                 )
             elif action == "delete_project":
                 pid = config.get("project_id") or config.get("id")
@@ -1322,7 +1474,9 @@ def register_analytics_tools(mcp_server):
                 id_err = validate_project_id(pid)
                 if id_err:
                     return id_err
-                return await adobe.delete_project(client_id, client_secret, org_id, str(pid))
+                return await adobe.delete_project(
+                    client_id, client_secret, org_id, str(pid), company_id=company_id
+                )
             elif action == "copy_project":
                 pid = config.get("project_id") or config.get("id")
                 new_name = config.get("name")
@@ -1342,7 +1496,12 @@ def register_analytics_tools(mcp_server):
                         "message": "config.name is required for copy_project (name of the duplicate)",
                     }
                 return await adobe.copy_project(
-                    client_id, client_secret, org_id, str(pid), name=str(new_name)
+                    client_id,
+                    client_secret,
+                    org_id,
+                    str(pid),
+                    name=str(new_name),
+                    company_id=company_id,
                 )
             return {
                 "error": True,
