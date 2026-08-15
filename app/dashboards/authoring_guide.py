@@ -15,8 +15,9 @@ from app.dashboards.artifact import (
     MAX_FILES,
     MAX_TOTAL_BYTES,
 )
+from app.dashboards.query_recipes import all_recipes, recipes_markdown
 
-AUTHORING_GUIDE = f"""
+_GUIDE_HEAD = f"""
 # Fluxito hosted dashboards — authoring contract (schema_version={ARTIFACT_SCHEMA_VERSION})
 
 You are writing a **Python Streamlit app**. Fluxito **hosts** that app. Fluxito
@@ -30,13 +31,15 @@ dashboard_card_preview, or dashboard_card_remove.
 
 1. Call `get_dashboard_authoring_guide` (you already have this text).
 2. Call `list_dashboard_connections` to see bindable aliases/types for this project.
-3. Write the Streamlit app + `manifest.json`.
-4. Call `validate_dashboard_artifact` and fix every error.
-5. Call `deploy_dashboard` (create) or `update_dashboard` (replace an existing one).
-6. Call `bind_dashboard` so aliases attach to this project's stored credentials.
-7. Give the user the returned `url`. That URL is the live hosted app.
+3. For each type you will use, follow the recipe in this guide (or call
+   `get_dashboard_query_recipe` with that type). Do not invent actions or params.
+4. Write the Streamlit app + `manifest.json`.
+5. Call `validate_dashboard_artifact` and fix every error.
+6. Call `deploy_dashboard` (create) or `update_dashboard` (replace an existing one).
+7. Call `bind_dashboard` so aliases attach to this project's stored credentials.
+8. Give the user the returned `url`. That URL is the live hosted app.
 
-Never skip validate. Never put secrets in source.
+Never skip validate. Never put secrets in source. Never emit card JSON.
 
 ## What you produce
 
@@ -136,27 +139,19 @@ Helper API (already on PYTHONPATH of the hosted process):
 
 - `query(alias, action, params=None)` → dict  (alias-only; no tool argument)
 - `as_dataframe(result)` → pandas.DataFrame when pandas is available, else list[dict]
+- `summarize(result)` → dict of numeric totals / first-row metrics for `st.metric`
 - `default_range(days=30)` → (start_date, end_date) as date objects
 - `connections()` → list of {{alias, type, status}} bound for this dashboard
-- `refresh()` — alias of `st.rerun()` documentation only; just call `query` again
 
-`params` is the same shape the platform tools already expect. Bound resource
-identity (property_id, customer_id, site_url, connection_id, account_id)
-is **injected by the host and overwrites** whatever you send:
+There is no `fx.refresh()`. Widgets trigger a Streamlit rerun; call `query` again
+with the widget values.
 
-- ga4 / run_report:
-    Send metrics (list), dimensions (list), start_date, end_date.
-    Do not try to retarget property_id — the bound GA4 property wins.
-- google_ads / get_campaign_performance:
-    start_date, end_date. Bound customer_id wins.
-- warehouse (bigquery|redshift|snowflake) / run_query:
-    query: SQL SELECT only. Prefer `{{start_date}}` / `{{end_date}}` placeholders.
-    Bound connection_id / engine win. You may send `sql` and the host rewrites
-    it to `query` for warehouse tools.
-- search_console / get_search_analytics:
-    start_date, end_date. Bound site_url wins.
-- meta_ads / tiktok_ads / snap_ads / apple_ads: start_date, end_date.
+`params` must match the recipe for the alias's `type`. Bound resource identity
+(property_id, customer_id, site_url, connection_id, account_id, advertiser_id)
+is **injected by the host and overwrites** whatever you send. Never pass `tool`.
+"""
 
+_GUIDE_TAIL = f"""
 To attach or refresh aliases after deploy, call `bind_dashboard(dashboard_id)`
 or `bind_dashboard(dashboard_id, bindings=[{{"alias": "ga4", "type": "ga4"}}])`.
 Never pass a `tool` field.
@@ -316,7 +311,9 @@ else:
 
 That is the entire product: you write Streamlit, Fluxito hosts it, credentials
 stay in Fluxito.
-""".strip()
+"""
+
+AUTHORING_GUIDE = (_GUIDE_HEAD + "\n" + recipes_markdown() + "\n" + _GUIDE_TAIL).strip()
 
 
 def authoring_guide_payload() -> dict:
@@ -326,14 +323,23 @@ def authoring_guide_payload() -> dict:
         "guide": AUTHORING_GUIDE,
         "connection_types": sorted(CONNECTION_TYPES),
         "connection_tools": dict(CONNECTION_TOOL),
+        "recipes": all_recipes(),
         "limits": {
             "max_files": MAX_FILES,
             "max_file_bytes": MAX_FILE_BYTES,
             "max_total_bytes": MAX_TOTAL_BYTES,
         },
+        "helper_api": [
+            "query(alias, action, params=None)",
+            "as_dataframe(result)",
+            "summarize(result)",
+            "default_range(days=30)",
+            "connections()",
+        ],
         "flow": [
             "get_dashboard_authoring_guide",
             "list_dashboard_connections",
+            "get_dashboard_query_recipe (per type if unsure)",
             "validate_dashboard_artifact",
             "deploy_dashboard or update_dashboard",
             "bind_dashboard",
@@ -345,5 +351,6 @@ def authoring_guide_payload() -> dict:
             "subprocess or shell-out",
             "caller-chosen tool on fluxito_data.query",
             "dashboard_deploy_batch / dashboard_card_* (unregistered)",
+            "st.secrets or asking the user for tokens",
         ],
     }

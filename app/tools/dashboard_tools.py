@@ -3,7 +3,8 @@ Dashboard MCP Tools — host model-authored Streamlit artifacts.
 
 Primary path (the only way to create or update a dashboard):
   get_dashboard_authoring_guide  — contract for the Streamlit app + manifest
-  list_dashboard_connections     — bindable aliases (no secrets)
+  get_dashboard_query_recipe     — exact action/params per connection type
+  list_dashboard_connections     — bindable aliases + recipe (no secrets)
   validate_dashboard_artifact    — reject secrets / invalid entrypoints
   deploy_dashboard               — create a kind=hosted dashboard
   bind_dashboard                 — attach connection aliases; host injects creds
@@ -517,15 +518,54 @@ def register_dashboard_tools(mcp_server):
     async def get_dashboard_authoring_guide() -> dict:
         """Return the complete contract for building a Fluxito-hosted Streamlit dashboard.
 
-        Call this FIRST before writing any dashboard code. Fluxito hosts a
+        REQUIRED FIRST CALL before writing any dashboard code. Fluxito hosts a
         model-authored Python/Streamlit app — it does not generate cards, charts,
-        or JavaScript. The guide covers project layout, manifest.json schema,
-        connection aliases, fluxito_data.query for live refresh, forbidden
-        secrets, validate-then-deploy, and failure modes.
+        or JavaScript. Follow the returned `flow` exactly.
+
+        Returns:
+          guide — markdown contract (layout, manifest, forbidden items, example)
+          recipes — per-type {action, send, injected, example_params, call}
+          connection_types / connection_tools — bindable types and host tools
+          helper_api — fluxito_data functions you may call
+          flow — required tool sequence
+
+        After this, call list_dashboard_connections, write app.py + manifest.json
+        using recipes[type], then validate_dashboard_artifact. Do not emit
+        card JSON, chart_type, or ECharts. Do not put secrets in source.
         """
         from app.dashboards.authoring_guide import authoring_guide_payload
 
         return authoring_guide_payload()
+
+    @mcp_server.tool("get_dashboard_query_recipe")
+    async def get_dashboard_query_recipe(connection_type: str | None = None) -> dict:
+        """Return the exact fluxito_data.query contract for a connection type.
+
+        Call this when you are about to write fx.query(...) and are unsure of
+        the action or params. Do not invent actions.
+
+        connection_type: e.g. "ga4", "google_ads", "bigquery". Omit to get every
+        type. Returns action, send (params you write), injected (host overwrites
+        — never send), example_params, and a ready-to-paste `call` string.
+
+        You still cannot pass a tool name. The host maps type → MCP tool.
+        """
+        from app.dashboards.query_recipes import all_recipes, recipe_for
+
+        if connection_type:
+            rec = recipe_for(connection_type)
+            if rec is None:
+                return {
+                    "error": True,
+                    "error_type": "unknown_type",
+                    "message": (
+                        f"Unknown connection type {connection_type!r}. "
+                        f"Known: {', '.join(sorted(all_recipes()))}."
+                    ),
+                    "recipes": all_recipes(),
+                }
+            return rec
+        return {"recipes": all_recipes()}
 
     @mcp_server.tool("validate_dashboard_artifact")
     async def validate_dashboard_artifact(
@@ -535,10 +575,17 @@ def register_dashboard_tools(mcp_server):
     ) -> dict:
         """Validate a Streamlit dashboard artifact without persisting or starting it.
 
-        files: path → UTF-8 source (must include the entrypoint, usually app.py).
-        manifest: optional object; otherwise files['manifest.json'] is used.
-        Rejects secrets, .env, credential files, invalid entrypoints, path
-        traversal, and shell-out. Call this before deploy_dashboard.
+        files: path → UTF-8 source. Must include app.py (or manifest.entrypoint)
+        and manifest.json unless `manifest` is passed separately.
+
+        Required in the entrypoint when connections[] is non-empty:
+          import streamlit as st
+          import fluxito_data as fx
+          fx.query(alias, action, params)  — alias only, no tool name
+
+        Rejects secrets, .env, st.secrets, credential files, card JSON /
+        chart_type / ECharts, invalid entrypoints, path traversal, and
+        shell-out. Call this before deploy_dashboard and fix every error.
         """
         from app.dashboards.artifact import ArtifactError, validate_artifact
 
@@ -569,10 +616,15 @@ def register_dashboard_tools(mcp_server):
     ) -> dict:
         """Create and host a model-authored Streamlit dashboard.
 
+        Prerequisite: get_dashboard_authoring_guide → list_dashboard_connections
+        → validate_dashboard_artifact (ok=true). files must be a Streamlit
+        project (manifest.json + app.py). Query live data with
+        fluxito_data.query(alias, action, params) using recipes from the guide.
+
         Writes the artifact to an isolated working directory, binds connection
-        aliases to this project's stored credentials (no secrets in files),
-        starts Streamlit, and returns the live URL. Call
-        get_dashboard_authoring_guide then validate_dashboard_artifact first.
+        aliases to this project's stored credentials (never put secrets in
+        files), starts Streamlit, and returns dashboard_id, slug, url,
+        host_status, bindings. Then call bind_dashboard if any alias is missing.
         """
         u = _user()
         if not u:
@@ -638,8 +690,12 @@ def register_dashboard_tools(mcp_server):
     async def list_dashboard_connections() -> dict:
         """List bindable project connections for manifest.connections[].
 
-        Returns type, suggested alias, label, resource, and status. Never
+        Returns type, suggested_alias, label, resource, status, and the
+        matching query `recipe` (action + send + example_params). Never
         returns tokens or secrets. Call this before writing the manifest.
+
+        Use suggested_alias as manifest.connections[].alias and recipe.action
+        / recipe.example_params in fluxito_data.query. Do not invent params.
         """
         u = _user()
         if not u:
@@ -649,6 +705,7 @@ def register_dashboard_tools(mcp_server):
         if proj_ctx:
             project_id = uuid.UUID(proj_ctx.project_id)
         from app.dashboards.connections import list_bindable_connections
+        from app.dashboards.query_recipes import recipe_for
 
         items = await list_bindable_connections(project_id, uuid.UUID(u.user_id))
         # Suggest aliases the model can paste into the manifest.
@@ -659,14 +716,14 @@ def register_dashboard_tools(mcp_server):
             n = used.get(base, 0)
             used[base] = n + 1
             alias = base if n == 0 else f"{base}_{n + 1}"
-            connections.append({**item, "suggested_alias": alias})
+            connections.append({**item, "suggested_alias": alias, "recipe": recipe_for(base)})
         return {
             "connections": connections,
             "hint": (
                 "Put each needed source in manifest.connections as "
                 '{"alias": suggested_alias, "type": type}. Query with '
-                "fluxito_data.query(alias, action, params). Never inline secrets. "
-                "After deploy, call bind_dashboard to attach those aliases."
+                "fluxito_data.query(alias, action=recipe.action, params=recipe.example_params). "
+                "Never inline secrets. After deploy, call bind_dashboard."
             ),
         }
 

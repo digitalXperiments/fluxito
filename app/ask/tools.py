@@ -296,8 +296,8 @@ def virtual_tool_specs() -> list[ToolSpec]:
             description=(
                 "RETIRED. Native JS cards are not how Fluxito dashboards are built. "
                 "Do not call this. Author a Streamlit app, then call "
-                "get_dashboard_authoring_guide → validate_dashboard_artifact → "
-                "deploy_dashboard → bind_dashboard over MCP."
+                "get_dashboard_authoring_guide → list_dashboard_connections → "
+                "validate_dashboard_artifact → deploy_dashboard → bind_dashboard over MCP."
             ),
             input_schema={
                 "type": "object",
@@ -358,8 +358,9 @@ async def _propose_card(*, user_id: str, project_id: str, params: dict[str, Any]
     del user_id, project_id, params
     msg = (
         "propose_card is retired. Native JS cards are not deployed. "
-        "Call get_dashboard_authoring_guide, write a Streamlit app + manifest, "
-        "validate_dashboard_artifact, deploy_dashboard, then bind_dashboard."
+        "Call get_dashboard_authoring_guide, list_dashboard_connections, write a "
+        "Streamlit app using get_dashboard_query_recipe, validate_dashboard_artifact, "
+        "deploy_dashboard, then bind_dashboard."
     )
     return VirtualToolResult(
         content=json.dumps({"error": msg, "error_type": "hosted_only"}),

@@ -63,6 +63,7 @@ EXPECTED_TOOLS = {
     "run_script",
     # Dashboard tools — hosted Streamlit (primary)
     "get_dashboard_authoring_guide",
+    "get_dashboard_query_recipe",
     "validate_dashboard_artifact",
     "deploy_dashboard",
     "update_dashboard",

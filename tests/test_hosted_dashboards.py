@@ -118,6 +118,35 @@ def test_validate_rejects_missing_entrypoint():
     assert any("entrypoint" in e for e in exc.value.errors)
 
 
+def test_validate_requires_fluxito_data_when_connections_present():
+    with pytest.raises(ArtifactError) as exc:
+        validate_artifact(
+            {
+                "manifest.json": json.dumps(_manifest()),
+                "app.py": "import streamlit as st\nst.title('no data helper')\n",
+            }
+        )
+    assert any("fluxito_data" in e for e in exc.value.errors)
+
+
+def test_validate_rejects_card_json_and_st_secrets():
+    with pytest.raises(ArtifactError) as exc:
+        validate_artifact(
+            {
+                "manifest.json": json.dumps(_manifest()),
+                "app.py": (
+                    "import streamlit as st\n"
+                    "import fluxito_data as fx\n"
+                    "st.secrets['token']\n"
+                    "chart_type = 'line'\n"
+                ),
+            }
+        )
+    joined = " ".join(exc.value.errors).lower()
+    assert "st.secrets" in joined or "secrets" in joined
+    assert "card" in joined or "chart_type" in joined or "retired" in joined
+
+
 def test_validate_rejects_non_streamlit_entrypoint():
     with pytest.raises(ArtifactError) as exc:
         validate_artifact({"manifest.json": json.dumps(_manifest()), "app.py": "print('hello')\n"})
@@ -155,6 +184,13 @@ def test_authoring_guide_is_the_contract():
     assert "unregistered" in guide.lower() or "do not call" in guide.lower()
     assert AUTHORING_GUIDE
     assert "ga4" in payload["connection_types"]
+    assert "recipes" in payload
+    assert payload["recipes"]["ga4"]["action"] == "run_report"
+    assert "metrics" in payload["recipes"]["ga4"]["send"]
+    assert "property_id" in payload["recipes"]["ga4"]["injected"]
+    from app.dashboards.query_recipes import assert_recipes_cover_types
+
+    assert assert_recipes_cover_types() == []
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +430,10 @@ async def test_mcp_guide_validate_deploy_list_get_delete(wired, db_session_facto
         guide = await _tool(server, "get_dashboard_authoring_guide")()
         assert "fluxito_data.query" in guide["guide"]
         assert "manifest.json" in guide["guide"]
+        assert guide["recipes"]["ga4"]["action"] == "run_report"
+        recipe = await _tool(server, "get_dashboard_query_recipe")(connection_type="ga4")
+        assert recipe["action"] == "run_report"
+        assert "property_id" in recipe["injected"]
 
         ok = await _tool(server, "validate_dashboard_artifact")(files=_files())
         assert ok["ok"] is True
@@ -871,6 +911,7 @@ def test_new_mcp_tools_describe_the_contract():
     names = set(server._tool_manager._tools)
     for name in (
         "get_dashboard_authoring_guide",
+        "get_dashboard_query_recipe",
         "validate_dashboard_artifact",
         "deploy_dashboard",
         "update_dashboard",
@@ -899,6 +940,8 @@ def test_new_mcp_tools_describe_the_contract():
     )
     bind_doc = server._tool_manager._tools["bind_dashboard"].fn.__doc__ or ""
     assert "tool" in bind_doc.lower() and "cannot" in bind_doc.lower()
+    recipe_doc = server._tool_manager._tools["get_dashboard_query_recipe"].fn.__doc__ or ""
+    assert "fluxito_data" in recipe_doc.lower() or "action" in recipe_doc.lower()
 
 
 def test_inject_bound_resource_overwrites_caller_identities():

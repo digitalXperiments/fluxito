@@ -254,6 +254,28 @@ def _scan_secrets(path: str, content: str) -> list[str]:
     return errors
 
 
+_RETIRED_DASHBOARD_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("card_json", re.compile(r"\bchart_type\b")),
+    ("echarts", re.compile(r"\becharts\b", re.IGNORECASE)),
+    (
+        "retired_tool",
+        re.compile(r"\bdashboard_(?:deploy_batch|create|card_upsert|card_preview|card_remove)\b"),
+    ),
+]
+
+
+def _scan_retired_dashboard_shape(path: str, content: str) -> list[str]:
+    errors: list[str] = []
+    for label, pat in _RETIRED_DASHBOARD_PATTERNS:
+        if pat.search(content):
+            errors.append(
+                f"{path}: looks like a retired native-card dashboard ({label}). "
+                "Write a Streamlit app that calls fluxito_data.query. "
+                "Do not emit card JSON, chart_type, or ECharts specs."
+            )
+    return errors
+
+
 def _scan_shell_out(path: str, content: str) -> list[str]:
     if not path.endswith(".py"):
         return []
@@ -408,11 +430,17 @@ def validate_artifact(
                     f"{parsed.entrypoint}: must import streamlit "
                     "(e.g. `import streamlit as st`). Fluxito hosts Streamlit apps only."
                 )
-            if "fluxito_data" not in src and parsed.connections:
-                warnings.append(
-                    f"{parsed.entrypoint}: no `import fluxito_data` found. "
-                    "Use fluxito_data.query(alias, action, params) to refresh live data. "
+            if parsed.connections and "fluxito_data" not in src:
+                errors.append(
+                    f"{parsed.entrypoint}: must `import fluxito_data` and call "
+                    "fluxito_data.query(alias, action, params) for live data. "
                     "Do not bake credentials into the app."
+                )
+            errors.extend(_scan_retired_dashboard_shape(parsed.entrypoint, src))
+            if "st.secrets" in src or "streamlit.secrets" in src:
+                errors.append(
+                    f"{parsed.entrypoint}: st.secrets is forbidden. "
+                    "Use fluxito_data.query with a bound alias."
                 )
 
     if errors:

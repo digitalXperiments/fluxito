@@ -94,6 +94,7 @@ def test_hosted_tools_are_in_domain_tools_map():
     assert {
         "dashboard_read",
         "get_dashboard_authoring_guide",
+        "get_dashboard_query_recipe",
         "validate_dashboard_artifact",
         "list_dashboards",
         "get_dashboard",

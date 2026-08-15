@@ -15,8 +15,12 @@ Those tools are unregistered.
 ## 2. See what can be bound
 
 `list_dashboard_connections` returns bindable project connections (type, suggested
-alias, label). No secrets. Put each needed source in `manifest.connections` as
+alias, label, and a `recipe` with action + example_params). No secrets. Put each
+needed source in `manifest.connections` as
 `{"alias": suggested_alias, "type": type}`.
+
+If the action or params are unclear, call `get_dashboard_query_recipe` with that
+type. Do not invent actions.
 
 ## 3. Write the artifact
 
