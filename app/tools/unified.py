@@ -20,7 +20,8 @@ Unified dispatchers (action + params):
 
 Direct tools that survive the rewire (not absorbed into a dispatcher):
     warehouse_query         get_session_context
-    dashboard_deploy_batch
+    deploy_dashboard        update_dashboard
+    bind_dashboard          delete_dashboard
     dashboard_manage_scopes  dashboard_rotate_token
     set_active_project      list_my_projects
     run_script
@@ -776,11 +777,14 @@ Actions:
 """
 
 DASHBOARD_READ_DOC = """
-Read saved dashboards.
+Read hosted Streamlit dashboards (and leftover legacy card rows).
+
+To BUILD a dashboard: call get_dashboard_authoring_guide first, then
+validate_dashboard_artifact, then deploy_dashboard. Do not emit card JSON.
 
 Actions:
-  list — List all dashboards in the active project. No params.
-  get  — Fetch one dashboard by id. params: dashboard_id
+  list — List dashboards in the active project. No params.
+  get  — Fetch one dashboard by UUID. params: dashboard_id
 """
 
 DEPLOY_KNOWLEDGE_DOC = """
@@ -1284,10 +1288,9 @@ def rewire_unified_surface(mcp_server) -> None:
         "search_console_audit",
         "search_console_write",
         "bing_webmaster_read",
-        # dashboards — reads are dispatched via dashboard_read; card-native
-        # deploy tools (dashboard_deploy_batch, dashboard_manage_scopes,
-        # dashboard_rotate_token) are NOT absorbed
-        # by a dispatcher.
+        # dashboards — reads are dispatched via dashboard_read; hosted
+        # deploy/update/bind/delete and leftover scope/token tools are NOT
+        # absorbed by a dispatcher.
         "dashboard_list",
         "dashboard_get",
         # templates + knowledge

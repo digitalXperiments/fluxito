@@ -61,15 +61,18 @@ EXPECTED_TOOLS = {
     # Feature-specific composites
     "tracking_plan",
     "run_script",
-    # Dashboard tools (card-native, no artifact)
-    "dashboard_deploy_batch",
+    # Dashboard tools — hosted Streamlit (primary)
+    "get_dashboard_authoring_guide",
+    "validate_dashboard_artifact",
+    "deploy_dashboard",
+    "update_dashboard",
+    "list_dashboards",
+    "get_dashboard",
+    "delete_dashboard",
+    "list_dashboard_connections",
+    "bind_dashboard",
     "dashboard_manage_scopes",
     "dashboard_rotate_token",
-    # Incremental card tools (dashboard revamp Phase 2 — chat/MCP build-as-you-go)
-    "dashboard_card_preview",
-    "dashboard_create",
-    "dashboard_card_upsert",
-    "dashboard_card_remove",
     # Project management
     "set_active_project",
     "list_my_projects",

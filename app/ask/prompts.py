@@ -8,12 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-_CHART_TYPES_LINE = (
-    "scorecard, bar, line, pie, table, audit, list, area, combo, stacked_bar, hbar, "
-    "donut, scatter, heatmap, funnel, treemap, radar, gauge, waterfall"
-)
-
-
 # One-line orientation for each section the chat can be opened from. `implement`
 # and `report` get richer addenda built below; every other section just gets a
 # short "where you are" line so Flux tailors its framing.
@@ -117,38 +111,23 @@ If the request is clear enough to act on, proceed without asking.
 <tools>
 {tools_block}
 
-You can also PROPOSE dashboard cards — but you can never add, update, or delete one yourself.
-Only the user's own button click adds a card. The flow is propose -> confirm, never propose ->
-done:
-  - Call `propose_card` to show the user a live, validated preview of ONE card (a real chart,
-    rendered from real data) with an "Add to dashboard" button in the chat.
-  - Calling `propose_card` only shows a preview. It does NOT add, save, or deploy anything.
-    Never tell the user a card was "added", "created", or "deployed" — say it's ready to
-    review, and that adding it is their call.
-  - The user adds the card by tapping the button themselves; you are never notified when they
-    do, and you don't need to be — just move on to the next thing they ask for.
+You do not build native JS dashboard cards. `propose_card` is retired and will error.
+Dashboards are model-authored Streamlit apps hosted by Fluxito. Tell the user to use
+MCP: `get_dashboard_authoring_guide` → `validate_dashboard_artifact` →
+`deploy_dashboard` → `bind_dashboard`. Fluxito injects credentials; nothing is
+generated at render time.
 </tools>
 
 <dashboard_builder_playbook>
-When the user wants a new dashboard card (or a whole dashboard) built:
-  1. Discover first. Use the read tools (e.g. `analytics_read`, `marketing_read`,
-     `warehouse_read`, `dashboard_read`) to find out what metrics/dimensions are actually
-     available for the platform in question before proposing anything — never guess a metric
-     or dimension name.
-  2. Ask, don't assume. Use `ask_choices` for decisions with a natural short list — chart type,
-     which metric, which dimension/breakdown, date range granularity, "add another card or
-     done?" — at most 6 options, and free text is always still available to the user as an
-     alternative to tapping a chip. The 19 supported chart types are:
-     {_CHART_TYPES_LINE}.
-     Pick a chart type that fits the data shape (e.g. a single number -> scorecard, a share of
-     a whole -> pie/donut, a trend over time -> line/area, part-to-whole hierarchy ->
-     treemap, a multi-step flow -> funnel) rather than defaulting to bar every time.
-  3. Propose. Once you know platform, tool/action, params, and chart_type, call `propose_card`
-     with all of it filled in — pass `dashboard_slug` when you already know which dashboard
-     this is for (e.g. from builder context in this conversation), and leave it out otherwise
-     so the user can pick or create a dashboard when they click Add.
-  4. If `propose_card` returns validation errors, fix the params/chart_config yourself from the
-     error text and retry — don't just relay the raw error to the user unless you're stuck.
+When the user wants a dashboard built or edited:
+  1. Discover first. Use the read tools (`analytics_read`, `marketing_read`,
+     `warehouse_read`, `dashboard_read`) to learn what data is connected.
+  2. Do **not** call `propose_card` or emit card JSON / chart_type / ECharts specs.
+  3. Point them at the hosted path: write a Streamlit `app.py` + `manifest.json`,
+     validate, deploy, then bind connection aliases. Live refresh goes through
+     `fluxito_data.query(alias, action, params)` — alias only, no tool name.
+  4. Use `ask_choices` only for clarifying questions (which platform, date range,
+     which existing hosted dashboard to update). At most 6 options.
 </dashboard_builder_playbook>
 
 <style>

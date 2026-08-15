@@ -17,16 +17,22 @@ DOMAIN_TOOLS: dict[str, dict[str, set[str]]] = {
     "seo": {"read": {"seo_read"}, "write": {"seo_write"}},
     "warehouse": {"read": {"warehouse_read", "warehouse_query"}, "write": set()},
     "dashboards": {
-        # dashboard_card_preview only executes a query + validates a chart
-        # spec — it persists nothing, so it's read-level like dashboard_read.
-        "read": {"dashboard_read", "dashboard_card_preview"},
+        # Hosted Streamlit only. Native card writers are unregistered.
+        "read": {
+            "dashboard_read",
+            "get_dashboard_authoring_guide",
+            "validate_dashboard_artifact",
+            "list_dashboards",
+            "get_dashboard",
+            "list_dashboard_connections",
+        },
         "write": {
-            "dashboard_deploy_batch",
             "dashboard_manage_scopes",
             "dashboard_rotate_token",
-            "dashboard_create",
-            "dashboard_card_upsert",
-            "dashboard_card_remove",
+            "deploy_dashboard",
+            "update_dashboard",
+            "delete_dashboard",
+            "bind_dashboard",
             "template_deploy",
             "template_save",
         },

@@ -1,10 +1,9 @@
-"""Tests for the Phase 3 chat-based dashboard builder (harness/backend core):
+"""Tests for Ask Fluxito dashboard builder leftovers:
 
-- CardPreviewBlock / ChoicesBlock JSON round-trip (incl. tolerance of unknown block types)
-- propose_card virtual-tool interception path
+- CardPreviewBlock / ChoicesBlock JSON round-trip (legacy blocks still load)
+- propose_card is intercepted and hard-errors (hosted-only; no card preview)
 - ask_choices virtual-tool event
-- POST /api/ask/confirm-action: add (happy path), discard, missing-dashboard 400,
-  foreign-conversation 403/404
+- POST /api/ask/confirm-action: add is rejected (hosted-only), discard still works
 """
 
 from __future__ import annotations
@@ -124,19 +123,8 @@ def test_block_to_provider_text_serialization():
 
 
 @pytest.mark.asyncio
-async def test_propose_card_success_emits_block_and_short_result():
-    from app.ask.providers.base import CardPreviewBlock
-
-    with patch(
-        "app.ask.tools.run_mcp_tool",
-        new=AsyncMock(
-            return_value=(
-                {"snap": {"rows": [1]}, "warnings": ["heads up"]},
-                False,
-                "{}",
-            )
-        ),
-    ) as mocked:
+async def test_propose_card_is_hosted_only_error():
+    with patch("app.ask.tools.run_mcp_tool", new=AsyncMock()) as mocked:
         from app.ask.tools import dispatch_virtual_tool
 
         result = await dispatch_virtual_tool(
@@ -153,21 +141,16 @@ async def test_propose_card_success_emits_block_and_short_result():
             },
         )
 
-    mocked.assert_awaited_once()
-    assert mocked.await_args.kwargs["name"] == "dashboard_card_preview"
-    assert result.is_error is False
-    assert "Do not claim it was added" in result.content
-    assert isinstance(result.block, CardPreviewBlock)
-    assert result.block.state == "proposed"
-    assert result.block.snap == {"rows": [1]}
-    assert result.block.warnings == ["heads up"]
-    assert result.event is not None
-    assert result.event.type == "card_preview"
-    assert result.event.block["card"]["title"] == "Revenue by channel"
+    mocked.assert_not_awaited()
+    assert result.is_error is True
+    assert result.block is None
+    assert result.event is None
+    assert "hosted_only" in result.content or "retired" in result.content.lower()
+    assert "deploy_dashboard" in result.content
 
 
 @pytest.mark.asyncio
-async def test_propose_card_missing_fields_is_self_correctable_error():
+async def test_propose_card_never_calls_card_preview():
     from app.ask.tools import dispatch_virtual_tool
 
     result = await dispatch_virtual_tool(
@@ -176,33 +159,7 @@ async def test_propose_card_missing_fields_is_self_correctable_error():
     assert result.is_error is True
     assert result.block is None
     assert result.event is None
-    assert "missing required field" in result.content
-
-
-@pytest.mark.asyncio
-async def test_propose_card_preview_failure_returns_validation_error_not_block():
-    with patch(
-        "app.ask.tools.run_mcp_tool",
-        new=AsyncMock(return_value=({"error": True, "message": "bad chart_config"}, False, "{}")),
-    ):
-        from app.ask.tools import dispatch_virtual_tool
-
-        result = await dispatch_virtual_tool(
-            user_id="u1",
-            project_id="p1",
-            name="propose_card",
-            params={
-                "title": "X",
-                "platform": "ga4",
-                "tool": "analytics_read",
-                "action": "report",
-                "params": {},
-                "chart_type": "bar",
-            },
-        )
-    assert result.is_error is True
-    assert result.block is None
-    assert "bad chart_config" in result.content
+    assert "dashboard_card_preview" not in result.content
 
 
 @pytest.mark.asyncio
@@ -436,37 +393,18 @@ async def test_confirm_action_add_happy_path(_http_client, db_session_factory):
     _http_client.cookies.set("uid", sign_uid(str(uid)))
     _http_client.cookies.set("active_project_id", str(pid))
 
-    with patch(
-        "app.api.ask_routes.run_mcp_tool",
-        new=AsyncMock(
-            return_value=(
-                {
-                    "card_key": "revenue_by_channel_x",
-                    "dashboard_url": "http://testserver/live-dashboards/dash-slug-1",
-                },
-                False,
-                "{}",
-            )
-        ),
-    ) as mocked_dispatch:
-        resp = await _http_client.post(
-            "/api/ask/confirm-action",
-            json={"conversation_id": str(conv.id), "block_id": "cp_add", "action": "add"},
-        )
+    resp = await _http_client.post(
+        "/api/ask/confirm-action",
+        json={"conversation_id": str(conv.id), "block_id": "cp_add", "action": "add"},
+    )
 
-    assert resp.status_code == 200
+    assert resp.status_code == 400
     body = resp.json()
-    assert body["status"] == "added"
-    assert body["dashboard_slug"] == "dash-slug-1"
-    assert body["card_key"] == "revenue_by_channel_x"
-
-    mocked_dispatch.assert_awaited_once()
-    assert mocked_dispatch.await_args.kwargs["name"] == "dashboard_card_upsert"
-    assert mocked_dispatch.await_args.kwargs["params"]["dashboard_slug"] == "dash-slug-1"
-    assert mocked_dispatch.await_args.kwargs["params"]["card"]["platform"] == "ga4"
+    assert body.get("error_type") == "hosted_only"
+    assert "deploy_dashboard" in body["error"]
 
     stored = await svc.find_block(conv.id, "cp_add")
-    assert stored["state"] == "added"
+    assert stored["state"] != "added"
 
 
 @pytest.mark.asyncio
@@ -500,7 +438,7 @@ async def test_confirm_action_add_without_dashboard_400(_http_client, db_session
         json={"conversation_id": str(conv.id), "block_id": "cp_nodash", "action": "add"},
     )
     assert resp.status_code == 400
-    assert "dashboard_slug" in resp.json()["error"]
+    assert resp.json().get("error_type") == "hosted_only" or "retired" in resp.json()["error"].lower()
 
 
 @pytest.mark.asyncio

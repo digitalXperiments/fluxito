@@ -24,7 +24,7 @@ in its own reference; this is the shared mechanics.
 | Warehouse (BigQuery/Redshift/Snowflake) | `warehouse_read` + `warehouse_query` (SQL) | — | `run_audit` (`warehouse_*`) |
 | Organic search (GSC, Bing) | `seo_read` | `seo_write` | `run_audit` (`seo_*`) |
 | Knowledge (KPIs, context, templates) | `get_knowledge` | `deploy_knowledge` | — |
-| Dashboards | `dashboard_read` | `dashboard_deploy_batch`, `dashboard_manage_scopes`, `dashboard_rotate_token` | — |
+| Dashboards | `dashboard_read`, `get_dashboard_authoring_guide`, `list_dashboard_connections` | `deploy_dashboard`, `update_dashboard`, `bind_dashboard`, `delete_dashboard` | — |
 | Tracking plan / SDR | `tracking_plan` | `tracking_plan` | `tracking_plan(action="diagnose")` |
 | Cross-connector insight | `run_analysis` | — | — |
 | Tag rule book / live tag test | `tag_rulebook`, `live_tag_test` | same | same |

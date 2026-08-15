@@ -28,7 +28,7 @@ from app.ask.prompts import build_system_prompt
 from app.ask.providers.base import LLMMessage, StreamEvent, TextBlock
 from app.ask.providers.registry import SUPPORTED_PROVIDERS, default_model_for, make_provider
 from app.ask.service import ConversationService
-from app.ask.tools import AskToolBridge, card_key_from_title, run_mcp_tool
+from app.ask.tools import AskToolBridge
 from app.auth.uid_cookie import get_uid_from_request
 from app.templating import render
 
@@ -248,13 +248,12 @@ async def ask_stream(request: Request):
 
 @router.post("/api/ask/confirm-action")
 async def confirm_action(request: Request):
-    """Human-tap gate for card_preview blocks: POST {conversation_id, block_id, action, dashboard_slug?}.
+    """Human-tap gate leftover from the retired card builder.
 
-    action='discard' just flips the block's state. action='add' resolves the target dashboard
-    (body dashboard_slug overrides the block's; '__new__' creates one first), then runs the
-    REAL MCP write tools (dashboard_create / dashboard_card_upsert) through the same
-    RBAC-checked + audited ('ask_fluxito') in-process dispatch path the read tools use — the
-    model itself never has a path to call these tools directly (they are not in READ_ONLY_TOOLS).
+    action='discard' still flips a leftover card_preview block's state.
+    action='add' is rejected: native JS cards are not deployed. Hosted
+    dashboards are authored as Streamlit artifacts and deployed over MCP
+    (get_dashboard_authoring_guide → deploy_dashboard → bind_dashboard).
     """
     uid = _require_user_id(request)
     if not uid:
@@ -264,7 +263,6 @@ async def confirm_action(request: Request):
     conv_id = body.get("conversation_id")
     block_id = body.get("block_id")
     action = body.get("action")
-    dashboard_slug_override = (body.get("dashboard_slug") or "").strip() or None
 
     if not conv_id or not block_id or action not in ("add", "discard"):
         return JSONResponse(
@@ -285,62 +283,16 @@ async def confirm_action(request: Request):
         await _service.set_block_state(conv.id, str(block_id), "discarded")
         return JSONResponse({"status": "discarded"})
 
-    # action == "add"
-    dashboard_slug = dashboard_slug_override or block.get("dashboard_slug")
-    if not dashboard_slug:
-        return JSONResponse(
-            {"error": "dashboard_slug is required to add this card (none was set on the proposal)."},
-            status_code=400,
-        )
-
-    from app.api.project_routes import ensure_active_project
-
-    project_id = await ensure_active_project(request, uid)
-    if not project_id:
-        return JSONResponse({"error": "No active project."}, status_code=400)
-
-    card = block.get("card") or {}
-    title = str(card.get("title") or "Untitled card")
-
-    if dashboard_slug == "__new__":
-        create_raw, create_is_err, _ = await run_mcp_tool(
-            user_id=uid, project_id=project_id, name="dashboard_create", params={"title": title}
-        )
-        if create_is_err or (isinstance(create_raw, dict) and create_raw.get("error")):
-            msg = create_raw.get("message") if isinstance(create_raw, dict) else None
-            return JSONResponse({"error": msg or "Failed to create dashboard."}, status_code=400)
-        dashboard_slug = create_raw.get("slug") if isinstance(create_raw, dict) else None
-        if not dashboard_slug:
-            return JSONResponse({"error": "Dashboard was created but no slug was returned."}, status_code=400)
-
-    upsert_card = {
-        "key": card_key_from_title(title),
-        "title": title,
-        "chart_type": card.get("chart_type"),
-        "platform": card.get("platform"),
-        "tool": card.get("tool"),
-        "action": card.get("action"),
-        "params": card.get("params") or {},
-        "chart_config": card.get("chart_config"),
-    }
-    raw, is_err, _ = await run_mcp_tool(
-        user_id=uid,
-        project_id=project_id,
-        name="dashboard_card_upsert",
-        params={"dashboard_slug": dashboard_slug, "card": upsert_card},
-    )
-    if is_err or (isinstance(raw, dict) and raw.get("error")):
-        msg = raw.get("message") if isinstance(raw, dict) else None
-        return JSONResponse({"error": msg or "Failed to add card to dashboard."}, status_code=400)
-
-    await _service.set_block_state(conv.id, str(block_id), "added")
     return JSONResponse(
         {
-            "status": "added",
-            "card_key": (raw.get("card_key") if isinstance(raw, dict) else None) or upsert_card["key"],
-            "dashboard_url": raw.get("dashboard_url") if isinstance(raw, dict) else None,
-            "dashboard_slug": dashboard_slug,
-        }
+            "error": (
+                "Native card dashboards are retired. Deploy a hosted Streamlit "
+                "artifact with get_dashboard_authoring_guide → "
+                "validate_dashboard_artifact → deploy_dashboard → bind_dashboard."
+            ),
+            "error_type": "hosted_only",
+        },
+        status_code=400,
     )
 
 

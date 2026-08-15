@@ -1,19 +1,13 @@
 """
 Dashboard Models
 
-A dashboard is a named collection of cards. Each card stores the query
-parameters that produced it, a chart_type + chart_config spec for frontend
-rendering, and a result_cache for fallback rendering.
+A dashboard is a hosted, model-authored Streamlit app (kind="hosted") or a
+legacy card-native row (kind="legacy_cards"). New deploys are hosted:
+Fluxito stores the artifact on disk, binds connection aliases, and runs
+Streamlit in an isolated process. DashboardCard remains for compatibility
+with existing card-native rows only.
 
-Dashboards are owned by a user (user_id FK) and also store the owner's
-email and display name denormalised — so the public share page can show
-"Shared by Ram" without an extra DB join at render time.
-
-Sharing is controlled by is_public + share_slug. The full share_url is
-stored on the row so it is queryable and stable.
-
-Structure:
-  Dashboard (1) → DashboardCard (many)
+Sharing is controlled by is_public + share_slug.
 """
 
 import uuid
@@ -82,6 +76,24 @@ class Dashboard(Base):
     cache_ttl_seconds: Mapped[int] = mapped_column(
         Integer, nullable=False, default=86400, server_default="86400"
     )
+
+    # Hosted Streamlit artifact (kind="hosted"). Existing card-native rows stay
+    # kind="legacy_cards". Column names intentionally avoid the retired
+    # artifact_js / artifact_html / render_mode fields.
+    kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="legacy_cards", server_default="legacy_cards"
+    )
+    manifest: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=sa.text("'{}'::jsonb"))
+    artifact_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    host_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="stopped", server_default="stopped"
+    )
+    host_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    host_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    connection_bindings: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+    runtime_token: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Sharing
     share_slug: Mapped[str] = mapped_column(String(16), unique=True, nullable=False, index=True)

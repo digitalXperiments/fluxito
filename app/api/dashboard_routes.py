@@ -537,9 +537,23 @@ async def list_saved_dashboards(request: Request):
 
         out = []
         for d in dashboards:
-            cards_result = await db.execute(select(DashboardCard).where(DashboardCard.dashboard_id == d.id))
-            card_count = len(list(cards_result.scalars().all()))
-            out.append({"slug": d.share_slug, "title": d.title, "card_count": card_count})
+            kind = getattr(d, "kind", None) or "legacy_cards"
+            card_count = 0
+            if kind != "hosted":
+                cards_result = await db.execute(
+                    select(DashboardCard).where(DashboardCard.dashboard_id == d.id)
+                )
+                card_count = len(list(cards_result.scalars().all()))
+            out.append(
+                {
+                    "slug": d.share_slug,
+                    "title": d.title,
+                    "card_count": card_count,
+                    "kind": kind,
+                    "host_status": getattr(d, "host_status", None),
+                    "bindings": getattr(d, "connection_bindings", None) or [],
+                }
+            )
 
     return JSONResponse({"dashboards": out})
 
@@ -565,9 +579,13 @@ async def delete_dashboard(dashboard_id: str, request: Request):
         dash = result.scalar_one_or_none()
         if not dash or not await _user_in_project(db, dash.project_id, user_uuid):
             return JSONResponse({"error": "Not found"}, status_code=404)
+        owner_id = dash.user_id
         await db.execute(sa_delete(Dashboard).where(Dashboard.id == dash.id))
         await db.commit()
 
+    from app.dashboards.runtime import delete_workdir
+
+    delete_workdir(owner_id, dash_uuid)
     return JSONResponse({"success": True})
 
 
@@ -950,8 +968,13 @@ async def live_dashboards_hub(request: Request):
         dashboards = result.scalars().all()
 
         for d in dashboards:
-            cards_q = await db.execute(select(DashboardCard).where(DashboardCard.dashboard_id == d.id))
-            card_count = len(list(cards_q.scalars().all()))
+            kind = getattr(d, "kind", None) or "legacy_cards"
+            card_count = 0
+            if kind != "hosted":
+                cards_q = await db.execute(select(DashboardCard).where(DashboardCard.dashboard_id == d.id))
+                card_count = len(list(cards_q.scalars().all()))
+            bindings = list(getattr(d, "connection_bindings", None) or [])
+            bound = sum(1 for b in bindings if b.get("status") == "bound")
             deployed.append(
                 {
                     "id": str(d.id),
@@ -959,6 +982,11 @@ async def live_dashboards_hub(request: Request):
                     "name": d.title,
                     "description": d.description or "",
                     "is_public": d.is_public,
+                    "kind": kind,
+                    "host_status": getattr(d, "host_status", None) or "stopped",
+                    "host_error": getattr(d, "host_error", None),
+                    "binding_bound": bound,
+                    "binding_total": len(bindings),
                     "card_count": card_count,
                     "updated_at": d.updated_at,
                 }
@@ -1024,6 +1052,8 @@ async def live_dashboard_page(page_slug: str, request: Request):
         dash = result.scalar_one_or_none()
         if not dash:
             return render(request, "dashboards/not_found.html", {}, status_code=404)
+        if getattr(dash, "kind", None) == "hosted":
+            return await _render_hosted_view(request, dash, uid)
         # Public dashboards are shareable by design. Private dashboards require
         # the owner to still be an active member of the dashboard's project.
         if not dash.is_public:
@@ -1537,3 +1567,366 @@ async def live_dashboard_pdf(slug: str, request: Request):
             "X-PDF-Live-Cards": str(result_pdf.live_card_count),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Hosted Streamlit apps — view chrome, reverse proxy, data plane
+# ---------------------------------------------------------------------------
+
+
+async def _can_view_dashboard(dash: Dashboard, uid: str | None) -> bool:
+    if dash.is_public:
+        return True
+    if not uid or str(dash.user_id) != uid:
+        return False
+    user_uuid = safe_uuid(uid)
+    if user_uuid is None:
+        return False
+    async with app_state.db_session_factory() as db:
+        return await _user_in_project(db, dash.project_id, user_uuid)
+
+
+async def _load_dash_by_slug(slug: str) -> Dashboard | None:
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(select(Dashboard).where(Dashboard.share_slug == slug))
+        return result.scalar_one_or_none()
+
+
+async def _render_hosted_view(request: Request, dash: Dashboard, uid: str | None):
+    if not await _can_view_dashboard(dash, uid):
+        return render(request, "dashboards/not_found.html", {}, status_code=404)
+
+    from app.dashboards.service import ensure_running, rebind_dashboard
+
+    await rebind_dashboard(dash)
+    await ensure_running(dash)
+    async with app_state.db_session_factory() as db:
+        result = await db.execute(select(Dashboard).where(Dashboard.id == dash.id))
+        fresh = result.scalar_one_or_none()
+        if fresh is not None:
+            fresh.connection_bindings = dash.connection_bindings
+            fresh.host_status = dash.host_status
+            fresh.host_port = dash.host_port
+            fresh.host_error = dash.host_error
+            fresh.runtime_token = dash.runtime_token
+            await db.commit()
+            await db.refresh(fresh)
+            dash = fresh
+
+    user_view = await _load_user_view_from_uid(uid)
+    is_owner = uid is not None and str(dash.user_id) == uid
+    bindings = list(dash.connection_bindings or [])
+    return render(
+        request,
+        "dashboards/hosted_view.html",
+        {
+            "dash": {
+                "id": str(dash.id),
+                "title": dash.title,
+                "description": dash.description or "",
+                "kind": "hosted",
+                "host_status": dash.host_status,
+                "host_error": dash.host_error,
+            },
+            "slug": dash.share_slug,
+            "is_owner": is_owner,
+            "user": user_view,
+            "bindings": bindings,
+            "host_src": f"/hosted/{dash.share_slug}/",
+        },
+    )
+
+
+# Hop-by-hop plus viewer credentials. The Streamlit child is untrusted and
+# must never receive Fluxito session cookies, bearer tokens, or CSRF headers.
+_PROXY_HOP_BY_HOP = frozenset(
+    {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+        "proxy-connection",
+    }
+)
+_PROXY_CREDENTIAL_HEADERS = frozenset(
+    {
+        "cookie",
+        "cookie2",
+        "authorization",
+        "set-cookie",
+        "set-cookie2",
+        "x-csrf-token",
+        "x-xsrf-token",
+    }
+)
+_PROXY_SKIP_HEADERS = _PROXY_HOP_BY_HOP | _PROXY_CREDENTIAL_HEADERS | frozenset({"host", "content-length"})
+
+
+def _forward_request_headers(request: Request) -> dict[str, str]:
+    skip = set(_PROXY_SKIP_HEADERS)
+    connection = request.headers.get("connection")
+    if connection:
+        skip.update(token.strip().lower() for token in connection.split(",") if token.strip())
+    return {k: v for k, v in request.headers.items() if k.lower() not in skip}
+
+
+async def _proxy_to_host(request: Request, dash: Dashboard, rest: str):
+    from app.dashboards.runtime import get_handle
+    from app.dashboards.service import ensure_running
+
+    await ensure_running(dash)
+    handle = get_handle(str(dash.id))
+    if handle is None:
+        return JSONResponse(
+            {
+                "error": "host_unavailable",
+                "message": dash.host_error or "Hosted app is not running. Redeploy from MCP.",
+            },
+            status_code=503,
+        )
+    suffix = rest.lstrip("/")
+    path = f"/hosted/{dash.share_slug}/" + suffix
+    if suffix and not rest.endswith("/") and "." not in suffix.split("/")[-1]:
+        # Streamlit assets keep their path; page routes keep the trailing structure.
+        pass
+    query = str(request.url.query)
+    url = f"http://127.0.0.1:{handle.port}{path}"
+    if query:
+        url = f"{url}?{query}"
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
+            upstream = await client.request(
+                request.method,
+                url,
+                headers=_forward_request_headers(request),
+                content=await request.body(),
+            )
+    except httpx.RequestError as exc:
+        logger.warning("hosted proxy failed slug=%s: %s", dash.share_slug, exc)
+        return JSONResponse({"error": "host_unreachable", "message": str(exc)[:300]}, status_code=502)
+
+    excluded = {"transfer-encoding", "content-encoding", "content-length", "connection"}
+    headers = {k: v for k, v in upstream.headers.items() if k.lower() not in excluded}
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers=headers,
+        media_type=upstream.headers.get("content-type"),
+    )
+
+
+@router.api_route(
+    "/hosted/{slug}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+)
+@router.api_route(
+    "/hosted/{slug}/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+)
+async def hosted_app_proxy(slug: str, request: Request, path: str = ""):
+    """Auth-checked reverse proxy to the isolated Streamlit process."""
+    uid = get_uid_from_request(request)
+    dash = await _load_dash_by_slug(slug)
+    if not dash or getattr(dash, "kind", None) != "hosted":
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if not await _can_view_dashboard(dash, uid):
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    return await _proxy_to_host(request, dash, path)
+
+
+@router.websocket("/hosted/{slug}/{path:path}")
+@router.websocket("/hosted/{slug}")
+async def hosted_app_ws(websocket, slug: str, path: str = ""):
+    """WebSocket proxy for Streamlit (_stcore/stream)."""
+    import asyncio
+
+    uid = get_uid_from_request(websocket)
+    dash = await _load_dash_by_slug(slug)
+    if not dash or getattr(dash, "kind", None) != "hosted":
+        await websocket.close(code=4404)
+        return
+    if not await _can_view_dashboard(dash, uid):
+        await websocket.close(code=4403)
+        return
+
+    from app.dashboards.runtime import get_handle
+    from app.dashboards.service import ensure_running
+
+    await ensure_running(dash)
+    handle = get_handle(str(dash.id))
+    if handle is None:
+        await websocket.close(code=4503)
+        return
+
+    await websocket.accept()
+    qs = websocket.url.query
+    target = f"ws://127.0.0.1:{handle.port}/hosted/{slug}/{path}"
+    if qs:
+        target = f"{target}?{qs}"
+
+    try:
+        import websockets
+    except ImportError:
+        await websocket.close(code=4501)
+        return
+
+    try:
+        async with websockets.connect(target, extra_headers=[]) as upstream:
+
+            async def _client_to_up():
+                try:
+                    while True:
+                        message = await websocket.receive()
+                        if message.get("type") == "websocket.disconnect":
+                            break
+                        if "text" in message and message["text"] is not None:
+                            await upstream.send(message["text"])
+                        elif "bytes" in message and message["bytes"] is not None:
+                            await upstream.send(message["bytes"])
+                except Exception:
+                    return
+
+            async def _up_to_client():
+                try:
+                    async for message in upstream:
+                        if isinstance(message, bytes):
+                            await websocket.send_bytes(message)
+                        else:
+                            await websocket.send_text(message)
+                except Exception:
+                    return
+
+            await asyncio.gather(_client_to_up(), _up_to_client())
+    except Exception as exc:
+        logger.debug("hosted ws proxy ended slug=%s: %s", slug, exc)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+@router.post("/api/hosted-dashboards/{slug}/query")
+async def hosted_dashboard_query(slug: str, request: Request):
+    """Data plane: Streamlit helper posts here with the runtime token."""
+    dash = await _load_dash_by_slug(slug)
+    if not dash or getattr(dash, "kind", None) != "hosted":
+        return JSONResponse({"error": True, "message": "Not found"}, status_code=404)
+
+    auth = request.headers.get("authorization") or ""
+    token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    if not token or not dash.runtime_token or token != dash.runtime_token:
+        return JSONResponse(
+            {"error": True, "error_type": "unauthorized", "message": "Bad runtime token"}, status_code=403
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": True, "message": "JSON body required"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": True, "message": "JSON object required"}, status_code=400)
+
+    alias = str(body.get("alias") or "").strip()
+    action = str(body.get("action") or "").strip()
+    if not alias or not action:
+        return JSONResponse(
+            {"error": True, "error_type": "invalid_request", "message": "alias and action are required"},
+            status_code=400,
+        )
+    params = body.get("params") if isinstance(body.get("params"), dict) else {}
+    if isinstance(params, dict):
+        params = {k: v for k, v in params.items() if k != "tool"}
+
+    from app.dashboards.data_plane import run_alias_query
+
+    # Caller-chosen tools are ignored. The bound alias alone selects the tool.
+    result = await run_alias_query(dash, alias=alias, action=action, params=params)
+    status = 200 if not result.get("error") else 400
+    return JSONResponse(result, status_code=status)
+
+
+@router.get("/api/hosted-dashboards/{slug}/status")
+async def hosted_dashboard_status(slug: str, request: Request):
+    """Connection bind + host status for the reporting UI."""
+    uid = get_uid_from_request(request)
+    dash = await _load_dash_by_slug(slug)
+    if not dash:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if not await _can_view_dashboard(dash, uid):
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    from app.dashboards.runtime import get_handle
+    from app.dashboards.service import hosted_payload, rebind_dashboard
+
+    await rebind_dashboard(dash)
+    handle = get_handle(str(dash.id))
+    payload = hosted_payload(dash)
+    payload["host_alive"] = handle is not None
+    return JSONResponse(payload)
+
+
+@router.post("/api/hosted-dashboards/{slug}/restart")
+async def hosted_dashboard_restart(slug: str, request: Request):
+    """Owner-only: restart the Streamlit process from the stored artifact."""
+    uid = get_uid_from_request(request)
+    if not uid:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    dash = await _load_dash_by_slug(slug)
+    if not dash or str(dash.user_id) != uid:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    from app.dashboards.runtime import stop_dashboard
+    from app.dashboards.service import ensure_running
+
+    stop_dashboard(str(dash.id))
+    dash.host_port = None
+    await ensure_running(dash)
+    async with app_state.db_session_factory() as db:
+        db.add(dash)
+        await db.commit()
+    return JSONResponse(
+        {
+            "success": dash.host_status == "running",
+            "host_status": dash.host_status,
+            "host_error": dash.host_error,
+        }
+    )
+
+
+@router.put("/api/hosted-dashboards/{id}/artifact")
+async def hosted_dashboard_redeploy(id: str, request: Request):
+    """Owner-only: replace the artifact from the reporting UI and restart."""
+    uid = get_uid_from_request(request)
+    if not uid:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "JSON body required"}, status_code=400)
+    files = body.get("files")
+    if not files:
+        return JSONResponse({"error": "files is required"}, status_code=400)
+
+    from app.auth.mcp_session_manager import UserContext
+    from app.dashboards.service import update_hosted
+
+    user = UserContext(user_id=uid, email="", display_name="")
+    result = await update_hosted(
+        dashboard_id=id,
+        files=files,
+        title=body.get("title"),
+        description=body.get("description"),
+        manifest=body.get("manifest"),
+        user=user,
+    )
+    if result.get("error"):
+        return JSONResponse(result, status_code=400)
+    return JSONResponse(result)

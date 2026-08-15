@@ -287,12 +287,7 @@ document.documentElement.classList.add('print-mode');
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           Scopes
         </a>
-        {% if not print_mode %}
-        <button class="btn primary sm" id="btnAddCard" type="button" title="Build a new card with Ask Fluxito">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add card
-        </button>
-        {% endif %}
+        {# Native card builder removed — hosted dashboards are model-authored Streamlit apps. #}
         {% endif %}
         <button class="btn primary sm" id="btnApply" type="button">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15A9 9 0 1 1 5.64 5.64L1 10"/></svg>
@@ -353,17 +348,21 @@ document.documentElement.classList.add('print-mode');
 <div id="toastHost"></main>
 
 {% if is_owner and not print_mode %}
-<!-- Chat-based card builder drawer (dashboard revamp Phase 3) -->
+<!-- Hosted-artifact hint (legacy card dashboards stay readable; new work is Streamlit). -->
 <div id="addCardBackdrop" class="lv-drawer-backdrop"></div>
-<div id="addCardDrawer" class="lv-drawer" role="dialog" aria-modal="true" aria-label="Build a card with Ask Fluxito">
+<div id="addCardDrawer" class="lv-drawer" role="dialog" aria-modal="true" aria-label="Hosted dashboard authoring">
   <div class="lv-drawer-head">
-    <span class="lv-drawer-title">Add card · Ask Fluxito</span>
+    <span class="lv-drawer-title">Edit hosted artifact</span>
     <button type="button" class="lv-drawer-close" id="addCardClose" aria-label="Close">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
-  <div class="lv-drawer-body">
-    <iframe id="addCardFrame" title="Ask Fluxito — build a card" src="about:blank"></iframe>
+  <div class="lv-drawer-body" style="padding:20px;line-height:1.55">
+    <p>Native JS cards are retired. Ask Claude, Grok, or Gemini over MCP to call
+    <code>get_dashboard_authoring_guide</code>, then
+    <code>validate_dashboard_artifact</code> → <code>deploy_dashboard</code> /
+    <code>update_dashboard</code> → <code>bind_dashboard</code>.</p>
+    <p><a href="/live-dashboards">Back to dashboards</a></p>
   </div>
 </div>
 {% endif %}
@@ -901,22 +900,14 @@ document.documentElement.classList.add('print-mode');
     btnSchedules.addEventListener('click', () => window.Scheds.open());
   }
 
-  // ── Add card drawer (dashboard revamp Phase 3 — chat-based builder) ────
-  // Right-side slide-over embedding /ask?builder=1&dashboard=<slug>. Owner-only
-  // markup (see is_owner gate in the template); guarded again here in case the
-  // elements aren't present (non-owner / print mode never render them).
+  // ── Hosted-artifact drawer (no /ask?builder=1 card authoring) ───────────
   const btnAddCard = document.getElementById('btnAddCard');
   const addCardDrawer = document.getElementById('addCardDrawer');
   const addCardBackdrop = document.getElementById('addCardBackdrop');
-  const addCardFrame = document.getElementById('addCardFrame');
   const addCardClose = document.getElementById('addCardClose');
 
   function openAddCardDrawer() {
     if (!addCardDrawer || !addCardBackdrop) return;
-    // Lazy-load the iframe on first open so the ask page isn't fetched until needed.
-    if (addCardFrame && addCardFrame.getAttribute('src') === 'about:blank') {
-      addCardFrame.src = '/ask?builder=1&dashboard=' + encodeURIComponent(SLUG);
-    }
     addCardDrawer.classList.add('is-open');
     addCardBackdrop.classList.add('is-open');
     document.body.style.overflow = 'hidden';

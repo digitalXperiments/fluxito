@@ -2,7 +2,7 @@
   {
     "tool": "dashboard_read",
     "action": "get",
-    "summary": "Get a full live dashboard including all cards (ordered by position) and their cached data, by dashboard UUID. Ownership-gated (Dashboard.user_id == current user).",
+    "summary": "Get one dashboard by UUID: hosted Streamlit metadata + connection bindings, or leftover legacy cards. Ownership-gated.",
     "group": "",
     "params": [
       {
@@ -10,7 +10,7 @@
         "type": "string",
         "required": true,
         "example": "3f9a1c2e-7b40-4d11-9a2e-1c0d5e8f6a3b",
-        "doc": "UUID from dashboard_read('list') or dashboard_deploy_batch response. Must be a valid UUID string."
+        "doc": "UUID from dashboard_read('list') or deploy_dashboard / update_dashboard response. Must be a valid UUID string."
       }
     ],
     "returns": "{ dashboard: {id, title, description, insights, owner_email, owner_name, share_slug, is_public, live_url, share_url, shared_at, card_count, created_at, updated_at, cards:[{id, key, title, platform, tool_name, chart_type, chart_config, query_params, position, refreshed_at, created_at}]} } | {error, message} | {error, error_type:'unauthenticated', message}",
@@ -19,7 +19,7 @@
   {
     "tool": "dashboard_read",
     "action": "list",
-    "summary": "List all live dashboards belonging to the current user, scoped to the active project if one is set. Returns title, card count, live_url, id per dashboard (no card data).",
+    "summary": "List hosted Streamlit dashboards (and leftover legacy card rows) for the current user, scoped to the active project. Returns title, kind, host_status, bindings, live_url, id.",
     "group": "",
     "params": [],
     "returns": "{ dashboards: [{id, title, description, insights, owner_email, owner_name, share_slug, is_public, live_url, share_url, shared_at, card_count, created_at, updated_at}], total, create_hint, manage_url, sharing_hint } | {error, error_type:'unauthenticated', message}",

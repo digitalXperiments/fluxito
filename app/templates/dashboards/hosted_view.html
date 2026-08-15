@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ dash.title }} — Live · Fluxito{% endblock %}
+{% set active = 'live' %}
+
+{% block head_extra %}
+<style>
+  .hv-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; color: var(--muted);
+    text-decoration: none;
+    font-family: var(--mono); letter-spacing: 0.02em;
+    margin-bottom: 14px;
+  }
+  .hv-back:hover { color: var(--ink); }
+  .hv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; }
+  .hv-meta { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 6px; }
+  .hv-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hv-binds { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .hv-bind {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border: 1px solid var(--line); border-radius: var(--r-m);
+    font-size: 12px; font-family: var(--mono); color: var(--ink-soft);
+  }
+  .hv-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .hv-bind.is-bound .hv-dot { background: var(--green); }
+  .hv-bind.is-missing .hv-dot { background: var(--amber, #c47b17); }
+  .hv-bind.is-error .hv-dot { background: var(--red); }
+  .hv-frame-wrap {
+    border: 1px solid var(--line); border-radius: var(--r-l);
+    overflow: hidden; background: var(--card); min-height: 70vh;
+  }
+  .hv-frame { width: 100%; height: calc(100vh - 260px); min-height: 640px; border: 0; display: block; background: var(--bg); }
+  .hv-error {
+    padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--r-l);
+    background: var(--bg-2); margin-bottom: 14px; font-size: 13.5px;
+  }
+  .hv-redeploy { display: none; margin-top: 14px; }
+  .hv-redeploy.is-open { display: block; }
+  .hv-redeploy textarea {
+    width: 100%; min-height: 180px; font-family: var(--mono); font-size: 12px;
+    border: 1px solid var(--line); border-radius: var(--r-m); padding: 10px;
+    background: var(--bg); color: var(--ink);
+  }
+  @media (max-width: 700px) {
+    .hv-frame { min-height: 480px; height: 70vh; }
+  }
+</style>
+{% endblock %}
+
+{% block main %}
+<main class="app-main">
+  <a href="/live-dashboards" class="hv-back">← All dashboards</a>
+
+  <div class="hv-head">
+    <div>
+      <span class="label">Hosted Streamlit app</span>
+      <h1>{{ dash.title }}</h1>
+      {% if dash.description %}<p>{{ dash.description }}</p>{% endif %}
+      <div class="hv-meta">
+        Host: <span id="hvStatus">{{ dash.host_status or "stopped" }}</span>
+        · connections refresh through Fluxito — no secrets in the artifact
+      </div>
+    </div>
+    <div class="hv-actions">
+      <button class="btn sm" type="button" id="hvRefresh" title="Reload the live app">Refresh</button>
+      {% if is_owner %}
+      <button class="btn sm" type="button" id="hvRestart">Restart host</button>
+      <button class="btn sm" type="button" id="hvToggleRedeploy">Update artifact</button>
+      <a class="btn sm" href="/live-dashboards/{{ slug }}/scopes">Scopes</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="hv-binds" id="hvBinds">
+    {% for b in bindings %}
+    <span class="hv-bind is-{{ b.status or 'missing' }}" title="{{ b.label or b.type }}">
+      <span class="hv-dot"></span>
+      {{ b.alias }} · {{ b.type }} · {{ b.status or "missing" }}
+    </span>
+    {% else %}
+    <span class="hv-bind">No connections declared in the manifest</span>
+    {% endfor %}
+  </div>
+
+  {% if dash.host_error %}
+  <div class="hv-error" id="hvError">{{ dash.host_error }}</div>
+  {% else %}
+  <div class="hv-error" id="hvError" hidden></div>
+  {% endif %}
+
+  {% if is_owner %}
+  <div class="hv-redeploy" id="hvRedeploy">
+    <p class="hv-meta" style="margin-bottom:8px">Paste the <code>files</code> object (path → source) from your model. This replaces the hosted app.</p>
+    <textarea id="hvFiles" placeholder='{"manifest.json": "{...}", "app.py": "import streamlit as st\n..."}'></textarea>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button class="btn primary sm" type="button" id="hvDoRedeploy">Redeploy</button>
+      <button class="btn sm" type="button" id="hvCancelRedeploy">Cancel</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="hv-frame-wrap">
+    <iframe class="hv-frame" id="hvFrame" title="{{ dash.title }}" src="{{ host_src }}" allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"></iframe>
+  </div>
+</main>
+<script>
+(function(){
+  var slug = {{ slug|tojson }};
+  var dashId = {{ dash.id|tojson }};
+  var frame = document.getElementById('hvFrame');
+  var statusEl = document.getElementById('hvStatus');
+  var errEl = document.getElementById('hvError');
+
+  function showErr(msg){
+    if (!errEl) return;
+    if (!msg) { errEl.hidden = true; errEl.textContent = ''; return; }
+    errEl.hidden = false; errEl.textContent = msg;
+  }
+
+  document.getElementById('hvRefresh').addEventListener('click', function(){
+    frame.src = frame.src;
+  });
+
+  var restart = document.getElementById('hvRestart');
+  if (restart) {
+    restart.addEventListener('click', function(){
+      restart.disabled = true;
+      fetch('/api/hosted-dashboards/' + encodeURIComponent(slug) + '/restart', { method: 'POST', credentials: 'same-origin' })
+        .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+        .then(function(res){
+          restart.disabled = false;
+          if (statusEl) statusEl.textContent = res.j.host_status || (res.ok ? 'running' : 'error');
+          showErr(res.j.host_error || '');
+          if (res.ok) frame.src = frame.src;
+        })
+        .catch(function(){ restart.disabled = false; showErr('Restart failed'); });
+    });
+  }
+
+  var toggle = document.getElementById('hvToggleRedeploy');
+  var pane = document.getElementById('hvRedeploy');
+  if (toggle && pane) {
+    toggle.addEventListener('click', function(){ pane.classList.toggle('is-open'); });
+    document.getElementById('hvCancelRedeploy').addEventListener('click', function(){ pane.classList.remove('is-open'); });
+    document.getElementById('hvDoRedeploy').addEventListener('click', function(){
+      var raw = document.getElementById('hvFiles').value;
+      var files;
+      try { files = JSON.parse(raw); } catch (e) { showErr('files must be JSON'); return; }
+      fetch('/api/hosted-dashboards/' + encodeURIComponent(dashId) + '/artifact', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: files })
+      })
+        .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+        .then(function(res){
+          if (!res.ok) { showErr(res.j.message || 'Redeploy failed'); return; }
+          pane.classList.remove('is-open');
+          if (statusEl) statusEl.textContent = res.j.host_status || 'running';
+          showErr(res.j.host_error || '');
+          frame.src = '/hosted/' + encodeURIComponent(slug) + '/';
+        })
+        .catch(function(){ showErr('Redeploy failed'); });
+    });
+  }
+})();
+</script>
+{% endblock %}

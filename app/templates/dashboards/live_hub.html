@@ -11,9 +11,9 @@
 {% block main %}
 <main class="app-main">
 
-  {% call page_header('Report', '<em>Dashboards.</em>', 'Start from a template or ask Flux to build one — every live dashboard and its scheduled deliveries, in one place.') %}
+  {% call page_header('Report', '<em>Dashboards.</em>', 'Your AI writes a Streamlit app. Fluxito hosts it live with your connected credentials — Fluxito does not generate cards or charts.') %}
     <div class="lh-head-actions">
-      <a href="/ask?builder=1" class="btn primary sm">⚡ Build with Ask Fluxito</a>
+      <a href="/connect" class="btn sm">Connections</a>
     </div>
   {% endcall %}
 
@@ -43,12 +43,14 @@
   </div>
   {% endif %}
 
-  <form id="lh-composer-form" class="lh-composer" autocomplete="off">
+  <div class="lh-composer" id="lh-authoring-hint">
     <span class="lh-composer-badge" aria-hidden="true">F</span>
-    <input type="text" id="lh-composer-input" class="lh-composer-input"
-           placeholder='Describe a dashboard — &quot;checkout funnel with paid ROAS by channel, weekly to Slack&quot;…'>
-    <button type="submit" class="btn-accent lh-composer-btn">Build it</button>
-  </form>
+    <div class="lh-composer-input" style="line-height:1.45">
+      Ask Claude, Grok, or Gemini (via MCP) to call <code>get_dashboard_authoring_guide</code>,
+      then <code>deploy_dashboard</code> with a Streamlit <code>app.py</code> + <code>manifest.json</code>.
+      Fluxito hosts that app — nothing is generated here.
+    </div>
+  </div>
 
   <div class="lh-grid-head">
     <span class="lh-tpl-strip-title">Your dashboards</span>
@@ -68,7 +70,12 @@
       </div>
 
       <div class="lh-meta">
-        {{ d.card_count or 0 }} card{% if (d.card_count or 0) != 1 %}s{% endif %}
+        {% if d.kind == 'hosted' %}
+          Hosted Streamlit · {{ d.host_status or 'stopped' }}
+          · {{ d.binding_bound or 0 }}/{{ d.binding_total or 0 }} connections bound
+        {% else %}
+          Legacy cards · {{ d.card_count or 0 }} card{% if (d.card_count or 0) != 1 %}s{% endif %}
+        {% endif %}
         {% if d.updated_at %} · Updated {{ d.updated_at | fmt_date }}{% endif %}
       </div>
 
@@ -92,25 +99,17 @@
   </div>
   {% else %}
   <div class="audit-empty">
-    <h3>No live dashboards yet</h3>
+    <h3>No hosted dashboards yet</h3>
     {% if has_connections %}
-    <p>Your platforms are connected — now ask your AI to build one.<br>
-       Try: <em>"Create a dashboard showing GA4 sessions and Google Ads spend for the last 7 days."</em></p>
-    <div style="margin-top:18px;">
-      <a href="/ask?builder=1" class="btn primary">⚡ Build with Ask Fluxito</a>
-    </div>
+    <p>Your platforms are connected. Ask your AI (Claude / Grok / Gemini) over MCP to<br>
+       call <em>get_dashboard_authoring_guide</em> and deploy a Streamlit app.</p>
     <div style="max-width:720px;margin:24px auto 0;text-align:left;">
       {% include "partials/add_to_ai.html" %}
     </div>
-    <div style="margin-top:18px;">
-      <a href="/templates" class="btn">Browse templates</a>
-    </div>
     {% else %}
-    <p>Connect a platform first, then ask your AI to build a dashboard.<br>
-       <em>"Create a dashboard showing GA4 sessions and Google Ads spend for the last 7 days."</em></p>
+    <p>Connect a platform first, then ask your AI to deploy a Streamlit dashboard via MCP.</p>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px;">
       <a href="/connect" class="btn primary">Connect your first platform <span class="arrow">→</span></a>
-      <a href="/ask?builder=1" class="btn">⚡ Build with Ask Fluxito</a>
     </div>
     {% endif %}
   </div>
@@ -307,17 +306,6 @@
   }
   window.addEventListener('hashchange', activate);
   activate();
-})();
-
-(function(){
-  var form = document.getElementById('lh-composer-form');
-  var input = document.getElementById('lh-composer-input');
-  if (!form || !input) return;
-  form.addEventListener('submit', function(e){
-    e.preventDefault();
-    var q = (input.value || '').trim();
-    window.location.href = q ? '/ask?q=' + encodeURIComponent(q) : '/ask?q=' + encodeURIComponent('Help me build a dashboard for my key marketing metrics');
-  });
 })();
 
 // Intercept dashboard open links and show overlay

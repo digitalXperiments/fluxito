@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     GCS_SERVICE_ACCOUNT_JSON: str = ""  # JSON string or leave empty to use ADC
 
     # Local dashboard storage (development / default)
-    # Generated card scripts are saved here: {DASHBOARDS_LOCAL_DIR}/{user_id}/{dashboard_id}/
+    # Hosted Streamlit artifacts live at {DASHBOARDS_LOCAL_DIR}/{user_id}/{dashboard_id}/
     # Defaults to ~/.fluxito/dashboards if not set.
     DASHBOARDS_LOCAL_DIR: str = ""
 

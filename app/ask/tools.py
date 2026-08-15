@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -12,7 +11,6 @@ from typing import Any
 
 from app import app_state
 from app.ask.providers.base import (
-    CardPreviewBlock,
     ChoicesBlock,
     ContentBlock,
     StreamEvent,
@@ -60,15 +58,14 @@ SECTION_TOOLS: dict[str, frozenset[str]] = {
     "implement": frozenset({"tagmanager_write"}),
 }
 
-# Write tools the model may PROPOSE (via propose_card) but never execute
-# directly — execution only happens through POST /api/ask/confirm-action,
-# gated on a human tap. Never added to READ_ONLY_TOOLS / is_allowed_call.
-CONFIRM_GATED_TOOLS: frozenset[str] = frozenset(
-    {"dashboard_card_upsert", "dashboard_card_remove", "dashboard_create"}
-)
+# Write tools the model may never execute from Ask. Hosted dashboard deploy
+# happens over MCP (deploy_dashboard / bind_dashboard), not via confirm-action.
+# Kept as an empty gate so confirm-action cannot be pointed at card writers.
+CONFIRM_GATED_TOOLS: frozenset[str] = frozenset()
 
 # Ask-side virtual tools: NOT MCP tools. The harness intercepts these by name
 # before any MCP dispatch (see dispatch_virtual_tool below).
+# propose_card is retired: intercepted so it hard-errors instead of previewing.
 VIRTUAL_TOOL_NAMES: frozenset[str] = frozenset({"propose_card", "ask_choices"})
 
 
@@ -196,8 +193,8 @@ async def run_mcp_tool(
     source tagging) used both by ``AskToolBridge.dispatch`` (read-only tools,
     gated by ``is_allowed_call``) and by the confirm-action route + the
     ``propose_card`` virtual tool for tools NOT in ``READ_ONLY_TOOLS``
-    (``dashboard_card_preview``, and — only from the confirm endpoint, never
-    from the model directly — ``CONFIRM_GATED_TOOLS``).
+    (hosted ``deploy_dashboard`` / ``bind_dashboard`` are MCP tools, not Ask
+    writers).
 
     RBAC: for any normally-registered tool this dispatches through
     ``tool_manager.call_tool`` — the SAME instrumented entry point
@@ -293,48 +290,21 @@ def virtual_tool_specs() -> list[ToolSpec]:
     produces for real MCP tools — so the provider adapters treat them identically
     to any other callable tool.
     """
-    chart_types = sorted(_chart_types())
     return [
         ToolSpec(
             name="propose_card",
             description=(
-                "Propose ONE dashboard card for the user to review. Internally runs the exact "
-                "query a deployed card would use and validates the chart config, then shows the "
-                "user a live preview in the chat with an 'Add to dashboard' button. This does NOT "
-                "add the card — only the user's button click does that. Never tell the user the "
-                "card was added; say it's ready to review. Use dashboard_slug when you know which "
-                "dashboard this card is for (e.g. from builder context); omit it to let the user "
-                "pick (or create a new dashboard) when they click Add."
+                "RETIRED. Native JS cards are not how Fluxito dashboards are built. "
+                "Do not call this. Author a Streamlit app, then call "
+                "get_dashboard_authoring_guide → validate_dashboard_artifact → "
+                "deploy_dashboard → bind_dashboard over MCP."
             ),
             input_schema={
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "Short, human-readable card title."},
-                    "platform": {
-                        "type": "string",
-                        "description": "Data platform, e.g. 'ga4', 'facebook_ads'.",
-                    },
-                    "tool": {"type": "string", "description": "The MCP tool name this card's query calls."},
-                    "action": {"type": "string", "description": "The action/report to run on that tool."},
-                    "params": {
-                        "type": "object",
-                        "description": "Parameters for the tool+action call (metrics, dimensions, date range, etc.).",
-                    },
-                    "chart_type": {
-                        "type": "string",
-                        "enum": chart_types,
-                        "description": "One of the 19 supported chart types.",
-                    },
-                    "chart_config": {
-                        "type": "object",
-                        "description": "Optional chart display config (series, axis, color_scheme, unit, etc.).",
-                    },
-                    "dashboard_slug": {
-                        "type": "string",
-                        "description": "Optional: the target dashboard's share_slug, if already known.",
-                    },
+                    "title": {"type": "string"},
                 },
-                "required": ["title", "platform", "tool", "action", "params", "chart_type"],
+                "required": [],
             },
         ),
         ToolSpec(
@@ -373,12 +343,6 @@ def virtual_tool_specs() -> list[ToolSpec]:
     ]
 
 
-def _chart_types() -> frozenset[str]:
-    from app.dashboards.chart_spec import CHART_TYPES
-
-    return CHART_TYPES
-
-
 async def dispatch_virtual_tool(
     *, user_id: str, project_id: str, name: str, params: dict[str, Any]
 ) -> VirtualToolResult:
@@ -391,76 +355,17 @@ async def dispatch_virtual_tool(
 
 
 async def _propose_card(*, user_id: str, project_id: str, params: dict[str, Any]) -> VirtualToolResult:
-    title = str(params.get("title") or "").strip() or "Untitled card"
-    platform = params.get("platform")
-    tool_name = params.get("tool")
-    action = params.get("action")
-    card_params = params.get("params") or {}
-    chart_type = params.get("chart_type")
-    chart_config = params.get("chart_config")
-    dashboard_slug = params.get("dashboard_slug")
-
-    missing = [
-        n
-        for n, v in (
-            ("platform", platform),
-            ("tool", tool_name),
-            ("action", action),
-            ("chart_type", chart_type),
-        )
-        if not v
-    ]
-    if missing:
-        msg = f"propose_card is missing required field(s): {', '.join(missing)}."
-        return VirtualToolResult(content=json.dumps({"error": msg}), is_error=True, block=None, event=None)
-
-    raw, is_error, _content = await run_mcp_tool(
-        user_id=user_id,
-        project_id=project_id,
-        name="dashboard_card_preview",
-        params={
-            "platform": platform,
-            "tool": tool_name,
-            "action": action,
-            "params": card_params,
-            "chart_type": chart_type,
-            "chart_config": chart_config,
-            "title": title,
-        },
+    del user_id, project_id, params
+    msg = (
+        "propose_card is retired. Native JS cards are not deployed. "
+        "Call get_dashboard_authoring_guide, write a Streamlit app + manifest, "
+        "validate_dashboard_artifact, deploy_dashboard, then bind_dashboard."
     )
-    tool_error = isinstance(raw, dict) and raw.get("error")
-    if is_error or tool_error:
-        err_msg = raw.get("message") if isinstance(raw, dict) else "Card preview failed."
-        return VirtualToolResult(
-            content=json.dumps({"error": err_msg or "Card preview failed."}),
-            is_error=True,
-            block=None,
-            event=None,
-        )
-
-    card = {
-        "title": title,
-        "platform": platform,
-        "tool": tool_name,
-        "action": action,
-        "params": card_params,
-        "chart_type": chart_type,
-        "chart_config": chart_config,
-    }
-    block = CardPreviewBlock(
-        id=f"cp_{uuid.uuid4().hex[:12]}",
-        card=card,
-        snap=raw.get("snap") or {},
-        warnings=raw.get("warnings") or [],
-        dashboard_slug=dashboard_slug,
-        state="proposed",
-    )
-    event = StreamEvent(type="card_preview", block=blocks_to_json([block])[0])
     return VirtualToolResult(
-        content="Card preview shown to the user with an Add-to-dashboard button. Do not claim it was added.",
-        is_error=False,
-        block=block,
-        event=event,
+        content=json.dumps({"error": msg, "error_type": "hosted_only"}),
+        is_error=True,
+        block=None,
+        event=None,
     )
 
 
@@ -572,9 +477,3 @@ class AskToolBridge:
 def new_tool_use_id() -> str:
     """A stable id for a tool_use block when a provider omits one (rare)."""
     return f"tu_{uuid.uuid4().hex[:12]}"
-
-
-def card_key_from_title(title: str) -> str:
-    """Derive a unique card key from a card title, for the confirm-action add path."""
-    slug = re.sub(r"[^a-z0-9]+", "_", (title or "").lower()).strip("_")[:40] or "card"
-    return f"{slug}_{uuid.uuid4().hex[:6]}"
