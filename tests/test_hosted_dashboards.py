@@ -198,7 +198,9 @@ def test_authoring_guide_is_the_contract():
 # ---------------------------------------------------------------------------
 
 
-def test_child_env_has_no_fluxito_secrets(tmp_path):
+def test_child_env_has_no_fluxito_secrets(tmp_path, monkeypatch):
+    monkeypatch.setenv("SSL_CERT_FILE", "/etc/ssl/certs/ca-certificates.crt")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://should-not-leak")
     env = build_child_env(
         workdir=tmp_path,
         data_url="http://127.0.0.1:8001/api/hosted-dashboards/abc/query",
@@ -213,6 +215,77 @@ def test_child_env_has_no_fluxito_secrets(tmp_path):
     assert "TOKEN_ENCRYPTION_KEY" not in env
     assert env["FLUXITO_RUNTIME_TOKEN"] == "tok"
     assert "ga4" in env["FLUXITO_CONNECTION_ALIASES"]
+    assert env["SSL_CERT_FILE"] == "/etc/ssl/certs/ca-certificates.crt"
+
+
+def test_requirements_pin_streamlit_below_starlette_server():
+    """1.57+ needs Starlette APIs FastAPI 0.115 / Starlette 0.41 do not have."""
+    from pathlib import Path
+
+    req = Path(__file__).resolve().parents[1] / "requirements.txt"
+    text = req.read_text(encoding="utf-8")
+    assert "streamlit>=1.40,<1.57" in text
+
+
+def test_start_dashboard_includes_host_log_on_crash(tmp_path):
+    from app.dashboards.runtime import HOST_LOG_NAME, start_dashboard, stop_dashboard
+
+    workdir = tmp_path / "crash"
+    workdir.mkdir()
+    (workdir / HOST_LOG_NAME).write_text("ImportError: cannot import name 'DEFAULT_EXCLUDED_CONTENT_TYPES'\n")
+
+    class _Dead:
+        pid = 99
+        returncode = 1
+
+        def poll(self):
+            return 1
+
+        def kill(self):
+            pass
+
+    def _factory(**_kwargs):
+        return _Dead()
+
+    set_process_factory(_factory)
+    try:
+        with pytest.raises(RuntimeError, match="DEFAULT_EXCLUDED_CONTENT_TYPES"):
+            start_dashboard(
+                dashboard_id="dead",
+                slug="dead",
+                workdir=workdir,
+                entrypoint="app.py",
+                env={},
+                port=14111,
+            )
+    finally:
+        set_process_factory(None)
+        stop_dashboard("dead")
+
+
+def test_attach_existing_reuses_foreign_worker_process(tmp_path, monkeypatch):
+    from app.dashboards.runtime import (
+        attach_existing,
+        get_handle,
+        stop_all,
+    )
+
+    workdir = tmp_path / "att"
+    workdir.mkdir()
+    (workdir / ".fluxito_host.json").write_text(
+        '{"dashboard_id": "d-att", "slug": "att", "port": 14122, "pid": 424242}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.dashboards.runtime._pid_alive", lambda pid: pid == 424242)
+    monkeypatch.setattr("app.dashboards.runtime._port_open", lambda port: port == 14122)
+    try:
+        handle = attach_existing("d-att", workdir)
+        assert handle is not None
+        assert handle.port == 14122
+        assert handle.pid == 424242
+        assert get_handle("d-att", workdir) is handle
+    finally:
+        stop_all()
 
 
 # ---------------------------------------------------------------------------

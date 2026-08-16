@@ -21,6 +21,7 @@ from app.dashboards.runtime import (
     delete_workdir,
     get_handle,
     start_dashboard,
+    stop_dashboard,
     workdir_for,
     write_artifact,
 )
@@ -49,7 +50,11 @@ def _public_url(slug: str) -> str:
 
 def hosted_payload(dash: Dashboard, *, include_manifest: bool = True) -> dict:
     bindings = list(dash.connection_bindings or [])
-    handle = get_handle(str(dash.id)) if getattr(dash, "kind", None) == "hosted" else None
+    handle = (
+        get_handle(str(dash.id), workdir_for(dash.user_id, dash.id))
+        if getattr(dash, "kind", None) == "hosted"
+        else None
+    )
     host_status = dash.host_status or "stopped"
     if handle is not None:
         host_status = "running"
@@ -104,6 +109,8 @@ async def persist_and_start(
 
     workdir = workdir_for(dash.user_id, dash.id)
     data_url = _data_url(dash.share_slug)
+    if restart:
+        stop_dashboard(str(dash.id), workdir=workdir)
     write_artifact(
         workdir,
         artifact,
@@ -266,11 +273,11 @@ async def ensure_running(dash: Dashboard) -> Dashboard:
     """Lazy-start a hosted dashboard on first view."""
     if getattr(dash, "kind", None) != "hosted":
         return dash
-    if get_handle(str(dash.id)) is not None:
+    workdir = workdir_for(dash.user_id, dash.id)
+    if get_handle(str(dash.id), workdir) is not None:
         if dash.host_status != "running":
             dash.host_status = "running"
         return dash
-    workdir = workdir_for(dash.user_id, dash.id)
     entrypoint = (dash.manifest or {}).get("entrypoint") or "app.py"
     if not (workdir / entrypoint).exists():
         dash.host_status = "error"

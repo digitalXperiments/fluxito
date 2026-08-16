@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.8] — 2026-08-16
+
+Hosted Streamlit dashboards failed to start on production (`host_unavailable`,
+exit code 1). This release makes the host actually boot.
+
+### Fixed
+- **Streamlit no longer conflicts with FastAPI's Starlette.** The 2.0.7 image
+  installed Streamlit 1.60, which imports a Starlette gzip API that does not
+  exist in Starlette 0.41 (FastAPI 0.115.6). `python -m streamlit` exited
+  immediately. Streamlit is now pinned to `>=1.40,<1.57` (Tornado server).
+- **Host crash logs surface in the UI.** The child's stdout/stderr is written
+  to `.fluxito_host.log` and the tail is included in `host_error` instead of
+  only "exited during startup (code 1)".
+- **Gunicorn workers can share one Streamlit process.** Pid/port are persisted
+  in the working directory so another worker proxies to the live child instead
+  of starting a second copy (or thinking the host is down).
+
+### Changed
+- Child address-space limit raised to 2 GiB (512 MiB virtual memory was too
+  small for Streamlit + pandas). File-descriptor and process limits relaxed.
+- Child env now forwards CA bundle / TZ / `PYTHONHOME` (still no secrets).
+- Default compose memory limit for the app service is 2 GiB so a hosted
+  dashboard does not OOM the container.
+
 ## [2.0.7] — 2026-08-16
 
 Dashboards are now model-authored Streamlit apps that Fluxito hosts. The

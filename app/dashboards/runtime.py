@@ -29,8 +29,12 @@ logger = logging.getLogger(__name__)
 HOST_PORT_MIN = 14100
 HOST_PORT_MAX = 14599
 START_TIMEOUT_S = 25
-MEMORY_LIMIT_BYTES = 512 * 1024 * 1024
-NOFILE_LIMIT = 256
+# Virtual address space, not RSS. Streamlit + pandas comfortably exceed 512MiB
+# of VAS; a tight RLIMIT_AS makes `python -m streamlit` die with code 1.
+MEMORY_LIMIT_BYTES = 2 * 1024 * 1024 * 1024
+NOFILE_LIMIT = 1024
+HOST_STATE_NAME = ".fluxito_host.json"
+HOST_LOG_NAME = ".fluxito_host.log"
 
 # Env keys that must never reach an untrusted Streamlit process.
 _BLOCKED_ENV = frozenset(
@@ -191,6 +195,19 @@ def build_child_env(
         "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
         "STREAMLIT_SERVER_BASE_URL_PATH": base_path,
     }
+    # TLS / locale from the parent — never secrets. Streamlit and httpx need
+    # the container CA bundle; a fully empty env breaks HTTPS to Fluxito.
+    for key in (
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+        "TZ",
+        "PYTHONHOME",
+    ):
+        val = os.environ.get(key)
+        if val:
+            env[key] = val
     # Never copy blocked keys even if a caller merged os.environ by mistake.
     for key in _BLOCKED_ENV:
         env.pop(key, None)
@@ -203,7 +220,7 @@ def _preexec() -> None:
 
         resource.setrlimit(resource.RLIMIT_AS, (MEMORY_LIMIT_BYTES, MEMORY_LIMIT_BYTES))
         resource.setrlimit(resource.RLIMIT_NOFILE, (NOFILE_LIMIT, NOFILE_LIMIT))
-        resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
+        resource.setrlimit(resource.RLIMIT_NPROC, (256, 256))
         os.setsid()
     except Exception:
         try:
@@ -266,8 +283,141 @@ def streamlit_command(entrypoint: str, port: int, base_path: str) -> list[str]:
     ]
 
 
-def stop_dashboard(dashboard_id: str) -> None:
+def _host_state_path(workdir: Path) -> Path:
+    return workdir / HOST_STATE_NAME
+
+
+def _write_host_state(workdir: Path, *, dashboard_id: str, slug: str, port: int, pid: int) -> None:
+    import json
+
+    _host_state_path(workdir).write_text(
+        json.dumps(
+            {"dashboard_id": dashboard_id, "slug": slug, "port": port, "pid": pid},
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def read_host_state(workdir: Path) -> dict | None:
+    import json
+
+    path = _host_state_path(workdir)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _port_open(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.3)
+        try:
+            sock.connect(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+class _ExternalProc:
+    """Stand-in for a Streamlit child started by another Gunicorn worker."""
+
+    def __init__(self, pid: int):
+        self.pid = pid
+        self.returncode = None
+
+    def poll(self):
+        if _pid_alive(self.pid):
+            return None
+        self.returncode = 0
+        return 0
+
+    def terminate(self) -> None:
+        try:
+            os.kill(self.pid, 15)
+        except OSError:
+            pass
+
+    def kill(self) -> None:
+        try:
+            os.kill(self.pid, 9)
+        except OSError:
+            pass
+
+    def wait(self, timeout=None):
+        deadline = time.time() + (timeout if timeout is not None else 5)
+        while time.time() < deadline:
+            if not _pid_alive(self.pid):
+                self.returncode = 0
+                return 0
+            time.sleep(0.1)
+        raise subprocess.TimeoutExpired(f"pid {self.pid}", timeout)
+
+
+def attach_existing(dashboard_id: str, workdir: Path) -> HostedProcess | None:
+    """Reuse a live child started by another worker (shared workdir state)."""
+    existing = _processes.get(str(dashboard_id))
+    if existing is not None and existing.is_alive():
+        return existing
+    state = read_host_state(workdir)
+    if not state:
+        return None
+    try:
+        pid = int(state.get("pid") or 0)
+        port = int(state.get("port") or 0)
+    except (TypeError, ValueError):
+        return None
+    slug = str(state.get("slug") or "")
+    if pid <= 0 or port <= 0 or not _pid_alive(pid) or not _port_open(port):
+        return None
+    handle = HostedProcess(
+        dashboard_id=str(dashboard_id),
+        slug=slug,
+        port=port,
+        pid=pid,
+        workdir=workdir,
+        proc=_ExternalProc(pid),
+    )
+    _processes[str(dashboard_id)] = handle
+    return handle
+
+
+def _read_host_log_tail(workdir: Path, limit: int = 1500) -> str:
+    path = workdir / HOST_LOG_NAME
+    if not path.is_file():
+        return ""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    text = data[-limit:].decode("utf-8", errors="replace").strip()
+    return text
+
+
+def stop_dashboard(dashboard_id: str, workdir: Path | None = None) -> None:
     handle = _processes.pop(str(dashboard_id), None)
+    if handle is None and workdir is not None:
+        handle = attach_existing(dashboard_id, workdir)
+        _processes.pop(str(dashboard_id), None)
     if handle is None:
         return
     proc = handle.proc
@@ -281,6 +431,11 @@ def stop_dashboard(dashboard_id: str) -> None:
                 proc.wait(timeout=3)
     except Exception as exc:
         logger.warning("Failed to stop hosted dashboard %s: %s", dashboard_id, exc)
+    if handle.workdir:
+        try:
+            _host_state_path(handle.workdir).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def start_dashboard(
@@ -293,12 +448,18 @@ def start_dashboard(
     port: int | None = None,
 ) -> HostedProcess:
     """Start (or restart) the isolated Streamlit process."""
-    stop_dashboard(dashboard_id)
+    attached = attach_existing(dashboard_id, workdir)
+    if attached is not None:
+        return attached
+    stop_dashboard(dashboard_id, workdir=workdir)
     port = port or pick_free_port()
     base_path = f"/hosted/{slug}"
     env = dict(env)
     env["STREAMLIT_SERVER_PORT"] = str(port)
     env["STREAMLIT_SERVER_BASE_URL_PATH"] = base_path
+
+    log_path = workdir / HOST_LOG_NAME
+    log_file = None
 
     factory = _process_factory
     if factory is not None:
@@ -313,11 +474,12 @@ def start_dashboard(
         )
     else:
         cmd = streamlit_command(entrypoint, port, base_path)
+        log_file = open(log_path, "ab")  # noqa: SIM115 — kept open for the child
         kwargs: dict = {
             "cwd": str(workdir),
             "env": env,
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.PIPE,
+            "stdout": log_file,
+            "stderr": subprocess.STDOUT,
             "stdin": subprocess.DEVNULL,
         }
         if os.name == "posix":
@@ -325,19 +487,35 @@ def start_dashboard(
         try:
             proc = subprocess.Popen(cmd, **kwargs)  # noqa: S603 — argv is our streamlit_command()
         except FileNotFoundError as exc:
+            log_file.close()
             raise RuntimeError(
                 "Streamlit is not installed. Install the `streamlit` package on the Fluxito host."
             ) from exc
 
     try:
         _wait_for_port(port, proc)
-    except Exception:
+    except Exception as exc:
         try:
             if proc.poll() is None:
                 proc.kill()
         except Exception:
             pass
-        raise
+        if log_file is not None:
+            try:
+                log_file.flush()
+            except Exception:
+                pass
+        tail = _read_host_log_tail(workdir)
+        detail = f"{exc}"
+        if tail:
+            detail = f"{detail}: {tail[-400:]}"
+        raise RuntimeError(detail[:500]) from exc
+    finally:
+        if log_file is not None:
+            try:
+                log_file.close()
+            except Exception:
+                pass
 
     handle = HostedProcess(
         dashboard_id=str(dashboard_id),
@@ -348,17 +526,28 @@ def start_dashboard(
         proc=proc,
     )
     _processes[str(dashboard_id)] = handle
+    try:
+        _write_host_state(
+            workdir,
+            dashboard_id=str(dashboard_id),
+            slug=slug,
+            port=port,
+            pid=handle.pid,
+        )
+    except OSError as exc:
+        logger.warning("Could not persist host state for %s: %s", dashboard_id, exc)
     return handle
 
 
-def get_handle(dashboard_id: str) -> HostedProcess | None:
+def get_handle(dashboard_id: str, workdir: Path | None = None) -> HostedProcess | None:
     handle = _processes.get(str(dashboard_id))
-    if handle is None:
-        return None
-    if not handle.is_alive():
+    if handle is not None:
+        if handle.is_alive():
+            return handle
         _processes.pop(str(dashboard_id), None)
-        return None
-    return handle
+    if workdir is not None:
+        return attach_existing(dashboard_id, workdir)
+    return None
 
 
 def delete_workdir(user_id: UUID | str, dashboard_id: UUID | str) -> None:

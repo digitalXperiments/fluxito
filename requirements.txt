@@ -68,7 +68,11 @@ python-multipart==0.0.20
 anthropic>=0.40.0,<1.0
 
 # ── Hosted Streamlit dashboards (model-authored apps Fluxito supervises) ──
-streamlit>=1.32,<2.0
+# Cap below 1.57: 1.57+ switches the default server to Starlette and imports
+# DEFAULT_EXCLUDED_CONTENT_TYPES from starlette.middleware.gzip, which does
+# not exist in Starlette 0.41 (FastAPI 0.115.6). An unpinned 1.60 install
+# makes `python -m streamlit` exit 1 immediately.
+streamlit>=1.40,<1.57
 pandas>=2.0,<3.0
 
 # ── PDF generation (dashboard export + scheduled reports) ──────────────────

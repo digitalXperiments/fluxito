@@ -1675,11 +1675,11 @@ def _forward_request_headers(request: Request) -> dict[str, str]:
 
 
 async def _proxy_to_host(request: Request, dash: Dashboard, rest: str):
-    from app.dashboards.runtime import get_handle
+    from app.dashboards.runtime import get_handle, workdir_for
     from app.dashboards.service import ensure_running
 
     await ensure_running(dash)
-    handle = get_handle(str(dash.id))
+    handle = get_handle(str(dash.id), workdir_for(dash.user_id, dash.id))
     if handle is None:
         return JSONResponse(
             {
@@ -1756,11 +1756,11 @@ async def hosted_app_ws(websocket, slug: str, path: str = ""):
         await websocket.close(code=4403)
         return
 
-    from app.dashboards.runtime import get_handle
+    from app.dashboards.runtime import get_handle, workdir_for
     from app.dashboards.service import ensure_running
 
     await ensure_running(dash)
-    handle = get_handle(str(dash.id))
+    handle = get_handle(str(dash.id), workdir_for(dash.user_id, dash.id))
     if handle is None:
         await websocket.close(code=4503)
         return
@@ -1862,11 +1862,11 @@ async def hosted_dashboard_status(slug: str, request: Request):
     if not await _can_view_dashboard(dash, uid):
         return JSONResponse({"error": "Not found"}, status_code=404)
 
-    from app.dashboards.runtime import get_handle
+    from app.dashboards.runtime import get_handle, workdir_for
     from app.dashboards.service import hosted_payload, rebind_dashboard
 
     await rebind_dashboard(dash)
-    handle = get_handle(str(dash.id))
+    handle = get_handle(str(dash.id), workdir_for(dash.user_id, dash.id))
     payload = hosted_payload(dash)
     payload["host_alive"] = handle is not None
     return JSONResponse(payload)
@@ -1882,10 +1882,10 @@ async def hosted_dashboard_restart(slug: str, request: Request):
     if not dash or str(dash.user_id) != uid:
         return JSONResponse({"error": "Not found"}, status_code=404)
 
-    from app.dashboards.runtime import stop_dashboard
+    from app.dashboards.runtime import stop_dashboard, workdir_for
     from app.dashboards.service import ensure_running
 
-    stop_dashboard(str(dash.id))
+    stop_dashboard(str(dash.id), workdir=workdir_for(dash.user_id, dash.id))
     dash.host_port = None
     await ensure_running(dash)
     async with app_state.db_session_factory() as db:
