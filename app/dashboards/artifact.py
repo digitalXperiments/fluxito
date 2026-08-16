@@ -9,11 +9,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import posixpath
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import PurePosixPath
+from urllib.parse import urlsplit
 
-ARTIFACT_SCHEMA_VERSION = 1
+# v2 makes the uploaded file inventory explicit. A manifest must list exactly
+# the paths present in the outer `files` object, including optional unreferenced
+# lazy chunks that a static parser cannot discover.
+ARTIFACT_SCHEMA_VERSION = 2
 ARTIFACT_KIND = "web"
 
 MAX_FILES = 80
@@ -111,6 +117,136 @@ _REMOTE_SCRIPT_RE = re.compile(
 )
 _QUERY_CALL_RE = re.compile(r"fluxito\s*\.\s*query\s*\(")
 
+# A hosted dashboard is a static build. A missing script or stylesheet should
+# fail validation instead of producing a page that looks present but has blank
+# charts or unstyled sections. These are deliberately limited to browser
+# resource references; normal links to SPA routes are not treated as assets.
+_HTML_RESOURCE_ATTRS: dict[str, tuple[str, ...]] = {
+    "audio": ("src",),
+    "embed": ("src",),
+    "iframe": ("src",),
+    "img": ("src", "srcset"),
+    "input": ("src",),
+    "link": ("href",),
+    "object": ("data",),
+    "script": ("src",),
+    "source": ("src", "srcset"),
+    "track": ("src",),
+    "video": ("poster", "src"),
+}
+_CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)(.*?)\1\s*\)", re.IGNORECASE)
+_JS_IMPORT_RE = re.compile(
+    r"\bimport\s*(?:[^\"'()]*?\s+from\s+)?[\(\s]*['\"]([^'\"]+)['\"]",
+    re.IGNORECASE,
+)
+_JS_NEW_URL_RE = re.compile(
+    r"\bnew\s+URL\(\s*['\"]([^'\"]+)['\"]\s*,\s*import\.meta\.url\s*\)",
+    re.IGNORECASE,
+)
+
+
+class _HtmlAssetParser(HTMLParser):
+    """Collect resource-bearing HTML attributes without interpreting links."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.references: list[tuple[str, str, str]] = []
+
+    def _collect(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        wanted = _HTML_RESOURCE_ATTRS.get(tag.lower(), ())
+        if not wanted:
+            return
+        for name, value in attrs:
+            if name.lower() in wanted and value:
+                self.references.append((tag.lower(), name.lower(), value))
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._collect(tag, attrs)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._collect(tag, attrs)
+
+
+def _is_non_file_reference(value: str) -> bool:
+    """Whether a browser URL is not a file that belongs to the artifact."""
+    value = value.strip()
+    if not value or value.startswith("#") or value == "/fluxito.js":
+        return True
+    parsed = urlsplit(value)
+    return bool(parsed.scheme or value.startswith("//"))
+
+
+def _asset_path(referencing_file: str, value: str) -> str | None:
+    """Resolve a relative/absolute artifact URL to its normalized file path."""
+    value = value.strip()
+    if _is_non_file_reference(value):
+        return None
+    parsed = urlsplit(value)
+    raw_path = parsed.path
+    if not raw_path:
+        return None
+    if raw_path.startswith("/"):
+        return posixpath.normpath(raw_path.lstrip("/"))
+    return posixpath.normpath(posixpath.join(posixpath.dirname(referencing_file), raw_path))
+
+
+def _srcset_values(value: str) -> list[str]:
+    """Return the URL part of each srcset candidate."""
+    values: list[str] = []
+    for candidate in value.split(","):
+        url = candidate.strip().split(None, 1)[0] if candidate.strip() else ""
+        if url:
+            values.append(url)
+    return values
+
+
+def _local_asset_references(path: str, content: str) -> list[str]:
+    """Find local browser assets referenced by HTML/CSS/JS source."""
+    suffix = PurePosixPath(path).suffix.lower()
+    values: list[str] = []
+    if suffix == ".html":
+        parser = _HtmlAssetParser()
+        try:
+            parser.feed(content)
+        except Exception:
+            # HTMLParser is intentionally best-effort. The HTML itself is
+            # still served, but malformed markup must not crash validation.
+            return values
+        for _tag, attr, value in parser.references:
+            values.extend(_srcset_values(value) if attr == "srcset" else [value])
+    elif suffix == ".css":
+        values.extend(match.group(2).strip() for match in _CSS_URL_RE.finditer(content))
+    elif suffix == ".js":
+        values.extend(match.group(1).strip() for match in _JS_IMPORT_RE.finditer(content))
+        values.extend(match.group(1).strip() for match in _JS_NEW_URL_RE.finditer(content))
+    return [value for value in values if value]
+
+
+def _check_local_asset_references(file_map: dict[str, str]) -> list[str]:
+    """Reject builds that reference a local file that was not sent."""
+    errors: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for path, content in file_map.items():
+        suffix = PurePosixPath(path).suffix.lower()
+        for value in _local_asset_references(path, content):
+            # Bare JS imports are package names. A production build should
+            # have bundled them, but they are not artifact-relative paths.
+            if suffix == ".js" and not value.startswith((".", "/")):
+                continue
+            target = _asset_path(path, value)
+            if target is None or target in file_map:
+                continue
+            key = (path, value)
+            if key in seen:
+                continue
+            seen.add(key)
+            errors.append(
+                f"{path}: local asset {value!r} is referenced but missing from files. "
+                "Send the complete production build, including every supported JS/CSS/SVG asset."
+            )
+    return errors
+
+
 _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("pem_private_key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
     ("aws_access_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
@@ -168,6 +304,7 @@ class ArtifactManifest:
     schema_version: int
     title: str
     entrypoint: str
+    artifact_files: list[str]
     connections: list[ConnectionRequirement] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -176,6 +313,7 @@ class ArtifactManifest:
             "kind": ARTIFACT_KIND,
             "title": self.title,
             "entrypoint": self.entrypoint,
+            "artifact_files": list(self.artifact_files),
             "connections": [
                 {"alias": c.alias, "type": c.type, "required": c.required} for c in self.connections
             ],
@@ -274,7 +412,7 @@ def _scan_retired_dashboard_shape(path: str, content: str) -> list[str]:
         if pat.search(content):
             errors.append(
                 f"{path}: looks like a retired dashboard shape ({label}). "
-                "Write a production HTML/JS app that calls fluxito.query. "
+                "Write a production HTML/JS/CSS app that calls fluxito.query. "
                 "Do not emit Streamlit, card JSON, chart_type, or ECharts specs."
             )
     return errors
@@ -309,7 +447,7 @@ def parse_manifest(raw: dict | str | None, *, fallback_title: str | None = None)
     if kind in {"streamlit", "python"}:
         errors.append(
             "manifest.kind 'streamlit' is not supported. Fluxito hosts a production "
-            "HTML/JS build (kind=web). Call get_dashboard_authoring_guide."
+            "HTML/JS/CSS build (kind=web). Call get_dashboard_authoring_guide."
         )
     elif kind not in {ARTIFACT_KIND, "hosted", ""}:
         errors.append(f"manifest.kind must be {ARTIFACT_KIND!r} (got {kind!r})")
@@ -335,6 +473,30 @@ def parse_manifest(raw: dict | str | None, *, fallback_title: str | None = None)
     entrypoint = entrypoint.strip().lstrip("/")
     if not entrypoint.endswith(".html"):
         errors.append(f"manifest.entrypoint must be an .html file (got {entrypoint!r})")
+
+    artifact_files_raw = raw.get("artifact_files")
+    artifact_files: list[str] = []
+    if artifact_files_raw is None:
+        errors.append(
+            "manifest.artifact_files is required — list every uploaded path explicitly, "
+            "including manifest.json and lazy-loaded chunks."
+        )
+    elif not isinstance(artifact_files_raw, list):
+        errors.append("manifest.artifact_files must be a list of uploaded paths")
+    else:
+        seen_files: set[str] = set()
+        for i, item in enumerate(artifact_files_raw):
+            if not isinstance(item, str) or not item.strip():
+                errors.append(f"manifest.artifact_files[{i}] must be a non-empty path string")
+                continue
+            path = item.strip()
+            if path != item:
+                errors.append(f"manifest.artifact_files[{i}] must not have surrounding whitespace")
+            if path in seen_files:
+                errors.append(f"manifest.artifact_files[{i}] duplicates {path!r}")
+                continue
+            seen_files.add(path)
+            artifact_files.append(path)
 
     conns_raw = raw.get("connections")
     if conns_raw is None:
@@ -380,6 +542,7 @@ def parse_manifest(raw: dict | str | None, *, fallback_title: str | None = None)
         schema_version=version,
         title=title,
         entrypoint=entrypoint,
+        artifact_files=sorted(artifact_files),
         connections=connections,
     )
 
@@ -413,6 +576,7 @@ def validate_artifact(
             errors.append(f"{path}: file is {size} bytes (max {MAX_FILE_BYTES})")
         errors.extend(_scan_secrets(path, content))
         errors.extend(_scan_remote_scripts(path, content))
+    errors.extend(_check_local_asset_references(file_map))
     if total > MAX_TOTAL_BYTES:
         errors.append(f"artifact is {total} bytes (max {MAX_TOTAL_BYTES})")
 
@@ -425,6 +589,19 @@ def validate_artifact(
         parsed = None
 
     if parsed is not None:
+        actual_files = set(file_map)
+        declared_files = set(parsed.artifact_files)
+        missing_from_manifest = sorted(actual_files - declared_files)
+        not_uploaded = sorted(declared_files - actual_files)
+        if missing_from_manifest:
+            errors.append(
+                "manifest.artifact_files must explicitly list every uploaded file. "
+                f"Missing from manifest: {', '.join(missing_from_manifest)}"
+            )
+        if not_uploaded:
+            errors.append(
+                "manifest.artifact_files declares files that were not uploaded: " f"{', '.join(not_uploaded)}"
+            )
         if parsed.entrypoint not in file_map:
             errors.append(
                 f"entrypoint {parsed.entrypoint!r} is not in files. "

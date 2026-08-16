@@ -275,7 +275,7 @@ def recipe_for(connection_type: str) -> dict[str, Any] | None:
     out = dict(rec)
     out["type"] = key
     out["tool"] = CONNECTION_TOOL.get(key)
-    out["call"] = f'fx.query("{key}", action="{rec["action"]}", params={rec["example_params"]})'
+    out["call"] = f'fluxito.query("{key}", action="{rec["action"]}", params={rec["example_params"]})'
     return out
 
 
@@ -287,7 +287,7 @@ def recipes_markdown() -> str:
     lines = [
         "## Per-platform query recipes (use these exact actions)",
         "",
-        "Call `fx.query(alias, action, params)` only. The host picks the MCP tool",
+        "Call `fluxito.query(alias, action, params)` only. The host picks the MCP tool",
         "from `type`. Do not invent actions. If a type is missing here, call",
         "`get_dashboard_query_recipe` rather than guessing.",
         "",

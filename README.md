@@ -49,7 +49,7 @@ Plans go stale. Tags break silently. Dashboards lie with confidence. Every hando
 
 > "Audit container GTM-XXXXXXX. Flag broken tags, wrong triggers, and GA4 events with no conversion mapping."
 
-**Report** — Hosted web dashboards: your AI builds a production HTML/JS app, Fluxito validates it, binds project credentials by alias, and serves it on an isolated origin. Live data goes through Fluxito so the app never sees tokens. Plus scheduled Slack/email recaps and root-cause investigation across every connected platform.
+**Report** — Hosted web dashboards: your AI builds a production HTML/JS/CSS app, explicitly inventories every uploaded file, Fluxito validates the complete asset graph, binds project credentials by alias, and serves the exact build on an isolated origin. Fluxito does not compile JSX/TSX or provide chart libraries; live data goes through Fluxito so the app never sees tokens. Plus scheduled Slack/email recaps and root-cause investigation across every connected platform.
 
 > "Build a dashboard of sessions → add-to-cart → checkout → purchase for the last 30 days, bound to our GA4 property."
 >
@@ -68,7 +68,7 @@ Not a wishlist — this is live in the product today:
 - ✅ **Tracking-plan reconciliation** — diff live GA4/GTM events against a saved SDR (new / updated / unchanged / conflicts), on demand from a conversation
 - ✅ **Live tag audits** against 25+ platform rule books — broken tags, wrong triggers, unmapped conversions
 - ✅ **Campaign write operations across all 9 ad platforms** — Google, Meta, TikTok, Snap, LinkedIn, Pinterest, X, Reddit, Apple Search Ads (create campaigns, update budget/status)
-- ✅ **Hosted web dashboards** — the AI sends a production HTML/JS build + manifest; Fluxito validates it, injects stored credentials by alias, and serves the app on an isolated origin that never sees Fernet keys or viewer cookies
+- ✅ **Hosted web dashboards** — the AI sends a complete production HTML/JS/CSS build + manifest with an explicit file inventory; Fluxito validates referenced assets, binds stored credentials by alias, and serves the exact app on an isolated origin that never sees Fernet keys or viewer cookies
 - ✅ **Query recipes per platform** — `get_dashboard_query_recipe` so hosted apps call the right action and params instead of inventing fields
 - ✅ **Ask Fluxito** — a built-in assistant on top of Claude, GPT, Gemini, xAI, Mistral, or a local model
 - ✅ **MCP + Fluxito Skills** — any MCP-compatible AI client gets full tool access, not just the hosted assistant

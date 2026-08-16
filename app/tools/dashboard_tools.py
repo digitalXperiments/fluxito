@@ -1,15 +1,15 @@
 """
-Dashboard MCP Tools — host model-authored Streamlit artifacts.
+Dashboard MCP Tools — host model-authored production web artifacts.
 
 Primary path (the only way to create or update a dashboard):
-  get_dashboard_authoring_guide  — contract for the Streamlit app + manifest
+  get_dashboard_authoring_guide  — contract for the static HTML/JS/CSS build + manifest
   get_dashboard_query_recipe     — exact action/params per connection type
   list_dashboard_connections     — bindable aliases + recipe (no secrets)
   validate_dashboard_artifact    — reject secrets / invalid entrypoints
   deploy_dashboard               — create a kind=hosted dashboard
-  bind_dashboard                 — attach connection aliases; host injects creds
+  bind_dashboard                 — attach connection aliases; the host scopes SDK queries
   update_dashboard               — replace the artifact and restart the host
-  delete_dashboard               — stop the host and drop the row
+  delete_dashboard               — remove the hosted artifact and row
   list_dashboards / get_dashboard / dashboard_read — inspect
 
 Do not emit card JSON. dashboard_deploy_batch, dashboard_create,
@@ -518,21 +518,28 @@ def register_dashboard_tools(mcp_server):
     async def get_dashboard_authoring_guide() -> dict:
         """Return the complete contract for building a Fluxito-hosted web dashboard.
 
-        REQUIRED FIRST CALL before writing any dashboard code. Fluxito hosts a
-        production HTML/JS build on an isolated origin. It does not compile JSX
-        or run Streamlit. Follow the returned `flow` exactly.
+        REQUIRED FIRST CALL before writing any dashboard code. Fluxito hosts the
+        complete production HTML/JS/CSS build on an isolated origin. It does not
+        run npm/Vite, compile JSX/TSX, run React or Streamlit, or provide a chart
+        library. Antigravity and other clients must send the finished `dist/`
+        files, including every referenced stylesheet, chart library, SVG/data-URI
+        visual asset, and lazy-loaded chunk. Follow the returned `flow` exactly.
 
         Returns:
           guide — markdown contract (build, manifest, forbidden items, example)
           recipes — per-type {action, send, injected, example_params, call}
           connection_types / connection_tools — bindable types and host tools
           helper_api — fluxito.query / fluxito.rows
+          hosting — static-build behavior and the one injected `/fluxito.js` SDK
           flow — required tool sequence
 
         After this, call list_dashboard_connections, build locally (Vite
-        base: './'), send index.html + assets + manifest.json, then
-        validate_dashboard_artifact. Do not emit Streamlit, card JSON, or
-        source .jsx. Do not put secrets in the bundle.
+        base: './'), send the latest index.html + complete asset graph +
+        manifest.json, declare the exact uploaded paths in
+        manifest.artifact_files, then validate_dashboard_artifact. After a visual edit,
+        use update_dashboard with the complete new build. Do not emit Streamlit,
+        card JSON, source .jsx/.tsx, or remote CDN dependencies. Do not put
+        secrets in the bundle.
         """
         from app.dashboards.authoring_guide import authoring_guide_payload
 
@@ -581,7 +588,8 @@ def register_dashboard_tools(mcp_server):
 
         Send the production build. Fluxito does not compile JSX.
 
-        Rejects secrets, .env, remote scripts, source .jsx/.tsx/.py, Streamlit,
+        Rejects secrets, .env, remote scripts, missing local assets, incomplete
+        manifest.artifact_files inventories, source .jsx/.tsx/.py, Streamlit,
         card JSON, invalid entrypoints, and path traversal. Call this before
         deploy_dashboard and fix every error.
         """
@@ -616,7 +624,8 @@ def register_dashboard_tools(mcp_server):
 
         Prerequisite: get_dashboard_authoring_guide → list_dashboard_connections
         → validate_dashboard_artifact (ok=true). files must be a production
-        build (manifest.json + index.html + assets). Query live data with
+        build (manifest.json + index.html + assets) whose manifest explicitly
+        lists every uploaded path in artifact_files. Query live data with
         fluxito.query(alias, action, params) using recipes from the guide.
 
         Writes the artifact to an isolated working directory, binds connection
@@ -647,7 +656,7 @@ def register_dashboard_tools(mcp_server):
         description: str | None = None,
         manifest: dict | None = None,
     ) -> dict:
-        """Replace a hosted dashboard's artifact (production HTML/JS build).
+        """Replace a hosted dashboard's artifact (production HTML/JS/CSS build).
 
         dashboard_id is the UUID from deploy_dashboard / list_dashboards.
         Same file + manifest contract as deploy_dashboard.
@@ -912,7 +921,7 @@ def register_dashboard_tools(mcp_server):
 
     @mcp_server.tool("dashboard_list")
     async def dashboard_list() -> dict:
-        """List hosted Streamlit dashboards (and any leftover legacy card rows) for this user."""
+        """List hosted web dashboards (and any leftover legacy card rows) for this user."""
         return await _list_dashboards_impl()
 
     # -------------------------------------------------------------------------

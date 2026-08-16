@@ -781,7 +781,11 @@ Read hosted web dashboards (and leftover legacy card rows).
 
 To BUILD a dashboard: call get_dashboard_authoring_guide first, then
 list_dashboard_connections, follow get_dashboard_query_recipe for each
-type, validate_dashboard_artifact, then deploy_dashboard. Do not emit card JSON.
+type, build the complete production HTML/JS/CSS `dist/` output, validate every
+referenced asset and declare every uploaded path in `manifest.artifact_files`
+with validate_dashboard_artifact, then deploy_dashboard.
+Fluxito does not compile JSX/TSX or provide chart libraries; after visual edits
+use update_dashboard with the complete latest build. Do not emit card JSON.
 
 Actions:
   list — List dashboards in the active project. No params.

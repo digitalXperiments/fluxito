@@ -295,7 +295,9 @@ def virtual_tool_specs() -> list[ToolSpec]:
             name="propose_card",
             description=(
                 "RETIRED. Native card JSON is not how Fluxito dashboards are built. "
-                "Do not call this. Author a production HTML/JS build, then call "
+                "Do not call this. Author a production HTML/JS/CSS build (compile "
+                "JSX/TSX locally, include every chart/font/image/chunk asset, and list "
+                "every uploaded path in manifest.artifact_files), then call "
                 "get_dashboard_authoring_guide → list_dashboard_connections → "
                 "validate_dashboard_artifact → deploy_dashboard → bind_dashboard over MCP."
             ),
@@ -359,8 +361,9 @@ async def _propose_card(*, user_id: str, project_id: str, params: dict[str, Any]
     msg = (
         "propose_card is retired. Native card JSON is not deployed. "
         "Call get_dashboard_authoring_guide, list_dashboard_connections, build a "
-        "production HTML/JS app using get_dashboard_query_recipe, validate_dashboard_artifact, "
-        "deploy_dashboard, then bind_dashboard."
+        "complete production HTML/JS/CSS app using get_dashboard_query_recipe, list every uploaded "
+        "path in manifest.artifact_files, validate_dashboard_artifact, deploy_dashboard, then "
+        "bind_dashboard. Fluxito does not compile JSX/TSX or supply chart libraries."
     )
     return VirtualToolResult(
         content=json.dumps({"error": msg, "error_type": "hosted_only"}),

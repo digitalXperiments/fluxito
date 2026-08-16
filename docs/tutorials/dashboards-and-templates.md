@@ -1,6 +1,8 @@
 # Build Dashboards and Use Templates
 
-Fluxito dashboards are live, card-based reports. The AI can create dashboard cards from connected platforms, and the web UI can render them, refresh them, share them, schedule them, and export them.
+Fluxito dashboards are live, model-authored web applications. The AI produces a
+production HTML/JS/CSS build; Fluxito hosts that build on an isolated origin and
+routes live queries through the project's bound connections.
 
 Templates are pre-built dashboard recipes you can deploy faster than starting from scratch.
 
@@ -33,12 +35,13 @@ Common starting points:
 Go to:
 
 ```text
-Reporting -> Templates
+Reporting → Templates
 ```
 
 Choose a template, review its purpose and required platforms, then deploy it to your project.
 
-After deployment, open the dashboard and confirm the date range, properties, accounts, and scopes.
+After deployment, open the dashboard and confirm the date range, properties,
+accounts, and connection bindings.
 
 ## 3. Ask the AI to build a dashboard
 
@@ -53,35 +56,41 @@ Create an executive KPI dashboard using our approved KPI Library definitions.
 ```
 
 ```text
-Build a checkout funnel dashboard from GA4 and include an audit card for missing purchase events.
+Build a checkout funnel dashboard from GA4 and include a diagnostics section for missing purchase events.
 ```
 
-The AI should create structured cards rather than pasting static screenshots or one-time tables.
+The AI should call `get_dashboard_authoring_guide` first, discover the project's
+connections, build the production output (for example, Vite `dist/` with
+`base: './'`), run `validate_dashboard_artifact`, then deploy or update it.
+Fluxito does not compile JSX/TSX, run React/Streamlit, or provide Chart.js,
+ECharts, fonts, icons, or other UI dependencies. Every file referenced by the
+HTML, CSS, or JavaScript must be included in `files`, and
+`manifest.artifact_files` must explicitly list every uploaded path.
 
-## 4. Review dashboard cards
+## 4. Preserve the authored design
 
-A dashboard can include:
+The hosted page is the same authored frontend, inside a thin Fluxito viewer
+shell. Fluxito does not translate the layout or restyle the page. To preserve
+an Antigravity or local preview exactly:
 
-| Card type | Use |
-|---|---|
-| Scorecard | One number, such as sessions or ROAS |
-| Line | Trend over time |
-| Bar | Channel, campaign, landing page, or event comparison |
-| Pie | Share of total |
-| Table | Detailed rows |
-| Audit | Findings or issues |
-| List | Ranked recommendations or notes |
+- send the latest production build, not source `.jsx`, `.tsx`, `.ts`, or `.py`;
+- include bundled chart libraries, fonts, images, and lazy-loaded chunks;
+- use relative asset paths and bundle dependencies instead of CDN URLs; and
+- call `update_dashboard` after visual changes with the complete new `files` object.
 
-Good cards have clear titles, live query parameters, and a useful chart type.
+The only host-provided runtime file is `/fluxito.js`. Live data is requested with
+`fluxito.query(alias, action, params)` and normalized with `fluxito.rows(result)`.
 
 ## 5. Manage dashboard scopes
 
-Dashboard live queries are scope-gated. If a card cannot refresh, check that the dashboard is allowed to query the platform/property/account it references.
+Dashboard live queries are alias- and connection-gated. If a section cannot
+refresh, check the dashboard's bindings and the query recipe for the connection
+type it uses.
 
 Ask the AI:
 
 ```text
-Check this dashboard's scopes and add any missing scopes needed for its cards.
+Check this dashboard's connection bindings and repair any missing connection.
 ```
 
 ## 6. Share, schedule, or export
@@ -100,7 +109,7 @@ Sharing and scheduling are user-triggered from the web UI.
 Useful prompts:
 
 ```text
-Review this dashboard and remove cards that duplicate the same insight.
+Review this dashboard and remove sections that duplicate the same insight.
 ```
 
 ```text
@@ -119,10 +128,11 @@ Create a public link for stakeholder review after I approve the dashboard.
 
 | Issue | Fix |
 |---|---|
-| Card does not refresh | Check platform connection, required params, and dashboard scopes. |
-| Dashboard has too many cards | Keep the first view focused on decisions, not every metric. |
-| KPI numbers differ from stakeholder expectations | Define the KPI in the KPI Library and rebuild the card from that definition. |
-| Public link shows old data | Refresh the dashboard and confirm card queries are live. |
+| Chart area is blank | Check browser asset failures and rerun `validate_dashboard_artifact`; a referenced chart library or chunk may be missing from `files`. |
+| Page looks different from the local/Antigravity preview | Deploy the latest production `dist/` with `update_dashboard`; Fluxito hosts the sent build and does not compile source. |
+| Section does not refresh | Check the connection binding, exact query recipe, and `result.error`. |
+| KPI numbers differ from stakeholder expectations | Define the KPI in the KPI Library and rebuild the relevant query/section. |
+| Public link shows old data | Open the returned `/live-dashboards/{slug}` URL and confirm the update completed. |
 | AI chooses the wrong property/account | Set the active project and explicitly name the property/account in your prompt. |
 
 ## Recommended dashboard structure
@@ -133,5 +143,5 @@ Start with:
 2. Funnel or channel drivers.
 3. Trend charts.
 4. Top movers or anomalies.
-5. Audit or data-quality notes.
+5. Diagnostics or data-quality notes.
 6. Next actions.

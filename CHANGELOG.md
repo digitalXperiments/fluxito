@@ -5,7 +5,22 @@ All notable changes to Fluxito will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.11] — 2026-08-16
+
+Hosted web dashboards now fail before deployment when the submitted production
+build is incomplete or its file inventory is inaccurate.
+
+### Added
+- **Explicit hosted artifact inventories.** Dashboard schema v2 requires
+  `manifest.artifact_files` to exactly match every uploaded file path.
+- **Missing asset validation.** HTML/CSS/JS references to missing local chart
+  libraries, stylesheets, images, or chunks are rejected before hosting.
+
+### Changed
+- Authoring guides and MCP tool descriptions now explicitly tell Antigravity
+  and other clients that Fluxito hosts compiled HTML/JS/CSS as-is; it does not
+  compile JSX/TSX/React/Streamlit or provide chart libraries.
+- Visual updates must use `update_dashboard` with the complete latest build.
 
 ## [2.0.10] — 2026-08-16
 

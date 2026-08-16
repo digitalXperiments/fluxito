@@ -11,7 +11,7 @@
 {% block main %}
 <main class="app-main">
 
-  {% call page_header('Report', '<em>Dashboards.</em>', 'Your AI writes a Streamlit app. Fluxito hosts it live with your connected credentials — Fluxito does not generate cards or charts.') %}
+  {% call page_header('Report', '<em>Dashboards.</em>', 'Your AI writes a production HTML/JS/CSS app. Fluxito hosts the exact build on an isolated origin and supplies live data through bound connections.') %}
     <div class="lh-head-actions">
       <a href="/connect" class="btn sm">Connections</a>
     </div>
@@ -46,9 +46,12 @@
   <div class="lh-composer" id="lh-authoring-hint">
     <span class="lh-composer-badge" aria-hidden="true">F</span>
     <div class="lh-composer-input" style="line-height:1.45">
-      Ask Claude, Grok, or Gemini (via MCP) to call <code>get_dashboard_authoring_guide</code>,
-      then <code>deploy_dashboard</code> with a Streamlit <code>app.py</code> + <code>manifest.json</code>.
-      Fluxito hosts that app — nothing is generated here.
+      Ask Antigravity, Claude, Grok, Gemini, or another MCP client to call
+      <code>get_dashboard_authoring_guide</code>, build the production
+      <code>dist/</code> output, validate it, then <code>deploy_dashboard</code>
+      with <code>manifest.json</code>, <code>index.html</code>, every runtime asset,
+      and the exact <code>manifest.artifact_files</code> inventory.
+      Fluxito hosts that exact build — it does not compile JSX or provide chart libraries.
     </div>
   </div>
 

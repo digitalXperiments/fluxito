@@ -252,7 +252,7 @@ async def confirm_action(request: Request):
 
     action='discard' still flips a leftover card_preview block's state.
     action='add' is rejected: native JS cards are not deployed. Hosted
-    dashboards are authored as production HTML/JS builds and deployed over MCP
+    dashboards are authored as production HTML/JS/CSS builds and deployed over MCP
     (get_dashboard_authoring_guide → deploy_dashboard → bind_dashboard).
     """
     uid = _require_user_id(request)

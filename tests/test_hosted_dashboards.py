@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 import app.app_state as app_state
 from app.auth.mcp_session_manager import UserContext
-from app.dashboards.artifact import ArtifactError, validate_artifact
+from app.dashboards.artifact import ARTIFACT_SCHEMA_VERSION, ArtifactError, validate_artifact
 from app.dashboards.authoring_guide import AUTHORING_GUIDE, authoring_guide_payload
 from app.dashboards.connections import bind_requirements
 from app.dashboards.data_plane import run_alias_query
@@ -24,10 +24,11 @@ from app.tools.dashboard_tools import register_dashboard_tools
 
 def _manifest(**overrides) -> dict:
     data = {
-        "schema_version": 1,
+        "schema_version": ARTIFACT_SCHEMA_VERSION,
         "kind": "web",
         "title": "GA4 last 30 days",
         "entrypoint": "index.html",
+        "artifact_files": ["app.js", "index.html", "manifest.json"],
         "connections": [{"alias": "ga4", "type": "ga4", "required": True}],
     }
     data.update(overrides)
@@ -56,11 +57,11 @@ def _app_js() -> str:
 
 def _files(**extra) -> dict[str, str]:
     files = {
-        "manifest.json": json.dumps(_manifest()),
         "index.html": _index_html(),
         "app.js": _app_js(),
     }
     files.update(extra)
+    files["manifest.json"] = json.dumps(_manifest(artifact_files=sorted({"manifest.json", *files})))
     return files
 
 
@@ -103,6 +104,67 @@ def test_validate_rejects_missing_entrypoint():
     assert any("entrypoint" in e for e in exc.value.errors)
 
 
+def test_validate_rejects_missing_local_runtime_asset():
+    files = _files(
+        **{
+            "index.html": (
+                "<!doctype html><html><body>"
+                "<script src='./chart.min.js'></script>"
+                "<script src='./app.js'></script>"
+                "</body></html>"
+            )
+        }
+    )
+    with pytest.raises(ArtifactError) as exc:
+        validate_artifact(files)
+    assert any("chart.min.js" in e and "missing" in e.lower() for e in exc.value.errors)
+
+
+def test_validate_rejects_incomplete_explicit_file_inventory():
+    files = _files()
+    manifest = json.loads(files["manifest.json"])
+    manifest["artifact_files"].remove("app.js")
+    manifest["artifact_files"].append("chart.min.js")
+    files["manifest.json"] = json.dumps(manifest)
+
+    with pytest.raises(ArtifactError) as exc:
+        validate_artifact(files)
+    message = " ".join(exc.value.errors).lower()
+    assert "artifact_files" in message
+    assert "app.js" in message
+    assert "chart.min.js" in message
+
+
+def test_validate_rejects_missing_explicit_file_inventory():
+    files = _files()
+    manifest = json.loads(files["manifest.json"])
+    del manifest["artifact_files"]
+    files["manifest.json"] = json.dumps(manifest)
+
+    with pytest.raises(ArtifactError) as exc:
+        validate_artifact(files)
+    assert any("artifact_files is required" in error for error in exc.value.errors)
+
+
+def test_validate_accepts_complete_nested_static_assets():
+    files = _files(
+        **{
+            "index.html": (
+                "<!doctype html><html><head>"
+                "<link rel='stylesheet' href='./assets/app.css'>"
+                "</head><body><script src='./assets/app.js'></script></body></html>"
+            ),
+            "assets/app.css": "@import url('./theme.css');\n.brand { background: url('./brand.svg'); }",
+            "assets/app.js": "import './chunk.js';",
+            "assets/theme.css": ".brand { color: #fff; }",
+            "assets/brand.svg": "<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+            "assets/chunk.js": "console.log('ok');",
+        }
+    )
+    art = validate_artifact(files)
+    assert art.manifest.entrypoint == "index.html"
+
+
 def test_validate_rejects_jsx_source():
     with pytest.raises(ArtifactError) as exc:
         validate_artifact({**_files(), "App.jsx": "export default function App(){return null}"})
@@ -135,7 +197,7 @@ def test_validate_rejects_path_traversal():
 def test_validate_warns_without_fluxito_query():
     art = validate_artifact(
         {
-            "manifest.json": json.dumps(_manifest()),
+            "manifest.json": json.dumps(_manifest(artifact_files=["index.html", "manifest.json"])),
             "index.html": "<!doctype html><html><body>static</body></html>",
         }
     )
@@ -148,8 +210,10 @@ def test_authoring_guide_is_the_contract():
     assert payload["kind"] == "web"
     assert "fluxito.query" in guide
     assert "manifest.json" in guide
+    assert "artifact_files" in guide
     assert "index.html" in guide
     assert "does not compile" in guide.lower() or "production" in guide.lower()
+    assert "every" in guide.lower() and "asset" in guide.lower()
     assert "do not put credentials" in guide.lower() or "never put secrets" in guide.lower()
     assert "validate_dashboard_artifact" in guide
     assert "deploy_dashboard" in guide
@@ -160,8 +224,13 @@ def test_authoring_guide_is_the_contract():
     assert "ga4" in payload["connection_types"]
     assert "recipes" in payload
     assert payload["recipes"]["ga4"]["action"] == "run_report"
+    assert payload["recipes"]["ga4"]["call"].startswith("fluxito.query(")
     assert "metrics" in payload["recipes"]["ga4"]["send"]
     assert "property_id" in payload["recipes"]["ga4"]["injected"]
+    assert payload["hosting"]["compiles_source"] is False
+    assert payload["hosting"]["requires_complete_asset_graph"] is True
+    assert payload["hosting"]["requires_explicit_file_inventory"] is True
+    assert payload["hosting"]["file_inventory_field"] == "artifact_files"
     from app.dashboards.query_recipes import assert_recipes_cover_types
 
     assert assert_recipes_cover_types() == []

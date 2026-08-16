@@ -3,7 +3,7 @@ Dashboard Models
 
 A dashboard is a hosted, model-authored web app (kind="hosted") or a
 legacy card-native row (kind="legacy_cards"). New deploys are hosted:
-Fluxito stores the production HTML/JS build on disk and binds connection
+Fluxito stores the production HTML/JS/CSS build on disk and binds connection
 aliases. The artifact runs on an isolated origin. DashboardCard remains
 for compatibility with existing card-native rows only.
 

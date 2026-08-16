@@ -1,12 +1,13 @@
 """Single source of truth for how a model authors a Fluxito-hosted dashboard.
 
 Returned verbatim by ``get_dashboard_authoring_guide``. Fluxito hosts a
-production HTML/JS build. It does not compile JSX and does not run Streamlit.
+production HTML/JS/CSS build. It does not compile JSX and does not run Streamlit.
 """
 
 from __future__ import annotations
 
 from app.dashboards.artifact import (
+    ALLOWED_SUFFIXES,
     ARTIFACT_KIND,
     ARTIFACT_SCHEMA_VERSION,
     CONNECTION_TOOL,
@@ -20,9 +21,18 @@ from app.dashboards.query_recipes import all_recipes, recipes_markdown
 _GUIDE_HEAD = f"""
 # Fluxito hosted dashboards — authoring contract (schema_version={ARTIFACT_SCHEMA_VERSION})
 
-You are writing a **production frontend** (HTML + JS + CSS). Fluxito **hosts**
-the built files on an isolated origin and injects live data. Fluxito does
-**not** compile JSX, run Streamlit, or generate cards / ECharts specs.
+You are writing a **production frontend** (HTML + JS + CSS). Fluxito **hosts the
+files you send as-is** on an isolated origin. It does **not** run npm, Vite,
+React, JSX, TypeScript, Python, Streamlit, or any chart library, and it does
+not generate cards / ECharts specs. The host injects only the small
+`/fluxito.js` data SDK; your UI, CSS, chart library, fonts, icons, images, and
+all other runtime assets must be in the production build.
+
+This contract is the same for Antigravity, Claude, Gemini, Grok, and every
+other MCP client. A local IDE preview is not the hosted runtime. If you author
+React/JSX/TSX, run the project's production build first and send the complete
+`dist/` output. Fluxito preserves the authored HTML/CSS/JS; it does not restyle
+the dashboard to match Fluxito's chrome.
 
 Those card tools are **unregistered**. They do not exist. Do not call
 dashboard_deploy_batch, dashboard_create, dashboard_card_upsert,
@@ -35,9 +45,14 @@ dashboard_card_preview, or dashboard_card_remove.
 3. For each type you will use, follow the recipe in this guide (or call
    `get_dashboard_query_recipe` with that type). Do not invent actions or params.
 4. Build locally (`vite build` / equivalent with `base: './'`).
-5. Send `manifest.json` + the **production** `index.html` and hashed assets.
+5. Send `manifest.json`, the **latest** production `index.html`, and **every
+   file referenced by it or by its JS/CSS** (including chart libraries, fonts,
+   images, and lazy-loaded chunks). Put the exact uploaded path list in
+   `manifest.artifact_files`.
 6. Call `validate_dashboard_artifact` and fix every error (and read warnings).
-7. Call `deploy_dashboard` (create) or `update_dashboard` (replace).
+7. Call `deploy_dashboard` (create) or `update_dashboard` (replace). After a
+   visual change, use `update_dashboard` with the complete new build; do not
+   assume the host sees local files.
 8. Call `bind_dashboard` so aliases attach to this project's stored credentials.
 9. Give the user the returned `url`. That URL is the live hosted app.
 
@@ -60,9 +75,14 @@ A small static project, sent as `files` (object of path → UTF-8 source):
 - Max {MAX_FILES} files
 - Max {MAX_FILE_BYTES} bytes per file
 - Max {MAX_TOTAL_BYTES} bytes total
-- Allowed suffixes: .html .js .css .svg .json .txt .md .map
+- Allowed suffixes: {" ".join(sorted(ALLOWED_SUFFIXES))}
 - Paths are relative. No `..`, no absolute paths, no `node_modules`, no `.env*`
 - **Rejected:** `.jsx` `.tsx` `.ts` `.py` — Fluxito does not compile. Send `dist/`.
+
+`manifest.artifact_files` is a required inventory. It must exactly equal the
+keys in the outer `files` object, including `manifest.json`, optional images or
+SVGs, and lazy-loaded chunks. Fluxito rejects both an uploaded file omitted from
+the inventory and an inventory entry whose file was not uploaded.
 
 Vite (required):
 
@@ -70,7 +90,12 @@ Vite (required):
 export default {{ base: './' }}
 ```
 
-Absolute `/assets/...` URLs break on the host. Use relative asset URLs.
+Absolute `/assets/...` URLs are rewritten for compatibility, but use relative
+asset URLs (`base: './'`) so the same build works in local preview and under
+`/s/<slug>/`. Do not rely on a CDN: the dash CSP blocks remote scripts and
+external resources. Bundle chart libraries (for example Chart.js or ECharts)
+and include the resulting file in `files`. `files` carries UTF-8 text; use SVG
+or data URIs for raster/font assets rather than sending raw binary files.
 
 ## manifest.json (required)
 
@@ -80,6 +105,7 @@ Absolute `/assets/...` URLs break on the host. Use relative asset URLs.
   "kind": "web",
   "title": "Acquisition overview",
   "entrypoint": "index.html",
+  "artifact_files": ["assets/index-xxxxx.css", "assets/index-xxxxx.js", "index.html", "manifest.json"],
   "connections": [
     {{"alias": "ga4", "type": "ga4", "required": true}},
     {{"alias": "ads", "type": "google_ads", "required": true}}
@@ -93,6 +119,7 @@ Rules:
 - `kind` is `web`.
 - `title` is the human name shown in the reporting UI.
 - `entrypoint` must be an `.html` file present in `files`. Default `index.html`.
+- `artifact_files` is required and must exactly list every key in `files`.
 - `connections` is required. Each entry:
   - `alias` — snake_case identifier you will pass to `fluxito.query`.
   - `type` — a Fluxito connection type (see below). Must match a live project connection.
@@ -109,7 +136,8 @@ The platform injects stored credentials at query time.
 
 ## How live data works (mandatory)
 
-Fluxito injects `/fluxito.js` into `index.html`. Do not rewrite that file.
+Fluxito injects `/fluxito.js` into `index.html`. Do not vendor, replace, or
+rewrite that file. It is the only runtime file supplied by the host.
 Do not put tokens in the bundle.
 
 ```html
@@ -157,6 +185,13 @@ cannot call `/api/*`, and cannot reach any connection except the aliases in
 this manifest. Opening the dash URL outside Fluxito shows no live data.
 
 There is no `fluxito.refresh()`. Re-call `query` when filters change.
+
+The host only adds the SDK tag and serves the files. If a chart, stylesheet,
+font, image, or lazy-loaded chunk is referenced but not included in `files`,
+the build is incomplete and validation rejects it. If a hosted page differs
+from an Antigravity/local preview, verify that the newest `dist/` files were
+sent to `update_dashboard` and that the browser is opening the returned live
+URL—not the local preview or the dash-origin URL directly.
 """
 
 _GUIDE_TAIL = f"""
@@ -168,6 +203,7 @@ Never pass a `tool` field.
 
 - Any `.jsx` / `.tsx` / `.ts` / `.py` — send the production build
 - Remote `<script src="https://...">` — bundle every script
+- Any local JS/CSS/image/font/chunk reference whose file is not in `files`
 - Any `.env`, `credentials.json`, `service-account.json`, `secrets.toml`, `*.pem`, `*.key`
 - `node_modules`, lockfiles, private keys, AWS keys, GitHub/Slack tokens
 - `DATABASE_URL=...`, `TOKEN_ENCRYPTION_KEY=...`, postgres://user:pass@host
@@ -182,6 +218,8 @@ Build something a stakeholder would keep open.
 - Date range + dimension filters in the page (not a leftover sidebar)
 - KPI row above charts
 - Interactive charts from `fluxito.rows(...)` — not screenshots
+- Bundle the chart/runtime dependency and verify every chart canvas/container
+  renders in the production build before deploying
 - Handle `result.error` with a short fix ("Connect GA4 in Fluxito → Connections")
 - Empty state when a query returns 0 rows, and say why
 - Do not block the whole page on one failed query; isolate each section
@@ -243,6 +281,8 @@ the share `slug`. Only a logged-in project member can open the live view.
 | validate: looks like a secret | credentials in source | delete them; use an alias |
 | validate: Fluxito does not compile .jsx | sent source, not dist/ | `vite build` with `base: './'` and send those files |
 | validate: remote script src | CDN script | bundle it |
+| validate: local asset missing | `index.html`/CSS/JS references a file not sent | include the complete production build, including chart libraries and lazy chunks |
+| validate: file inventory mismatch | `manifest.artifact_files` differs from the uploaded `files` keys | regenerate the exact inventory from the final `dist/` output |
 | validate: entrypoint not in files | missing index.html | include the file |
 | deploy: unauthenticated | no MCP session | user must reconnect Fluxito |
 | deploy: too many dashboards | 10 per user cap | delete an old one |
@@ -261,6 +301,7 @@ manifest.json:
   "kind": "web",
   "title": "GA4 last 30 days",
   "entrypoint": "index.html",
+  "artifact_files": ["app.js", "index.html", "manifest.json"],
   "connections": [{{"alias": "ga4", "type": "ga4"}}]
 }}
 ```
@@ -353,6 +394,17 @@ def authoring_guide_payload() -> dict:
             "max_files": MAX_FILES,
             "max_file_bytes": MAX_FILE_BYTES,
             "max_total_bytes": MAX_TOTAL_BYTES,
+            "allowed_suffixes": sorted(ALLOWED_SUFFIXES),
+        },
+        "hosting": {
+            "format": "static production HTML/JS/CSS build",
+            "compiles_source": False,
+            "injected_runtime": ["/fluxito.js"],
+            "preserves_authored_ui": True,
+            "requires_complete_asset_graph": True,
+            "requires_explicit_file_inventory": True,
+            "file_inventory_field": "artifact_files",
+            "source_extensions_rejected": [".jsx", ".tsx", ".ts", ".py"],
         },
         "helper_api": [
             "fluxito.query(alias, action, params)",
