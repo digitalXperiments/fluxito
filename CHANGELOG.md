@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.9] — 2026-08-16
+
+Hosted Streamlit apps booted but stayed on the loading skeleton. The browser
+could not open the Streamlit websocket.
+
+### Fixed
+- **Nginx now upgrades WebSockets for `/hosted/`.** The generic `Connection ""`
+  keepalive setting dropped `Upgrade`, so `wss://…/hosted/<slug>/_stcore/stream`
+  failed. Hosted apps have their own location with `$connection_upgrade`.
+- **In-app websocket proxy talks to current `websockets`.** Connect to Streamlit
+  first, then accept the browser; send `additional_headers` (or `extra_headers`
+  on older libraries). Websocket compression is off on the child.
+
 ## [2.0.8] — 2026-08-16
 
 Hosted Streamlit dashboards failed to start on production (`host_unavailable`,

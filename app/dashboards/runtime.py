@@ -130,7 +130,7 @@ def write_artifact(
     if not config_path.exists():
         config_path.write_text(
             "[server]\nheadless = true\nenableCORS = false\nenableXsrfProtection = false\n"
-            "gatherUsageStats = false\n",
+            "enableWebsocketCompression = false\ngatherUsageStats = false\n",
             encoding="utf-8",
         )
 
@@ -279,6 +279,8 @@ def streamlit_command(entrypoint: str, port: int, base_path: str) -> list[str]:
         "--server.enableCORS",
         "false",
         "--server.enableXsrfProtection",
+        "false",
+        "--server.enableWebsocketCompression",
         "false",
     ]
 

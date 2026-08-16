@@ -2,6 +2,8 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 gunicorn==22.0.0
+# Explicit pin: hosted Streamlit WS proxy (uvicorn[standard] already pulls this).
+websockets>=12,<16
 
 # Model Context Protocol (MCP) — Claude integration
 # 1.20+ required — Streamable HTTP transport + fixed Tool.from_function

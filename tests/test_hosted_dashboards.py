@@ -839,6 +839,28 @@ def test_hosted_view_iframe_is_sandboxed():
     assert "allow-top-navigation" not in html
 
 
+def test_nginx_hosted_location_upgrades_websocket():
+    from pathlib import Path
+
+    conf = (Path(__file__).resolve().parents[1] / "nginx.conf").read_text()
+    assert "location /hosted/" in conf
+    assert "proxy_set_header   Upgrade           $http_upgrade;" in conf
+    assert "map $http_upgrade $connection_upgrade" in conf
+    hosted = conf.split("location /hosted/")[1].split("location ")[0]
+    assert "Connection        $connection_upgrade" in hosted
+    assert 'Connection "";' not in hosted
+
+
+def test_upstream_ws_connect_kwargs_compatible():
+    pytest.importorskip("websockets")
+    from app.api.dashboard_routes import _upstream_ws_connect_kwargs
+
+    kwargs = _upstream_ws_connect_kwargs(14100)
+    assert "additional_headers" in kwargs or "extra_headers" in kwargs
+    headers = kwargs.get("additional_headers") or kwargs.get("extra_headers")
+    assert headers["Host"] == "127.0.0.1:14100"
+
+
 @pytest.mark.asyncio
 async def test_hosted_proxy_strips_viewer_credentials(wired, db_session_factory, tmp_path):
     """Cookie / Authorization / Proxy-Authorization must never reach Streamlit."""

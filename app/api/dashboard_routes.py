@@ -1666,6 +1666,24 @@ _PROXY_CREDENTIAL_HEADERS = frozenset(
 _PROXY_SKIP_HEADERS = _PROXY_HOP_BY_HOP | _PROXY_CREDENTIAL_HEADERS | frozenset({"host", "content-length"})
 
 
+def _upstream_ws_connect_kwargs(port: int) -> dict:
+    """Kwargs for websockets.connect that work on both 10.x and 13+ APIs."""
+    import inspect
+
+    import websockets
+
+    headers = {"Host": f"127.0.0.1:{port}"}
+    kwargs: dict = {"open_timeout": 15, "ping_interval": 20, "ping_timeout": 20}
+    params = inspect.signature(websockets.connect).parameters
+    if "additional_headers" in params:
+        kwargs["additional_headers"] = headers
+    elif "extra_headers" in params:
+        kwargs["extra_headers"] = headers
+    if "compression" in params:
+        kwargs["compression"] = None
+    return kwargs
+
+
 def _forward_request_headers(request: Request) -> dict[str, str]:
     skip = set(_PROXY_SKIP_HEADERS)
     connection = request.headers.get("connection")
@@ -1765,9 +1783,9 @@ async def hosted_app_ws(websocket, slug: str, path: str = ""):
         await websocket.close(code=4503)
         return
 
-    await websocket.accept()
     qs = websocket.url.query
-    target = f"ws://127.0.0.1:{handle.port}/hosted/{slug}/{path}"
+    rest = path.lstrip("/")
+    target = f"ws://127.0.0.1:{handle.port}/hosted/{slug}/{rest}"
     if qs:
         target = f"{target}?{qs}"
 
@@ -1778,7 +1796,8 @@ async def hosted_app_ws(websocket, slug: str, path: str = ""):
         return
 
     try:
-        async with websockets.connect(target, extra_headers=[]) as upstream:
+        async with websockets.connect(target, **_upstream_ws_connect_kwargs(handle.port)) as upstream:
+            await websocket.accept()
 
             async def _client_to_up():
                 try:
@@ -1805,7 +1824,7 @@ async def hosted_app_ws(websocket, slug: str, path: str = ""):
 
             await asyncio.gather(_client_to_up(), _up_to_client())
     except Exception as exc:
-        logger.debug("hosted ws proxy ended slug=%s: %s", slug, exc)
+        logger.warning("hosted ws proxy ended slug=%s: %s", slug, exc)
         try:
             await websocket.close()
         except Exception:
