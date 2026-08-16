@@ -71,9 +71,13 @@ class Settings(BaseSettings):
     GCS_SERVICE_ACCOUNT_JSON: str = ""  # JSON string or leave empty to use ADC
 
     # Local dashboard storage (development / default)
-    # Hosted Streamlit artifacts live at {DASHBOARDS_LOCAL_DIR}/{user_id}/{dashboard_id}/
+    # Hosted web artifacts live at {DASHBOARDS_LOCAL_DIR}/{user_id}/{dashboard_id}/
     # Defaults to ~/.fluxito/dashboards if not set.
     DASHBOARDS_LOCAL_DIR: str = ""
+
+    # Isolated origin that serves untrusted dashboard JS. Must differ from
+    # APP_BASE_URL. Empty → localhost:8002 in dev, or dash.<app-host> in prod.
+    DASHBOARD_ORIGIN: str = ""
 
     # Email (SMTP) — leave empty to log emails to console in dev
     SMTP_HOST: str = ""

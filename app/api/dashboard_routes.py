@@ -1570,15 +1570,20 @@ async def live_dashboard_pdf(slug: str, request: Request):
 
 
 # ---------------------------------------------------------------------------
-# Hosted Streamlit apps — view chrome, reverse proxy, data plane
+# Hosted web dashboards — Fluxito chrome. Artifact JS runs on the dash origin.
 # ---------------------------------------------------------------------------
 
 
 async def _can_view_dashboard(dash: Dashboard, uid: str | None) -> bool:
-    if dash.is_public:
-        return True
-    if not uid or str(dash.user_id) != uid:
+    # Hosted web artifacts are untrusted JS. Never show them to anonymous viewers.
+    if getattr(dash, "kind", None) == "hosted" and not uid:
         return False
+    if dash.is_public and getattr(dash, "kind", None) != "hosted":
+        return True
+    if not uid:
+        return False
+    if str(dash.user_id) == uid:
+        return True
     user_uuid = safe_uuid(uid)
     if user_uuid is None:
         return False
@@ -1596,26 +1601,33 @@ async def _render_hosted_view(request: Request, dash: Dashboard, uid: str | None
     if not await _can_view_dashboard(dash, uid):
         return render(request, "dashboards/not_found.html", {}, status_code=404)
 
-    from app.dashboards.service import ensure_running, rebind_dashboard
+    from app.dashboards.embed_token import mint_embed_token
+    from app.dashboards.origin import app_origin, dash_src, origins_are_isolated
+    from app.dashboards.service import ensure_ready, rebind_dashboard
 
     await rebind_dashboard(dash)
-    await ensure_running(dash)
+    await ensure_ready(dash)
     async with app_state.db_session_factory() as db:
         result = await db.execute(select(Dashboard).where(Dashboard.id == dash.id))
         fresh = result.scalar_one_or_none()
         if fresh is not None:
             fresh.connection_bindings = dash.connection_bindings
             fresh.host_status = dash.host_status
-            fresh.host_port = dash.host_port
             fresh.host_error = dash.host_error
-            fresh.runtime_token = dash.runtime_token
             await db.commit()
             await db.refresh(fresh)
             dash = fresh
 
+    aliases = [str(b.get("alias")) for b in (dash.connection_bindings or []) if b.get("alias")]
+    token, ttl = mint_embed_token(
+        slug=dash.share_slug,
+        dashboard_id=str(dash.id),
+        viewer_id=uid or "",
+        aliases=aliases,
+    )
     user_view = await _load_user_view_from_uid(uid)
     is_owner = uid is not None and str(dash.user_id) == uid
-    bindings = list(dash.connection_bindings or [])
+    isolated = origins_are_isolated()
     return render(
         request,
         "dashboards/hosted_view.html",
@@ -1626,249 +1638,59 @@ async def _render_hosted_view(request: Request, dash: Dashboard, uid: str | None
                 "description": dash.description or "",
                 "kind": "hosted",
                 "host_status": dash.host_status,
-                "host_error": dash.host_error,
+                "host_error": dash.host_error
+                if isolated
+                else "DASHBOARD_ORIGIN must differ from APP_BASE_URL so untrusted JS cannot use your session.",
             },
             "slug": dash.share_slug,
             "is_owner": is_owner,
             "user": user_view,
-            "bindings": bindings,
-            "host_src": f"/hosted/{dash.share_slug}/",
+            "bindings": list(dash.connection_bindings or []),
+            "host_src": dash_src(dash.share_slug) if isolated else "",
+            "dash_origin": dash_src(dash.share_slug).rsplit("/s/", 1)[0] if isolated else "",
+            "parent_origin": app_origin(),
+            "embed_token": token if isolated else "",
+            "embed_ttl": ttl,
         },
     )
 
 
-# Hop-by-hop plus viewer credentials. The Streamlit child is untrusted and
-# must never receive Fluxito session cookies, bearer tokens, or CSRF headers.
-_PROXY_HOP_BY_HOP = frozenset(
-    {
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailers",
-        "transfer-encoding",
-        "upgrade",
-        "proxy-connection",
-    }
-)
-_PROXY_CREDENTIAL_HEADERS = frozenset(
-    {
-        "cookie",
-        "cookie2",
-        "authorization",
-        "set-cookie",
-        "set-cookie2",
-        "x-csrf-token",
-        "x-xsrf-token",
-    }
-)
-_PROXY_SKIP_HEADERS = _PROXY_HOP_BY_HOP | _PROXY_CREDENTIAL_HEADERS | frozenset({"host", "content-length"})
-
-
-def _upstream_ws_connect_kwargs(port: int) -> dict:
-    """Kwargs for websockets.connect that work on both 10.x and 13+ APIs."""
-    import inspect
-
-    import websockets
-
-    headers = {"Host": f"127.0.0.1:{port}"}
-    kwargs: dict = {"open_timeout": 15, "ping_interval": 20, "ping_timeout": 20}
-    params = inspect.signature(websockets.connect).parameters
-    if "additional_headers" in params:
-        kwargs["additional_headers"] = headers
-    elif "extra_headers" in params:
-        kwargs["extra_headers"] = headers
-    if "compression" in params:
-        kwargs["compression"] = None
-    return kwargs
-
-
-def _forward_request_headers(request: Request) -> dict[str, str]:
-    skip = set(_PROXY_SKIP_HEADERS)
-    connection = request.headers.get("connection")
-    if connection:
-        skip.update(token.strip().lower() for token in connection.split(",") if token.strip())
-    return {k: v for k, v in request.headers.items() if k.lower() not in skip}
-
-
-async def _proxy_to_host(request: Request, dash: Dashboard, rest: str):
-    from app.dashboards.runtime import get_handle, workdir_for
-    from app.dashboards.service import ensure_running
-
-    await ensure_running(dash)
-    handle = get_handle(str(dash.id), workdir_for(dash.user_id, dash.id))
-    if handle is None:
-        return JSONResponse(
-            {
-                "error": "host_unavailable",
-                "message": dash.host_error or "Hosted app is not running. Redeploy from MCP.",
-            },
-            status_code=503,
-        )
-    suffix = rest.lstrip("/")
-    path = f"/hosted/{dash.share_slug}/" + suffix
-    if suffix and not rest.endswith("/") and "." not in suffix.split("/")[-1]:
-        # Streamlit assets keep their path; page routes keep the trailing structure.
-        pass
-    query = str(request.url.query)
-    url = f"http://127.0.0.1:{handle.port}{path}"
-    if query:
-        url = f"{url}?{query}"
-
-    import httpx
-
-    try:
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
-            upstream = await client.request(
-                request.method,
-                url,
-                headers=_forward_request_headers(request),
-                content=await request.body(),
-            )
-    except httpx.RequestError as exc:
-        logger.warning("hosted proxy failed slug=%s: %s", dash.share_slug, exc)
-        return JSONResponse({"error": "host_unreachable", "message": str(exc)[:300]}, status_code=502)
-
-    excluded = {"transfer-encoding", "content-encoding", "content-length", "connection"}
-    headers = {k: v for k, v in upstream.headers.items() if k.lower() not in excluded}
-    return Response(
-        content=upstream.content,
-        status_code=upstream.status_code,
-        headers=headers,
-        media_type=upstream.headers.get("content-type"),
-    )
-
-
-@router.api_route(
-    "/hosted/{slug}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-)
-@router.api_route(
-    "/hosted/{slug}/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-)
-async def hosted_app_proxy(slug: str, request: Request, path: str = ""):
-    """Auth-checked reverse proxy to the isolated Streamlit process."""
+@router.get("/api/hosted-dashboards/{slug}/embed-session")
+async def hosted_embed_session(slug: str, request: Request):
+    """Mint a short-lived embed token for the dash-origin iframe (logged-in viewers)."""
     uid = get_uid_from_request(request)
     dash = await _load_dash_by_slug(slug)
     if not dash or getattr(dash, "kind", None) != "hosted":
         return JSONResponse({"error": "Not found"}, status_code=404)
     if not await _can_view_dashboard(dash, uid):
         return JSONResponse({"error": "Not found"}, status_code=404)
-    return await _proxy_to_host(request, dash, path)
 
+    from app.dashboards.embed_token import mint_embed_token
+    from app.dashboards.origin import dash_src, origins_are_isolated
 
-@router.websocket("/hosted/{slug}/{path:path}")
-@router.websocket("/hosted/{slug}")
-async def hosted_app_ws(websocket, slug: str, path: str = ""):
-    """WebSocket proxy for Streamlit (_stcore/stream)."""
-    import asyncio
-
-    uid = get_uid_from_request(websocket)
-    dash = await _load_dash_by_slug(slug)
-    if not dash or getattr(dash, "kind", None) != "hosted":
-        await websocket.close(code=4404)
-        return
-    if not await _can_view_dashboard(dash, uid):
-        await websocket.close(code=4403)
-        return
-
-    from app.dashboards.runtime import get_handle, workdir_for
-    from app.dashboards.service import ensure_running
-
-    await ensure_running(dash)
-    handle = get_handle(str(dash.id), workdir_for(dash.user_id, dash.id))
-    if handle is None:
-        await websocket.close(code=4503)
-        return
-
-    qs = websocket.url.query
-    rest = path.lstrip("/")
-    target = f"ws://127.0.0.1:{handle.port}/hosted/{slug}/{rest}"
-    if qs:
-        target = f"{target}?{qs}"
-
-    try:
-        import websockets
-    except ImportError:
-        await websocket.close(code=4501)
-        return
-
-    try:
-        async with websockets.connect(target, **_upstream_ws_connect_kwargs(handle.port)) as upstream:
-            await websocket.accept()
-
-            async def _client_to_up():
-                try:
-                    while True:
-                        message = await websocket.receive()
-                        if message.get("type") == "websocket.disconnect":
-                            break
-                        if "text" in message and message["text"] is not None:
-                            await upstream.send(message["text"])
-                        elif "bytes" in message and message["bytes"] is not None:
-                            await upstream.send(message["bytes"])
-                except Exception:
-                    return
-
-            async def _up_to_client():
-                try:
-                    async for message in upstream:
-                        if isinstance(message, bytes):
-                            await websocket.send_bytes(message)
-                        else:
-                            await websocket.send_text(message)
-                except Exception:
-                    return
-
-            await asyncio.gather(_client_to_up(), _up_to_client())
-    except Exception as exc:
-        logger.warning("hosted ws proxy ended slug=%s: %s", slug, exc)
-        try:
-            await websocket.close()
-        except Exception:
-            pass
-
-
-@router.post("/api/hosted-dashboards/{slug}/query")
-async def hosted_dashboard_query(slug: str, request: Request):
-    """Data plane: Streamlit helper posts here with the runtime token."""
-    dash = await _load_dash_by_slug(slug)
-    if not dash or getattr(dash, "kind", None) != "hosted":
-        return JSONResponse({"error": True, "message": "Not found"}, status_code=404)
-
-    auth = request.headers.get("authorization") or ""
-    token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-    if not token or not dash.runtime_token or token != dash.runtime_token:
+    if not origins_are_isolated():
         return JSONResponse(
-            {"error": True, "error_type": "unauthorized", "message": "Bad runtime token"}, status_code=403
+            {
+                "error": True,
+                "error_type": "origin_not_isolated",
+                "message": "DASHBOARD_ORIGIN must differ from APP_BASE_URL.",
+            },
+            status_code=503,
         )
-
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({"error": True, "message": "JSON body required"}, status_code=400)
-    if not isinstance(body, dict):
-        return JSONResponse({"error": True, "message": "JSON object required"}, status_code=400)
-
-    alias = str(body.get("alias") or "").strip()
-    action = str(body.get("action") or "").strip()
-    if not alias or not action:
-        return JSONResponse(
-            {"error": True, "error_type": "invalid_request", "message": "alias and action are required"},
-            status_code=400,
-        )
-    params = body.get("params") if isinstance(body.get("params"), dict) else {}
-    if isinstance(params, dict):
-        params = {k: v for k, v in params.items() if k != "tool"}
-
-    from app.dashboards.data_plane import run_alias_query
-
-    # Caller-chosen tools are ignored. The bound alias alone selects the tool.
-    result = await run_alias_query(dash, alias=alias, action=action, params=params)
-    status = 200 if not result.get("error") else 400
-    return JSONResponse(result, status_code=status)
+    aliases = [str(b.get("alias")) for b in (dash.connection_bindings or []) if b.get("alias")]
+    token, ttl = mint_embed_token(
+        slug=dash.share_slug,
+        dashboard_id=str(dash.id),
+        viewer_id=uid or "",
+        aliases=aliases,
+    )
+    return JSONResponse(
+        {
+            "token": token,
+            "expires_in": ttl,
+            "src": dash_src(dash.share_slug),
+        }
+    )
 
 
 @router.get("/api/hosted-dashboards/{slug}/status")
@@ -1881,19 +1703,17 @@ async def hosted_dashboard_status(slug: str, request: Request):
     if not await _can_view_dashboard(dash, uid):
         return JSONResponse({"error": "Not found"}, status_code=404)
 
-    from app.dashboards.runtime import get_handle, workdir_for
     from app.dashboards.service import hosted_payload, rebind_dashboard
 
     await rebind_dashboard(dash)
-    handle = get_handle(str(dash.id), workdir_for(dash.user_id, dash.id))
     payload = hosted_payload(dash)
-    payload["host_alive"] = handle is not None
+    payload["host_alive"] = payload.get("host_status") == "ready"
     return JSONResponse(payload)
 
 
 @router.post("/api/hosted-dashboards/{slug}/restart")
 async def hosted_dashboard_restart(slug: str, request: Request):
-    """Owner-only: restart the Streamlit process from the stored artifact."""
+    """Owner-only: refresh injected host files for the stored artifact."""
     uid = get_uid_from_request(request)
     if not uid:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
@@ -1901,18 +1721,15 @@ async def hosted_dashboard_restart(slug: str, request: Request):
     if not dash or str(dash.user_id) != uid:
         return JSONResponse({"error": "Not found"}, status_code=404)
 
-    from app.dashboards.runtime import stop_dashboard, workdir_for
-    from app.dashboards.service import ensure_running
+    from app.dashboards.service import ensure_ready
 
-    stop_dashboard(str(dash.id), workdir=workdir_for(dash.user_id, dash.id))
-    dash.host_port = None
-    await ensure_running(dash)
+    await ensure_ready(dash)
     async with app_state.db_session_factory() as db:
         db.add(dash)
         await db.commit()
     return JSONResponse(
         {
-            "success": dash.host_status == "running",
+            "success": dash.host_status == "ready",
             "host_status": dash.host_status,
             "host_error": dash.host_error,
         }

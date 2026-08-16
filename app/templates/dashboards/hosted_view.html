@@ -4,18 +4,25 @@
 
 {% block head_extra %}
 <style>
+  .hv-bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    min-height: 48px; margin-bottom: 8px;
+  }
   .hv-back {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 12.5px; color: var(--muted);
     text-decoration: none;
     font-family: var(--mono); letter-spacing: 0.02em;
-    margin-bottom: 14px;
   }
   .hv-back:hover { color: var(--ink); }
-  .hv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; }
-  .hv-meta { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 6px; }
-  .hv-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .hv-binds { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .hv-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .hv-note { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .hv-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .hv-binds { margin: 0 0 8px; }
+  .hv-binds summary {
+    cursor: pointer; font-size: 12px; color: var(--muted); font-family: var(--mono);
+  }
+  .hv-bind-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .hv-bind {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 5px 10px; border: 1px solid var(--line); border-radius: var(--r-m);
@@ -27,9 +34,10 @@
   .hv-bind.is-error .hv-dot { background: var(--red); }
   .hv-frame-wrap {
     border: 1px solid var(--line); border-radius: var(--r-l);
-    overflow: hidden; background: var(--card); min-height: 70vh;
+    overflow: hidden; background: #0f1419;
+    height: calc(100vh - 140px); min-height: 480px;
   }
-  .hv-frame { width: 100%; height: calc(100vh - 260px); min-height: 640px; border: 0; display: block; background: var(--bg); }
+  .hv-frame { width: 100%; height: 100%; border: 0; display: block; background: #0f1419; }
   .hv-error {
     padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--r-l);
     background: var(--bg-2); margin-bottom: 14px; font-size: 13.5px;
@@ -42,45 +50,41 @@
     background: var(--bg); color: var(--ink);
   }
   @media (max-width: 700px) {
-    .hv-frame { min-height: 480px; height: 70vh; }
+    .hv-frame-wrap { min-height: 420px; height: 70vh; }
   }
 </style>
 {% endblock %}
 
 {% block main %}
 <main class="app-main">
-  <a href="/live-dashboards" class="hv-back">← All dashboards</a>
-
-  <div class="hv-head">
-    <div>
-      <span class="label">Hosted Streamlit app</span>
-      <h1>{{ dash.title }}</h1>
-      {% if dash.description %}<p>{{ dash.description }}</p>{% endif %}
-      <div class="hv-meta">
-        Host: <span id="hvStatus">{{ dash.host_status or "stopped" }}</span>
-        · connections refresh through Fluxito — no secrets in the artifact
-      </div>
-    </div>
+  <div class="hv-bar">
+    <a href="/live-dashboards" class="hv-back">← Dashboards</a>
+    <span class="hv-title">{{ dash.title }}</span>
+    <span class="hv-note" id="hvStatus">{{ dash.host_status or "ready" }}</span>
     <div class="hv-actions">
-      <button class="btn sm" type="button" id="hvRefresh" title="Reload the live app">Refresh</button>
+      <button class="btn sm" type="button" id="hvRefresh">Refresh</button>
       {% if is_owner %}
-      <button class="btn sm" type="button" id="hvRestart">Restart host</button>
+      <button class="btn sm" type="button" id="hvRestart">Reload files</button>
       <button class="btn sm" type="button" id="hvToggleRedeploy">Update artifact</button>
       <a class="btn sm" href="/live-dashboards/{{ slug }}/scopes">Scopes</a>
       {% endif %}
     </div>
   </div>
+  <p class="hv-note">Untrusted dashboard · live data only via bound connections</p>
 
-  <div class="hv-binds" id="hvBinds">
-    {% for b in bindings %}
-    <span class="hv-bind is-{{ b.status or 'missing' }}" title="{{ b.label or b.type }}">
-      <span class="hv-dot"></span>
-      {{ b.alias }} · {{ b.type }} · {{ b.status or "missing" }}
-    </span>
-    {% else %}
-    <span class="hv-bind">No connections declared in the manifest</span>
-    {% endfor %}
-  </div>
+  <details class="hv-binds" id="hvBinds">
+    <summary>Connections</summary>
+    <div class="hv-bind-list">
+      {% for b in bindings %}
+      <span class="hv-bind is-{{ b.status or 'missing' }}" title="{{ b.label or b.type }}">
+        <span class="hv-dot"></span>
+        {{ b.alias }} · {{ b.type }} · {{ b.status or "missing" }}
+      </span>
+      {% else %}
+      <span class="hv-bind">No connections declared in the manifest</span>
+      {% endfor %}
+    </div>
+  </details>
 
   {% if dash.host_error %}
   <div class="hv-error" id="hvError">{{ dash.host_error }}</div>
@@ -90,8 +94,8 @@
 
   {% if is_owner %}
   <div class="hv-redeploy" id="hvRedeploy">
-    <p class="hv-meta" style="margin-bottom:8px">Paste the <code>files</code> object (path → source) from your model. This replaces the hosted app.</p>
-    <textarea id="hvFiles" placeholder='{"manifest.json": "{...}", "app.py": "import streamlit as st\n..."}'></textarea>
+    <p class="hv-note" style="margin-bottom:8px">Paste the <code>files</code> object (path → source) from your model. Production build only.</p>
+    <textarea id="hvFiles" placeholder='{"manifest.json": "{...}", "index.html": "<!doctype html>..."}'></textarea>
     <div style="margin-top:8px;display:flex;gap:8px">
       <button class="btn primary sm" type="button" id="hvDoRedeploy">Redeploy</button>
       <button class="btn sm" type="button" id="hvCancelRedeploy">Cancel</button>
@@ -99,9 +103,13 @@
   </div>
   {% endif %}
 
+  {% if host_src %}
   <div class="hv-frame-wrap">
-    <iframe class="hv-frame" id="hvFrame" title="{{ dash.title }}" src="{{ host_src }}" allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"></iframe>
+    {# allow-same-origin is required so fluxito.query is same-origin on the dash host.
+       Isolation is the separate origin (not this flag). Never point src at Fluxito. #}
+    <iframe class="hv-frame" id="hvFrame" title="{{ dash.title }}" src="{{ host_src }}" allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"></iframe>
   </div>
+  {% endif %}
 </main>
 <script>
 (function(){
@@ -110,6 +118,8 @@
   var frame = document.getElementById('hvFrame');
   var statusEl = document.getElementById('hvStatus');
   var errEl = document.getElementById('hvError');
+  var token = {{ embed_token|tojson }};
+  var dashOrigin = {{ dash_origin|tojson }};
 
   function showErr(msg){
     if (!errEl) return;
@@ -117,9 +127,27 @@
     errEl.hidden = false; errEl.textContent = msg;
   }
 
-  document.getElementById('hvRefresh').addEventListener('click', function(){
-    frame.src = frame.src;
+  function sendToken(){
+    if (!frame || !frame.contentWindow || !token || !dashOrigin) return;
+    try {
+      frame.contentWindow.postMessage({ type: 'fluxito-embed', token: token }, dashOrigin);
+    } catch (e) {}
+  }
+
+  window.addEventListener('message', function(ev){
+    if (!dashOrigin || ev.origin !== dashOrigin) return;
+    if (ev.data && ev.data.type === 'fluxito-ready') sendToken();
   });
+  if (frame) {
+    frame.addEventListener('load', sendToken);
+  }
+
+  var refresh = document.getElementById('hvRefresh');
+  if (refresh && frame) {
+    refresh.addEventListener('click', function(){
+      frame.src = frame.src;
+    });
+  }
 
   var restart = document.getElementById('hvRestart');
   if (restart) {
@@ -129,11 +157,11 @@
         .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
         .then(function(res){
           restart.disabled = false;
-          if (statusEl) statusEl.textContent = res.j.host_status || (res.ok ? 'running' : 'error');
+          if (statusEl) statusEl.textContent = res.j.host_status || (res.ok ? 'ready' : 'error');
           showErr(res.j.host_error || '');
-          if (res.ok) frame.src = frame.src;
+          if (res.ok && frame) frame.src = frame.src;
         })
-        .catch(function(){ restart.disabled = false; showErr('Restart failed'); });
+        .catch(function(){ restart.disabled = false; showErr('Reload failed'); });
     });
   }
 
@@ -156,9 +184,9 @@
         .then(function(res){
           if (!res.ok) { showErr(res.j.message || 'Redeploy failed'); return; }
           pane.classList.remove('is-open');
-          if (statusEl) statusEl.textContent = res.j.host_status || 'running';
+          if (statusEl) statusEl.textContent = res.j.host_status || 'ready';
           showErr(res.j.host_error || '');
-          frame.src = '/hosted/' + encodeURIComponent(slug) + '/';
+          if (frame) frame.src = frame.src;
         })
         .catch(function(){ showErr('Redeploy failed'); });
     });

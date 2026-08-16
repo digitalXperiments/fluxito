@@ -9,6 +9,7 @@ services:
     image: ghcr.io/digitalxperiments/fluxito-nginx:${FLUXITO_VERSION:-latest}
     ports:
       - "8000:80"
+      - "8002:8002"
     depends_on:
       app:
         condition: service_healthy
@@ -49,8 +50,6 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          # Streamlit children live in this container (2GiB VAS each). 1G
-          # OOM-kills the host the moment a dashboard starts.
           memory: 2G
         reservations:
           memory: 512M

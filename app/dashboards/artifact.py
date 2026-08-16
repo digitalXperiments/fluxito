@@ -1,8 +1,8 @@
-"""Hosted Streamlit dashboard artifact contract and validation.
+"""Hosted web dashboard artifact contract and validation.
 
-Fluxito hosts a model-authored Python/Streamlit app. It does not generate
-cards, charts, or JS dashboards. Validation is the gate before any file is
-written to disk or any process is started.
+Fluxito hosts a model-authored production frontend (HTML/JS/CSS). It does
+not compile JSX and does not run Streamlit. Validation is the gate before
+any file is written to disk.
 """
 
 from __future__ import annotations
@@ -14,14 +14,15 @@ from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
 ARTIFACT_SCHEMA_VERSION = 1
-ARTIFACT_KIND = "streamlit"
+ARTIFACT_KIND = "web"
 
-MAX_FILES = 40
-MAX_FILE_BYTES = 200_000
-MAX_TOTAL_BYTES = 1_500_000
-MAX_PATH_DEPTH = 6
+MAX_FILES = 80
+MAX_FILE_BYTES = 2_000_000
+MAX_TOTAL_BYTES = 8_000_000
+MAX_PATH_DEPTH = 8
 
-ALLOWED_SUFFIXES = frozenset({".py", ".txt", ".md", ".toml", ".css", ".json"})
+ALLOWED_SUFFIXES = frozenset({".html", ".js", ".css", ".svg", ".json", ".txt", ".md", ".map"})
+SOURCE_ONLY_SUFFIXES = frozenset({".jsx", ".tsx", ".ts", ".py", ".vue", ".svelte"})
 FORBIDDEN_FILENAMES = frozenset(
     {
         ".env",
@@ -33,9 +34,13 @@ FORBIDDEN_FILENAMES = frozenset(
         "secrets.toml",
         "id_rsa",
         "id_ed25519",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
     }
 )
 FORBIDDEN_SUFFIXES = frozenset({".pem", ".key", ".p12", ".pfx", ".crt", ".der"})
+FORBIDDEN_DIR_NAMES = frozenset({"node_modules", ".git", ".streamlit"})
 
 CONNECTION_TYPES = frozenset(
     {
@@ -69,7 +74,6 @@ CONNECTION_TYPES = frozenset(
     }
 )
 
-# Maps a connection type to the MCP tool the data plane will dispatch.
 CONNECTION_TOOL: dict[str, str] = {
     "ga4": "analytics_read",
     "amplitude": "analytics_read",
@@ -101,6 +105,11 @@ CONNECTION_TOOL: dict[str, str] = {
 }
 
 _ALIAS_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+_REMOTE_SCRIPT_RE = re.compile(
+    r"""<script[^>]+src\s*=\s*['"](?:https?:)?//""",
+    re.IGNORECASE,
+)
+_QUERY_CALL_RE = re.compile(r"fluxito\s*\.\s*query\s*\(")
 
 _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("pem_private_key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
@@ -124,13 +133,13 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("database_url_secret", re.compile(r"\bDATABASE_URL\b\s*[:=]\s*['\"][^'\"]+['\"]")),
 ]
 
-_SHELL_OUT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("subprocess", re.compile(r"\b(?:import\s+subprocess|from\s+subprocess\s+import)\b")),
-    ("os_system", re.compile(r"\bos\.system\s*\(")),
-    ("os_popen", re.compile(r"\bos\.popen\s*\(")),
-    ("os_exec", re.compile(r"\bos\.execv[pe]?\s*\(")),
-    ("pty_spawn", re.compile(r"\bpty\.spawn\s*\(")),
-    ("commands_getoutput", re.compile(r"\bcommands\.(?:getoutput|getstatusoutput)\s*\(")),
+_RETIRED_DASHBOARD_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    (
+        "retired_tool",
+        re.compile(r"\bdashboard_(?:deploy_batch|create|card_upsert|card_preview|card_remove)\b"),
+    ),
+    ("streamlit", re.compile(r"\b(?:import streamlit|from streamlit|streamlit as st)\b")),
+    ("fluxito_data", re.compile(r"\bfluxito_data\b")),
 ]
 
 
@@ -188,7 +197,7 @@ class ValidatedArtifact:
 def normalize_files(files: dict | list | None) -> dict[str, str]:
     """Accept ``{path: content}`` or ``[{path, content}, ...]`` and return a dict."""
     if files is None:
-        raise ArtifactError(["files is required — pass the Streamlit project as path → source."])
+        raise ArtifactError(["files is required — pass the production build as path → source."])
     out: dict[str, str] = {}
     if isinstance(files, dict):
         items = files.items()
@@ -218,20 +227,26 @@ def _check_path(path: str) -> list[str]:
         errors.append(f"{path}: absolute paths are not allowed")
         return errors
     posix = PurePosixPath(path)
-    if ".." in posix.parts or any(p in ("", ".") and i == 0 for i, p in enumerate(posix.parts)):
-        if ".." in posix.parts:
-            errors.append(f"{path}: path traversal ('..') is not allowed")
-    if any(part.startswith(".") and part not in {".streamlit"} for part in posix.parts[:-1]):
-        errors.append(f"{path}: hidden directories other than .streamlit/ are not allowed")
+    if ".." in posix.parts:
+        errors.append(f"{path}: path traversal ('..') is not allowed")
+    if any(part in FORBIDDEN_DIR_NAMES for part in posix.parts):
+        errors.append(f"{path}: {posix.parts} includes a forbidden directory")
+    if any(part.startswith(".") for part in posix.parts[:-1]):
+        errors.append(f"{path}: hidden directories are not allowed")
     if len(posix.parts) > MAX_PATH_DEPTH:
         errors.append(f"{path}: too many path segments (max {MAX_PATH_DEPTH})")
     name = posix.name.lower()
     if name in FORBIDDEN_FILENAMES or name.startswith(".env"):
-        errors.append(f"{path}: credential / env files are forbidden — bind connections by alias")
+        errors.append(f"{path}: credential / env / lock files are forbidden")
     suffix = posix.suffix.lower()
     if suffix in FORBIDDEN_SUFFIXES:
         errors.append(f"{path}: certificate / key files are forbidden")
-    if suffix not in ALLOWED_SUFFIXES:
+    if suffix in SOURCE_ONLY_SUFFIXES:
+        errors.append(
+            f"{path}: Fluxito does not compile {suffix}. Send the production build "
+            "(index.html + hashed .js/.css). Set Vite base: './'."
+        )
+    elif suffix not in ALLOWED_SUFFIXES:
         errors.append(
             f"{path}: file type {suffix or '(none)'} is not allowed. "
             f"Use one of: {', '.join(sorted(ALLOWED_SUFFIXES))}"
@@ -241,7 +256,6 @@ def _check_path(path: str) -> list[str]:
 
 def _scan_secrets(path: str, content: str) -> list[str]:
     errors: list[str] = []
-    # Never allow a dotenv-shaped file even if the name slipped through.
     if PurePosixPath(path).name.lower().startswith(".env"):
         errors.append(f"{path}: .env files are forbidden")
         return errors
@@ -249,19 +263,9 @@ def _scan_secrets(path: str, content: str) -> list[str]:
         if pat.search(content):
             errors.append(
                 f"{path}: looks like a secret ({label}). Do not put credentials in the artifact. "
-                "Declare a connection alias in the manifest and call fluxito_data.query(alias, ...)."
+                "Declare a connection alias in the manifest and call fluxito.query(alias, ...)."
             )
     return errors
-
-
-_RETIRED_DASHBOARD_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("card_json", re.compile(r"\bchart_type\b")),
-    ("echarts", re.compile(r"\becharts\b", re.IGNORECASE)),
-    (
-        "retired_tool",
-        re.compile(r"\bdashboard_(?:deploy_batch|create|card_upsert|card_preview|card_remove)\b"),
-    ),
-]
 
 
 def _scan_retired_dashboard_shape(path: str, content: str) -> list[str]:
@@ -269,24 +273,19 @@ def _scan_retired_dashboard_shape(path: str, content: str) -> list[str]:
     for label, pat in _RETIRED_DASHBOARD_PATTERNS:
         if pat.search(content):
             errors.append(
-                f"{path}: looks like a retired native-card dashboard ({label}). "
-                "Write a Streamlit app that calls fluxito_data.query. "
-                "Do not emit card JSON, chart_type, or ECharts specs."
+                f"{path}: looks like a retired dashboard shape ({label}). "
+                "Write a production HTML/JS app that calls fluxito.query. "
+                "Do not emit Streamlit, card JSON, chart_type, or ECharts specs."
             )
     return errors
 
 
-def _scan_shell_out(path: str, content: str) -> list[str]:
-    if not path.endswith(".py"):
+def _scan_remote_scripts(path: str, content: str) -> list[str]:
+    if not path.endswith(".html") and not path.endswith(".js"):
         return []
-    errors: list[str] = []
-    for label, pat in _SHELL_OUT_PATTERNS:
-        if pat.search(content):
-            errors.append(
-                f"{path}: {label} is not allowed in hosted dashboards. "
-                "Query live data through fluxito_data — do not shell out."
-            )
-    return errors
+    if _REMOTE_SCRIPT_RE.search(content):
+        return [f"{path}: remote <script src> is not allowed. Bundle every script in the artifact."]
+    return []
 
 
 def parse_manifest(raw: dict | str | None, *, fallback_title: str | None = None) -> ArtifactManifest:
@@ -306,6 +305,15 @@ def parse_manifest(raw: dict | str | None, *, fallback_title: str | None = None)
         raise ArtifactError(["manifest must be a JSON object"])
 
     errors: list[str] = []
+    kind = str(raw.get("kind") or ARTIFACT_KIND).strip().lower()
+    if kind in {"streamlit", "python"}:
+        errors.append(
+            "manifest.kind 'streamlit' is not supported. Fluxito hosts a production "
+            "HTML/JS build (kind=web). Call get_dashboard_authoring_guide."
+        )
+    elif kind not in {ARTIFACT_KIND, "hosted", ""}:
+        errors.append(f"manifest.kind must be {ARTIFACT_KIND!r} (got {kind!r})")
+
     version = raw.get("schema_version", ARTIFACT_SCHEMA_VERSION)
     try:
         version = int(version)
@@ -320,13 +328,13 @@ def parse_manifest(raw: dict | str | None, *, fallback_title: str | None = None)
         errors.append("manifest.title must be a non-empty string")
     title = str(title).strip()[:120]
 
-    entrypoint = raw.get("entrypoint") or "app.py"
+    entrypoint = raw.get("entrypoint") or "index.html"
     if not isinstance(entrypoint, str) or not entrypoint.strip():
         errors.append("manifest.entrypoint must be a non-empty string")
-        entrypoint = "app.py"
+        entrypoint = "index.html"
     entrypoint = entrypoint.strip().lstrip("/")
-    if not entrypoint.endswith(".py"):
-        errors.append(f"manifest.entrypoint must be a .py file (got {entrypoint!r})")
+    if not entrypoint.endswith(".html"):
+        errors.append(f"manifest.entrypoint must be an .html file (got {entrypoint!r})")
 
     conns_raw = raw.get("connections")
     if conns_raw is None:
@@ -382,7 +390,7 @@ def validate_artifact(
     *,
     fallback_title: str | None = None,
 ) -> ValidatedArtifact:
-    """Validate a model-authored Streamlit artifact.
+    """Validate a model-authored web artifact.
 
     Raises ``ArtifactError`` with every problem aggregated so the model can
     fix them in one retry. Never writes to disk.
@@ -392,7 +400,7 @@ def validate_artifact(
     warnings: list[str] = []
 
     if not file_map:
-        raise ArtifactError(["files must contain at least the Streamlit entrypoint (app.py)"])
+        raise ArtifactError(["files must contain at least the HTML entrypoint (index.html)"])
     if len(file_map) > MAX_FILES:
         errors.append(f"too many files ({len(file_map)}). Maximum is {MAX_FILES}.")
 
@@ -404,11 +412,10 @@ def validate_artifact(
         if size > MAX_FILE_BYTES:
             errors.append(f"{path}: file is {size} bytes (max {MAX_FILE_BYTES})")
         errors.extend(_scan_secrets(path, content))
-        errors.extend(_scan_shell_out(path, content))
+        errors.extend(_scan_remote_scripts(path, content))
     if total > MAX_TOTAL_BYTES:
         errors.append(f"artifact is {total} bytes (max {MAX_TOTAL_BYTES})")
 
-    # Manifest may live in files or be passed separately.
     if manifest is None and "manifest.json" in file_map:
         manifest = file_map["manifest.json"]
     try:
@@ -421,27 +428,27 @@ def validate_artifact(
         if parsed.entrypoint not in file_map:
             errors.append(
                 f"entrypoint {parsed.entrypoint!r} is not in files. "
-                "The Streamlit app must be included in the artifact."
+                "Send the production index.html from your build."
             )
         else:
             src = file_map[parsed.entrypoint]
-            if "streamlit" not in src:
-                errors.append(
-                    f"{parsed.entrypoint}: must import streamlit "
-                    "(e.g. `import streamlit as st`). Fluxito hosts Streamlit apps only."
-                )
-            if parsed.connections and "fluxito_data" not in src:
-                errors.append(
-                    f"{parsed.entrypoint}: must `import fluxito_data` and call "
-                    "fluxito_data.query(alias, action, params) for live data. "
-                    "Do not bake credentials into the app."
-                )
             errors.extend(_scan_retired_dashboard_shape(parsed.entrypoint, src))
-            if "st.secrets" in src or "streamlit.secrets" in src:
-                errors.append(
-                    f"{parsed.entrypoint}: st.secrets is forbidden. "
-                    "Use fluxito_data.query with a bound alias."
+            if 'src="/assets/' in src or "src='/assets/" in src:
+                warnings.append(
+                    f"{parsed.entrypoint}: absolute /assets/ URLs break on the dash host. "
+                    "Set Vite `base: './'` (relative asset URLs)."
                 )
+        blob = "\n".join(file_map.values())
+        if parsed.connections and not _QUERY_CALL_RE.search(blob):
+            warnings.append(
+                "No fluxito.query(...) call found. Live data only works through "
+                "fluxito.query(alias, action, params). The host injects /fluxito.js."
+            )
+        for path, content in file_map.items():
+            if path == parsed.entrypoint:
+                continue
+            if path.endswith((".js", ".html")):
+                errors.extend(_scan_retired_dashboard_shape(path, content))
 
     if errors:
         raise ArtifactError(errors)

@@ -1,6 +1,6 @@
-"""Per-platform query recipes for hosted Streamlit dashboards.
+"""Per-platform query recipes for hosted web dashboards.
 
-Single source of truth for what a model may pass to ``fluxito_data.query``.
+Single source of truth for what a model may pass to ``fluxito.query``.
 The authoring guide, ``get_dashboard_query_recipe``, and
 ``list_dashboard_connections`` all read from here so the contract cannot
 drift between surfaces.
@@ -143,7 +143,7 @@ RECIPES: dict[str, dict[str, Any]] = {
             )
         },
         notes=(
-            "SELECT only. Fill start_date/end_date from Streamlit widgets into the "
+            "SELECT only. Fill start_date/end_date from dashboard widgets into the "
             "SQL string before calling query(). You may send `sql`; the host "
             "rewrites it to `query`. Do not send connection_id."
         ),

@@ -1,12 +1,11 @@
-"""Hosted Streamlit dashboard contract: validate, deploy, bind, host path."""
+"""Hosted web dashboard contract: validate, deploy, bind, isolated origin."""
 
 from __future__ import annotations
 
 import json
-import threading
 import uuid
 from contextlib import contextmanager
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 from mcp.server.fastmcp import FastMCP
@@ -18,51 +17,48 @@ from app.dashboards.artifact import ArtifactError, validate_artifact
 from app.dashboards.authoring_guide import AUTHORING_GUIDE, authoring_guide_payload
 from app.dashboards.connections import bind_requirements
 from app.dashboards.data_plane import run_alias_query
-from app.dashboards.runtime import (
-    build_child_env,
-    child_env_is_clean,
-    set_process_factory,
-    stop_all,
-    stop_dashboard,
-)
 from app.models.dashboard import Dashboard
 from app.models.user import User
 from app.tools.dashboard_tools import register_dashboard_tools
-
-# ---------------------------------------------------------------------------
-# Sample artifact
-# ---------------------------------------------------------------------------
 
 
 def _manifest(**overrides) -> dict:
     data = {
         "schema_version": 1,
+        "kind": "web",
         "title": "GA4 last 30 days",
-        "entrypoint": "app.py",
+        "entrypoint": "index.html",
         "connections": [{"alias": "ga4", "type": "ga4", "required": True}],
     }
     data.update(overrides)
     return data
 
 
-def _app_py() -> str:
+def _index_html() -> str:
     return (
-        "import streamlit as st\n"
-        "import fluxito_data as fx\n\n"
-        "st.set_page_config(page_title='GA4', layout='wide')\n"
-        "st.title('GA4 last 30 days')\n"
-        "data = fx.query('ga4', action='run_report', params={'metrics': ['sessions']})\n"
-        "if data.get('error'):\n"
-        "    st.error(data.get('message'))\n"
-        "else:\n"
-        "    st.write(data)\n"
+        "<!doctype html><html><body>"
+        "<h1>GA4 last 30 days</h1>"
+        "<script src='./app.js'></script>"
+        "</body></html>"
+    )
+
+
+def _app_js() -> str:
+    return (
+        "async function main(){\n"
+        "  const data = await fluxito.query('ga4', 'run_report', {metrics: ['sessions']});\n"
+        "  if (data.error) { console.error(data.message); return; }\n"
+        "  fluxito.rows(data);\n"
+        "}\n"
+        "main();\n"
     )
 
 
 def _files(**extra) -> dict[str, str]:
     files = {
         "manifest.json": json.dumps(_manifest()),
-        "app.py": _app_py(),
+        "index.html": _index_html(),
+        "app.js": _app_js(),
     }
     files.update(extra)
     return files
@@ -76,27 +72,16 @@ class _FakeTool:
         return await self._fn(call_args)
 
 
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
-
-
 def test_validate_happy_path():
     art = validate_artifact(_files())
-    assert art.manifest.entrypoint == "app.py"
+    assert art.manifest.entrypoint == "index.html"
     assert art.manifest.connections[0].alias == "ga4"
     assert art.digest
 
 
 def test_validate_rejects_secrets():
     with pytest.raises(ArtifactError) as exc:
-        validate_artifact(
-            _files(
-                **{
-                    "app.py": _app_py() + "\nAPI_KEY = 'sk-live-supersecrettoken'\n",
-                }
-            )
-        )
+        validate_artifact(_files(**{"app.js": _app_js() + "\nAPI_KEY = 'sk-live-supersecrettoken'\n"}))
     assert any("secret" in e.lower() or "api" in e.lower() for e in exc.value.errors)
 
 
@@ -118,70 +103,59 @@ def test_validate_rejects_missing_entrypoint():
     assert any("entrypoint" in e for e in exc.value.errors)
 
 
-def test_validate_requires_fluxito_data_when_connections_present():
+def test_validate_rejects_jsx_source():
+    with pytest.raises(ArtifactError) as exc:
+        validate_artifact({**_files(), "App.jsx": "export default function App(){return null}"})
+    assert any("jsx" in e.lower() or "compile" in e.lower() for e in exc.value.errors)
+
+
+def test_validate_rejects_python_and_streamlit():
+    with pytest.raises(ArtifactError) as exc:
+        validate_artifact({**_files(), "app.py": "import streamlit as st\nst.title('x')\n"})
+    assert any(".py" in e.lower() or "compile" in e.lower() for e in exc.value.errors)
+
+
+def test_validate_rejects_remote_script():
     with pytest.raises(ArtifactError) as exc:
         validate_artifact(
             {
-                "manifest.json": json.dumps(_manifest()),
-                "app.py": "import streamlit as st\nst.title('no data helper')\n",
+                **_files(),
+                "index.html": '<html><script src="https://evil.example/x.js"></script></html>',
             }
         )
-    assert any("fluxito_data" in e for e in exc.value.errors)
-
-
-def test_validate_rejects_card_json_and_st_secrets():
-    with pytest.raises(ArtifactError) as exc:
-        validate_artifact(
-            {
-                "manifest.json": json.dumps(_manifest()),
-                "app.py": (
-                    "import streamlit as st\n"
-                    "import fluxito_data as fx\n"
-                    "st.secrets['token']\n"
-                    "chart_type = 'line'\n"
-                ),
-            }
-        )
-    joined = " ".join(exc.value.errors).lower()
-    assert "st.secrets" in joined or "secrets" in joined
-    assert "card" in joined or "chart_type" in joined or "retired" in joined
-
-
-def test_validate_rejects_non_streamlit_entrypoint():
-    with pytest.raises(ArtifactError) as exc:
-        validate_artifact({"manifest.json": json.dumps(_manifest()), "app.py": "print('hello')\n"})
-    assert any("streamlit" in e.lower() for e in exc.value.errors)
-
-
-def test_validate_rejects_subprocess():
-    with pytest.raises(ArtifactError) as exc:
-        validate_artifact(
-            {
-                "manifest.json": json.dumps(_manifest()),
-                "app.py": "import streamlit as st\nimport subprocess\nst.write(subprocess.getoutput('ls'))\n",
-            }
-        )
-    assert any("subprocess" in e.lower() for e in exc.value.errors)
+    assert any("remote" in e.lower() for e in exc.value.errors)
 
 
 def test_validate_rejects_path_traversal():
     with pytest.raises(ArtifactError) as exc:
-        validate_artifact({**_files(), "../evil.py": "import streamlit as st\n"})
+        validate_artifact({**_files(), "../evil.js": "alert(1)"})
     assert any("traversal" in e.lower() or ".." in e for e in exc.value.errors)
+
+
+def test_validate_warns_without_fluxito_query():
+    art = validate_artifact(
+        {
+            "manifest.json": json.dumps(_manifest()),
+            "index.html": "<!doctype html><html><body>static</body></html>",
+        }
+    )
+    assert any("fluxito.query" in w for w in art.warnings)
 
 
 def test_authoring_guide_is_the_contract():
     payload = authoring_guide_payload()
     guide = payload["guide"]
-    assert "streamlit" in guide.lower()
+    assert payload["kind"] == "web"
+    assert "fluxito.query" in guide
     assert "manifest.json" in guide
-    assert "fluxito_data" in guide
+    assert "index.html" in guide
+    assert "does not compile" in guide.lower() or "production" in guide.lower()
     assert "do not put credentials" in guide.lower() or "never put secrets" in guide.lower()
     assert "validate_dashboard_artifact" in guide
     assert "deploy_dashboard" in guide
     assert "bind_dashboard" in guide
-    assert "tool=None" not in guide
     assert "unregistered" in guide.lower() or "do not call" in guide.lower()
+    assert "streamlit" in guide.lower()  # forbidden, called out
     assert AUTHORING_GUIDE
     assert "ga4" in payload["connection_types"]
     assert "recipes" in payload
@@ -193,104 +167,75 @@ def test_authoring_guide_is_the_contract():
     assert assert_recipes_cover_types() == []
 
 
-# ---------------------------------------------------------------------------
-# Child env isolation
-# ---------------------------------------------------------------------------
+def test_requirements_do_not_pin_streamlit():
+    text = Path(__file__).resolve().parents[1].joinpath("requirements.txt").read_text(encoding="utf-8")
+    assert "streamlit" not in text
 
 
-def test_child_env_has_no_fluxito_secrets(tmp_path, monkeypatch):
-    monkeypatch.setenv("SSL_CERT_FILE", "/etc/ssl/certs/ca-certificates.crt")
-    monkeypatch.setenv("DATABASE_URL", "postgresql://should-not-leak")
-    env = build_child_env(
-        workdir=tmp_path,
-        data_url="http://127.0.0.1:8001/api/hosted-dashboards/abc/query",
-        runtime_token="tok",
-        dashboard_id="d1",
+def test_write_artifact_injects_sdk(tmp_path):
+    from app.dashboards.runtime import write_artifact
+
+    art = validate_artifact(_files())
+    write_artifact(
+        tmp_path / "d1",
+        art,
         bindings=[{"alias": "ga4", "type": "ga4", "status": "bound"}],
-        port=14101,
-        base_path="/hosted/abc",
+        dashboard_id="d1",
+        slug="x",
     )
-    assert child_env_is_clean(env)
-    assert "DATABASE_URL" not in env
-    assert "TOKEN_ENCRYPTION_KEY" not in env
-    assert env["FLUXITO_RUNTIME_TOKEN"] == "tok"
-    assert "ga4" in env["FLUXITO_CONNECTION_ALIASES"]
-    assert env["SSL_CERT_FILE"] == "/etc/ssl/certs/ca-certificates.crt"
+    helper = (tmp_path / "d1" / "fluxito.js").read_text()
+    assert "fluxito.query" in helper or "function query" in helper
+    assert "DATABASE_URL" not in helper
+    assert "TOKEN_ENCRYPTION_KEY" not in helper
+    html = (tmp_path / "d1" / "index.html").read_text()
+    assert "/fluxito.js" in html
 
 
-def test_requirements_pin_streamlit_below_starlette_server():
-    """1.57+ needs Starlette APIs FastAPI 0.115 / Starlette 0.41 do not have."""
-    from pathlib import Path
+def test_bind_requirements_marks_missing_and_bound():
+    from app.dashboards.artifact import ConnectionRequirement
 
-    req = Path(__file__).resolve().parents[1] / "requirements.txt"
-    text = req.read_text(encoding="utf-8")
-    assert "streamlit>=1.40,<1.57" in text
-
-
-def test_start_dashboard_includes_host_log_on_crash(tmp_path):
-    from app.dashboards.runtime import HOST_LOG_NAME, start_dashboard, stop_dashboard
-
-    workdir = tmp_path / "crash"
-    workdir.mkdir()
-    (workdir / HOST_LOG_NAME).write_text("ImportError: cannot import name 'DEFAULT_EXCLUDED_CONTENT_TYPES'\n")
-
-    class _Dead:
-        pid = 99
-        returncode = 1
-
-        def poll(self):
-            return 1
-
-        def kill(self):
-            pass
-
-    def _factory(**_kwargs):
-        return _Dead()
-
-    set_process_factory(_factory)
-    try:
-        with pytest.raises(RuntimeError, match="DEFAULT_EXCLUDED_CONTENT_TYPES"):
-            start_dashboard(
-                dashboard_id="dead",
-                slug="dead",
-                workdir=workdir,
-                entrypoint="app.py",
-                env={},
-                port=14111,
-            )
-    finally:
-        set_process_factory(None)
-        stop_dashboard("dead")
+    reqs = [
+        ConnectionRequirement("ga4", "ga4"),
+        ConnectionRequirement("ads", "google_ads"),
+    ]
+    available = [
+        {
+            "type": "ga4",
+            "label": "GA4 (123)",
+            "connection_id": "c1",
+            "resource_key": "property_id",
+            "resource_value": "123",
+            "status": "active",
+        }
+    ]
+    bindings = bind_requirements(reqs, available)
+    assert bindings[0]["status"] == "bound"
+    assert bindings[0]["resource_value"] == "123"
+    assert bindings[1]["status"] == "missing"
 
 
-def test_attach_existing_reuses_foreign_worker_process(tmp_path, monkeypatch):
-    from app.dashboards.runtime import (
-        attach_existing,
-        get_handle,
-        stop_all,
+def test_embed_token_roundtrip_and_expiry():
+    from app.dashboards.embed_token import mint_embed_token, verify_embed_token
+
+    token, ttl = mint_embed_token(
+        slug="abc",
+        dashboard_id="11111111-1111-1111-1111-111111111111",
+        viewer_id="user-1",
+        aliases=["ga4"],
     )
-
-    workdir = tmp_path / "att"
-    workdir.mkdir()
-    (workdir / ".fluxito_host.json").write_text(
-        '{"dashboard_id": "d-att", "slug": "att", "port": 14122, "pid": 424242}',
-        encoding="utf-8",
-    )
-    monkeypatch.setattr("app.dashboards.runtime._pid_alive", lambda pid: pid == 424242)
-    monkeypatch.setattr("app.dashboards.runtime._port_open", lambda port: port == 14122)
-    try:
-        handle = attach_existing("d-att", workdir)
-        assert handle is not None
-        assert handle.port == 14122
-        assert handle.pid == 424242
-        assert get_handle("d-att", workdir) is handle
-    finally:
-        stop_all()
+    assert ttl >= 60
+    payload = verify_embed_token(token)
+    assert payload is not None
+    assert payload["slug"] == "abc"
+    assert verify_embed_token("nope") is None
+    assert verify_embed_token(token[:-2] + "xx") is None
 
 
-# ---------------------------------------------------------------------------
-# Bindings
-# ---------------------------------------------------------------------------
+def test_origins_are_isolated_by_default():
+    from app.dashboards.origin import app_origin, dashboard_origin, origins_are_isolated
+
+    assert app_origin() != dashboard_origin()
+    assert origins_are_isolated()
 
 
 @pytest.mark.asyncio
@@ -358,54 +303,6 @@ async def test_data_plane_rejects_unbound_and_unknown_alias():
     assert unknown["error_type"] == "unknown_alias"
 
 
-def test_write_artifact_injects_helper(tmp_path):
-    from app.dashboards.runtime import write_artifact
-
-    art = validate_artifact(_files())
-    write_artifact(
-        tmp_path / "d1",
-        art,
-        bindings=[{"alias": "ga4", "type": "ga4", "status": "bound"}],
-        data_url="http://127.0.0.1:8001/api/hosted-dashboards/x/query",
-        runtime_token="tok",
-        dashboard_id="d1",
-        slug="x",
-    )
-    helper = (tmp_path / "d1" / "fluxito_data.py").read_text()
-    assert "def query(" in helper
-    assert (tmp_path / "d1" / "app.py").exists()
-    assert "DATABASE_URL" not in helper
-    assert "TOKEN_ENCRYPTION_KEY" not in helper
-
-
-def test_bind_requirements_marks_missing_and_bound():
-    from app.dashboards.artifact import ConnectionRequirement
-
-    reqs = [
-        ConnectionRequirement("ga4", "ga4"),
-        ConnectionRequirement("ads", "google_ads"),
-    ]
-    available = [
-        {
-            "type": "ga4",
-            "label": "GA4 (123)",
-            "connection_id": "c1",
-            "resource_key": "property_id",
-            "resource_value": "123",
-            "status": "active",
-        }
-    ]
-    bindings = bind_requirements(reqs, available)
-    assert bindings[0]["status"] == "bound"
-    assert bindings[0]["resource_value"] == "123"
-    assert bindings[1]["status"] == "missing"
-
-
-# ---------------------------------------------------------------------------
-# MCP + DB lifecycle
-# ---------------------------------------------------------------------------
-
-
 def _build_server() -> FastMCP:
     server = FastMCP(name="hosted-dashboard-tools-test")
     register_dashboard_tools(server)
@@ -442,56 +339,9 @@ def wired(db_session_factory, tmp_path, monkeypatch):
     prev = app_state.db_session_factory
     app_state.db_session_factory = db_session_factory
     monkeypatch.setattr("app.config.settings.DASHBOARDS_LOCAL_DIR", str(tmp_path / "dash"))
-
-    class _DummyProc:
-        def __init__(self):
-            self.pid = 4242
-            self.returncode = None
-
-        def poll(self):
-            return None
-
-        def terminate(self):
-            self.returncode = 0
-
-        def kill(self):
-            self.returncode = -9
-
-        def wait(self, timeout=None):
-            self.returncode = self.returncode if self.returncode is not None else 0
-
-    def _factory(**kwargs):
-        # Pretend Streamlit is already listening so start_dashboard's wait passes.
-        import socket
-
-        port = kwargs["port"]
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind(("127.0.0.1", port))
-        except OSError:
-            pass
-        else:
-            sock.listen(1)
-
-            def _accept():
-                try:
-                    conn, _ = sock.accept()
-                    conn.close()
-                except Exception:
-                    pass
-                finally:
-                    sock.close()
-
-            threading.Thread(target=_accept, daemon=True).start()
-        return _DummyProc()
-
-    set_process_factory(_factory)
     try:
         yield
     finally:
-        stop_all()
-        set_process_factory(None)
         app_state.db_session_factory = prev
 
 
@@ -501,8 +351,9 @@ async def test_mcp_guide_validate_deploy_list_get_delete(wired, db_session_facto
     server = _build_server()
     with _user_ctx(uid):
         guide = await _tool(server, "get_dashboard_authoring_guide")()
-        assert "fluxito_data.query" in guide["guide"]
+        assert "fluxito.query" in guide["guide"]
         assert "manifest.json" in guide["guide"]
+        assert guide["kind"] == "web"
         assert guide["recipes"]["ga4"]["action"] == "run_report"
         recipe = await _tool(server, "get_dashboard_query_recipe")(connection_type="ga4")
         assert recipe["action"] == "run_report"
@@ -523,8 +374,8 @@ async def test_mcp_guide_validate_deploy_list_get_delete(wired, db_session_facto
         dash_id = deployed["dashboard_id"]
         slug = deployed["slug"]
         assert "/live-dashboards/" in deployed["url"]
+        assert deployed["host_status"] == "ready"
         assert deployed["bindings"][0]["alias"] == "ga4"
-        # No matching connection in the empty project → missing bind, not a crash.
         assert deployed["bindings"][0]["status"] == "missing"
 
         listed = await _tool(server, "list_dashboards")()
@@ -544,7 +395,6 @@ async def test_mcp_guide_validate_deploy_list_get_delete(wired, db_session_facto
             title="GA4 refreshed",
         )
         assert updated.get("error") is not True
-        assert updated["title"] == "GA4 last 30 days" or updated["title"]
 
         conns = await _tool(server, "list_dashboard_connections")()
         assert "connections" in conns
@@ -565,15 +415,10 @@ async def test_deploy_rejects_secrets(wired, db_session_factory):
     with _user_ctx(uid):
         resp = await _tool(server, "deploy_dashboard")(
             title="Bad",
-            files={**_files(), "app.py": _app_py() + "\npassword = 'hunter2secret'\n"},
+            files={**_files(), "app.js": _app_js() + "\npassword = 'hunter2secret'\n"},
         )
     assert resp.get("error") is True
     assert resp.get("error_type") == "invalid_artifact"
-
-
-# ---------------------------------------------------------------------------
-# Data plane bind/refresh
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -650,14 +495,8 @@ async def test_data_plane_unknown_alias(wired, db_session_factory):
     assert result["error_type"] == "unknown_alias"
 
 
-# ---------------------------------------------------------------------------
-# Host / embed HTTP path
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
-async def test_hosted_proxy_and_status_path(wired, db_session_factory, tmp_path, monkeypatch):
-    """The reporting host path proxies to the isolated process (dummy HTTP here)."""
+async def test_hosted_view_and_status_path(wired, db_session_factory):
     import httpx
     from httpx import ASGITransport
 
@@ -667,79 +506,9 @@ async def test_hosted_proxy_and_status_path(wired, db_session_factory, tmp_path,
 
     uid = await _make_user(db_session_factory)
     server = _build_server()
-
-    # Real tiny HTTP server stands in for Streamlit so the proxy is exercised.
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            body = f"hosted-ok {self.path}".encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *a):
-            return
-
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    port = httpd.server_address[1]
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-
-    def _factory(**kwargs):
-        class _P:
-            pid = 99
-            returncode = None
-
-            def poll(self):
-                return None
-
-            def terminate(self):
-                pass
-
-            def kill(self):
-                pass
-
-            def wait(self, timeout=None):
-                pass
-
-        return _P()
-
-    set_process_factory(_factory)
-
     with _user_ctx(uid):
         deployed = await _tool(server, "deploy_dashboard")(title="GA4", files=_files())
     slug = deployed["slug"]
-    dash_id = uuid.UUID(deployed["dashboard_id"])
-
-    async with db_session_factory() as db:
-        dash = (await db.execute(select(Dashboard).where(Dashboard.id == dash_id))).scalar_one()
-        dash.host_status = "running"
-        dash.host_port = port
-        dash.is_public = True
-        await db.commit()
-
-    import subprocess
-
-    from app.dashboards.runtime import HostedProcess, _processes
-
-    class _Alive(subprocess.Popen):
-        def __init__(self):
-            pass
-
-        def poll(self):
-            return None
-
-    # Point the in-memory supervisor at the dummy server port.
-    stop_dashboard(str(dash_id))
-    _processes[str(dash_id)] = HostedProcess(
-        dashboard_id=str(dash_id),
-        slug=slug,
-        port=port,
-        pid=1,
-        workdir=tmp_path,
-        proc=_Alive(),  # type: ignore[arg-type]
-    )
 
     csrf = _generate_csrf_token()
     async with httpx.AsyncClient(
@@ -751,119 +520,57 @@ async def test_hosted_proxy_and_status_path(wired, db_session_factory, tmp_path,
     ) as client:
         view = await client.get(f"/live-dashboards/{slug}")
         assert view.status_code == 200
-        assert "Hosted Streamlit app" in view.text
-        assert f"/hosted/{slug}/" in view.text
+        assert "Hosted Streamlit app" not in view.text
+        assert "/s/" in view.text
         assert "Add card" not in view.text
         assert (
-            'sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"' in view.text
+            'sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"' in view.text
         )
         assert "allow-top-navigation" not in view.text
-
-        proxied = await client.get(f"/hosted/{slug}/")
-        assert proxied.status_code == 200
-        assert "hosted-ok" in proxied.text
+        assert "fluxito-embed" in view.text
 
         status = await client.get(f"/api/hosted-dashboards/{slug}/status")
         assert status.status_code == 200
         body = status.json()
         assert body["kind"] == "hosted"
         assert body["slug"] == slug
+        assert body["host_status"] == "ready"
 
         hub = await client.get("/live-dashboards")
         assert hub.status_code == 200
         assert "get_dashboard_authoring_guide" in hub.text
         assert "Build with Ask Fluxito" not in hub.text
 
-    httpd.shutdown()
-    stop_dashboard(str(dash_id))
-
-
-def test_forward_request_headers_strips_viewer_credentials():
-    from starlette.requests import Request
-
-    from app.api.dashboard_routes import _forward_request_headers
-
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0"},
-        "http_version": "1.1",
-        "method": "GET",
-        "scheme": "http",
-        "path": "/hosted/foo/",
-        "raw_path": b"/hosted/foo/",
-        "query_string": b"",
-        "headers": [
-            (b"host", b"fluxito.example"),
-            (b"cookie", b"uid=secret-session"),
-            (b"authorization", b"Bearer viewer-jwt"),
-            (b"proxy-authorization", b"Basic abc"),
-            (b"set-cookie", b"uid=should-not-forward"),
-            (b"cookie2", b"legacy"),
-            (b"x-csrf-token", b"csrf-secret"),
-            (b"x-xsrf-token", b"xsrf-secret"),
-            (b"connection", b"keep-alive"),
-            (b"keep-alive", b"timeout=5"),
-            (b"transfer-encoding", b"chunked"),
-            (b"accept", b"text/html"),
-            (b"content-type", b"application/json"),
-        ],
-        "client": ("127.0.0.1", 123),
-        "server": ("testserver", 80),
-    }
-    forwarded = {k.lower(): v for k, v in _forward_request_headers(Request(scope)).items()}
-    for name in (
-        "cookie",
-        "authorization",
-        "proxy-authorization",
-        "set-cookie",
-        "cookie2",
-        "x-csrf-token",
-        "x-xsrf-token",
-        "host",
-        "connection",
-        "keep-alive",
-        "transfer-encoding",
-    ):
-        assert name not in forwarded
-    assert forwarded["accept"] == "text/html"
-    assert forwarded["content-type"] == "application/json"
-
 
 def test_hosted_view_iframe_is_sandboxed():
-    from pathlib import Path
-
     html = (
         Path(__file__).resolve().parents[1] / "app" / "templates" / "dashboards" / "hosted_view.html"
     ).read_text()
-    assert 'sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"' in html
+    assert 'sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"' in html
     assert "allow-top-navigation" not in html
 
 
-def test_nginx_hosted_location_upgrades_websocket():
-    from pathlib import Path
-
+def test_nginx_isolates_dash_origin():
     conf = (Path(__file__).resolve().parents[1] / "nginx.conf").read_text()
-    assert "location /hosted/" in conf
-    assert "proxy_set_header   Upgrade           $http_upgrade;" in conf
-    assert "map $http_upgrade $connection_upgrade" in conf
-    hosted = conf.split("location /hosted/")[1].split("location ")[0]
-    assert "Connection        $connection_upgrade" in hosted
-    assert 'Connection "";' not in hosted
+    assert "server_name dash.fluxito.app" in conf
+    assert "listen 8002" in conf
+    assert "X-Fluxito-Surface dash" in conf
+    assert "location /hosted/" not in conf
 
 
-def test_upstream_ws_connect_kwargs_compatible():
-    pytest.importorskip("websockets")
-    from app.api.dashboard_routes import _upstream_ws_connect_kwargs
+def test_uid_cookie_is_host_only():
+    from pathlib import Path as P
 
-    kwargs = _upstream_ws_connect_kwargs(14100)
-    assert "additional_headers" in kwargs or "extra_headers" in kwargs
-    headers = kwargs.get("additional_headers") or kwargs.get("extra_headers")
-    assert headers["Host"] == "127.0.0.1:14100"
+    src = (P(__file__).resolve().parents[1] / "app" / "api" / "setup_routes.py").read_text()
+    # The uid cookie must never set Domain=.fluxito.app
+    assert 'set_cookie(\n        "uid"' in src or 'set_cookie("uid"' in src.replace(" ", "")
+    assert "domain=" not in src.lower() or 'domain="' not in src.lower()
 
 
 @pytest.mark.asyncio
-async def test_hosted_proxy_strips_viewer_credentials(wired, db_session_factory, tmp_path):
-    """Cookie / Authorization / Proxy-Authorization must never reach Streamlit."""
+async def test_dash_origin_lockdown_and_query(wired, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
     import httpx
     from httpx import ASGITransport
 
@@ -873,48 +580,6 @@ async def test_hosted_proxy_strips_viewer_credentials(wired, db_session_factory,
 
     uid = await _make_user(db_session_factory)
     server = _build_server()
-    captured: dict[str, str] = {}
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            captured.clear()
-            captured.update({k.lower(): v for k, v in self.headers.items()})
-            body = b"hosted-ok"
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *a):
-            return
-
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    port = httpd.server_address[1]
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-
-    def _factory(**kwargs):
-        class _P:
-            pid = 99
-            returncode = None
-
-            def poll(self):
-                return None
-
-            def terminate(self):
-                pass
-
-            def kill(self):
-                pass
-
-            def wait(self, timeout=None):
-                pass
-
-        return _P()
-
-    set_process_factory(_factory)
-
     with _user_ctx(uid):
         deployed = await _tool(server, "deploy_dashboard")(title="GA4", files=_files())
     slug = deployed["slug"]
@@ -922,83 +587,97 @@ async def test_hosted_proxy_strips_viewer_credentials(wired, db_session_factory,
 
     async with db_session_factory() as db:
         dash = (await db.execute(select(Dashboard).where(Dashboard.id == dash_id))).scalar_one()
-        dash.host_status = "running"
-        dash.host_port = port
-        dash.is_public = True
+        dash.connection_bindings = [
+            {
+                "alias": "ga4",
+                "type": "ga4",
+                "status": "bound",
+                "tool": "analytics_read",
+                "resource_key": "property_id",
+                "resource_value": "279951751",
+            }
+        ]
         await db.commit()
 
-    import subprocess
+    csrf = _generate_csrf_token()
+    seen: dict = {}
 
-    from app.dashboards.runtime import HostedProcess, _processes
+    class _Ctx:
+        async def __aenter__(self):
+            return self
 
-    class _Alive(subprocess.Popen):
-        def __init__(self):
-            pass
-
-        def poll(self):
+        async def __aexit__(self, *a):
             return None
 
-    stop_dashboard(str(dash_id))
-    _processes[str(dash_id)] = HostedProcess(
-        dashboard_id=str(dash_id),
-        slug=slug,
-        port=port,
-        pid=1,
-        workdir=tmp_path,
-        proc=_Alive(),  # type: ignore[arg-type]
-    )
+    with (
+        patch("app.auth.mcp_session_manager.build_refresh_context", new=AsyncMock(return_value=_Ctx())),
+        patch("app.dashboards.data_plane.query_engine.run_card") as run_card,
+    ):
 
-    csrf = _generate_csrf_token()
-    try:
+        async def _run(tm, spec, tool_name=None, action=None, timeout=None):
+            seen["dispatched_tool"] = tool_name
+            seen.update(spec)
+            return {"rows": [{"sessions": "3"}]}
+
+        run_card.side_effect = _run
         async with httpx.AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://testserver",
             cookies={"csrf_token": csrf, "uid": sign_uid(str(uid))},
-            headers={
-                "x-csrf-token": csrf,
-                "Authorization": "Bearer viewer-jwt",
-                "Proxy-Authorization": "Basic abc",
-            },
-            follow_redirects=False,
+            headers={"x-csrf-token": csrf},
         ) as client:
-            proxied = await client.get(f"/hosted/{slug}/")
-            assert proxied.status_code == 200
-            assert "hosted-ok" in proxied.text
-    finally:
-        httpd.shutdown()
-        stop_dashboard(str(dash_id))
+            blocked = await client.post(
+                "/query",
+                json={"alias": "ga4", "action": "run_report", "params": {}},
+            )
+            assert blocked.status_code == 404
 
-    assert captured
-    assert "cookie" not in captured
-    assert "authorization" not in captured
-    assert "proxy-authorization" not in captured
-    assert "x-csrf-token" not in captured
-    assert "x-xsrf-token" not in captured
+            api_query = await client.post(
+                f"/api/hosted-dashboards/{slug}/query",
+                json={"alias": "ga4", "action": "run_report", "params": {}},
+            )
+            assert api_query.status_code == 404
 
+            session = await client.get(f"/api/hosted-dashboards/{slug}/embed-session")
+            assert session.status_code == 200
+            token = session.json()["token"]
 
-@pytest.mark.asyncio
-async def test_hosted_query_endpoint_rejects_bad_token(wired, db_session_factory):
-    import httpx
-    from httpx import ASGITransport
+            page = await client.get(
+                f"/s/{slug}/",
+                headers={"X-Fluxito-Surface": "dash"},
+            )
+            assert page.status_code == 200
+            assert b"/fluxito.js" in page.content
+            assert "text/html" in page.headers.get("content-type", "")
+            assert "Content-Security-Policy" in page.headers
+            assert "connect-src 'self'" in page.headers["Content-Security-Policy"]
 
-    from app.main import app
+            billing = await client.get(
+                "/api/health",
+                headers={"X-Fluxito-Surface": "dash"},
+            )
+            assert billing.status_code == 404
 
-    uid = await _make_user(db_session_factory)
-    server = _build_server()
-    with _user_ctx(uid):
-        deployed = await _tool(server, "deploy_dashboard")(title="GA4", files=_files())
-    slug = deployed["slug"]
+            bad = await client.post(
+                "/query",
+                headers={"X-Fluxito-Surface": "dash", "Authorization": "Bearer nope"},
+                json={"alias": "ga4", "action": "run_report", "params": {}},
+            )
+            assert bad.status_code == 403
 
-    async with httpx.AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://testserver",
-    ) as client:
-        resp = await client.post(
-            f"/api/hosted-dashboards/{slug}/query",
-            json={"alias": "ga4", "action": "run_report", "params": {}},
-            headers={"Authorization": "Bearer wrong"},
-        )
-    assert resp.status_code == 403
+            ok = await client.post(
+                "/query",
+                headers={"X-Fluxito-Surface": "dash", "Authorization": f"Bearer {token}"},
+                json={
+                    "alias": "ga4",
+                    "action": "run_report",
+                    "tool": "warehouse_query",
+                    "params": {"metrics": ["sessions"], "property_id": "evil", "tool": "warehouse_query"},
+                },
+            )
+    assert ok.status_code == 200
+    assert seen.get("dispatched_tool") == "analytics_read"
+    assert seen.get("property_id") == "279951751"
 
 
 def test_new_mcp_tools_describe_the_contract():
@@ -1028,7 +707,7 @@ def test_new_mcp_tools_describe_the_contract():
     ):
         assert retired not in names
     guide_doc = server._tool_manager._tools["get_dashboard_authoring_guide"].fn.__doc__ or ""
-    assert "streamlit" in guide_doc.lower()
+    assert "html" in guide_doc.lower() or "jsx" in guide_doc.lower() or "web" in guide_doc.lower()
     deploy_doc = server._tool_manager._tools["deploy_dashboard"].fn.__doc__ or ""
     assert (
         "secret" in deploy_doc.lower() or "credential" in deploy_doc.lower() or "alias" in deploy_doc.lower()
@@ -1036,11 +715,10 @@ def test_new_mcp_tools_describe_the_contract():
     bind_doc = server._tool_manager._tools["bind_dashboard"].fn.__doc__ or ""
     assert "tool" in bind_doc.lower() and "cannot" in bind_doc.lower()
     recipe_doc = server._tool_manager._tools["get_dashboard_query_recipe"].fn.__doc__ or ""
-    assert "fluxito_data" in recipe_doc.lower() or "action" in recipe_doc.lower()
+    assert "fluxito.query" in recipe_doc.lower() or "action" in recipe_doc.lower()
 
 
 def test_inject_bound_resource_overwrites_caller_identities():
-    """Bound property_id / account_id / connection_id always beat the caller."""
     from app.dashboards.data_plane import _inject_bound_resource
 
     merged = _inject_bound_resource(
@@ -1068,7 +746,6 @@ def test_inject_bound_resource_overwrites_caller_identities():
 
 @pytest.mark.asyncio
 async def test_run_alias_query_ignores_caller_tool_and_overwrites_resource():
-    """Hostile stored binding.tool + attacker resource ids must not retarget dispatch."""
     from unittest.mock import AsyncMock, patch
 
     from app.dashboards.artifact import CONNECTION_TOOL
@@ -1146,8 +823,6 @@ async def test_run_alias_query_ignores_caller_tool_and_overwrites_resource():
 
 @pytest.mark.asyncio
 async def test_run_alias_query_fails_closed_on_unknown_type_even_with_stored_tool():
-    """Unknown binding.type must not fall back to a tampered binding.tool."""
-
     class _Dash:
         id = uuid.uuid4()
         connection_bindings = [
@@ -1173,18 +848,6 @@ async def test_run_alias_query_fails_closed_on_unknown_type_even_with_stored_too
     assert result["error_type"] == "no_tool"
 
 
-def test_fluxito_data_query_does_not_accept_or_post_tool():
-    import inspect
-
-    from app.dashboards import fluxito_data
-
-    sig = inspect.signature(fluxito_data.query)
-    assert "tool" not in sig.parameters
-    source = inspect.getsource(fluxito_data.query)
-    assert '"tool"' not in source
-    assert "tool=" not in source
-
-
 @pytest.mark.asyncio
 async def test_bind_dashboard_mcp_rebinds_and_rejects_tool(wired, db_session_factory):
     uid = await _make_user(db_session_factory)
@@ -1203,73 +866,3 @@ async def test_bind_dashboard_mcp_rebinds_and_rejects_tool(wired, db_session_fac
         )
         assert rejected.get("error") is True
         assert rejected.get("error_type") == "tool_not_allowed"
-
-
-@pytest.mark.asyncio
-async def test_hosted_query_endpoint_ignores_caller_tool(wired, db_session_factory):
-    from unittest.mock import AsyncMock, patch
-
-    import httpx
-    from httpx import ASGITransport
-
-    from app.main import app
-
-    uid = await _make_user(db_session_factory)
-    server = _build_server()
-    with _user_ctx(uid):
-        deployed = await _tool(server, "deploy_dashboard")(title="GA4", files=_files())
-    slug = deployed["slug"]
-    dash_id = uuid.UUID(deployed["dashboard_id"])
-
-    async with db_session_factory() as db:
-        dash = (await db.execute(select(Dashboard).where(Dashboard.id == dash_id))).scalar_one()
-        dash.runtime_token = "tok"
-        dash.connection_bindings = [
-            {
-                "alias": "ga4",
-                "type": "ga4",
-                "status": "bound",
-                "tool": "analytics_read",
-                "resource_key": "property_id",
-                "resource_value": "279951751",
-            }
-        ]
-        await db.commit()
-
-    seen: dict = {}
-
-    class _Ctx:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *a):
-            return None
-
-    with (
-        patch("app.auth.mcp_session_manager.build_refresh_context", new=AsyncMock(return_value=_Ctx())),
-        patch("app.dashboards.data_plane.query_engine.run_card") as run_card,
-    ):
-
-        async def _run(tm, spec, tool_name=None, action=None, timeout=None):
-            seen["dispatched_tool"] = tool_name
-            seen.update(spec)
-            return {"rows": [{"sessions": "3"}]}
-
-        run_card.side_effect = _run
-        async with httpx.AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client:
-            resp = await client.post(
-                f"/api/hosted-dashboards/{slug}/query",
-                json={
-                    "alias": "ga4",
-                    "action": "run_report",
-                    "tool": "warehouse_query",
-                    "params": {"metrics": ["sessions"], "property_id": "evil", "tool": "warehouse_query"},
-                },
-                headers={"Authorization": "Bearer tok"},
-            )
-    assert resp.status_code == 200
-    assert seen.get("dispatched_tool") == "analytics_read"
-    assert seen.get("property_id") == "279951751"

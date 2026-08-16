@@ -1,11 +1,11 @@
 """
 Dashboard Models
 
-A dashboard is a hosted, model-authored Streamlit app (kind="hosted") or a
+A dashboard is a hosted, model-authored web app (kind="hosted") or a
 legacy card-native row (kind="legacy_cards"). New deploys are hosted:
-Fluxito stores the artifact on disk, binds connection aliases, and runs
-Streamlit in an isolated process. DashboardCard remains for compatibility
-with existing card-native rows only.
+Fluxito stores the production HTML/JS build on disk and binds connection
+aliases. The artifact runs on an isolated origin. DashboardCard remains
+for compatibility with existing card-native rows only.
 
 Sharing is controlled by is_public + share_slug.
 """
@@ -77,7 +77,7 @@ class Dashboard(Base):
         Integer, nullable=False, default=86400, server_default="86400"
     )
 
-    # Hosted Streamlit artifact (kind="hosted"). Existing card-native rows stay
+    # Hosted web artifact (kind="hosted"). Existing card-native rows stay
     # kind="legacy_cards". Column names intentionally avoid the retired
     # artifact_js / artifact_html / render_mode fields.
     kind: Mapped[str] = mapped_column(

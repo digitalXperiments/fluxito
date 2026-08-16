@@ -2,7 +2,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 gunicorn==22.0.0
-# Explicit pin: hosted Streamlit WS proxy (uvicorn[standard] already pulls this).
+# uvicorn[standard] already pulls this; pin the range we test against.
 websockets>=12,<16
 
 # Model Context Protocol (MCP) — Claude integration
@@ -68,14 +68,6 @@ python-multipart==0.0.20
 
 # ── Anthropic SDK (Haiku/Sonnet for dashboard generation + improvise) ─────────
 anthropic>=0.40.0,<1.0
-
-# ── Hosted Streamlit dashboards (model-authored apps Fluxito supervises) ──
-# Cap below 1.57: 1.57+ switches the default server to Starlette and imports
-# DEFAULT_EXCLUDED_CONTENT_TYPES from starlette.middleware.gzip, which does
-# not exist in Starlette 0.41 (FastAPI 0.115.6). An unpinned 1.60 install
-# makes `python -m streamlit` exit 1 immediately.
-streamlit>=1.40,<1.57
-pandas>=2.0,<3.0
 
 # ── PDF generation (dashboard export + scheduled reports) ──────────────────
 # Headless Chromium renders the live dashboard view (charts included) to PDF.

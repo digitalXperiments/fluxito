@@ -1,9 +1,9 @@
-"""Data plane for hosted Streamlit apps.
+"""Data plane for hosted web dashboards.
 
-The Streamlit process POSTs {alias, action, params} with the dashboard's
-runtime token. Fluxito resolves the alias to a bound connection, builds a
-refresh context for the dashboard owner, and dispatches the matching MCP
-tool. Secrets never leave this process.
+The dash origin POSTs {alias, action, params} with a short-lived embed
+token. Fluxito resolves the alias to a bound connection, builds a refresh
+context for the dashboard owner, and dispatches the matching MCP tool.
+Secrets never leave this process.
 """
 
 from __future__ import annotations

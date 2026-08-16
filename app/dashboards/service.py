@@ -1,4 +1,4 @@
-"""Deploy / update / delete / describe hosted Streamlit dashboards."""
+"""Deploy / update / delete / describe hosted web dashboards."""
 
 from __future__ import annotations
 
@@ -16,12 +16,10 @@ from app.dashboards.artifact import (
     validate_artifact,
 )
 from app.dashboards.connections import bind_requirements, list_bindable_connections
+from app.dashboards.origin import dash_src
 from app.dashboards.runtime import (
-    build_child_env,
     delete_workdir,
-    get_handle,
-    start_dashboard,
-    stop_dashboard,
+    ensure_house_files,
     workdir_for,
     write_artifact,
 )
@@ -39,25 +37,22 @@ def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _data_url(slug: str) -> str:
-    base = (settings.INTERNAL_BASE_URL or "http://127.0.0.1:8001").rstrip("/")
-    return f"{base}/api/hosted-dashboards/{slug}/query"
-
-
 def _public_url(slug: str) -> str:
     return f"{settings.APP_BASE_URL.rstrip('/')}/live-dashboards/{slug}"
 
 
+def _artifact_ready(dash: Dashboard) -> bool:
+    workdir = workdir_for(dash.user_id, dash.id)
+    entry = (dash.manifest or {}).get("entrypoint") or "index.html"
+    return (workdir / entry).is_file()
+
+
 def hosted_payload(dash: Dashboard, *, include_manifest: bool = True) -> dict:
     bindings = list(dash.connection_bindings or [])
-    handle = (
-        get_handle(str(dash.id), workdir_for(dash.user_id, dash.id))
-        if getattr(dash, "kind", None) == "hosted"
-        else None
-    )
-    host_status = dash.host_status or "stopped"
-    if handle is not None:
-        host_status = "running"
+    ready = _artifact_ready(dash) if getattr(dash, "kind", None) == "hosted" else False
+    host_status = "ready" if ready else (dash.host_error and "error") or dash.host_status or "missing"
+    if ready:
+        host_status = "ready"
     out = {
         "id": str(dash.id),
         "dashboard_id": str(dash.id),
@@ -69,9 +64,9 @@ def hosted_payload(dash: Dashboard, *, include_manifest: bool = True) -> dict:
         "is_public": dash.is_public,
         "url": _public_url(dash.share_slug),
         "live_url": _public_url(dash.share_slug),
-        "embed_url": f"{settings.APP_BASE_URL.rstrip('/')}/hosted/{dash.share_slug}/",
+        "embed_url": dash_src(dash.share_slug),
         "host_status": host_status,
-        "host_error": dash.host_error,
+        "host_error": None if ready else dash.host_error,
         "bindings": bindings,
         "connection_bindings": bindings,
         "artifact_hash": getattr(dash, "artifact_hash", None),
@@ -88,69 +83,39 @@ async def _count_user_dashboards(db, uid: UUID) -> int:
     return int(result.scalar() or 0)
 
 
-async def persist_and_start(
+async def persist_and_write(
     dash: Dashboard,
     artifact: ValidatedArtifact,
     *,
     uid: UUID,
-    restart: bool = True,
 ) -> dict:
     available = await list_bindable_connections(dash.project_id, uid)
     bindings = bind_requirements(artifact.manifest.connections, available)
-    token = dash.runtime_token or secrets.token_urlsafe(32)
 
     dash.kind = "hosted"
     dash.manifest = artifact.manifest.to_dict()
     dash.artifact_hash = artifact.digest
     dash.connection_bindings = bindings
-    dash.runtime_token = token
     dash.title = artifact.manifest.title[:MAX_TITLE_LEN]
     dash.updated_at = _now()
+    dash.host_port = None
+    dash.runtime_token = None
 
     workdir = workdir_for(dash.user_id, dash.id)
-    data_url = _data_url(dash.share_slug)
-    if restart:
-        stop_dashboard(str(dash.id), workdir=workdir)
-    write_artifact(
-        workdir,
-        artifact,
-        bindings=bindings,
-        data_url=data_url,
-        runtime_token=token,
-        dashboard_id=str(dash.id),
-        slug=dash.share_slug,
-    )
-
-    host_error = None
-    host_status = "stopped"
-    host_port = None
-    if restart:
-        env = build_child_env(
-            workdir=workdir,
-            data_url=data_url,
-            runtime_token=token,
-            dashboard_id=str(dash.id),
+    try:
+        write_artifact(
+            workdir,
+            artifact,
             bindings=bindings,
-            port=0,
-            base_path=f"/hosted/{dash.share_slug}",
+            dashboard_id=str(dash.id),
+            slug=dash.share_slug,
         )
-        try:
-            handle = start_dashboard(
-                dashboard_id=str(dash.id),
-                slug=dash.share_slug,
-                workdir=workdir,
-                entrypoint=artifact.manifest.entrypoint,
-                env=env,
-            )
-            host_status = "running"
-            host_port = handle.port
-        except Exception as exc:
-            host_status = "error"
-            host_error = str(exc)[:500]
+        dash.host_status = "ready"
+        dash.host_error = None
+    except Exception as exc:
+        dash.host_status = "error"
+        dash.host_error = str(exc)[:500]
 
-    dash.host_status = host_status
-    dash.host_port = host_port
-    dash.host_error = host_error
     return hosted_payload(dash)
 
 
@@ -196,7 +161,7 @@ async def deploy_hosted(
         )
         db.add(dash)
         await db.flush()
-        payload = await persist_and_start(dash, artifact, uid=uid, restart=True)
+        payload = await persist_and_write(dash, artifact, uid=uid)
         await db.commit()
         await db.refresh(dash)
 
@@ -237,7 +202,7 @@ async def update_hosted(
             dash.title = title.strip()[:MAX_TITLE_LEN]
         if description is not None:
             dash.description = (description or "")[:MAX_DESC_LEN] or None
-        payload = await persist_and_start(dash, artifact, uid=uid, restart=True)
+        payload = await persist_and_write(dash, artifact, uid=uid)
         await db.commit()
         await db.refresh(dash)
 
@@ -269,47 +234,28 @@ async def delete_hosted(dashboard_id: str, user) -> dict:
     return {"success": True, "deleted": dashboard_id}
 
 
-async def ensure_running(dash: Dashboard) -> Dashboard:
-    """Lazy-start a hosted dashboard on first view."""
+async def ensure_ready(dash: Dashboard) -> Dashboard:
+    """Make sure house files exist for a hosted dashboard."""
     if getattr(dash, "kind", None) != "hosted":
         return dash
     workdir = workdir_for(dash.user_id, dash.id)
-    if get_handle(str(dash.id), workdir) is not None:
-        if dash.host_status != "running":
-            dash.host_status = "running"
-        return dash
-    entrypoint = (dash.manifest or {}).get("entrypoint") or "app.py"
-    if not (workdir / entrypoint).exists():
+    entry = (dash.manifest or {}).get("entrypoint") or "index.html"
+    if not (workdir / entry).is_file():
         dash.host_status = "error"
         dash.host_error = "Artifact files are missing on disk. Redeploy the dashboard."
         return dash
-    token = dash.runtime_token or secrets.token_urlsafe(32)
-    dash.runtime_token = token
-    env = build_child_env(
-        workdir=workdir,
-        data_url=_data_url(dash.share_slug),
-        runtime_token=token,
-        dashboard_id=str(dash.id),
-        bindings=list(dash.connection_bindings or []),
-        port=dash.host_port or 0,
-        base_path=f"/hosted/{dash.share_slug}",
-    )
     try:
-        handle = start_dashboard(
-            dashboard_id=str(dash.id),
-            slug=dash.share_slug,
-            workdir=workdir,
-            entrypoint=entrypoint,
-            env=env,
-            port=dash.host_port,
-        )
-        dash.host_status = "running"
-        dash.host_port = handle.port
+        ensure_house_files(workdir)
+        dash.host_status = "ready"
         dash.host_error = None
     except Exception as exc:
         dash.host_status = "error"
         dash.host_error = str(exc)[:500]
     return dash
+
+
+# Back-compat name used by a few routes during the Streamlit era.
+ensure_running = ensure_ready
 
 
 async def rebind_dashboard(dash: Dashboard) -> list[dict]:
@@ -336,11 +282,7 @@ def _bindings_from_caller(
     available: list[dict],
     manifest_connections: list,
 ) -> list[dict] | dict:
-    """Build bindings from an explicit bind_dashboard payload.
-
-    Caller may name alias / type / connection_id. Tool is always assigned
-    from CONNECTION_TOOL — never from the request.
-    """
+    """Build bindings from an explicit bind_dashboard payload."""
     from app.dashboards.artifact import CONNECTION_TOOL, ConnectionRequirement
 
     if not isinstance(requested, list):
@@ -375,13 +317,11 @@ def _bindings_from_caller(
         if conn_id:
             want_connection[alias] = str(conn_id)
 
-    # Prefer an explicitly requested connection_id when several of that type exist.
     wanted_ids = set(want_connection.values())
     preferred = [c for c in available if str(c.get("connection_id") or "") in wanted_ids]
     rest = [c for c in available if str(c.get("connection_id") or "") not in wanted_ids]
     bindings = bind_requirements(reqs, preferred + rest)
     for b in bindings:
-        # Host-owned tool map — strip anything a caller might have smuggled.
         b["tool"] = CONNECTION_TOOL.get(b.get("type") or "")
     if manifest_connections:
         allowed = {
@@ -419,7 +359,7 @@ async def bind_hosted(
                 "error": True,
                 "error_type": "hosted_only",
                 "message": (
-                    "bind_dashboard only works on hosted Streamlit dashboards. "
+                    "bind_dashboard only works on hosted web dashboards. "
                     "Call get_dashboard_authoring_guide then deploy_dashboard."
                 ),
             }

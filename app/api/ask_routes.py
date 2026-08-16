@@ -252,7 +252,7 @@ async def confirm_action(request: Request):
 
     action='discard' still flips a leftover card_preview block's state.
     action='add' is rejected: native JS cards are not deployed. Hosted
-    dashboards are authored as Streamlit artifacts and deployed over MCP
+    dashboards are authored as production HTML/JS builds and deployed over MCP
     (get_dashboard_authoring_guide → deploy_dashboard → bind_dashboard).
     """
     uid = _require_user_id(request)
@@ -286,7 +286,7 @@ async def confirm_action(request: Request):
     return JSONResponse(
         {
             "error": (
-                "Native card dashboards are retired. Deploy a hosted Streamlit "
+                "Native card dashboards are retired. Deploy a hosted web "
                 "artifact with get_dashboard_authoring_guide → "
                 "validate_dashboard_artifact → deploy_dashboard → bind_dashboard."
             ),

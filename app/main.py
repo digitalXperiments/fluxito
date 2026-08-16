@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select as _sel
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import app.app_state as app_state
 from app.auth.mcp_session_manager import build_project_context, require_valid_mcp_token
@@ -349,6 +350,24 @@ app.add_middleware(
     expose_headers=["X-Request-Id"],
 )
 
+
+class _DashOriginLockdown(BaseHTTPMiddleware):
+    """Untrusted dashboard JS only exists on the dash origin; Fluxito APIs do not."""
+
+    async def dispatch(self, request: Request, call_next):
+        from app.dashboards.origin import dash_path_allowed, is_dash_only_path, is_dash_request
+
+        path = request.url.path
+        dash = is_dash_request(request)
+        if dash and not dash_path_allowed(request.method, path):
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        if not dash and is_dash_only_path(path):
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        return await call_next(request)
+
+
+app.add_middleware(_DashOriginLockdown)
+
 # ---------------------------------------------------------------------------
 # Static files (css, js, images) for the unified UI
 # ---------------------------------------------------------------------------
@@ -442,6 +461,7 @@ from app.api.auditing_routes import router as auditing_platform_router
 from app.api.auth_routes import router as auth_router
 from app.api.automation_routes import router as automation_router
 from app.api.connector_metadata_routes import router as connector_metadata_router
+from app.api.dash_origin_routes import router as dash_origin_router
 from app.api.dashboard_query_routes import router as dashboard_query_router
 from app.api.dashboard_routes import router as dashboard_router
 from app.api.google_oauth_routes import router as google_router
@@ -464,6 +484,7 @@ app.include_router(oauth_router)
 app.include_router(google_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
+app.include_router(dash_origin_router)
 app.include_router(dashboard_query_router)
 app.include_router(notification_router)
 app.include_router(template_router)

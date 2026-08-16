@@ -17,7 +17,7 @@ DOMAIN_TOOLS: dict[str, dict[str, set[str]]] = {
     "seo": {"read": {"seo_read"}, "write": {"seo_write"}},
     "warehouse": {"read": {"warehouse_read", "warehouse_query"}, "write": set()},
     "dashboards": {
-        # Hosted Streamlit only. Native card writers are unregistered.
+        # Hosted web dashboards only. Native card writers are unregistered.
         "read": {
             "dashboard_read",
             "get_dashboard_authoring_guide",

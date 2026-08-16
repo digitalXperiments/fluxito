@@ -511,27 +511,28 @@ def _dashboard_to_dict(dash, include_cards: bool = True) -> dict:
 
 def register_dashboard_tools(mcp_server):
     # -------------------------------------------------------------------------
-    # Hosted Streamlit surface — PRIMARY
+    # Hosted web dashboards — PRIMARY
     # -------------------------------------------------------------------------
 
     @mcp_server.tool("get_dashboard_authoring_guide")
     async def get_dashboard_authoring_guide() -> dict:
-        """Return the complete contract for building a Fluxito-hosted Streamlit dashboard.
+        """Return the complete contract for building a Fluxito-hosted web dashboard.
 
         REQUIRED FIRST CALL before writing any dashboard code. Fluxito hosts a
-        model-authored Python/Streamlit app — it does not generate cards, charts,
-        or JavaScript. Follow the returned `flow` exactly.
+        production HTML/JS build on an isolated origin. It does not compile JSX
+        or run Streamlit. Follow the returned `flow` exactly.
 
         Returns:
-          guide — markdown contract (layout, manifest, forbidden items, example)
+          guide — markdown contract (build, manifest, forbidden items, example)
           recipes — per-type {action, send, injected, example_params, call}
           connection_types / connection_tools — bindable types and host tools
-          helper_api — fluxito_data functions you may call
+          helper_api — fluxito.query / fluxito.rows
           flow — required tool sequence
 
-        After this, call list_dashboard_connections, write app.py + manifest.json
-        using recipes[type], then validate_dashboard_artifact. Do not emit
-        card JSON, chart_type, or ECharts. Do not put secrets in source.
+        After this, call list_dashboard_connections, build locally (Vite
+        base: './'), send index.html + assets + manifest.json, then
+        validate_dashboard_artifact. Do not emit Streamlit, card JSON, or
+        source .jsx. Do not put secrets in the bundle.
         """
         from app.dashboards.authoring_guide import authoring_guide_payload
 
@@ -539,9 +540,9 @@ def register_dashboard_tools(mcp_server):
 
     @mcp_server.tool("get_dashboard_query_recipe")
     async def get_dashboard_query_recipe(connection_type: str | None = None) -> dict:
-        """Return the exact fluxito_data.query contract for a connection type.
+        """Return the exact fluxito.query contract for a connection type.
 
-        Call this when you are about to write fx.query(...) and are unsure of
+        Call this when you are about to write fluxito.query(...) and are unsure of
         the action or params. Do not invent actions.
 
         connection_type: e.g. "ga4", "google_ads", "bigquery". Omit to get every
@@ -573,19 +574,16 @@ def register_dashboard_tools(mcp_server):
         manifest: dict | None = None,
         title: str | None = None,
     ) -> dict:
-        """Validate a Streamlit dashboard artifact without persisting or starting it.
+        """Validate a web dashboard artifact without persisting it.
 
-        files: path → UTF-8 source. Must include app.py (or manifest.entrypoint)
+        files: path → UTF-8 source. Must include index.html (or manifest.entrypoint)
         and manifest.json unless `manifest` is passed separately.
 
-        Required in the entrypoint when connections[] is non-empty:
-          import streamlit as st
-          import fluxito_data as fx
-          fx.query(alias, action, params)  — alias only, no tool name
+        Send the production build. Fluxito does not compile JSX.
 
-        Rejects secrets, .env, st.secrets, credential files, card JSON /
-        chart_type / ECharts, invalid entrypoints, path traversal, and
-        shell-out. Call this before deploy_dashboard and fix every error.
+        Rejects secrets, .env, remote scripts, source .jsx/.tsx/.py, Streamlit,
+        card JSON, invalid entrypoints, and path traversal. Call this before
+        deploy_dashboard and fix every error.
         """
         from app.dashboards.artifact import ArtifactError, validate_artifact
 
@@ -614,17 +612,17 @@ def register_dashboard_tools(mcp_server):
         description: str | None = None,
         manifest: dict | None = None,
     ) -> dict:
-        """Create and host a model-authored Streamlit dashboard.
+        """Create and host a model-authored web dashboard.
 
         Prerequisite: get_dashboard_authoring_guide → list_dashboard_connections
-        → validate_dashboard_artifact (ok=true). files must be a Streamlit
-        project (manifest.json + app.py). Query live data with
-        fluxito_data.query(alias, action, params) using recipes from the guide.
+        → validate_dashboard_artifact (ok=true). files must be a production
+        build (manifest.json + index.html + assets). Query live data with
+        fluxito.query(alias, action, params) using recipes from the guide.
 
         Writes the artifact to an isolated working directory, binds connection
         aliases to this project's stored credentials (never put secrets in
-        files), starts Streamlit, and returns dashboard_id, slug, url,
-        host_status, bindings. Then call bind_dashboard if any alias is missing.
+        files), and returns dashboard_id, slug, url, host_status, bindings.
+        Then call bind_dashboard if any alias is missing.
         """
         u = _user()
         if not u:
@@ -649,7 +647,7 @@ def register_dashboard_tools(mcp_server):
         description: str | None = None,
         manifest: dict | None = None,
     ) -> dict:
-        """Replace a hosted dashboard's artifact and restart the Streamlit process.
+        """Replace a hosted dashboard's artifact (production HTML/JS build).
 
         dashboard_id is the UUID from deploy_dashboard / list_dashboards.
         Same file + manifest contract as deploy_dashboard.
@@ -675,7 +673,7 @@ def register_dashboard_tools(mcp_server):
 
     @mcp_server.tool("delete_dashboard")
     async def delete_dashboard(dashboard_id: str) -> dict:
-        """Delete a dashboard you own: stop the host, wipe the working dir, drop the row.
+        """Delete a dashboard you own: wipe the working dir and drop the row.
 
         dashboard_id is the UUID. Irreversible.
         """
@@ -695,7 +693,7 @@ def register_dashboard_tools(mcp_server):
         returns tokens or secrets. Call this before writing the manifest.
 
         Use suggested_alias as manifest.connections[].alias and recipe.action
-        / recipe.example_params in fluxito_data.query. Do not invent params.
+        / recipe.example_params in fluxito.query. Do not invent params.
         """
         u = _user()
         if not u:
@@ -722,7 +720,7 @@ def register_dashboard_tools(mcp_server):
             "hint": (
                 "Put each needed source in manifest.connections as "
                 '{"alias": suggested_alias, "type": type}. Query with '
-                "fluxito_data.query(alias, action=recipe.action, params=recipe.example_params). "
+                "fluxito.query(alias, action=recipe.action, params=recipe.example_params). "
                 "Never inline secrets. After deploy, call bind_dashboard."
             ),
         }

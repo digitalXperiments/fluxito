@@ -777,7 +777,7 @@ Actions:
 """
 
 DASHBOARD_READ_DOC = """
-Read hosted Streamlit dashboards (and leftover legacy card rows).
+Read hosted web dashboards (and leftover legacy card rows).
 
 To BUILD a dashboard: call get_dashboard_authoring_guide first, then
 list_dashboard_connections, follow get_dashboard_query_recipe for each

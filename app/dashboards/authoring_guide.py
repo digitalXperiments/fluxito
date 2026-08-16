@@ -1,13 +1,13 @@
 """Single source of truth for how a model authors a Fluxito-hosted dashboard.
 
-Returned verbatim by ``get_dashboard_authoring_guide``. Keep this document
-complete and unambiguous — models are expected to fetch it first and follow
-it exactly. Fluxito does not generate dashboard UI.
+Returned verbatim by ``get_dashboard_authoring_guide``. Fluxito hosts a
+production HTML/JS build. It does not compile JSX and does not run Streamlit.
 """
 
 from __future__ import annotations
 
 from app.dashboards.artifact import (
+    ARTIFACT_KIND,
     ARTIFACT_SCHEMA_VERSION,
     CONNECTION_TOOL,
     CONNECTION_TYPES,
@@ -20,8 +20,9 @@ from app.dashboards.query_recipes import all_recipes, recipes_markdown
 _GUIDE_HEAD = f"""
 # Fluxito hosted dashboards — authoring contract (schema_version={ARTIFACT_SCHEMA_VERSION})
 
-You are writing a **Python Streamlit app**. Fluxito **hosts** that app. Fluxito
-does **not** generate cards, charts, HTML, JavaScript, or ECharts specs.
+You are writing a **production frontend** (HTML + JS + CSS). Fluxito **hosts**
+the built files on an isolated origin and injects live data. Fluxito does
+**not** compile JSX, run Streamlit, or generate cards / ECharts specs.
 
 Those card tools are **unregistered**. They do not exist. Do not call
 dashboard_deploy_batch, dashboard_create, dashboard_card_upsert,
@@ -33,41 +34,52 @@ dashboard_card_preview, or dashboard_card_remove.
 2. Call `list_dashboard_connections` to see bindable aliases/types for this project.
 3. For each type you will use, follow the recipe in this guide (or call
    `get_dashboard_query_recipe` with that type). Do not invent actions or params.
-4. Write the Streamlit app + `manifest.json`.
-5. Call `validate_dashboard_artifact` and fix every error.
-6. Call `deploy_dashboard` (create) or `update_dashboard` (replace an existing one).
-7. Call `bind_dashboard` so aliases attach to this project's stored credentials.
-8. Give the user the returned `url`. That URL is the live hosted app.
+4. Build locally (`vite build` / equivalent with `base: './'`).
+5. Send `manifest.json` + the **production** `index.html` and hashed assets.
+6. Call `validate_dashboard_artifact` and fix every error (and read warnings).
+7. Call `deploy_dashboard` (create) or `update_dashboard` (replace).
+8. Call `bind_dashboard` so aliases attach to this project's stored credentials.
+9. Give the user the returned `url`. That URL is the live hosted app.
 
-Never skip validate. Never put secrets in source. Never emit card JSON.
+Never skip validate. Never put secrets in source. Never send `.jsx` / `.tsx`.
+Never emit card JSON. Never write Streamlit.
 
 ## What you produce
 
-A small Python project, sent as `files` (object of path → UTF-8 source):
+A small static project, sent as `files` (object of path → UTF-8 source):
 
     files = {{
       "manifest.json": "<json>",
-      "app.py": "<streamlit app>",
+      "index.html": "<html>",
+      "assets/index-xxxxx.js": "<bundle>",
+      "assets/index-xxxxx.css": "<css>",
     }}
-
-Optional extra modules (imported by app.py) are allowed: `charts.py`, `theme.py`,
-`README.md`, `.streamlit/config.toml`. No binaries, no `.env`, no credential files.
 
 ### Limits
 
 - Max {MAX_FILES} files
 - Max {MAX_FILE_BYTES} bytes per file
 - Max {MAX_TOTAL_BYTES} bytes total
-- Allowed suffixes: .py .txt .md .toml .css .json
-- Paths are relative. No `..`, no absolute paths, no `.env*`
+- Allowed suffixes: .html .js .css .svg .json .txt .md .map
+- Paths are relative. No `..`, no absolute paths, no `node_modules`, no `.env*`
+- **Rejected:** `.jsx` `.tsx` `.ts` `.py` — Fluxito does not compile. Send `dist/`.
+
+Vite (required):
+
+```js
+export default {{ base: './' }}
+```
+
+Absolute `/assets/...` URLs break on the host. Use relative asset URLs.
 
 ## manifest.json (required)
 
 ```json
 {{
   "schema_version": {ARTIFACT_SCHEMA_VERSION},
+  "kind": "web",
   "title": "Acquisition overview",
-  "entrypoint": "app.py",
+  "entrypoint": "index.html",
   "connections": [
     {{"alias": "ga4", "type": "ga4", "required": true}},
     {{"alias": "ads", "type": "google_ads", "required": true}}
@@ -78,14 +90,13 @@ Optional extra modules (imported by app.py) are allowed: `charts.py`, `theme.py`
 Rules:
 
 - `schema_version` must be {ARTIFACT_SCHEMA_VERSION}.
+- `kind` is `web`.
 - `title` is the human name shown in the reporting UI.
-- `entrypoint` must be a `.py` file present in `files`. Default `app.py`.
+- `entrypoint` must be an `.html` file present in `files`. Default `index.html`.
 - `connections` is required. Each entry:
-  - `alias` — snake_case identifier you will pass to `fluxito_data.query`.
+  - `alias` — snake_case identifier you will pass to `fluxito.query`.
   - `type` — a Fluxito connection type (see below). Must match a live project connection.
-  - `required` — default true. If true and the project has no matching connection,
-    deploy still succeeds but the reporting UI marks the bind as `missing` and
-    `fluxito_data.query` returns an error until the user connects that platform.
+  - `required` — default true.
 
 Known `type` values:
   {", ".join(sorted(CONNECTION_TYPES))}
@@ -93,62 +104,59 @@ Known `type` values:
 Default tool dispatched for each type:
 {chr(10).join(f"  - {k} → {v}" for k, v in sorted(CONNECTION_TOOL.items()))}
 
-You do **not** pass OAuth tokens, API keys, service-account JSON, passwords,
-`DATABASE_URL`, or Fernet keys. The platform injects stored credentials at
-runtime via the data helper.
+You do **not** pass OAuth tokens, API keys, service-account JSON, or passwords.
+The platform injects stored credentials at query time.
 
 ## How live data works (mandatory)
 
-Fluxito copies a helper named `fluxito_data.py` into the working directory.
-Import it. Do not rewrite it. Do not vendor secrets.
+Fluxito injects `/fluxito.js` into `index.html`. Do not rewrite that file.
+Do not put tokens in the bundle.
 
-```python
-import streamlit as st
-import fluxito_data as fx
-
-st.set_page_config(page_title="Acquisition overview", layout="wide")
-st.title("Acquisition overview")
-
-start, end = st.date_input("Range", value=fx.default_range(30))
-result = fx.query(
-    "ga4",
-    action="run_report",
-    params={{
-        "metrics": ["sessions", "totalUsers"],
-        "dimensions": ["date"],
-        "start_date": start.isoformat(),
-        "end_date": end.isoformat(),
-    }},
-)
-if result.get("error"):
-    st.error(result["message"])
-else:
-    st.line_chart(fx.as_dataframe(result), x="date")
-
-if st.button("Refresh data"):
-    st.rerun()
+```html
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Acquisition overview</title>
+    <link rel="stylesheet" href="./assets/app.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./assets/app.js"></script>
+  </body>
+</html>
 ```
 
-`fx.query(alias, action, params)` POSTs to Fluxito's data plane. Fluxito
-resolves `alias` → the bound connection → stored credentials and runs the
-MCP tool **owned by that binding**. You cannot pass a tool name. The
-Streamlit process never receives Fernet keys, OAuth refresh tokens, or the
-app database URL.
+```js
+const result = await fluxito.query("ga4", "run_report", {{
+  metrics: ["sessions", "totalUsers"],
+  dimensions: ["date"],
+  start_date: "2026-07-16",
+  end_date: "2026-08-15",
+}});
+if (result.error) {{
+  showError(result.message);
+}} else {{
+  const rows = fluxito.rows(result);
+}}
+```
 
-Helper API (already on PYTHONPATH of the hosted process):
+`fluxito.query(alias, action, params)` POSTs to Fluxito's data plane with a
+short-lived embed token the host delivers via `postMessage`. You cannot pass a
+tool name. Bound resource identity (`property_id`, `customer_id`, `connection_id`)
+**overwrites** whatever you send.
 
-- `query(alias, action, params=None)` → dict  (alias-only; no tool argument)
-- `as_dataframe(result)` → pandas.DataFrame when pandas is available, else list[dict]
-- `summarize(result)` → dict of numeric totals / first-row metrics for `st.metric`
-- `default_range(days=30)` → (start_date, end_date) as date objects
-- `connections()` → list of {{alias, type, status}} bound for this dashboard
+Helper API (on `window.fluxito` after the host injects the script):
 
-There is no `fx.refresh()`. Widgets trigger a Streamlit rerun; call `query` again
-with the widget values.
+- `query(alias, action, params)` → Promise<dict>
+- `rows(result)` → array of objects
+- `whenReady()` → Promise that resolves when the embed token arrives
 
-`params` must match the recipe for the alias's `type`. Bound resource identity
-(property_id, customer_id, site_url, connection_id, account_id, advertiser_id)
-is **injected by the host and overwrites** whatever you send. Never pass `tool`.
+The dashboard runs on a **separate origin**. It cannot see Fluxito cookies,
+cannot call `/api/*`, and cannot reach any connection except the aliases in
+this manifest. Opening the dash URL outside Fluxito shows no live data.
+
+There is no `fluxito.refresh()`. Re-call `query` when filters change.
 """
 
 _GUIDE_TAIL = f"""
@@ -158,46 +166,25 @@ Never pass a `tool` field.
 
 ## Forbidden (validation rejects the artifact)
 
+- Any `.jsx` / `.tsx` / `.ts` / `.py` — send the production build
+- Remote `<script src="https://...">` — bundle every script
 - Any `.env`, `credentials.json`, `service-account.json`, `secrets.toml`, `*.pem`, `*.key`
-- Private keys, AWS keys, GitHub/Slack tokens, `password=` / `api_key=` assignments
+- `node_modules`, lockfiles, private keys, AWS keys, GitHub/Slack tokens
 - `DATABASE_URL=...`, `TOKEN_ENCRYPTION_KEY=...`, postgres://user:pass@host
-- `subprocess`, `os.system`, `os.popen`, `os.exec*`, `pty.spawn`
-- Baking tokens into Streamlit `secrets.toml` or `st.secrets`
+- Streamlit / `fluxito_data` / Fluxito card JSON / `dashboard_card_*`
 - Asking the user to paste a service-account JSON into the app
-- Generating Fluxito card JSON / chart_type / ECharts specs — that path is dead
 
-## Styling and interactivity expectations
+## Visual and query expectations
 
 Build something a stakeholder would keep open.
 
-- `st.set_page_config(layout="wide")`
 - A clear title and one-sentence description
-- Date range + any dimension filters as Streamlit widgets (they trigger a rerun;
-  call `fx.query` with the widget values — that **is** the refresh path)
-- KPI row (`st.metric`) above charts
-- Use `st.line_chart` / `st.bar_chart` / `st.altair_chart` / `st.plotly_chart` /
-  `st.dataframe` — interactive, not screenshots
-- Handle `result["error"]` with `st.error` and a short fix ("Connect GA4 in
-  Fluxito → Connections")
-- Empty state when a required alias is `missing`
+- Date range + dimension filters in the page (not a leftover sidebar)
+- KPI row above charts
+- Interactive charts from `fluxito.rows(...)` — not screenshots
+- Handle `result.error` with a short fix ("Connect GA4 in Fluxito → Connections")
+- Empty state when a query returns 0 rows, and say why
 - Do not block the whole page on one failed query; isolate each section
-
-A `.streamlit/config.toml` is optional. Prefer:
-
-```toml
-[theme]
-base = "light"
-primaryColor = "#1a1a1a"
-backgroundColor = "#faf8f5"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#1a1a1a"
-font = "sans serif"
-
-[server]
-headless = true
-```
-
-Do not set `enableCORS` / ports / browser.gatherUsageStats — the host owns those.
 
 ## Validate-then-deploy
 
@@ -206,22 +193,22 @@ validate_dashboard_artifact(files=..., manifest=optional)
 ```
 
 Returns `{{ok, digest, manifest, warnings, errors?}}`. If `ok` is false, fix
-every error and validate again. Do not deploy an invalid artifact.
+every error and validate again. Read warnings (absolute `/assets/` URLs, missing
+`fluxito.query`). Do not deploy an invalid artifact.
 
 ```
 deploy_dashboard(title=..., files=..., description?=..., manifest?=...)
 ```
 
-Creates a new hosted dashboard, writes the artifact to an isolated working
-directory, binds connection aliases to this project's stored credentials,
-starts a Streamlit process, and returns:
+Creates a hosted dashboard, writes the artifact, binds connection aliases to
+this project's stored credentials, and returns:
 
 ```
 {{
   "dashboard_id": "<uuid>",
   "slug": "...",
   "url": "https://…/live-dashboards/<slug>",
-  "host_status": "running" | "starting" | "error",
+  "host_status": "ready" | "error",
   "bindings": [{{"alias", "type", "status", "label"}}]
 }}
 ```
@@ -230,7 +217,7 @@ starts a Streamlit process, and returns:
 update_dashboard(dashboard_id=..., files=..., title?=..., description?=..., manifest?=...)
 ```
 
-Replaces the artifact, restarts the host, rebinds connections. Same return shape.
+Replaces the artifact, rebinds connections. Same return shape.
 
 ```
 bind_dashboard(dashboard_id, bindings?= [{{alias, type, connection_id?}}])
@@ -247,22 +234,22 @@ list_dashboard_connections()
 ```
 
 IDs are UUIDs. Use `dashboard_id` everywhere except the public URL, which uses
-the share `slug`.
+the share `slug`. Only a logged-in project member can open the live view.
 
 ## Failure modes (read these before retrying)
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | validate: looks like a secret | credentials in source | delete them; use an alias |
-| validate: entrypoint not in files | missing app.py | include the file |
-| validate: must import streamlit | not a Streamlit app | `import streamlit as st` |
-| validate: subprocess not allowed | shell-out | use `fluxito_data.query` |
+| validate: Fluxito does not compile .jsx | sent source, not dist/ | `vite build` with `base: './'` and send those files |
+| validate: remote script src | CDN script | bundle it |
+| validate: entrypoint not in files | missing index.html | include the file |
 | deploy: unauthenticated | no MCP session | user must reconnect Fluxito |
 | deploy: too many dashboards | 10 per user cap | delete an old one |
-| binding status=missing | platform not connected | tell the user to Connect that platform; do not invent tokens |
+| binding status=missing | platform not connected | tell the user to Connect that platform |
 | query error "unknown alias" | alias not in manifest | add it to connections[] |
 | query error from the tool | bad params / scope | fix action/params; do not catch-and-hide |
-| host_status=error | Streamlit failed to start | check entrypoint syntax; reread this guide |
+| live data banner "Open from Fluxito" | opened dash origin directly | use the `/live-dashboards/{{slug}}` URL |
 
 ## Minimal complete example
 
@@ -271,46 +258,84 @@ manifest.json:
 ```json
 {{
   "schema_version": {ARTIFACT_SCHEMA_VERSION},
+  "kind": "web",
   "title": "GA4 last 30 days",
-  "entrypoint": "app.py",
+  "entrypoint": "index.html",
   "connections": [{{"alias": "ga4", "type": "ga4"}}]
 }}
 ```
 
-app.py:
+index.html:
 
-```python
-import streamlit as st
-import fluxito_data as fx
-
-st.set_page_config(page_title="GA4 last 30 days", layout="wide")
-st.title("GA4 last 30 days")
-st.caption("Live data via the project's connected GA4 property. No secrets in this file.")
-
-start, end = st.date_input("Range", value=fx.default_range(30))
-data = fx.query(
-    "ga4",
-    action="run_report",
-    params={{
-        "metrics": ["sessions", "totalUsers", "bounceRate"],
-        "dimensions": ["date"],
-        "start_date": start.isoformat() if hasattr(start, "isoformat") else str(start),
-        "end_date": end.isoformat() if hasattr(end, "isoformat") else str(end),
-    }},
-)
-if data.get("error"):
-    st.error(data.get("message") or "Query failed")
-else:
-    cols = st.columns(3)
-    summary = fx.summarize(data)
-    cols[0].metric("Sessions", summary.get("sessions", "—"))
-    cols[1].metric("Users", summary.get("totalUsers", "—"))
-    cols[2].metric("Bounce rate", summary.get("bounceRate", "—"))
-    st.line_chart(fx.as_dataframe(data), x="date")
+```html
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>GA4 last 30 days</title>
+    <style>
+      body {{ font: 15px/1.45 system-ui, sans-serif; background: #0f1419; color: #e8eef7; margin: 0; }}
+      main {{ max-width: 960px; margin: 0 auto; padding: 28px 20px; }}
+      .kpis {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }}
+      .card {{ background: #161c24; border: 1px solid #2a3340; border-radius: 12px; padding: 16px; }}
+      .err {{ color: #f2b8b5; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>GA4 last 30 days</h1>
+      <p>Live data via the project's connected GA4 property. No secrets in this file.</p>
+      <div id="status"></div>
+      <div class="kpis">
+        <div class="card" id="sessions">Sessions —</div>
+        <div class="card" id="users">Users —</div>
+        <div class="card" id="bounce">Bounce —</div>
+      </div>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
 ```
 
-That is the entire product: you write Streamlit, Fluxito hosts it, credentials
-stay in Fluxito.
+app.js:
+
+```js
+function end() {{ return new Date().toISOString().slice(0, 10); }}
+function start() {{
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  return d.toISOString().slice(0, 10);
+}}
+
+async function main() {{
+  const data = await fluxito.query("ga4", "run_report", {{
+    metrics: ["sessions", "totalUsers", "bounceRate"],
+    dimensions: ["date"],
+    start_date: start(),
+    end_date: end(),
+  }});
+  const status = document.getElementById("status");
+  if (data.error) {{
+    status.className = "err";
+    status.textContent = data.message || "Query failed";
+    return;
+  }}
+  const rows = fluxito.rows(data);
+  let sessions = 0, users = 0;
+  for (const row of rows) {{
+    sessions += Number(row.sessions || 0);
+    users += Number(row.totalUsers || 0);
+  }}
+  document.getElementById("sessions").textContent = "Sessions " + sessions;
+  document.getElementById("users").textContent = "Users " + users;
+  const last = rows[rows.length - 1] || {{}};
+  document.getElementById("bounce").textContent = "Bounce " + (last.bounceRate || "—");
+}}
+main();
+```
+
+That is the entire product: you write and build the UI, Fluxito hosts it on
+an isolated origin, credentials stay in Fluxito.
 """
 
 AUTHORING_GUIDE = (_GUIDE_HEAD + "\n" + recipes_markdown() + "\n" + _GUIDE_TAIL).strip()
@@ -319,7 +344,7 @@ AUTHORING_GUIDE = (_GUIDE_HEAD + "\n" + recipes_markdown() + "\n" + _GUIDE_TAIL)
 def authoring_guide_payload() -> dict:
     return {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
-        "kind": "streamlit",
+        "kind": ARTIFACT_KIND,
         "guide": AUTHORING_GUIDE,
         "connection_types": sorted(CONNECTION_TYPES),
         "connection_tools": dict(CONNECTION_TOOL),
@@ -330,11 +355,9 @@ def authoring_guide_payload() -> dict:
             "max_total_bytes": MAX_TOTAL_BYTES,
         },
         "helper_api": [
-            "query(alias, action, params=None)",
-            "as_dataframe(result)",
-            "summarize(result)",
-            "default_range(days=30)",
-            "connections()",
+            "fluxito.query(alias, action, params)",
+            "fluxito.rows(result)",
+            "fluxito.whenReady()",
         ],
         "flow": [
             "get_dashboard_authoring_guide",
@@ -346,11 +369,11 @@ def authoring_guide_payload() -> dict:
             "list_dashboards / get_dashboard / delete_dashboard",
         ],
         "forbidden": [
+            "JSX/TS source — send the production build",
             "secrets in source or .env",
-            "card JSON / chart_type / ECharts",
-            "subprocess or shell-out",
-            "caller-chosen tool on fluxito_data.query",
+            "remote script src",
+            "Streamlit / fluxito_data / card JSON",
+            "caller-chosen tool on fluxito.query",
             "dashboard_deploy_batch / dashboard_card_* (unregistered)",
-            "st.secrets or asking the user for tokens",
         ],
     }

@@ -49,9 +49,9 @@ Plans go stale. Tags break silently. Dashboards lie with confidence. Every hando
 
 > "Audit container GTM-XXXXXXX. Flag broken tags, wrong triggers, and GA4 events with no conversion mapping."
 
-**Report** — Hosted Streamlit dashboards: your AI writes a Python app, Fluxito validates it, binds project credentials by alias, and runs it in isolation. Live data goes through Fluxito so the app never sees tokens. Plus scheduled Slack/email recaps and root-cause investigation across every connected platform.
+**Report** — Hosted web dashboards: your AI builds a production HTML/JS app, Fluxito validates it, binds project credentials by alias, and serves it on an isolated origin. Live data goes through Fluxito so the app never sees tokens. Plus scheduled Slack/email recaps and root-cause investigation across every connected platform.
 
-> "Build a Streamlit dashboard of sessions → add-to-cart → checkout → purchase for the last 30 days, bound to our GA4 property."
+> "Build a dashboard of sessions → add-to-cart → checkout → purchase for the last 30 days, bound to our GA4 property."
 >
 > "Every Monday at 9am, Slack me the biggest anomalies across GA4, Meta Ads, and Google Ads."
 >
@@ -68,7 +68,7 @@ Not a wishlist — this is live in the product today:
 - ✅ **Tracking-plan reconciliation** — diff live GA4/GTM events against a saved SDR (new / updated / unchanged / conflicts), on demand from a conversation
 - ✅ **Live tag audits** against 25+ platform rule books — broken tags, wrong triggers, unmapped conversions
 - ✅ **Campaign write operations across all 9 ad platforms** — Google, Meta, TikTok, Snap, LinkedIn, Pinterest, X, Reddit, Apple Search Ads (create campaigns, update budget/status)
-- ✅ **Hosted Streamlit dashboards** — the AI writes a Python app + manifest; Fluxito validates it, injects stored credentials by alias, and runs an isolated process that never sees Fernet keys or viewer cookies
+- ✅ **Hosted web dashboards** — the AI sends a production HTML/JS build + manifest; Fluxito validates it, injects stored credentials by alias, and serves the app on an isolated origin that never sees Fernet keys or viewer cookies
 - ✅ **Query recipes per platform** — `get_dashboard_query_recipe` so hosted apps call the right action and params instead of inventing fields
 - ✅ **Ask Fluxito** — a built-in assistant on top of Claude, GPT, Gemini, xAI, Mistral, or a local model
 - ✅ **MCP + Fluxito Skills** — any MCP-compatible AI client gets full tool access, not just the hosted assistant
@@ -86,7 +86,7 @@ Not a wishlist — this is live in the product today:
 | **Acquire** | Google Ads, Meta Ads, TikTok Ads, Snap Ads, LinkedIn Ads, Pinterest Ads, X Ads, Reddit Ads, Apple Search Ads |
 | **Nurture** | Adobe Marketo Engage, Braze, MoEngage |
 | **Warehouse** | BigQuery, Snowflake, Redshift |
-| **Report** | Hosted Streamlit dashboards (model-authored, host-bound credentials), scheduled email/Slack, automations, activity log |
+| **Report** | Hosted web dashboards (model-authored, host-bound credentials), scheduled email/Slack, automations, activity log |
 
 Setup walkthroughs for each platform live under [`docs/tutorials/`](docs/tutorials/).
 

@@ -61,7 +61,7 @@ EXPECTED_TOOLS = {
     # Feature-specific composites
     "tracking_plan",
     "run_script",
-    # Dashboard tools — hosted Streamlit (primary)
+    # Dashboard tools — hosted web artifacts (primary)
     "get_dashboard_authoring_guide",
     "get_dashboard_query_recipe",
     "validate_dashboard_artifact",

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Isolated-origin hosted web dashboards.** Models deploy a production HTML/JS
+  build (`index.html` + assets + `manifest.json`). Fluxito serves it on a
+  separate origin (`dash.fluxito.app` / `localhost:8002`) with a short-lived
+  embed token. Live data is `fluxito.query(alias, action, params)` against
+  bound connections only — the page cannot see Fluxito cookies or call `/api/*`.
+
+### Changed
+- Hosted dashboard authoring contract is a frontend build (Vite `base: './'`).
+  MCP tools, the skill, and Ask Fluxito point at that path.
+
+### Removed
+- Hosted Streamlit runtime, WebSocket proxy, and the `streamlit` / `pandas`
+  pins. Existing Streamlit artifacts will not boot; redeploy as a web build.
+
 ## [2.0.9] — 2026-08-16
 
 Hosted Streamlit apps booted but stayed on the loading skeleton. The browser
