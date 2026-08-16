@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.10] — 2026-08-16
+
+Hosted dashboards are no longer Streamlit. Models deploy a production HTML/JS
+build; Fluxito serves it on a separate origin so untrusted JS cannot use the
+viewer session.
+
 ### Added
 - **Isolated-origin hosted web dashboards.** Models deploy a production HTML/JS
   build (`index.html` + assets + `manifest.json`). Fluxito serves it on a

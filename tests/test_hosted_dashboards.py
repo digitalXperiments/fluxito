@@ -523,9 +523,7 @@ async def test_hosted_view_and_status_path(wired, db_session_factory):
         assert "Hosted Streamlit app" not in view.text
         assert "/s/" in view.text
         assert "Add card" not in view.text
-        assert (
-            'sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"' in view.text
-        )
+        assert 'sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"' in view.text
         assert "allow-top-navigation" not in view.text
         assert "fluxito-embed" in view.text
 
