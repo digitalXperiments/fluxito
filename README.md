@@ -49,9 +49,9 @@ Plans go stale. Tags break silently. Dashboards lie with confidence. Every hando
 
 > "Audit container GTM-XXXXXXX. Flag broken tags, wrong triggers, and GA4 events with no conversion mapping."
 
-**Report** — Native dashboards with 19 chart types, built card-by-card in conversation: Ask Fluxito proposes a chart, shows you a live preview, and adds it only when you click **Add**. Plus scheduled Slack/email recaps and root-cause investigation across every connected platform.
+**Report** — Hosted Streamlit dashboards: your AI writes a Python app, Fluxito validates it, binds project credentials by alias, and runs it in isolation. Live data goes through Fluxito so the app never sees tokens. Plus scheduled Slack/email recaps and root-cause investigation across every connected platform.
 
-> "Build me a funnel from sessions → add-to-cart → checkout → purchase for the last 30 days, and add it to the Growth dashboard."
+> "Build a Streamlit dashboard of sessions → add-to-cart → checkout → purchase for the last 30 days, bound to our GA4 property."
 >
 > "Every Monday at 9am, Slack me the biggest anomalies across GA4, Meta Ads, and Google Ads."
 >
@@ -68,8 +68,8 @@ Not a wishlist — this is live in the product today:
 - ✅ **Tracking-plan reconciliation** — diff live GA4/GTM events against a saved SDR (new / updated / unchanged / conflicts), on demand from a conversation
 - ✅ **Live tag audits** against 25+ platform rule books — broken tags, wrong triggers, unmapped conversions
 - ✅ **Campaign write operations across all 9 ad platforms** — Google, Meta, TikTok, Snap, LinkedIn, Pinterest, X, Reddit, Apple Search Ads (create campaigns, update budget/status)
-- ✅ **Native dashboards, 19 chart types** — funnels, heatmaps, treemaps, gauges, waterfalls, combos and more, with filters, shareable public links, and scheduled PDF/email/Slack delivery
-- ✅ **Chat-based dashboard builder** — describe the chart, preview it live in Ask Fluxito, click **Add**; nothing is written without your confirmation
+- ✅ **Hosted Streamlit dashboards** — the AI writes a Python app + manifest; Fluxito validates it, injects stored credentials by alias, and runs an isolated process that never sees Fernet keys or viewer cookies
+- ✅ **Query recipes per platform** — `get_dashboard_query_recipe` so hosted apps call the right action and params instead of inventing fields
 - ✅ **Ask Fluxito** — a built-in assistant on top of Claude, GPT, Gemini, xAI, Mistral, or a local model
 - ✅ **MCP + Fluxito Skills** — any MCP-compatible AI client gets full tool access, not just the hosted assistant
 - ✅ **Project-scoped RBAC** — per-tool, per-connection roles shared by the API and the UI
@@ -86,7 +86,7 @@ Not a wishlist — this is live in the product today:
 | **Acquire** | Google Ads, Meta Ads, TikTok Ads, Snap Ads, LinkedIn Ads, Pinterest Ads, X Ads, Reddit Ads, Apple Search Ads |
 | **Nurture** | Adobe Marketo Engage, Braze, MoEngage |
 | **Warehouse** | BigQuery, Snowflake, Redshift |
-| **Report** | Native dashboards (19 chart types, chat builder, filters, public links, PDF), scheduled email/Slack, automations, activity log |
+| **Report** | Hosted Streamlit dashboards (model-authored, host-bound credentials), scheduled email/Slack, automations, activity log |
 
 Setup walkthroughs for each platform live under [`docs/tutorials/`](docs/tutorials/).
 
@@ -94,7 +94,7 @@ Setup walkthroughs for each platform live under [`docs/tutorials/`](docs/tutoria
 
 ## Hosted, or your own infra
 
-**[fluxito.app](https://fluxito.app)** is the full product, not a trial: tracking plans, GTM work, live tag audits, native dashboards, scheduled automations, team RBAC, and **Ask Fluxito** — a built-in assistant that runs on Claude, GPT, Gemini, xAI, Mistral, or a local model via LM Studio.
+**[fluxito.app](https://fluxito.app)** is the full product, not a trial: tracking plans, GTM work, live tag audits, hosted dashboards, scheduled automations, team RBAC, and **Ask Fluxito** — a built-in assistant that runs on Claude, GPT, Gemini, xAI, Mistral, or a local model via LM Studio.
 
 Prefer your own infra? Everything below is the same product, self-hosted with Docker — encrypted credentials at rest, project-scoped RBAC, nothing leaves your infrastructure except to platforms you explicitly authorize.
 
@@ -345,7 +345,7 @@ Useful today; still evolving. Direction of travel:
 - Reverse-ETL — writing back to the warehouse, not just querying it
 - Proactive, scheduled tracking-plan ↔ live-tag drift alerts (today: on-demand reconciliation)
 - Richer Ask Fluxito (files, project memory, custom instructions)
-- Dashboard drag-reorder & resize, chart images in Slack digests, branded scheduled PDFs
+- Richer hosted-dashboard authoring (templates, shared themes) and branded scheduled PDFs
 - Statistical anomaly detection with root-cause hints (today: biggest-movers ranking)
 
 Shape it with issues and PRs — that's the point of open source.

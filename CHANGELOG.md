@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.7] — 2026-08-16
+
+Dashboards are now model-authored Streamlit apps that Fluxito hosts. The
+native card / ECharts writer path is gone.
+
+### Added
+- **Hosted Streamlit dashboards.** An AI client writes a small Python app plus
+  a `manifest.json`. Fluxito validates the artifact (rejects secrets, bad
+  entrypoints, and shell-out), stores it, binds project credentials by alias,
+  and supervises an isolated Streamlit process on localhost.
+- **Host data plane.** The child calls `fluxito_data.query(alias, action, params)`
+  and never sees Fernet keys, database URLs, or viewer cookies. Bound identities
+  (`property_id`, `customer_id`, `connection_id`) overwrite whatever the app
+  sent. MCP dispatch is connection-type only — a stored `binding.tool` is inert.
+- **Per-platform query recipes.** `get_dashboard_query_recipe` plus recipes on
+  the authoring guide and `list_dashboard_connections` so models use the right
+  action and params instead of inventing fields.
+- **Authoring MCP tools:** `get_dashboard_authoring_guide`,
+  `get_dashboard_query_recipe`, `list_dashboard_connections`,
+  `validate_dashboard_artifact`, `deploy_dashboard`, `bind_dashboard`,
+  `update_dashboard`, and `delete_dashboard`.
+- **Isolation at the edge.** The reverse proxy strips Cookie / Authorization /
+  CSRF / hop-by-hop headers before they reach the child. The live view embeds
+  the app in a restrictive iframe sandbox (no top-navigation).
+
+### Changed
+- Ask Fluxito's dashboard confirm / propose-card flow is hosted-only. Leftover
+  native card rows stay readable via `dashboard_read` and the live hub.
+
+### Removed
+- Native-card MCP writers are unregistered: `dashboard_deploy_batch`,
+  `dashboard_create`, `dashboard_card_upsert`, `dashboard_card_remove`, and
+  `dashboard_card_preview`.
+
 ## [2.0.6] — 2026-08-14
 
 ### Fixed
