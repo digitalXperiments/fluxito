@@ -78,6 +78,14 @@ an Antigravity or local preview exactly:
 - use relative asset paths and bundle dependencies instead of CDN URLs; and
 - call `update_dashboard` after visual changes with the complete new `files` object.
 
+Do not mistake a complete file inventory or an HTTP 200 response for a working
+runtime. Never hand-write or truncate a library file, copy a Chart.js/ECharts
+banner onto a stub, or leave chart `render()`/`update()` methods as no-ops. Run
+`node --check` (or the equivalent module syntax check), open the final
+production build in a browser, confirm every chart paints, and verify each
+query succeeds. `validate_dashboard_artifact` checks the static contract and
+asset graph; it does not execute JavaScript or validate chart behavior.
+
 The only host-provided runtime file is `/fluxito.js`. Live data is requested with
 `fluxito.query(alias, action, params)` and normalized with `fluxito.rows(result)`.
 
@@ -129,6 +137,7 @@ Create a public link for stakeholder review after I approve the dashboard.
 | Issue | Fix |
 |---|---|
 | Chart area is blank | Check browser asset failures and rerun `validate_dashboard_artifact`; a referenced chart library or chunk may be missing from `files`. |
+| Chart library returns 200 but charts are blank | Inspect for a syntax error, truncated/placeholder bundle, or no-op renderer; replace it with the real compiled library and run the production browser smoke test. |
 | Page looks different from the local/Antigravity preview | Deploy the latest production `dist/` with `update_dashboard`; Fluxito hosts the sent build and does not compile source. |
 | Section does not refresh | Check the connection binding, exact query recipe, and `result.error`. |
 | KPI numbers differ from stakeholder expectations | Define the KPI in the KPI Library and rebuild the relevant query/section. |

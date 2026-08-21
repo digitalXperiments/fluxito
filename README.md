@@ -49,7 +49,7 @@ Plans go stale. Tags break silently. Dashboards lie with confidence. Every hando
 
 > "Audit container GTM-XXXXXXX. Flag broken tags, wrong triggers, and GA4 events with no conversion mapping."
 
-**Report** — Hosted web dashboards: your AI builds a production HTML/JS/CSS app, explicitly inventories every uploaded file, Fluxito validates the complete asset graph, binds project credentials by alias, and serves the exact build on an isolated origin. Fluxito does not compile JSX/TSX or provide chart libraries; live data goes through Fluxito so the app never sees tokens. Plus scheduled Slack/email recaps and root-cause investigation across every connected platform.
+**Report** — Hosted web dashboards: your AI builds a production HTML/JS/CSS app, explicitly inventories every uploaded file, Fluxito validates the complete asset graph, binds project credentials by alias, and serves the exact build on an isolated origin. Fluxito does not compile JSX/TSX or provide chart libraries; the model must send real executable bundles and browser-smoke-test charts because static validation cannot detect truncated/no-op runtimes. Live data goes through Fluxito so the app never sees tokens. Plus scheduled Slack/email recaps and root-cause investigation across every connected platform.
 
 > "Build a dashboard of sessions → add-to-cart → checkout → purchase for the last 30 days, bound to our GA4 property."
 >

@@ -218,6 +218,10 @@ def test_authoring_guide_is_the_contract():
     assert "validate_dashboard_artifact" in guide
     assert "deploy_dashboard" in guide
     assert "bind_dashboard" in guide
+    assert "node --check" in guide
+    assert "placeholder" in guide.lower() and "no-op" in guide.lower()
+    assert "static" in guide.lower() and "does not execute javascript" in guide.lower()
+    assert "browser" in guide.lower() and "smoke" in guide.lower()
     assert "unregistered" in guide.lower() or "do not call" in guide.lower()
     assert "streamlit" in guide.lower()  # forbidden, called out
     assert AUTHORING_GUIDE
@@ -231,6 +235,9 @@ def test_authoring_guide_is_the_contract():
     assert payload["hosting"]["requires_complete_asset_graph"] is True
     assert payload["hosting"]["requires_explicit_file_inventory"] is True
     assert payload["hosting"]["file_inventory_field"] == "artifact_files"
+    assert payload["hosting"]["requires_executable_javascript"] is True
+    assert payload["hosting"]["requires_runtime_smoke_test"] is True
+    assert payload["hosting"]["validator_is_static_only"] is True
     from app.dashboards.query_recipes import assert_recipes_cover_types
 
     assert assert_recipes_cover_types() == []
@@ -430,6 +437,8 @@ async def test_mcp_guide_validate_deploy_list_get_delete(wired, db_session_facto
 
         ok = await _tool(server, "validate_dashboard_artifact")(files=_files())
         assert ok["ok"] is True
+        assert ok["validation_scope"] == "static_only"
+        assert ok["runtime_smoke_test_required"] is True
 
         bad = await _tool(server, "validate_dashboard_artifact")(
             files={**_files(), ".env": "SECRET=abc12345"}
@@ -765,6 +774,13 @@ def test_new_mcp_tools_describe_the_contract():
         assert name in names
         doc = (server._tool_manager._tools[name].fn.__doc__ or "").lower()
         assert len(doc) >= 20
+    guide_doc = server._tool_manager._tools["get_dashboard_authoring_guide"].fn.__doc__.lower()
+    validate_doc = server._tool_manager._tools["validate_dashboard_artifact"].fn.__doc__.lower()
+    update_doc = server._tool_manager._tools["update_dashboard"].fn.__doc__.lower()
+    assert "syntactically valid" in guide_doc
+    assert "browser smoke test" in guide_doc
+    assert "static" in validate_doc and "does not execute" in validate_doc
+    assert "no-op" in update_doc and "smoke-test" in update_doc
     for retired in (
         "dashboard_deploy_batch",
         "dashboard_create",

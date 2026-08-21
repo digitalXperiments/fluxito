@@ -12,6 +12,14 @@ React/JSX/TSX, build it first and send the complete `dist/` output. The only
 file the host adds is `/fluxito.js`; every stylesheet, chart library, font,
 image, and lazy-loaded chunk referenced by the build must be included.
 
+An asset being present and returning HTTP 200 is not enough. Never create a
+truncated, placeholder, or no-op file named `chart.min.js`, `echarts.min.js`, or
+another library filename. Send the real compiled implementation. Before the
+MCP validation/deploy sequence, run `node --check` (or the equivalent module
+syntax check), serve the final production output, and browser-smoke-test every
+chart and live query. `validate_dashboard_artifact` is a static file/security
+check; it does not execute JavaScript or prove that a chart library works.
+
 Do **not** call `dashboard_deploy_batch`, `dashboard_create`,
 `dashboard_card_preview`, `dashboard_card_upsert`, or `dashboard_card_remove`.
 Those tools are unregistered.
@@ -42,6 +50,9 @@ A static production project, sent as `files` (path → UTF-8 source):
 - `artifact_files` must exactly equal the paths in the outer `files` object. The
   validator rejects both uploaded files omitted from the inventory and
   inventory entries that were not uploaded.
+- A complete inventory is still not a working runtime: every chart canvas/SVG
+  must paint, chart `render`/`update` methods must be implemented, and each
+  query must handle a successful response or visible `result.error` state.
 
 Never put secrets, `.env`, service-account JSON, or tokens in the files.
 Never send `node_modules` or remote `<script src="https://…">`; bundle all
@@ -50,7 +61,8 @@ runtime dependencies instead of relying on a CDN.
 ## 4. Validate, deploy, bind
 
 1. `validate_dashboard_artifact(files=…)` — fix every error, including missing
-   local asset references, then continue.
+   local asset references, then continue. Remember that this check is static;
+   runtime syntax and browser smoke tests are also required.
 2. `deploy_dashboard(title=…, files=…)` to create, or `update_dashboard(dashboard_id=…, files=…)`
    to replace. After a visual change, always send the complete latest build to
    `update_dashboard`; Fluxito does not read files from the local IDE. Returns

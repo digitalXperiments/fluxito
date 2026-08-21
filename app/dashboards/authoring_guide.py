@@ -34,6 +34,33 @@ React/JSX/TSX, run the project's production build first and send the complete
 `dist/` output. Fluxito preserves the authored HTML/CSS/JS; it does not restyle
 the dashboard to match Fluxito's chrome.
 
+**Runtime integrity is your responsibility.** A JavaScript file being present,
+listed in `artifact_files`, and served with HTTP 200 does **not** mean that it
+is executable. Never hand-write a placeholder, truncated copy, or no-op stub
+named `chart.min.js`, `echarts.min.js`, or another library filename. Do not
+copy a library banner onto a partial implementation. If the dashboard calls a
+chart library, send the real production bundle and verify that its constructor
+and update/render methods are implemented.
+
+Before `validate_dashboard_artifact` and every deploy/update, run the final
+production output—not the dev server—through these checks:
+
+- Run `node --check` (or the equivalent bundler/module syntax check) on every
+  emitted JavaScript file.
+- Serve the final build at a relative `/s/<slug>/`-style path and open it in a
+  browser. Fix every `SyntaxError`, `ReferenceError`, failed module/asset load,
+  and CSP error that blocks the UI.
+- Exercise every chart and confirm each canvas/SVG/container actually paints;
+  a no-op `render()`/`update()` is a failed chart, not a passing smoke test.
+- Exercise each live query and handle `result.error`; a successful page load
+  or static fallback does not prove that live data works.
+
+`validate_dashboard_artifact` is intentionally a **static** check: it verifies
+the manifest, security rules, file inventory, and referenced local asset graph.
+It does not execute JavaScript, instantiate Chart.js/ECharts, or guarantee
+that a chart library is syntactically valid or functionally complete. A
+successful validation never replaces the production browser smoke test.
+
 Those card tools are **unregistered**. They do not exist. Do not call
 dashboard_deploy_batch, dashboard_create, dashboard_card_upsert,
 dashboard_card_preview, or dashboard_card_remove.
@@ -45,16 +72,18 @@ dashboard_card_preview, or dashboard_card_remove.
 3. For each type you will use, follow the recipe in this guide (or call
    `get_dashboard_query_recipe` with that type). Do not invent actions or params.
 4. Build locally (`vite build` / equivalent with `base: './'`).
-5. Send `manifest.json`, the **latest** production `index.html`, and **every
+5. Run the production runtime smoke test above against the final `dist/`
+   output.
+6. Send `manifest.json`, the **latest** production `index.html`, and **every
    file referenced by it or by its JS/CSS** (including chart libraries, fonts,
    images, and lazy-loaded chunks). Put the exact uploaded path list in
    `manifest.artifact_files`.
-6. Call `validate_dashboard_artifact` and fix every error (and read warnings).
-7. Call `deploy_dashboard` (create) or `update_dashboard` (replace). After a
+7. Call `validate_dashboard_artifact` and fix every error (and read warnings).
+8. Call `deploy_dashboard` (create) or `update_dashboard` (replace). After a
    visual change, use `update_dashboard` with the complete new build; do not
    assume the host sees local files.
-8. Call `bind_dashboard` so aliases attach to this project's stored credentials.
-9. Give the user the returned `url`. That URL is the live hosted app.
+9. Call `bind_dashboard` so aliases attach to this project's stored credentials.
+10. Give the user the returned `url`. That URL is the live hosted app.
 
 Never skip validate. Never put secrets in source. Never send `.jsx` / `.tsx`.
 Never emit card JSON. Never write Streamlit.
@@ -191,7 +220,9 @@ font, image, or lazy-loaded chunk is referenced but not included in `files`,
 the build is incomplete and validation rejects it. If a hosted page differs
 from an Antigravity/local preview, verify that the newest `dist/` files were
 sent to `update_dashboard` and that the browser is opening the returned live
-URL—not the local preview or the dash-origin URL directly.
+URL—not the local preview or the dash-origin URL directly. If the asset is
+present but the chart is blank, inspect the browser console and rerun the
+runtime smoke test; do not assume the file's presence proves the library works.
 """
 
 _GUIDE_TAIL = f"""
@@ -283,6 +314,7 @@ the share `slug`. Only a logged-in project member can open the live view.
 | validate: remote script src | CDN script | bundle it |
 | validate: local asset missing | `index.html`/CSS/JS references a file not sent | include the complete production build, including chart libraries and lazy chunks |
 | validate: file inventory mismatch | `manifest.artifact_files` differs from the uploaded `files` keys | regenerate the exact inventory from the final `dist/` output |
+| chart file returns 200 but canvas is blank | malformed/truncated library, placeholder stub, JavaScript syntax error, or no-op renderer | replace it with the real compiled library, run `node --check`/equivalent, and browser-smoke-test every chart |
 | validate: entrypoint not in files | missing index.html | include the file |
 | deploy: unauthenticated | no MCP session | user must reconnect Fluxito |
 | deploy: too many dashboards | 10 per user cap | delete an old one |
@@ -404,6 +436,14 @@ def authoring_guide_payload() -> dict:
             "requires_complete_asset_graph": True,
             "requires_explicit_file_inventory": True,
             "file_inventory_field": "artifact_files",
+            "requires_executable_javascript": True,
+            "requires_runtime_smoke_test": True,
+            "validator_is_static_only": True,
+            "runtime_requirements": [
+                "syntax-check every emitted JavaScript file",
+                "browser-smoke-test every chart and live query",
+                "no placeholder/truncated/no-op chart runtimes",
+            ],
             "source_extensions_rejected": [".jsx", ".tsx", ".ts", ".py"],
         },
         "helper_api": [

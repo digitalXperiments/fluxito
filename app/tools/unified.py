@@ -785,7 +785,13 @@ type, build the complete production HTML/JS/CSS `dist/` output, validate every
 referenced asset and declare every uploaded path in `manifest.artifact_files`
 with validate_dashboard_artifact, then deploy_dashboard.
 Fluxito does not compile JSX/TSX or provide chart libraries; after visual edits
-use update_dashboard with the complete latest build. Do not emit card JSON.
+use update_dashboard with the complete latest build. Every emitted JS file must
+be real, syntactically valid, executable production code: a present/listed
+`chart.min.js` that is truncated, a placeholder, or a no-op renderer still
+produces blank charts. Run `node --check` (or an equivalent module syntax check)
+and browser-smoke-test every chart and live query before deployment. The
+artifact validator is static and cannot execute JS or prove Chart.js/ECharts is
+functional. Do not emit card JSON.
 
 Actions:
   list — List dashboards in the active project. No params.

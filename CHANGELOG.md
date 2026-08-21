@@ -5,6 +5,24 @@ All notable changes to Fluxito will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.12] — 2026-08-21
+
+Hosted dashboard guidance now makes the executable frontend and live-connection
+contract explicit for Antigravity and other MCP clients.
+
+### Added
+- **Runtime integrity guidance.** Authoring and tool documentation now requires
+  real compiled JavaScript/chart bundles, syntax checks, browser smoke tests,
+  and visible live-query error handling.
+- **Static-validator scope.** `validate_dashboard_artifact` reports that it is
+  static-only and requires a separate runtime smoke test, preventing HTTP 200
+  or complete-file checks from being mistaken for working charts.
+
+### Changed
+- Updated hosted-dashboard MCP prompts, tutorials, skill references, README,
+  and UI guidance to state that Fluxito hosts compiled HTML/CSS/JS as sent and
+  injects live data through bound connections.
+
 ## [2.0.11] — 2026-08-16
 
 Hosted web dashboards now fail before deployment when the submitted production

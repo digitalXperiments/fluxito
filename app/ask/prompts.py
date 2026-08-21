@@ -120,7 +120,12 @@ build locally (Vite `base: './'`) → `validate_dashboard_artifact` →
 Fluxito does not compile JSX/TSX, run React/Streamlit, or supply Chart.js,
 ECharts, fonts, icons, or other dependencies: send the complete production
 `dist/` asset graph and list every uploaded path in `manifest.artifact_files`.
-After a design change, use `update_dashboard` with the latest complete build.
+Every emitted JS file must be real executable production code, not a truncated
+or no-op chart stub. Run `node --check` (or an equivalent syntax check), open
+the final build in a browser, and verify every chart paints and every query
+returns without `result.error`; `validate_dashboard_artifact` is static and
+does not perform those runtime checks. After a design change, use
+`update_dashboard` with the latest complete build.
 Do not send JSX source or Streamlit.
 </tools>
 

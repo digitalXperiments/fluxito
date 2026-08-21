@@ -523,7 +523,12 @@ def register_dashboard_tools(mcp_server):
         run npm/Vite, compile JSX/TSX, run React or Streamlit, or provide a chart
         library. Antigravity and other clients must send the finished `dist/`
         files, including every referenced stylesheet, chart library, SVG/data-URI
-        visual asset, and lazy-loaded chunk. Follow the returned `flow` exactly.
+        visual asset, and lazy-loaded chunk. Every emitted JS file must be real,
+        syntactically valid, executable production code: never send a truncated
+        or no-op chart stub just because its filename is `chart.min.js`. The
+        returned guide requires a `node --check`/equivalent syntax check and a
+        browser smoke test of every chart and live query. Follow its `flow`
+        exactly.
 
         Returns:
           guide — markdown contract (build, manifest, forbidden items, example)
@@ -539,7 +544,9 @@ def register_dashboard_tools(mcp_server):
         manifest.artifact_files, then validate_dashboard_artifact. After a visual edit,
         use update_dashboard with the complete new build. Do not emit Streamlit,
         card JSON, source .jsx/.tsx, or remote CDN dependencies. Do not put
-        secrets in the bundle.
+        secrets in the bundle. `validate_dashboard_artifact` is static: it checks
+        the file graph and security contract but does not execute JS or prove that
+        Chart.js/ECharts is valid or functional.
         """
         from app.dashboards.authoring_guide import authoring_guide_payload
 
@@ -590,8 +597,13 @@ def register_dashboard_tools(mcp_server):
 
         Rejects secrets, .env, remote scripts, missing local assets, incomplete
         manifest.artifact_files inventories, source .jsx/.tsx/.py, Streamlit,
-        card JSON, invalid entrypoints, and path traversal. Call this before
-        deploy_dashboard and fix every error.
+        card JSON, invalid entrypoints, and path traversal. This is a static
+        validator; it does not execute JavaScript, parse it, instantiate a
+        chart library, or detect a syntactically valid but incomplete/no-op
+        runtime.
+        Run the final build through `node --check` (or the equivalent) and a
+        browser chart/query smoke test before deploy_dashboard, then fix every
+        validation and runtime error.
         """
         from app.dashboards.artifact import ArtifactError, validate_artifact
 
@@ -611,6 +623,8 @@ def register_dashboard_tools(mcp_server):
             "manifest": artifact.manifest.to_dict(),
             "warnings": artifact.warnings,
             "file_count": len(artifact.files),
+            "validation_scope": "static_only",
+            "runtime_smoke_test_required": True,
         }
 
     @mcp_server.tool("deploy_dashboard")
@@ -626,7 +640,10 @@ def register_dashboard_tools(mcp_server):
         → validate_dashboard_artifact (ok=true). files must be a production
         build (manifest.json + index.html + assets) whose manifest explicitly
         lists every uploaded path in artifact_files. Query live data with
-        fluxito.query(alias, action, params) using recipes from the guide.
+        fluxito.query(alias, action, params) using recipes from the guide. A
+        successful static validation or HTTP 200 for a JS asset is not proof
+        that the code runs; send only a real compiled chart/runtime bundle that
+        passed syntax and browser smoke tests.
 
         Writes the artifact to an isolated working directory, binds connection
         aliases to this project's stored credentials (never put secrets in
@@ -659,7 +676,11 @@ def register_dashboard_tools(mcp_server):
         """Replace a hosted dashboard's artifact (production HTML/JS/CSS build).
 
         dashboard_id is the UUID from deploy_dashboard / list_dashboards.
-        Same file + manifest contract as deploy_dashboard.
+        Same file + manifest contract as deploy_dashboard. Send the complete
+        latest build after every visual change, including the real executable
+        chart library. Do not send a placeholder/truncated/no-op chart runtime;
+        static validation cannot detect that failure, so syntax-check and
+        browser-smoke-test the final build first.
         """
         u = _user()
         if not u:

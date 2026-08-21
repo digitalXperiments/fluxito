@@ -299,7 +299,10 @@ def virtual_tool_specs() -> list[ToolSpec]:
                 "JSX/TSX locally, include every chart/font/image/chunk asset, and list "
                 "every uploaded path in manifest.artifact_files), then call "
                 "get_dashboard_authoring_guide → list_dashboard_connections → "
-                "validate_dashboard_artifact → deploy_dashboard → bind_dashboard over MCP."
+                "validate_dashboard_artifact → deploy_dashboard → bind_dashboard over MCP. "
+                "Every emitted JS/chart runtime must be real, syntactically valid, executable "
+                "production code—not a truncated or no-op stub. Run a syntax check and browser "
+                "smoke test; static validation does not execute JavaScript."
             ),
             input_schema={
                 "type": "object",
@@ -363,7 +366,9 @@ async def _propose_card(*, user_id: str, project_id: str, params: dict[str, Any]
         "Call get_dashboard_authoring_guide, list_dashboard_connections, build a "
         "complete production HTML/JS/CSS app using get_dashboard_query_recipe, list every uploaded "
         "path in manifest.artifact_files, validate_dashboard_artifact, deploy_dashboard, then "
-        "bind_dashboard. Fluxito does not compile JSX/TSX or supply chart libraries."
+        "bind_dashboard. Fluxito does not compile JSX/TSX or supply chart libraries. Every "
+        "chart/runtime file must be a real executable production bundle, not a truncated or "
+        "no-op stub; run syntax and browser smoke tests because validation is static only."
     )
     return VirtualToolResult(
         content=json.dumps({"error": msg, "error_type": "hosted_only"}),
