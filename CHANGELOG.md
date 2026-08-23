@@ -5,6 +5,16 @@ All notable changes to Fluxito will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Adobe Launch `list_companies` action.** `tagmanager_read` now exposes `list_companies` under the `ADOBE LAUNCH` group, allowing AI agents and MCP clients to list Adobe Launch (Reactor) company IDs (`CO...`).
+
+### Fixed
+- **Adobe Launch Reactor API tenant routing.** Injected the required `x-gw-ims-org-id: {org_id}` header and `Accept: application/vnd.api+json;revision=1` on all Adobe Launch requests, fixing 404 errors when listing properties under a company.
+- **Adobe Launch company ID auto-resolution.** `tagmanager_read(action="list_properties")` now automatically discovers and uses the organization's company ID if `account_id` is omitted.
+- **Adobe Launch dashboard connection type.** `AdobeConnection` in `list_bindable_connections` now surfaces `adobe_launch` (`tagmanager_read`) when Launch is enabled.
+
 ## [2.0.12] — 2026-08-21
 
 Hosted dashboard guidance now makes the executable frontend and live-connection
