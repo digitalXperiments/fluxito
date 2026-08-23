@@ -131,6 +131,9 @@ def register_tagmanager_tools(mcp_server):
         """
         u = _user()
 
+        if action == "list_companies" and platform == "gtm":
+            platform = "adobe_launch"
+
         if platform == "gtm":
             if not u or not u.has_gtm:
                 return _no_gtm()
@@ -240,13 +243,8 @@ def register_tagmanager_tools(mcp_server):
                     org_id,
                 )
             elif action == "list_properties":
-                if not account_id:
-                    return {
-                        "error": True,
-                        "message": "account_id (company_id) is required for list_properties",
-                    }
                 return await cached_tool_response(
-                    f"cache:launch:props:{conn_id}:{account_id}",
+                    f"cache:launch:props:{conn_id}:{account_id or 'auto'}",
                     300,
                     launch.list_properties,
                     client_id,

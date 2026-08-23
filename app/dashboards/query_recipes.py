@@ -219,8 +219,8 @@ RECIPES: dict[str, dict[str, Any]] = {
         send=[],
         injected=["account_id", "container_id", *_INJECT_COMMON],
         example={},
-        notes="Host injects company/property ids. Other: list_properties, list_rules.",
-        other_actions=["list_properties", "list_rules"],
+        notes="Host injects company/property ids. Other: list_companies, list_properties, list_rules.",
+        other_actions=["list_companies", "list_properties", "list_rules"],
     ),
     "adobe_marketo": _recipe(
         action="list_programs",

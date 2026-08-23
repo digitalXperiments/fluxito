@@ -220,6 +220,32 @@ async def list_bindable_connections(project_id, user_id=None) -> list[dict]:
             except Exception:
                 continue
             for row in rows.scalars().all():
+                if model is AdobeConnection:
+                    if getattr(row, "has_analytics", False):
+                        out.append(
+                            {
+                                "type": "adobe_analytics",
+                                "tool": "analytics_read",
+                                "label": getattr(row, "display_name", None) or f"Adobe Analytics ({row.id})",
+                                "connection_id": str(row.id),
+                                "resource_key": "connection_id",
+                                "resource_value": str(row.id),
+                                "status": getattr(row, "connection_status", None) or "active",
+                            }
+                        )
+                    if getattr(row, "has_launch", False):
+                        out.append(
+                            {
+                                "type": "adobe_launch",
+                                "tool": "tagmanager_read",
+                                "label": getattr(row, "display_name", None) or f"Adobe Launch ({row.id})",
+                                "connection_id": str(row.id),
+                                "resource_key": "connection_id",
+                                "resource_value": str(row.id),
+                                "status": getattr(row, "connection_status", None) or "active",
+                            }
+                        )
+                    continue
                 label = getattr(row, "display_name", None) or f"{platform} ({row.id})"
                 out.append(
                     {

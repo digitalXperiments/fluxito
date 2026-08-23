@@ -108,9 +108,11 @@ class AdobeLaunchConnector:
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/vnd.api+json",
-            "Accept": "application/vnd.api+json",
+            "Accept": "application/vnd.api+json;revision=1",
             "x-api-key": client_id,
         }
+        if org_id:
+            headers["x-gw-ims-org-id"] = org_id
 
         try:
             url = f"{_REACTOR_BASE}{endpoint}"
@@ -172,24 +174,51 @@ class AdobeLaunchConnector:
         }
 
     @friendly_errors("Adobe Launch")
-    async def list_properties(self, client_id: str, client_secret: str, org_id: str, company_id: str) -> dict:
+    async def list_properties(
+        self, client_id: str, client_secret: str, org_id: str, company_id: str | None = None
+    ) -> dict:
         """
         List all properties for a company.
         GET /companies/{company_id}/properties
         """
+        target_company = company_id
+        if not target_company or not str(target_company).startswith("CO"):
+            companies_res = await self.list_companies(client_id, client_secret, org_id)
+            if companies_res.get("error"):
+                return companies_res
+            companies = companies_res.get("companies", [])
+            if companies:
+                matched = next(
+                    (
+                        c
+                        for c in companies
+                        if target_company
+                        and (
+                            c.get("id") == target_company
+                            or c.get("org_id") == target_company
+                            or c.get("name") == target_company
+                        )
+                    ),
+                    None,
+                )
+                target_company = matched.get("id") if matched else companies[0].get("id")
+
+        if not target_company:
+            return {"error": True, "message": "No Adobe Launch company found for this organization."}
+
         result = await self._request(
             client_id,
             client_secret,
             org_id,
             "GET",
-            f"/companies/{company_id}/properties",
+            f"/companies/{target_company}/properties",
         )
         if result.get("error"):
             return result
 
         properties = result.get("data", [])
         return {
-            "company_id": company_id,
+            "company_id": target_company,
             "properties": [
                 {
                     "id": p.get("id"),

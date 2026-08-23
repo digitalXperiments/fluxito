@@ -149,6 +149,7 @@ _CARD_PARAM_REQUIREMENTS: dict[tuple[str, str], list[str]] = {
     # adobe_launch cards dispatch through tagmanager_read(platform="adobe_launch").
     # Verified against tagmanager_tools.py: list_properties needs account_id
     # (=company_id), get_property/list_rules need container_id (=property_id).
+    ("adobe_launch", "list_companies"): [],
     ("adobe_launch", "list_properties"): ["account_id"],
     ("adobe_launch", "get_property"): ["container_id"],
     ("adobe_launch", "list_rules"): ["container_id"],

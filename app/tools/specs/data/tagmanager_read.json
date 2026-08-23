@@ -199,6 +199,28 @@
   },
   {
     "tool": "tagmanager_read",
+    "action": "list_companies",
+    "summary": "List Adobe Launch (Reactor) companies accessible to the org (cached 600s). Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": false,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "Tag platform; defaults to adobe_launch for list_companies."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ companies: [...] } | no_adobe_launch_response | {error,message}"
+  },
+  {
+    "tool": "tagmanager_read",
     "action": "list_containers",
     "summary": "List GTM containers, optionally filtered by account_id (cached 600s).",
     "group": "GTM",
@@ -346,7 +368,7 @@
   {
     "tool": "tagmanager_read",
     "action": "list_properties",
-    "summary": "List Adobe Launch properties for a company (cached 300s). Requires platform=adobe_launch.",
+    "summary": "List Adobe Launch properties for a company (cached 300s). Auto-resolves company if account_id is omitted. Requires platform=adobe_launch.",
     "group": "ADOBE LAUNCH",
     "params": [
       {
@@ -362,9 +384,9 @@
       {
         "name": "account_id",
         "type": "string",
-        "required": true,
+        "required": false,
         "example": "CO1234abcd",
-        "doc": "Adobe company_id (overloaded onto account_id param)."
+        "doc": "Adobe company_id (overloaded onto account_id param). If omitted, automatically resolved from the organization's companies."
       }
     ],
     "platforms": [

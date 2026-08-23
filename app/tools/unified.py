@@ -138,6 +138,7 @@ TAGMANAGER_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "get_tag_detail": ("tagmanager_read", "get_tag_detail"),
     "get_container_summary": ("tagmanager_read", "get_container_summary"),
     # Adobe Launch reads
+    "list_companies": ("tagmanager_read", "list_companies", {"platform": "adobe_launch"}),
     "list_properties": ("tagmanager_read", "list_properties"),
     "get_property": ("tagmanager_read", "get_property"),
     "list_rules": ("tagmanager_read", "list_rules"),
@@ -615,7 +616,7 @@ Actions:
     get_tag_detail       — params: account_id, container_id, workspace_id, tag_id
     get_container_summary— params: account_id, container_id
   ADOBE LAUNCH
-    list_properties, get_property, list_rules, get_rule,
+    list_companies, list_properties, get_property, list_rules, get_rule,
     list_data_elements, list_extensions, list_environments,
     list_libraries, list_builds
 """
