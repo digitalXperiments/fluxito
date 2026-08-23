@@ -131,7 +131,22 @@ def register_tagmanager_tools(mcp_server):
         """
         u = _user()
 
-        if action == "list_companies" and platform == "gtm":
+        ADOBE_LAUNCH_READ_ACTIONS = {
+            "list_companies",
+            "list_properties",
+            "get_property",
+            "list_rules",
+            "get_rule",
+            "list_rule_components",
+            "get_rule_component",
+            "list_data_elements",
+            "get_data_element",
+            "list_extensions",
+            "list_environments",
+            "list_libraries",
+            "list_builds",
+        }
+        if action in ADOBE_LAUNCH_READ_ACTIONS and platform == "gtm":
             platform = "adobe_launch"
 
         if platform == "gtm":
@@ -253,76 +268,113 @@ def register_tagmanager_tools(mcp_server):
                     account_id,
                 )
             elif action == "get_property":
-                if not container_id:
+                prop_id = container_id or account_id or tag_id
+                if not prop_id:
                     return {
                         "error": True,
                         "message": "container_id (property_id) is required for get_property",
                     }
-                return await launch.get_property(client_id, client_secret, org_id, container_id)
+                return await launch.get_property(client_id, client_secret, org_id, prop_id)
             elif action == "list_rules":
-                if not container_id:
+                prop_id = container_id or account_id
+                if not prop_id:
                     return {"error": True, "message": "container_id (property_id) is required for list_rules"}
                 return await cached_tool_response(
-                    f"cache:launch:rules:{conn_id}:{container_id}",
+                    f"cache:launch:rules:{conn_id}:{prop_id}",
                     300,
                     launch.list_rules,
                     client_id,
                     client_secret,
                     org_id,
-                    container_id,
+                    prop_id,
                 )
             elif action == "get_rule":
-                if not tag_id:
+                rule_id = tag_id or container_id
+                if not rule_id:
                     return {"error": True, "message": "tag_id (rule_id) is required for get_rule"}
-                return await launch.get_rule(client_id, client_secret, org_id, tag_id)
+                return await launch.get_rule(client_id, client_secret, org_id, rule_id)
+            elif action == "list_rule_components":
+                rule_id = tag_id or container_id
+                if not rule_id:
+                    return {"error": True, "message": "tag_id (rule_id) is required for list_rule_components"}
+                return await cached_tool_response(
+                    f"cache:launch:rule_components:{conn_id}:{rule_id}",
+                    300,
+                    launch.list_rule_components,
+                    client_id,
+                    client_secret,
+                    org_id,
+                    rule_id,
+                )
+            elif action == "get_rule_component":
+                comp_id = tag_id or container_id
+                if not comp_id:
+                    return {
+                        "error": True,
+                        "message": "tag_id (rule_component_id) is required for get_rule_component",
+                    }
+                return await launch.get_rule_component(client_id, client_secret, org_id, comp_id)
             elif action == "list_data_elements":
-                if not container_id:
+                prop_id = container_id or account_id
+                if not prop_id:
                     return {
                         "error": True,
                         "message": "container_id (property_id) is required for list_data_elements",
                     }
                 return await cached_tool_response(
-                    f"cache:launch:data_elements:{conn_id}:{container_id}",
+                    f"cache:launch:data_elements:{conn_id}:{prop_id}",
                     300,
                     launch.list_data_elements,
                     client_id,
                     client_secret,
                     org_id,
-                    container_id,
+                    prop_id,
                 )
+            elif action == "get_data_element":
+                element_id = tag_id or container_id
+                if not element_id:
+                    return {
+                        "error": True,
+                        "message": "tag_id (data_element_id) is required for get_data_element",
+                    }
+                return await launch.get_data_element(client_id, client_secret, org_id, element_id)
             elif action == "list_extensions":
-                if not container_id:
+                prop_id = container_id or account_id
+                if not prop_id:
                     return {
                         "error": True,
                         "message": "container_id (property_id) is required for list_extensions",
                     }
                 return await cached_tool_response(
-                    f"cache:launch:extensions:{conn_id}:{container_id}",
+                    f"cache:launch:extensions:{conn_id}:{prop_id}",
                     300,
                     launch.list_extensions,
                     client_id,
                     client_secret,
                     org_id,
-                    container_id,
+                    prop_id,
                 )
             elif action == "list_environments":
-                if not container_id:
+                prop_id = container_id or account_id
+                if not prop_id:
                     return {
                         "error": True,
                         "message": "container_id (property_id) is required for list_environments",
                     }
-                return await launch.list_environments(client_id, client_secret, org_id, container_id)
+                return await launch.list_environments(client_id, client_secret, org_id, prop_id)
             elif action == "list_libraries":
-                if not container_id:
+                prop_id = container_id or account_id
+                if not prop_id:
                     return {
                         "error": True,
                         "message": "container_id (property_id) is required for list_libraries",
                     }
-                return await launch.list_libraries(client_id, client_secret, org_id, container_id)
+                return await launch.list_libraries(client_id, client_secret, org_id, prop_id)
             elif action == "list_builds":
-                if not workspace_id or workspace_id == "0":
+                lib_id = workspace_id if workspace_id and workspace_id != "0" else (container_id or tag_id)
+                if not lib_id:
                     return {"error": True, "message": "workspace_id (library_id) is required for list_builds"}
-                return await launch.list_builds(client_id, client_secret, org_id, workspace_id)
+                return await launch.list_builds(client_id, client_secret, org_id, lib_id)
             return {"error": True, "message": f"Unknown action '{action}' for Adobe Launch tagmanager_read"}
 
         return {"error": True, "message": f"Unknown platform '{platform}'"}
@@ -2111,9 +2163,28 @@ def register_tagmanager_tools(mcp_server):
                     conn_id, account_id, container_id, workspace_id, name, type, parameters or []
                 )
 
-            return {"error": True, "message": f"Unknown action '{action}' for GTM tagmanager_write"}
+            ADOBE_LAUNCH_WRITE_ACTIONS = {
+                "create_property",
+                "create_rule",
+                "update_rule",
+                "delete_rule",
+                "create_rule_component",
+                "update_rule_component",
+                "delete_rule_component",
+                "create_data_element",
+                "update_data_element",
+                "delete_data_element",
+                "create_library",
+                "add_resources_to_library",
+                "build_library",
+                "transition_library",
+            }
+            if action in ADOBE_LAUNCH_WRITE_ACTIONS:
+                platform = "adobe_launch"
+            else:
+                return {"error": True, "message": f"Unknown action '{action}' for GTM tagmanager_write"}
 
-        elif platform == "adobe_launch":
+        if platform == "adobe_launch":
             # Write gating (FINDINGS S1 #8): unlike GTM there is no Google-style
             # per-action OAuth scope to pre-check — Adobe Launch uses a
             # Server-to-Server credential whose Launch permissions are fixed at
@@ -2131,78 +2202,189 @@ def register_tagmanager_tools(mcp_server):
                 return _no_adobe_launch()
             launch = state.adobe_launch_connector
 
+            cfg = dict(config or {})
+            if "name" not in cfg and name:
+                cfg["name"] = name
+            if "property_id" not in cfg:
+                if container_id:
+                    cfg["property_id"] = container_id
+                elif account_id and action != "create_property":
+                    cfg["property_id"] = account_id
+            if "rule_id" not in cfg and tag_id:
+                cfg["rule_id"] = tag_id
+            if "data_element_id" not in cfg and tag_id:
+                cfg["data_element_id"] = tag_id
+            if "rule_component_id" not in cfg and tag_id:
+                cfg["rule_component_id"] = tag_id
+            if "library_id" not in cfg and workspace_id and workspace_id != "0":
+                cfg["library_id"] = workspace_id
+            if "settings" not in cfg and spec:
+                cfg["settings"] = spec
+
             if action == "create_property":
-                if not config or not config.get("name") or not config.get("company_id"):
+                comp_id = cfg.get("company_id") or account_id
+                if not cfg.get("name") or not comp_id:
                     return {"error": True, "message": "config.name and config.company_id are required"}
                 return await launch.create_property(
                     client_id,
                     client_secret,
                     org_id,
-                    config["company_id"],
-                    name=config["name"],
-                    platform=config.get("platform", "web"),
-                    domains=config.get("domains"),
+                    comp_id,
+                    name=cfg["name"],
+                    platform=cfg.get("platform", "web"),
+                    domains=cfg.get("domains"),
                 )
             elif action == "create_rule":
-                if not config or not config.get("property_id") or not config.get("name"):
+                if not cfg.get("property_id") or not cfg.get("name"):
                     return {"error": True, "message": "config.property_id and config.name are required"}
                 return await launch.create_rule(
-                    client_id, client_secret, org_id, config["property_id"], config["name"]
+                    client_id,
+                    client_secret,
+                    org_id,
+                    cfg["property_id"],
+                    cfg["name"],
+                    components=cfg.get("components"),
                 )
+            elif action == "update_rule":
+                rule_id = cfg.get("rule_id")
+                if not rule_id:
+                    return {"error": True, "message": "config.rule_id is required"}
+                return await launch.update_rule(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    rule_id,
+                    name=cfg.get("name"),
+                    enabled=cfg.get("enabled"),
+                )
+            elif action == "delete_rule":
+                rule_id = cfg.get("rule_id")
+                if not rule_id:
+                    return {"error": True, "message": "config.rule_id is required"}
+                return await launch.delete_rule(client_id, client_secret, org_id, rule_id)
+            elif action == "create_rule_component":
+                required = ["property_id", "rule_id", "name", "delegate_descriptor_id"]
+                missing = [k for k in required if not cfg.get(k)]
+                if missing:
+                    return {"error": True, "message": f"config missing required keys: {missing}"}
+                return await launch.create_rule_component(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    cfg["property_id"],
+                    cfg["rule_id"],
+                    name=cfg["name"],
+                    delegate_descriptor_id=cfg["delegate_descriptor_id"],
+                    settings=cfg.get("settings"),
+                    extension_id=cfg.get("extension_id"),
+                    rule_order=cfg.get("rule_order"),
+                    order=cfg.get("order"),
+                    negate=cfg.get("negate"),
+                    timeout=cfg.get("timeout"),
+                    delay_next=cfg.get("delay_next"),
+                )
+            elif action == "update_rule_component":
+                comp_id = cfg.get("rule_component_id")
+                if not comp_id:
+                    return {"error": True, "message": "config.rule_component_id is required"}
+                return await launch.update_rule_component(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    comp_id,
+                    name=cfg.get("name"),
+                    settings=cfg.get("settings"),
+                    delegate_descriptor_id=cfg.get("delegate_descriptor_id"),
+                    rule_order=cfg.get("rule_order"),
+                    order=cfg.get("order"),
+                    negate=cfg.get("negate"),
+                    timeout=cfg.get("timeout"),
+                    delay_next=cfg.get("delay_next"),
+                )
+            elif action == "delete_rule_component":
+                comp_id = cfg.get("rule_component_id")
+                if not comp_id:
+                    return {"error": True, "message": "config.rule_component_id is required"}
+                return await launch.delete_rule_component(client_id, client_secret, org_id, comp_id)
             elif action == "create_data_element":
-                if not config:
-                    return {"error": True, "message": "config is required"}
                 required = ["property_id", "name", "delegate_descriptor_id"]
-                missing = [k for k in required if not config.get(k)]
+                missing = [k for k in required if not cfg.get(k)]
                 if missing:
                     return {"error": True, "message": f"config missing required keys: {missing}"}
                 return await launch.create_data_element(
                     client_id,
                     client_secret,
                     org_id,
-                    config["property_id"],
-                    name=config["name"],
-                    delegate_descriptor_id=config["delegate_descriptor_id"],
-                    settings=config.get("settings"),
+                    cfg["property_id"],
+                    name=cfg["name"],
+                    delegate_descriptor_id=cfg["delegate_descriptor_id"],
+                    settings=cfg.get("settings"),
+                    extension_id=cfg.get("extension_id"),
+                    clean_text=cfg.get("clean_text"),
+                    force_lower_case=cfg.get("force_lower_case"),
+                    default_value=cfg.get("default_value"),
+                    storage_duration=cfg.get("storage_duration"),
+                    enabled=cfg.get("enabled", True),
                 )
+            elif action == "update_data_element":
+                de_id = cfg.get("data_element_id")
+                if not de_id:
+                    return {"error": True, "message": "config.data_element_id is required"}
+                return await launch.update_data_element(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    de_id,
+                    name=cfg.get("name"),
+                    settings=cfg.get("settings"),
+                    delegate_descriptor_id=cfg.get("delegate_descriptor_id"),
+                    enabled=cfg.get("enabled"),
+                    clean_text=cfg.get("clean_text"),
+                    force_lower_case=cfg.get("force_lower_case"),
+                    default_value=cfg.get("default_value"),
+                    storage_duration=cfg.get("storage_duration"),
+                )
+            elif action == "delete_data_element":
+                de_id = cfg.get("data_element_id")
+                if not de_id:
+                    return {"error": True, "message": "config.data_element_id is required"}
+                return await launch.delete_data_element(client_id, client_secret, org_id, de_id)
             elif action == "create_library":
-                if not config:
-                    return {"error": True, "message": "config is required"}
                 required = ["property_id", "name", "environment_id"]
-                missing = [k for k in required if not config.get(k)]
+                missing = [k for k in required if not cfg.get(k)]
                 if missing:
                     return {"error": True, "message": f"config missing required keys: {missing}"}
                 return await launch.create_library(
                     client_id,
                     client_secret,
                     org_id,
-                    config["property_id"],
-                    name=config["name"],
-                    environment_id=config["environment_id"],
+                    cfg["property_id"],
+                    name=cfg["name"],
+                    environment_id=cfg["environment_id"],
                 )
             elif action == "add_resources_to_library":
-                if not config or not config.get("library_id") or not config.get("resources"):
+                if not cfg.get("library_id") or not cfg.get("resources"):
                     return {"error": True, "message": "config.library_id and config.resources are required"}
                 return await launch.add_resources_to_library(
                     client_id,
                     client_secret,
                     org_id,
-                    config["library_id"],
-                    config["resources"],
+                    cfg["library_id"],
+                    cfg["resources"],
                 )
             elif action == "build_library":
-                if not config or not config.get("library_id"):
+                if not cfg.get("library_id"):
                     return {"error": True, "message": "config.library_id is required"}
-                return await launch.build_library(client_id, client_secret, org_id, config["library_id"])
+                return await launch.build_library(client_id, client_secret, org_id, cfg["library_id"])
             elif action == "transition_library":
-                if not config or not config.get("library_id") or not config.get("action"):
+                if not cfg.get("library_id") or not cfg.get("action"):
                     return {"error": True, "message": "config.library_id and config.action are required"}
                 return await launch.transition_library(
                     client_id,
                     client_secret,
                     org_id,
-                    config["library_id"],
-                    config["action"],
+                    cfg["library_id"],
+                    cfg["action"],
                 )
             return {"error": True, "message": f"Unknown action '{action}' for Adobe Launch tagmanager_write"}
 

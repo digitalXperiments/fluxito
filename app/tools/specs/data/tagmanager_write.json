@@ -74,7 +74,7 @@
   {
     "tool": "tagmanager_write",
     "action": "create_data_element",
-    "summary": "Create an Adobe Launch data element on a property. Requires platform=adobe_launch.",
+    "summary": "Create an Adobe Launch data element on a property. Automatically resolves and attaches extension relationship and stringifies settings. Requires platform=adobe_launch.",
     "group": "ADOBE LAUNCH",
     "params": [
       {
@@ -99,7 +99,7 @@
             "path": "document.title"
           }
         },
-        "doc": "Required keys: property_id, name, delegate_descriptor_id. settings optional (extension-specific config object)."
+        "doc": "Required keys: property_id, name, delegate_descriptor_id. Optional: settings (dict or JSON string), extension_id (auto-resolved if omitted), clean_text, force_lower_case, default_value, storage_duration, enabled."
       }
     ],
     "platforms": [
@@ -185,7 +185,7 @@
   {
     "tool": "tagmanager_write",
     "action": "create_rule",
-    "summary": "Create an Adobe Launch rule on a property. Requires platform=adobe_launch.",
+    "summary": "Create an Adobe Launch rule on a property, optionally attaching components (events, conditions, actions). Requires platform=adobe_launch.",
     "group": "ADOBE LAUNCH",
     "params": [
       {
@@ -204,9 +204,16 @@
         "required": true,
         "example": {
           "property_id": "PR1234abcd",
-          "name": "Page Bottom - GA"
+          "name": "Page Bottom - GA",
+          "components": [
+            {
+              "name": "Page Top Event",
+              "delegate_descriptor_id": "core::events::page-top",
+              "settings": {}
+            }
+          ]
         },
-        "doc": "config.property_id and config.name are required."
+        "doc": "Required keys: property_id, name. Optional: components (array of component objects with name, delegate_descriptor_id, settings, etc.)."
       }
     ],
     "platforms": [
@@ -215,6 +222,247 @@
     "returns": "{ ...rule } | no_adobe_launch_response | {error,message}",
     "scope": "no scope gate (connection presence only)",
     "reversible": true
+  },
+  {
+    "tool": "tagmanager_write",
+    "action": "create_rule_component",
+    "summary": "Create an Adobe Launch rule component (event, condition, or action) and attach it to a rule. Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "property_id": "PR1234abcd",
+          "rule_id": "RL1234abcd",
+          "name": "Set AA Variables",
+          "delegate_descriptor_id": "adobe-analytics::actions::set-variables",
+          "settings": {
+            "eVar1": "%Page Name%"
+          }
+        },
+        "doc": "Required keys: property_id, rule_id, name, delegate_descriptor_id. Optional: settings (dict or JSON string), extension_id (auto-resolved if omitted), rule_order, order, negate, timeout, delay_next."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ ...rule_component } | no_adobe_launch_response | {error,message}",
+    "scope": "no scope gate (connection presence only)",
+    "reversible": true
+  },
+  {
+    "tool": "tagmanager_write",
+    "action": "update_rule",
+    "summary": "Update an existing Adobe Launch rule's name or enabled status. Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "rule_id": "RL1234abcd",
+          "name": "Updated Rule Name",
+          "enabled": true
+        },
+        "doc": "Required keys: rule_id. Optional: name, enabled."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ ...rule } | no_adobe_launch_response | {error,message}",
+    "scope": "no scope gate (connection presence only)",
+    "reversible": true
+  },
+  {
+    "tool": "tagmanager_write",
+    "action": "delete_rule",
+    "summary": "Delete an Adobe Launch rule by ID. Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "rule_id": "RL1234abcd"
+        },
+        "doc": "config.rule_id is required."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ success: true, rule_id, message } | no_adobe_launch_response | {error,message}",
+    "scope": "no scope gate (connection presence only)",
+    "reversible": false
+  },
+  {
+    "tool": "tagmanager_write",
+    "action": "update_rule_component",
+    "summary": "Update an existing Adobe Launch rule component. Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "rule_component_id": "RC1234abcd",
+          "name": "Updated Component Name"
+        },
+        "doc": "Required keys: rule_component_id. Optional: name, settings, delegate_descriptor_id, rule_order, order, negate, timeout, delay_next."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ ...rule_component } | no_adobe_launch_response | {error,message}",
+    "scope": "no scope gate (connection presence only)",
+    "reversible": true
+  },
+  {
+    "tool": "tagmanager_write",
+    "action": "delete_rule_component",
+    "summary": "Delete an Adobe Launch rule component by ID. Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "rule_component_id": "RC1234abcd"
+        },
+        "doc": "config.rule_component_id is required."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ success: true, rule_component_id, message } | no_adobe_launch_response | {error,message}",
+    "scope": "no scope gate (connection presence only)",
+    "reversible": false
+  },
+  {
+    "tool": "tagmanager_write",
+    "action": "update_data_element",
+    "summary": "Update an existing Adobe Launch data element. Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "data_element_id": "DE1234abcd",
+          "name": "New Element Name"
+        },
+        "doc": "config.data_element_id is required. Optional: name, settings, delegate_descriptor_id, enabled, clean_text, force_lower_case, default_value, storage_duration."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ ...data_element } | no_adobe_launch_response | {error,message}",
+    "scope": "no scope gate (connection presence only)",
+    "reversible": true
+  },
+  {
+    "tool": "tagmanager_write",
+    "action": "delete_data_element",
+    "summary": "Delete an Adobe Launch data element by ID. Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "config",
+        "type": "object",
+        "required": true,
+        "example": {
+          "data_element_id": "DE1234abcd"
+        },
+        "doc": "config.data_element_id is required."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ success: true, data_element_id, message } | no_adobe_launch_response | {error,message}",
+    "scope": "no scope gate (connection presence only)",
+    "reversible": false
   },
   {
     "tool": "tagmanager_write",

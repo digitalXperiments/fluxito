@@ -17,6 +17,7 @@ Layer 3 (Write): create_property, create_rule, create_data_element, create_libra
                build_library, transition_library
 """
 
+import json
 import logging
 import time
 from typing import Any
@@ -293,12 +294,90 @@ class AdobeLaunchConnector:
         rule = result.get("data", {})
         components = result.get("included", [])
 
+        formatted_components = [
+            {
+                "id": c.get("id"),
+                "name": c.get("attributes", {}).get("name"),
+                "delegate_descriptor_id": c.get("attributes", {}).get("delegate_descriptor_id"),
+                "settings": c.get("attributes", {}).get("settings"),
+                "rule_order": c.get("attributes", {}).get("rule_order"),
+                "order": c.get("attributes", {}).get("order"),
+                "negate": c.get("attributes", {}).get("negate"),
+                "timeout": c.get("attributes", {}).get("timeout"),
+                "delay_next": c.get("attributes", {}).get("delay_next"),
+            }
+            for c in components
+        ]
+
         return {
             "rule_id": rule_id,
             "name": rule.get("attributes", {}).get("name"),
             "enabled": rule.get("attributes", {}).get("enabled"),
             "components_count": len(components),
             "component_types": list(set(c.get("type", "") for c in components)),
+            "components": formatted_components,
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def list_rule_components(
+        self, client_id: str, client_secret: str, org_id: str, rule_id: str
+    ) -> dict:
+        """
+        List all rule components for a rule.
+        GET /rules/{rule_id}/rule_components
+        """
+        result = await self._request(
+            client_id, client_secret, org_id, "GET", f"/rules/{rule_id}/rule_components"
+        )
+        if result.get("error"):
+            return result
+
+        components = result.get("data", [])
+        return {
+            "rule_id": rule_id,
+            "rule_components": [
+                {
+                    "id": c.get("id"),
+                    "name": c.get("attributes", {}).get("name"),
+                    "delegate_descriptor_id": c.get("attributes", {}).get("delegate_descriptor_id"),
+                    "settings": c.get("attributes", {}).get("settings"),
+                    "rule_order": c.get("attributes", {}).get("rule_order"),
+                    "order": c.get("attributes", {}).get("order"),
+                    "negate": c.get("attributes", {}).get("negate"),
+                }
+                for c in components
+            ],
+            "total": len(components),
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def get_rule_component(
+        self, client_id: str, client_secret: str, org_id: str, rule_component_id: str
+    ) -> dict:
+        """
+        Get a single rule component.
+        GET /rule_components/{rule_component_id}
+        """
+        result = await self._request(
+            client_id, client_secret, org_id, "GET", f"/rule_components/{rule_component_id}"
+        )
+        if result.get("error"):
+            return result
+
+        comp = result.get("data", {})
+        attrs = comp.get("attributes", {})
+        return {
+            "rule_component_id": rule_component_id,
+            "name": attrs.get("name"),
+            "delegate_descriptor_id": attrs.get("delegate_descriptor_id"),
+            "settings": attrs.get("settings"),
+            "rule_order": attrs.get("rule_order"),
+            "order": attrs.get("order"),
+            "negate": attrs.get("negate"),
+            "timeout": attrs.get("timeout"),
+            "delay_next": attrs.get("delay_next"),
+            "created": attrs.get("created_at"),
+            "updated": attrs.get("updated_at"),
         }
 
     @friendly_errors("Adobe Launch")
@@ -332,6 +411,36 @@ class AdobeLaunchConnector:
                 for e in elements
             ],
             "total": len(elements),
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def get_data_element(
+        self, client_id: str, client_secret: str, org_id: str, data_element_id: str
+    ) -> dict:
+        """
+        Get a single data element.
+        GET /data_elements/{data_element_id}
+        """
+        result = await self._request(
+            client_id, client_secret, org_id, "GET", f"/data_elements/{data_element_id}"
+        )
+        if result.get("error"):
+            return result
+
+        element = result.get("data", {})
+        attrs = element.get("attributes", {})
+        return {
+            "data_element_id": data_element_id,
+            "name": attrs.get("name"),
+            "enabled": attrs.get("enabled"),
+            "delegate_descriptor_id": attrs.get("delegate_descriptor_id"),
+            "settings": attrs.get("settings"),
+            "clean_text": attrs.get("clean_text"),
+            "force_lower_case": attrs.get("force_lower_case"),
+            "default_value": attrs.get("default_value"),
+            "storage_duration": attrs.get("storage_duration"),
+            "created": attrs.get("created_at"),
+            "updated": attrs.get("updated_at"),
         }
 
     @friendly_errors("Adobe Launch")
@@ -576,6 +685,54 @@ class AdobeLaunchConnector:
             "message": "Property created successfully",
         }
 
+    async def _resolve_extension_id(
+        self,
+        client_id: str,
+        client_secret: str,
+        org_id: str,
+        property_id: str,
+        delegate_descriptor_id: str | None = None,
+        extension_id: str | None = None,
+        extension_name: str | None = None,
+    ) -> str | None:
+        """
+        Resolve an extension ID for a property.
+        If extension_id is provided, returns it.
+        Otherwise fetches installed extensions for the property and matches by name
+        (from extension_name or delegate_descriptor_id package prefix, e.g. 'core' or 'adobe-analytics'),
+        defaulting to the 'core' extension.
+        """
+        if extension_id:
+            return extension_id
+
+        target_name = extension_name
+        if not target_name and delegate_descriptor_id and "::" in delegate_descriptor_id:
+            target_name = delegate_descriptor_id.split("::", 1)[0].strip()
+
+        ext_res = await self.list_extensions(client_id, client_secret, org_id, property_id)
+        if ext_res.get("error"):
+            return None
+
+        extensions = ext_res.get("extensions", [])
+        if not extensions:
+            return None
+
+        # 1. Match by target_name
+        if target_name:
+            target_clean = target_name.lower().replace("_", "-")
+            for ext in extensions:
+                ext_name = (ext.get("name") or "").lower().replace("_", "-")
+                if ext_name == target_clean:
+                    return ext.get("id")
+
+        # 2. Match "core" extension
+        for ext in extensions:
+            if (ext.get("name") or "").lower() == "core":
+                return ext.get("id")
+
+        # 3. Fallback to first extension
+        return extensions[0].get("id")
+
     @friendly_errors("Adobe Launch")
     async def create_rule(
         self,
@@ -584,9 +741,10 @@ class AdobeLaunchConnector:
         org_id: str,
         property_id: str,
         name: str,
+        components: list[dict[str, Any]] | None = None,
     ) -> dict:
         """
-        Create a new (empty) rule.
+        Create a new rule, optionally attaching components (events, conditions, actions).
         POST /properties/{property_id}/rules
         """
         json_body = {
@@ -611,11 +769,300 @@ class AdobeLaunchConnector:
             return result
 
         rule = result.get("data", {})
+        rule_id = rule.get("id")
+
+        created_components = []
+        if components and rule_id:
+            for comp in components:
+                comp_name = comp.get("name") or f"{name} Component"
+                comp_desc = comp.get("delegate_descriptor_id")
+                if not comp_desc:
+                    continue
+                comp_res = await self.create_rule_component(
+                    client_id,
+                    client_secret,
+                    org_id,
+                    property_id,
+                    rule_id,
+                    name=comp_name,
+                    delegate_descriptor_id=comp_desc,
+                    settings=comp.get("settings"),
+                    extension_id=comp.get("extension_id"),
+                    rule_order=comp.get("rule_order"),
+                    order=comp.get("order"),
+                    negate=comp.get("negate"),
+                    timeout=comp.get("timeout"),
+                    delay_next=comp.get("delay_next"),
+                )
+                if not comp_res.get("error"):
+                    created_components.append(comp_res)
+                else:
+                    logger.warning(f"Failed to create rule component {comp_name} for rule {rule_id}: {comp_res}")
+
         return {
             "success": True,
-            "rule_id": rule.get("id"),
+            "rule_id": rule_id,
             "name": name,
-            "message": "Rule created successfully",
+            "components_count": len(created_components),
+            "components": created_components,
+            "message": "Rule created successfully" + (f" with {len(created_components)} component(s)" if created_components else ""),
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def update_rule(
+        self,
+        client_id: str,
+        client_secret: str,
+        org_id: str,
+        rule_id: str,
+        name: str | None = None,
+        enabled: bool | None = None,
+    ) -> dict:
+        """
+        Update an existing rule.
+        PATCH /rules/{rule_id}
+        """
+        attributes: dict[str, Any] = {}
+        if name is not None:
+            attributes["name"] = name
+        if enabled is not None:
+            attributes["enabled"] = enabled
+
+        json_body = {
+            "data": {
+                "type": "rules",
+                "id": rule_id,
+                "attributes": attributes,
+            }
+        }
+
+        result = await self._request(
+            client_id,
+            client_secret,
+            org_id,
+            "PATCH",
+            f"/rules/{rule_id}",
+            json_body=json_body,
+        )
+        if result.get("error"):
+            return result
+
+        rule = result.get("data", {})
+        return {
+            "success": True,
+            "rule_id": rule_id,
+            "name": rule.get("attributes", {}).get("name", name),
+            "enabled": rule.get("attributes", {}).get("enabled", enabled),
+            "message": "Rule updated successfully",
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def delete_rule(
+        self, client_id: str, client_secret: str, org_id: str, rule_id: str
+    ) -> dict:
+        """
+        Delete a rule.
+        DELETE /rules/{rule_id}
+        """
+        result = await self._request(
+            client_id, client_secret, org_id, "DELETE", f"/rules/{rule_id}"
+        )
+        if result.get("error"):
+            return result
+
+        return {
+            "success": True,
+            "rule_id": rule_id,
+            "message": "Rule deleted successfully",
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def create_rule_component(
+        self,
+        client_id: str,
+        client_secret: str,
+        org_id: str,
+        property_id: str,
+        rule_id: str,
+        name: str,
+        delegate_descriptor_id: str,
+        settings: dict[str, Any] | str | None = None,
+        extension_id: str | None = None,
+        rule_order: int | None = None,
+        order: int | None = None,
+        negate: bool | None = None,
+        timeout: int | None = None,
+        delay_next: bool | None = None,
+    ) -> dict:
+        """
+        Create a rule component (event, condition, or action) and attach it to a rule.
+        POST /properties/{property_id}/rule_components
+        """
+        ext_id = await self._resolve_extension_id(
+            client_id,
+            client_secret,
+            org_id,
+            property_id,
+            delegate_descriptor_id=delegate_descriptor_id,
+            extension_id=extension_id,
+        )
+        if not ext_id:
+            return {
+                "error": True,
+                "message": f"Could not resolve extension for rule component on property '{property_id}'. Please ensure the extension is installed.",
+            }
+
+        if isinstance(settings, dict):
+            settings_str = json.dumps(settings)
+        elif isinstance(settings, str):
+            settings_str = settings
+        else:
+            settings_str = "{}"
+
+        attributes: dict[str, Any] = {
+            "name": name,
+            "delegate_descriptor_id": delegate_descriptor_id,
+            "settings": settings_str,
+        }
+        if rule_order is not None:
+            attributes["rule_order"] = rule_order
+        if order is not None:
+            attributes["order"] = order
+        if negate is not None:
+            attributes["negate"] = negate
+        if timeout is not None:
+            attributes["timeout"] = timeout
+        if delay_next is not None:
+            attributes["delay_next"] = delay_next
+
+        json_body = {
+            "data": {
+                "type": "rule_components",
+                "attributes": attributes,
+                "relationships": {
+                    "rules": {
+                        "data": {
+                            "type": "rules",
+                            "id": rule_id,
+                        }
+                    },
+                    "extension": {
+                        "data": {
+                            "type": "extensions",
+                            "id": ext_id,
+                        }
+                    },
+                },
+            }
+        }
+
+        result = await self._request(
+            client_id,
+            client_secret,
+            org_id,
+            "POST",
+            f"/properties/{property_id}/rule_components",
+            json_body=json_body,
+        )
+        if result.get("error"):
+            return result
+
+        comp = result.get("data", {})
+        return {
+            "success": True,
+            "rule_component_id": comp.get("id"),
+            "rule_id": rule_id,
+            "name": name,
+            "delegate_descriptor_id": delegate_descriptor_id,
+            "extension_id": ext_id,
+            "message": "Rule component created successfully",
+            "data": comp,
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def update_rule_component(
+        self,
+        client_id: str,
+        client_secret: str,
+        org_id: str,
+        rule_component_id: str,
+        name: str | None = None,
+        settings: dict[str, Any] | str | None = None,
+        delegate_descriptor_id: str | None = None,
+        rule_order: int | None = None,
+        order: int | None = None,
+        negate: bool | None = None,
+        timeout: int | None = None,
+        delay_next: bool | None = None,
+    ) -> dict:
+        """
+        Update an existing rule component.
+        PATCH /rule_components/{rule_component_id}
+        """
+        attributes: dict[str, Any] = {}
+        if name is not None:
+            attributes["name"] = name
+        if settings is not None:
+            attributes["settings"] = json.dumps(settings) if isinstance(settings, dict) else settings
+        if delegate_descriptor_id is not None:
+            attributes["delegate_descriptor_id"] = delegate_descriptor_id
+        if rule_order is not None:
+            attributes["rule_order"] = rule_order
+        if order is not None:
+            attributes["order"] = order
+        if negate is not None:
+            attributes["negate"] = negate
+        if timeout is not None:
+            attributes["timeout"] = timeout
+        if delay_next is not None:
+            attributes["delay_next"] = delay_next
+
+        json_body = {
+            "data": {
+                "type": "rule_components",
+                "id": rule_component_id,
+                "attributes": attributes,
+            }
+        }
+
+        result = await self._request(
+            client_id,
+            client_secret,
+            org_id,
+            "PATCH",
+            f"/rule_components/{rule_component_id}",
+            json_body=json_body,
+        )
+        if result.get("error"):
+            return result
+
+        comp = result.get("data", {})
+        return {
+            "success": True,
+            "rule_component_id": rule_component_id,
+            "name": comp.get("attributes", {}).get("name", name),
+            "message": "Rule component updated successfully",
+            "data": comp,
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def delete_rule_component(
+        self, client_id: str, client_secret: str, org_id: str, rule_component_id: str
+    ) -> dict:
+        """
+        Delete a rule component.
+        DELETE /rule_components/{rule_component_id}
+        """
+        result = await self._request(
+            client_id, client_secret, org_id, "DELETE", f"/rule_components/{rule_component_id}"
+        )
+        if result.get("error"):
+            return result
+
+        return {
+            "success": True,
+            "rule_component_id": rule_component_id,
+            "message": "Rule component deleted successfully",
         }
 
     @friendly_errors("Adobe Launch")
@@ -627,24 +1074,69 @@ class AdobeLaunchConnector:
         property_id: str,
         name: str,
         delegate_descriptor_id: str,
-        settings: dict[str, Any] | None = None,
+        settings: dict[str, Any] | str | None = None,
+        extension_id: str | None = None,
+        clean_text: bool | None = None,
+        force_lower_case: bool | None = None,
+        default_value: str | None = None,
+        storage_duration: str | None = None,
+        enabled: bool = True,
     ) -> dict:
         """
         Create a new data element.
         POST /properties/{property_id}/data_elements
         """
+        ext_id = await self._resolve_extension_id(
+            client_id,
+            client_secret,
+            org_id,
+            property_id,
+            delegate_descriptor_id=delegate_descriptor_id,
+            extension_id=extension_id,
+        )
+        if not ext_id:
+            return {
+                "error": True,
+                "message": f"Could not resolve extension for data element on property '{property_id}'. Please ensure the extension is installed.",
+            }
+
+        # Reactor API requires settings to be a JSON string
+        if isinstance(settings, dict):
+            settings_str = json.dumps(settings)
+        elif isinstance(settings, str):
+            settings_str = settings
+        else:
+            settings_str = "{}"
+
+        attributes: dict[str, Any] = {
+            "name": name,
+            "delegate_descriptor_id": delegate_descriptor_id,
+            "settings": settings_str,
+            "enabled": True if enabled is None else enabled,
+        }
+        if clean_text is not None:
+            attributes["clean_text"] = clean_text
+        if force_lower_case is not None:
+            attributes["force_lower_case"] = force_lower_case
+        if default_value is not None:
+            attributes["default_value"] = default_value
+        if storage_duration is not None:
+            attributes["storage_duration"] = storage_duration
+
         json_body = {
             "data": {
                 "type": "data_elements",
-                "attributes": {
-                    "name": name,
-                    "delegate_descriptor_id": delegate_descriptor_id,
-                    "enabled": True,
+                "attributes": attributes,
+                "relationships": {
+                    "extension": {
+                        "data": {
+                            "type": "extensions",
+                            "id": ext_id,
+                        }
+                    }
                 },
             }
         }
-        if settings:
-            json_body["data"]["attributes"]["settings"] = settings
 
         result = await self._request(
             client_id,
@@ -662,7 +1154,96 @@ class AdobeLaunchConnector:
             "success": True,
             "data_element_id": element.get("id"),
             "name": name,
+            "delegate_descriptor_id": delegate_descriptor_id,
+            "extension_id": ext_id,
             "message": "Data element created successfully",
+            "data": element,
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def update_data_element(
+        self,
+        client_id: str,
+        client_secret: str,
+        org_id: str,
+        data_element_id: str,
+        name: str | None = None,
+        settings: dict[str, Any] | str | None = None,
+        delegate_descriptor_id: str | None = None,
+        enabled: bool | None = None,
+        clean_text: bool | None = None,
+        force_lower_case: bool | None = None,
+        default_value: str | None = None,
+        storage_duration: str | None = None,
+    ) -> dict:
+        """
+        Update an existing data element.
+        PATCH /data_elements/{data_element_id}
+        """
+        attributes: dict[str, Any] = {}
+        if name is not None:
+            attributes["name"] = name
+        if settings is not None:
+            attributes["settings"] = json.dumps(settings) if isinstance(settings, dict) else settings
+        if delegate_descriptor_id is not None:
+            attributes["delegate_descriptor_id"] = delegate_descriptor_id
+        if enabled is not None:
+            attributes["enabled"] = enabled
+        if clean_text is not None:
+            attributes["clean_text"] = clean_text
+        if force_lower_case is not None:
+            attributes["force_lower_case"] = force_lower_case
+        if default_value is not None:
+            attributes["default_value"] = default_value
+        if storage_duration is not None:
+            attributes["storage_duration"] = storage_duration
+
+        json_body = {
+            "data": {
+                "type": "data_elements",
+                "id": data_element_id,
+                "attributes": attributes,
+            }
+        }
+
+        result = await self._request(
+            client_id,
+            client_secret,
+            org_id,
+            "PATCH",
+            f"/data_elements/{data_element_id}",
+            json_body=json_body,
+        )
+        if result.get("error"):
+            return result
+
+        element = result.get("data", {})
+        return {
+            "success": True,
+            "data_element_id": data_element_id,
+            "name": element.get("attributes", {}).get("name", name),
+            "message": "Data element updated successfully",
+            "data": element,
+        }
+
+    @friendly_errors("Adobe Launch")
+    async def delete_data_element(
+        self, client_id: str, client_secret: str, org_id: str, data_element_id: str
+    ) -> dict:
+        """
+        Delete a data element.
+        DELETE /data_elements/{data_element_id}
+        """
+        result = await self._request(
+            client_id, client_secret, org_id, "DELETE", f"/data_elements/{data_element_id}"
+        )
+        if result.get("error"):
+            return result
+
+        return {
+            "success": True,
+            "data_element_id": data_element_id,
+            "message": "Data element deleted successfully",
         }
 
     @friendly_errors("Adobe Launch")

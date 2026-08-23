@@ -96,6 +96,93 @@
   },
   {
     "tool": "tagmanager_read",
+    "action": "get_data_element",
+    "summary": "Get one Adobe Launch data element by ID (not cached). Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "tag_id",
+        "type": "string",
+        "required": true,
+        "example": "DE1234abcd",
+        "doc": "Adobe Launch data_element_id (overloaded onto tag_id param)."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ ...data_element } | no_adobe_launch_response | {error,message}"
+  },
+  {
+    "tool": "tagmanager_read",
+    "action": "list_rule_components",
+    "summary": "List all rule components for an Adobe Launch rule (cached 300s). Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "tag_id",
+        "type": "string",
+        "required": true,
+        "example": "RL1234abcd",
+        "doc": "Adobe Launch rule_id (overloaded onto tag_id param)."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ rule_id, rule_components: [...], total } | no_adobe_launch_response | {error,message}"
+  },
+  {
+    "tool": "tagmanager_read",
+    "action": "get_rule_component",
+    "summary": "Get one Adobe Launch rule component by ID (not cached). Requires platform=adobe_launch.",
+    "group": "ADOBE LAUNCH",
+    "params": [
+      {
+        "name": "platform",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "adobe_launch"
+        ],
+        "example": "adobe_launch",
+        "doc": "MUST be passed as adobe_launch."
+      },
+      {
+        "name": "tag_id",
+        "type": "string",
+        "required": true,
+        "example": "RC1234abcd",
+        "doc": "Adobe Launch rule_component_id (overloaded onto tag_id param)."
+      }
+    ],
+    "platforms": [
+      "adobe_launch"
+    ],
+    "returns": "{ ...rule_component } | no_adobe_launch_response | {error,message}"
+  },
+  {
+    "tool": "tagmanager_read",
     "action": "get_tag_detail",
     "summary": "Get raw detail for one GTM tag by tag_id (cached 300s).",
     "group": "GTM",

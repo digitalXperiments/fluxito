@@ -139,15 +139,18 @@ TAGMANAGER_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "get_container_summary": ("tagmanager_read", "get_container_summary"),
     # Adobe Launch reads
     "list_companies": ("tagmanager_read", "list_companies", {"platform": "adobe_launch"}),
-    "list_properties": ("tagmanager_read", "list_properties"),
-    "get_property": ("tagmanager_read", "get_property"),
-    "list_rules": ("tagmanager_read", "list_rules"),
-    "get_rule": ("tagmanager_read", "get_rule"),
-    "list_data_elements": ("tagmanager_read", "list_data_elements"),
-    "list_extensions": ("tagmanager_read", "list_extensions"),
-    "list_environments": ("tagmanager_read", "list_environments"),
-    "list_libraries": ("tagmanager_read", "list_libraries"),
-    "list_builds": ("tagmanager_read", "list_builds"),
+    "list_properties": ("tagmanager_read", "list_properties", {"platform": "adobe_launch"}),
+    "get_property": ("tagmanager_read", "get_property", {"platform": "adobe_launch"}),
+    "list_rules": ("tagmanager_read", "list_rules", {"platform": "adobe_launch"}),
+    "get_rule": ("tagmanager_read", "get_rule", {"platform": "adobe_launch"}),
+    "list_rule_components": ("tagmanager_read", "list_rule_components", {"platform": "adobe_launch"}),
+    "get_rule_component": ("tagmanager_read", "get_rule_component", {"platform": "adobe_launch"}),
+    "list_data_elements": ("tagmanager_read", "list_data_elements", {"platform": "adobe_launch"}),
+    "get_data_element": ("tagmanager_read", "get_data_element", {"platform": "adobe_launch"}),
+    "list_extensions": ("tagmanager_read", "list_extensions", {"platform": "adobe_launch"}),
+    "list_environments": ("tagmanager_read", "list_environments", {"platform": "adobe_launch"}),
+    "list_libraries": ("tagmanager_read", "list_libraries", {"platform": "adobe_launch"}),
+    "list_builds": ("tagmanager_read", "list_builds", {"platform": "adobe_launch"}),
 }
 
 # tagmanager_write (GTM + Adobe Launch)
@@ -162,13 +165,20 @@ TAGMANAGER_WRITE_ROUTES: dict[str, tuple[str, str | None]] = {
     "create_variable": ("tagmanager_write", "create_variable"),
     "publish_container": ("tagmanager_write", "publish_container"),
     # Adobe Launch
-    "create_property": ("tagmanager_write", "create_property"),
-    "create_rule": ("tagmanager_write", "create_rule"),
-    "create_data_element": ("tagmanager_write", "create_data_element"),
-    "create_library": ("tagmanager_write", "create_library"),
-    "add_resources_to_library": ("tagmanager_write", "add_resources_to_library"),
-    "build_library": ("tagmanager_write", "build_library"),
-    "transition_library": ("tagmanager_write", "transition_library"),
+    "create_property": ("tagmanager_write", "create_property", {"platform": "adobe_launch"}),
+    "create_rule": ("tagmanager_write", "create_rule", {"platform": "adobe_launch"}),
+    "update_rule": ("tagmanager_write", "update_rule", {"platform": "adobe_launch"}),
+    "delete_rule": ("tagmanager_write", "delete_rule", {"platform": "adobe_launch"}),
+    "create_rule_component": ("tagmanager_write", "create_rule_component", {"platform": "adobe_launch"}),
+    "update_rule_component": ("tagmanager_write", "update_rule_component", {"platform": "adobe_launch"}),
+    "delete_rule_component": ("tagmanager_write", "delete_rule_component", {"platform": "adobe_launch"}),
+    "create_data_element": ("tagmanager_write", "create_data_element", {"platform": "adobe_launch"}),
+    "update_data_element": ("tagmanager_write", "update_data_element", {"platform": "adobe_launch"}),
+    "delete_data_element": ("tagmanager_write", "delete_data_element", {"platform": "adobe_launch"}),
+    "create_library": ("tagmanager_write", "create_library", {"platform": "adobe_launch"}),
+    "add_resources_to_library": ("tagmanager_write", "add_resources_to_library", {"platform": "adobe_launch"}),
+    "build_library": ("tagmanager_write", "build_library", {"platform": "adobe_launch"}),
+    "transition_library": ("tagmanager_write", "transition_library", {"platform": "adobe_launch"}),
 }
 
 # marketing_read (Google Ads + Meta Ads + TikTok Ads + Snap Ads) — performance queries only.
@@ -617,8 +627,8 @@ Actions:
     get_container_summary— params: account_id, container_id
   ADOBE LAUNCH
     list_companies, list_properties, get_property, list_rules, get_rule,
-    list_data_elements, list_extensions, list_environments,
-    list_libraries, list_builds
+    list_rule_components, get_rule_component, list_data_elements, get_data_element,
+    list_extensions, list_environments, list_libraries, list_builds
 """
 
 TAGMANAGER_WRITE_DOC = """
@@ -638,8 +648,15 @@ Actions:
 
   ADOBE LAUNCH
     create_property           — config: {name, company_id, platform?, domains?}
-    create_rule               — config: {property_id, name}
-    create_data_element       — config: {property_id, name, delegate_descriptor_id, settings?}
+    create_rule               — config: {property_id, name, components?[]}
+    update_rule               — config: {rule_id, name?, enabled?}
+    delete_rule               — config: {rule_id}
+    create_rule_component     — config: {property_id, rule_id, name, delegate_descriptor_id, settings?, extension_id?, rule_order?, order?, negate?, timeout?, delay_next?}
+    update_rule_component     — config: {rule_component_id, name?, settings?, delegate_descriptor_id?, rule_order?, order?, negate?, timeout?, delay_next?}
+    delete_rule_component     — config: {rule_component_id}
+    create_data_element       — config: {property_id, name, delegate_descriptor_id, settings?, extension_id?, clean_text?, force_lower_case?, default_value?, storage_duration?, enabled?}
+    update_data_element       — config: {data_element_id, name?, settings?, delegate_descriptor_id?, enabled?, clean_text?, force_lower_case?, default_value?, storage_duration?}
+    delete_data_element       — config: {data_element_id}
     create_library            — config: {property_id, name, environment_id}
     add_resources_to_library  — config: {library_id, resources[]}
     build_library             — config: {library_id}
