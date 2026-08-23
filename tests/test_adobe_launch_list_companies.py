@@ -1,11 +1,12 @@
 """Tests for Adobe Launch list_companies and list_properties on tagmanager_read."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from mcp.server.fastmcp import FastMCP
 
-from app.auth.mcp_session_manager import UserContext
 import app.app_state as state
+from app.auth.mcp_session_manager import UserContext
 from app.connectors.adobe_launch import AdobeLaunchConnector
 from app.tools import specs
 from app.tools.registry import register_all_tools
@@ -62,9 +63,7 @@ async def test_tagmanager_read_list_companies_dispatch(mcp_server):
 
     mock_launch = AsyncMock()
     mock_launch.list_companies.return_value = {
-        "companies": [
-            {"id": "CO1234567890", "name": "Test Company", "org_id": "test_org@AdobeOrg"}
-        ],
+        "companies": [{"id": "CO1234567890", "name": "Test Company", "org_id": "test_org@AdobeOrg"}],
         "total": 1,
     }
     state.adobe_launch_connector = mock_launch
@@ -114,9 +113,7 @@ async def test_tagmanager_read_list_properties_auto_resolve(mcp_server):
 @pytest.mark.asyncio
 async def test_adobe_launch_connector_request_headers():
     connector = AdobeLaunchConnector()
-    with patch.object(
-        connector, "_get_adobe_token", new=AsyncMock(return_value={"token": "mock_token"})
-    ):
+    with patch.object(connector, "_get_adobe_token", new=AsyncMock(return_value={"token": "mock_token"})):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"data": []}
