@@ -176,7 +176,11 @@ TAGMANAGER_WRITE_ROUTES: dict[str, tuple[str, str | None]] = {
     "update_data_element": ("tagmanager_write", "update_data_element", {"platform": "adobe_launch"}),
     "delete_data_element": ("tagmanager_write", "delete_data_element", {"platform": "adobe_launch"}),
     "create_library": ("tagmanager_write", "create_library", {"platform": "adobe_launch"}),
-    "add_resources_to_library": ("tagmanager_write", "add_resources_to_library", {"platform": "adobe_launch"}),
+    "add_resources_to_library": (
+        "tagmanager_write",
+        "add_resources_to_library",
+        {"platform": "adobe_launch"},
+    ),
     "build_library": ("tagmanager_write", "build_library", {"platform": "adobe_launch"}),
     "transition_library": ("tagmanager_write", "transition_library", {"platform": "adobe_launch"}),
 }

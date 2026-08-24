@@ -91,7 +91,10 @@ async def test_create_data_element_attaches_extension_and_stringifies_settings()
             # Validate JSON:API schema compliance:
             assert json_body["data"]["type"] == "data_elements"
             assert json_body["data"]["attributes"]["name"] == "Page Title"
-            assert json_body["data"]["attributes"]["delegate_descriptor_id"] == "core::dataElements::javascript-variable"
+            assert (
+                json_body["data"]["attributes"]["delegate_descriptor_id"]
+                == "core::dataElements::javascript-variable"
+            )
             # Settings MUST be stringified JSON
             assert isinstance(json_body["data"]["attributes"]["settings"], str)
             assert json.loads(json_body["data"]["attributes"]["settings"]) == {"path": "document.title"}
@@ -240,7 +243,7 @@ async def test_get_rule_returns_components():
                     "attributes": {
                         "name": "Click Event",
                         "delegate_descriptor_id": "core::events::click",
-                        "settings": "{\"selector\": \".voice\"}",
+                        "settings": '{"selector": ".voice"}',
                     },
                 },
                 {
@@ -249,7 +252,7 @@ async def test_get_rule_returns_components():
                     "attributes": {
                         "name": "Set AA Vars",
                         "delegate_descriptor_id": "adobe-analytics::actions::set-variables",
-                        "settings": "{\"eVar1\": \"voice\"}",
+                        "settings": '{"eVar1": "voice"}',
                     },
                 },
             ],
@@ -351,7 +354,7 @@ async def test_tagmanager_read_get_data_element_dispatch(mcp_server, mock_user_c
         "name": "Page URL",
         "enabled": True,
         "delegate_descriptor_id": "core::dataElements::javascript-variable",
-        "settings": "{\"path\": \"window.location.href\"}",
+        "settings": '{"path": "window.location.href"}',
     }
     state.adobe_launch_connector = mock_launch
 

@@ -797,7 +797,9 @@ class AdobeLaunchConnector:
                 if not comp_res.get("error"):
                     created_components.append(comp_res)
                 else:
-                    logger.warning(f"Failed to create rule component {comp_name} for rule {rule_id}: {comp_res}")
+                    logger.warning(
+                        f"Failed to create rule component {comp_name} for rule {rule_id}: {comp_res}"
+                    )
 
         return {
             "success": True,
@@ -805,7 +807,8 @@ class AdobeLaunchConnector:
             "name": name,
             "components_count": len(created_components),
             "components": created_components,
-            "message": "Rule created successfully" + (f" with {len(created_components)} component(s)" if created_components else ""),
+            "message": "Rule created successfully"
+            + (f" with {len(created_components)} component(s)" if created_components else ""),
         }
 
     @friendly_errors("Adobe Launch")
@@ -857,16 +860,12 @@ class AdobeLaunchConnector:
         }
 
     @friendly_errors("Adobe Launch")
-    async def delete_rule(
-        self, client_id: str, client_secret: str, org_id: str, rule_id: str
-    ) -> dict:
+    async def delete_rule(self, client_id: str, client_secret: str, org_id: str, rule_id: str) -> dict:
         """
         Delete a rule.
         DELETE /rules/{rule_id}
         """
-        result = await self._request(
-            client_id, client_secret, org_id, "DELETE", f"/rules/{rule_id}"
-        )
+        result = await self._request(client_id, client_secret, org_id, "DELETE", f"/rules/{rule_id}")
         if result.get("error"):
             return result
 
@@ -1005,7 +1004,9 @@ class AdobeLaunchConnector:
         if name is not None:
             attributes["name"] = name
         if settings is not None:
-            attributes["settings"] = json.dumps(settings) if isinstance(settings, (dict, list)) else str(settings)
+            attributes["settings"] = (
+                json.dumps(settings) if isinstance(settings, (dict, list)) else str(settings)
+            )
         if delegate_descriptor_id is not None:
             attributes["delegate_descriptor_id"] = delegate_descriptor_id
         if rule_order is not None:
@@ -1186,7 +1187,9 @@ class AdobeLaunchConnector:
         if name is not None:
             attributes["name"] = name
         if settings is not None:
-            attributes["settings"] = json.dumps(settings) if isinstance(settings, (dict, list)) else str(settings)
+            attributes["settings"] = (
+                json.dumps(settings) if isinstance(settings, (dict, list)) else str(settings)
+            )
         if delegate_descriptor_id is not None:
             attributes["delegate_descriptor_id"] = delegate_descriptor_id
         if enabled is not None:
