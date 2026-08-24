@@ -912,10 +912,10 @@ class AdobeLaunchConnector:
                 "message": f"Could not resolve extension for rule component on property '{property_id}'. Please ensure the extension is installed.",
             }
 
-        if isinstance(settings, dict):
+        if isinstance(settings, (dict, list)):
             settings_str = json.dumps(settings)
-        elif isinstance(settings, str):
-            settings_str = settings
+        elif settings is not None:
+            settings_str = str(settings)
         else:
             settings_str = "{}"
 
@@ -941,10 +941,12 @@ class AdobeLaunchConnector:
                 "attributes": attributes,
                 "relationships": {
                     "rules": {
-                        "data": {
-                            "type": "rules",
-                            "id": rule_id,
-                        }
+                        "data": [
+                            {
+                                "type": "rules",
+                                "id": rule_id,
+                            }
+                        ]
                     },
                     "extension": {
                         "data": {
@@ -1003,7 +1005,7 @@ class AdobeLaunchConnector:
         if name is not None:
             attributes["name"] = name
         if settings is not None:
-            attributes["settings"] = json.dumps(settings) if isinstance(settings, dict) else settings
+            attributes["settings"] = json.dumps(settings) if isinstance(settings, (dict, list)) else str(settings)
         if delegate_descriptor_id is not None:
             attributes["delegate_descriptor_id"] = delegate_descriptor_id
         if rule_order is not None:
@@ -1101,10 +1103,10 @@ class AdobeLaunchConnector:
             }
 
         # Reactor API requires settings to be a JSON string
-        if isinstance(settings, dict):
+        if isinstance(settings, (dict, list)):
             settings_str = json.dumps(settings)
-        elif isinstance(settings, str):
-            settings_str = settings
+        elif settings is not None:
+            settings_str = str(settings)
         else:
             settings_str = "{}"
 
@@ -1184,7 +1186,7 @@ class AdobeLaunchConnector:
         if name is not None:
             attributes["name"] = name
         if settings is not None:
-            attributes["settings"] = json.dumps(settings) if isinstance(settings, dict) else settings
+            attributes["settings"] = json.dumps(settings) if isinstance(settings, (dict, list)) else str(settings)
         if delegate_descriptor_id is not None:
             attributes["delegate_descriptor_id"] = delegate_descriptor_id
         if enabled is not None:

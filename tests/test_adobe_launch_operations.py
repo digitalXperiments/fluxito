@@ -159,10 +159,12 @@ async def test_create_rule_component_payload_schema():
             assert json_body["data"]["attributes"]["name"] == "Set eVar1"
             assert json_body["data"]["attributes"]["rule_order"] == 50
             assert isinstance(json_body["data"]["attributes"]["settings"], str)
-            assert json_body["data"]["relationships"]["rules"]["data"] == {
-                "type": "rules",
-                "id": "RL_555",
-            }
+            assert json_body["data"]["relationships"]["rules"]["data"] == [
+                {
+                    "type": "rules",
+                    "id": "RL_555",
+                }
+            ]
             assert json_body["data"]["relationships"]["extension"]["data"] == {
                 "type": "extensions",
                 "id": "EX_AA_456",
