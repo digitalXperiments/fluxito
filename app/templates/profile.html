@@ -1,331 +1,370 @@
 {% extends "settings/shell.html" %}
-{% from "partials/page_header.html" import page_header %}
 {% block title %}Account — Fluxito{% endblock %}
 {% set settings_section = 'account' %}
 
 {% block settings_main %}
 <main class="app-main">
 
-  {{ page_header('Account', 'You & your <em>Flux.</em>') }}
-
-  {# ── Identity header ── #}
-  <div class="pf-identity">
-    <div class="pf-avatar" id="profileAvatar">{{ (user.display_name or user.email)[:2] | upper }}</div>
-    <div style="flex:1;min-width:0">
-      <div class="pf-name-row">
-        <h1 id="profileDisplayName">{{ user.display_name or user.email.split('@')[0] | title }}</h1>
-        {% if not user.is_active %}
-          <span class="t-flag" style="background:color-mix(in srgb, var(--amber) 12%, transparent);color:var(--amber)">Deactivated</span>
-        {% endif %}
-      </div>
-      <div class="pf-sub">{{ user.email }}{% if user.created_at %} · Member since {{ user.created_at | fmt_date }}{% endif %}</div>
-    </div>
-  </div>
-
-  {# ── Stats row ── #}
-  <div class="pf-stats">
-    <div class="pf-stat">
-      <div class="pf-stat-label">Platforms</div>
-      <div class="pf-stat-val">{{ total_conns }}</div>
-      <div class="pf-stat-foot">Connected</div>
-    </div>
-    <div class="pf-stat">
-      <div class="pf-stat-label">Dashboards</div>
-      <div class="pf-stat-val">{{ dashboard_count }}</div>
-      <div class="pf-stat-foot">Live dashboards</div>
-    </div>
-    <div class="pf-stat">
-      <div class="pf-stat-label">Notifications</div>
-      <div class="pf-stat-val">{{ unread_notifs }}</div>
-      <div class="pf-stat-foot">Unread</div>
-    </div>
-  </div>
-
-  {# ── Personal Info + Preferences (side-by-side on wide screens) ── #}
-  <div class="pf-grid">
-    <div class="pf-card">
-      <div class="pf-card-head">
-        <h2>Personal Info</h2>
-      </div>
-      <form id="profileForm" onsubmit="return false;">
-        <label class="f-field">
-          <span>Display name</span>
-          <input class="f-input" type="text" id="displayName" name="display_name"
-                 value="{{ user.display_name or '' }}"
-                 placeholder="How should we call you?" maxlength="255"/>
-        </label>
-        <label class="f-field">
-          <span>Email address</span>
-          <input class="f-input" type="email" id="emailField" name="email"
-                 value="{{ user.email }}"
-                 placeholder="your@email.com"/>
-        </label>
-        <label class="f-field">
-          <span>New password</span>
-          <input class="f-input" type="password" id="newPasswordField" name="new_password"
-                 autocomplete="new-password" placeholder="Leave blank to keep current"/>
-        </label>
-        <button type="button" class="btn primary" id="saveProfileBtn" onclick="Fluxito._saveProfile()">Save changes</button>
-      </form>
-    </div>
-
-    {% if org %}
-    <div class="pf-card pf-side-card">
-      <div class="pf-card-head">
-        <h2>Organization</h2>
-      </div>
-      <div class="pf-pref-row">
-        <div>
-          <div class="pf-pref-name">{{ org.name }}</div>
-          <div class="pf-pref-sub">{{ org_member_count }} members</div>
+  {# ── Header matching Project Settings ── #}
+  <div class="page-head">
+    <div class="ps-eyebrow">Account settings</div>
+    <div class="ps-head">
+      <div class="ps-mark" id="profileAvatar">{{ (user.display_name or user.email)[:2] | upper }}</div>
+      <div class="ps-head-main">
+        <div class="pf-name-row">
+          <h1 id="profileDisplayName">{{ user.display_name or user.email.split('@')[0] | title }}</h1>
+          {% if not user.is_active %}
+            <span class="t-flag" style="background:color-mix(in srgb, var(--amber) 12%, transparent);color:var(--amber)">Deactivated</span>
+          {% endif %}
         </div>
-        <a href="/org" class="btn sm">Manage</a>
-      </div>
-    </div>
-    {% endif %}
-  </div>
-
-  {# ── How Flux briefs you (role + monitors from onboarding, editable) ── #}
-  <div class="pf-card">
-    <div class="pf-card-head">
-      <h2>How Flux briefs you</h2>
-    </div>
-    <div class="pf-briefs-sub">Set during onboarding — tune anytime.</div>
-
-    <div class="pf-brief-block">
-      <div class="pf-brief-label">Role</div>
-      <div class="pf-role-grid" id="pfRoleGrid">
-        <div class="pf-role-card {% if user.flux_role == 'run_marketing' %}is-selected{% endif %}" data-role="run_marketing">
-          <div class="pf-role-title">I run marketing</div>
-          <div class="pf-role-sub">Campaigns, budgets, ROAS.</div>
+        <div class="ps-subline">
+          {{ user.email }}{% if user.created_at %} · Member since {{ user.created_at | fmt_date }}{% endif %}
         </div>
-        <div class="pf-role-card {% if user.flux_role == 'implement_tracking' %}is-selected{% endif %}" data-role="implement_tracking">
-          <div class="pf-role-title">I implement tracking</div>
-          <div class="pf-role-sub">GTM, dataLayers, pixels.</div>
-        </div>
-        <div class="pf-role-card {% if user.flux_role == 'analyze_report' %}is-selected{% endif %}" data-role="analyze_report">
-          <div class="pf-role-title">I analyze &amp; report</div>
-          <div class="pf-role-sub">Dashboards, deep dives.</div>
-        </div>
-        <div class="pf-role-card {% if user.flux_role == 'everything' %}is-selected{% endif %}" data-role="everything">
-          <div class="pf-role-title">A bit of everything</div>
-          <div class="pf-role-sub">I own the whole stack.</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="pf-brief-block">
-      <div class="pf-brief-label">Watching</div>
-      <div class="pf-chip-row" id="pfMonitorChips">
-        <span class="pf-chip {% if 'roas' in user.flux_monitors %}is-selected{% endif %}" data-monitor="roas">{% if 'roas' in user.flux_monitors %}✓ {% endif %}ROAS by channel</span>
-        <span class="pf-chip {% if 'health' in user.flux_monitors %}is-selected{% endif %}" data-monitor="health">{% if 'health' in user.flux_monitors %}✓ {% endif %}Conversion tracking health</span>
-        <span class="pf-chip {% if 'pacing' in user.flux_monitors %}is-selected{% endif %}" data-monitor="pacing">{% if 'pacing' in user.flux_monitors %}✓ {% endif %}Budget pacing</span>
-        <span class="pf-chip {% if 'funnel' in user.flux_monitors %}is-selected{% endif %}" data-monitor="funnel">{% if 'funnel' in user.flux_monitors %}✓ {% endif %}Funnel drop-offs</span>
-        <span class="pf-chip {% if 'seo' in user.flux_monitors %}is-selected{% endif %}" data-monitor="seo">{% if 'seo' in user.flux_monitors %}✓ {% endif %}SEO movement</span>
-        <span class="pf-chip {% if 'comp' in user.flux_monitors %}is-selected{% endif %}" data-monitor="comp">{% if 'comp' in user.flux_monitors %}✓ {% endif %}Competitor bidding</span>
       </div>
     </div>
   </div>
 
-  {# ── AI providers (summary card — full editor lives at /settings/ai) ── #}
-  <div class="pf-card">
-    <div class="pf-card-head">
-      <h2>AI providers</h2>
-    </div>
-    <div class="pf-briefs-sub">The model behind Flux's in-app chat. Keys are encrypted at rest and never leave your instance.</div>
-    <div class="pf-ai-provider-list" id="pfAiProviderList">
-      <div class="pf-loading">Loading…</div>
-    </div>
+  {# ── Tab Bar ── #}
+  <div class="sub-tabs pf-tabs" id="pfTabs">
+    <a class="sub-tab is-active" href="#general" data-tab="general">General</a>
+    <a class="sub-tab" href="#preferences" data-tab="preferences">Preferences</a>
+    <a class="sub-tab" href="#tokens" data-tab="tokens">MCP Tokens</a>
+    <a class="sub-tab" href="#activity" data-tab="activity">Activity</a>
   </div>
 
-  {# ── Your AI client (preferred_ai_client + MCP URL, Flux - Profile & AI.dc.html) ── #}
-  <div class="pf-card">
-    <div class="pf-card-head">
-      <h2>Your AI client</h2>
-    </div>
-    <div class="pf-briefs-sub">Which tool talks to Flux over MCP. For provider API keys (the model behind in-app chat), see <a href="/settings/ai">AI providers</a>.</div>
-
-    <div class="pf-client-grid" id="pfClientGrid">
-      <div class="pf-client-card {% if user.preferred_ai_client == 'claude' %}is-selected{% endif %}" data-client="claude">
-        <span class="pf-client-icon" style="background:#d97757;"><img src="/static/img/logos/claude.svg" alt=""></span>
-        <div><div class="pf-client-name">Claude</div><div class="pf-client-desc">Web &amp; Desktop · native MCP</div></div>
-      </div>
-      <div class="pf-client-card {% if user.preferred_ai_client == 'chatgpt' %}is-selected{% endif %}" data-client="chatgpt">
-        <span class="pf-client-icon" style="background:#10a37f;"><img src="/static/img/logos/chatgpt.svg" alt=""></span>
-        <div><div class="pf-client-name">ChatGPT</div><div class="pf-client-desc">Web &amp; Desktop</div></div>
-      </div>
-      <div class="pf-client-card {% if user.preferred_ai_client == 'cursor' %}is-selected{% endif %}" data-client="cursor">
-        <span class="pf-client-icon" style="background:#09090b;"><img src="/static/img/logos/cursor.svg" alt=""></span>
-        <div><div class="pf-client-name">Cursor</div><div class="pf-client-desc">Code editor</div></div>
-      </div>
-      <div class="pf-client-card {% if user.preferred_ai_client == 'windsurf' %}is-selected{% endif %}" data-client="windsurf">
-        <span class="pf-client-icon" style="background:#09b6a2;"><img src="/static/img/logos/windsurf.svg" alt=""></span>
-        <div><div class="pf-client-name">Windsurf</div><div class="pf-client-desc">Code editor</div></div>
-      </div>
-      <div class="pf-client-card {% if user.preferred_ai_client == 'lmstudio' %}is-selected{% endif %}" data-client="lmstudio">
-        <span class="pf-client-icon" style="background:#4338ca;"><img src="/static/img/logos/lmstudio.svg" alt=""></span>
-        <div><div class="pf-client-name">LM Studio</div><div class="pf-client-desc">Local models</div></div>
-      </div>
-      <div class="pf-client-card {% if user.preferred_ai_client == 'inapp' %}is-selected{% endif %}" data-client="inapp">
-        <span class="pf-client-icon pf-client-icon-flux">F</span>
-        <div><div class="pf-client-name">Just the app</div><div class="pf-client-desc">Chat with Flux right here</div></div>
-      </div>
-    </div>
-
-    <div class="pf-mcp-box">
-      <span class="pf-mcp-url" id="pfMcpUrl">{{ base_url }}/mcp</span>
-      <span class="pf-mcp-copy" id="pfCopyMcpUrl">Copy URL</span>
-    </div>
-    <div class="pf-mcp-hint">Paste this into your client's MCP settings — see <a href="/tutorials">Tutorials</a> for a walkthrough per tool.</div>
-  </div>
-
-  {# ── MCP Access Tokens (PATs) for remote / headless / SSH use ── #}
-  {# Primary solution for "no browser on the remote box": generate here (laptop), copy token or config, paste on remote. #}
-  <div class="pf-card" id="mcpTokensCard">
-    <div class="pf-card-head">
-      <div>
-        <h2>MCP Access Tokens</h2>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px;">For remote servers, SSH, containers, CLIs (no browser or localhost redirect needed on the target)</div>
-      </div>
-    </div>
-
-    {# Create form #}
-    <form id="mcpTokenForm" onsubmit="return false;" class="pf-token-create">
-      <label class="f-field pf-grow">
-        <span>Name</span>
-        <input class="f-input" type="text" id="mcpTokenName" placeholder="remote-server-1" maxlength="255" required />
-      </label>
-      <label class="f-field pf-expires">
-        <span>Expires</span>
-        <select class="f-input" id="mcpTokenExpiry">
-          <option value="90">90 days (recommended)</option>
-          <option value="30">30 days</option>
-          <option value="60">60 days</option>
-          <option value="365">365 days</option>
-          <option value="0">Never</option>
-        </select>
-      </label>
-      <button type="button" class="btn primary pf-btn-create" id="mcpCreateBtn" onclick="Fluxito._createMcpPat()">Create token</button>
-    </form>
-
-    {# Post-create reveal (populated by JS, shown once) #}
-    <div id="mcpPatReveal" class="pf-pat-reveal" style="display:none;margin-bottom:16px;border:2px solid var(--green);border-radius:var(--r-m);padding:14px;background:var(--bg-2)">
-      <div style="font-size:12px;font-weight:600;color:var(--green);margin-bottom:6px">✓ Token created — copy the full value now (shown only once, never again)</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <code id="mcpPatPlain" style="flex:1;font-family:var(--mono);font-size:13px;word-break:break-all;background:var(--bg);padding:8px 10px;border-radius:6px;border:1px solid var(--line);user-select:all" onclick="try{this.select()}catch(e){}"></code>
-        <button type="button" class="btn primary sm" onclick="Fluxito.copy(document.getElementById('mcpPatPlain').textContent, 'MCP PAT')">Copy token</button>
-      </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Config snippet for your remote MCP client (add the Authorization header):</div>
-      <pre id="mcpPatSnippet" style="font-size:11px;background:var(--bg);padding:8px;border-radius:4px;border:1px solid var(--line);overflow:auto;white-space:pre-wrap;margin-bottom:8px"></pre>
-      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-        <button type="button" class="btn sm" onclick="Fluxito.copy(document.getElementById('mcpPatSnippet').textContent, 'Config snippet')">Copy snippet</button>
-        <button type="button" class="btn sm" onclick="document.getElementById('mcpPatReveal').style.display='none'">Done — I've copied the token</button>
-      </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px">The full token will never be shown again. Keep it safe.</div>
-    </div>
-
-    {# Existing tokens list (server-rendered initial state; JS can refresh or we reload on mutate for simplicity) #}
-    <div id="mcpPatList">
-      {% if mcp_pats %}
-        <div style="font-size:11px;font-weight:600;color:var(--muted);margin:6px 0 4px;text-transform:uppercase;letter-spacing:.06em">Your tokens</div>
-        <div class="pf-pat-list">
-          {% for p in mcp_pats %}
-            <div class="pf-pat-row" data-id="{{ p.id }}">
-              <div class="pf-pat-main">
-                <span class="pf-pat-name">{{ p.name or '(unnamed)' }}</span>
-                <span class="pf-pat-hint mono">{{ p.token_hint or '' }}</span>
-              </div>
-              <div class="pf-pat-meta">
-                {% if p.access_token_expires_at %}
-                  <span class="pf-pat-exp">expires {{ p.access_token_expires_at | fmt_date if p.access_token_expires_at else '—' }}</span>
-                {% else %}
-                  <span class="pf-pat-exp">no expiry</span>
-                {% endif %}
-                {% if p.last_used_at %}<span class="pf-pat-last">last used {{ p.last_used_at | fmt_date }}</span>{% endif %}
-              </div>
-              <button type="button" class="btn sm" style="color:var(--red);border-color:var(--red)" onclick="Fluxito._revokeMcpPat('{{ p.id }}', '{{ p.name or p.token_hint or 'this token' }}')">Revoke</button>
-            </div>
-          {% endfor %}
+  {# ══════════════════════════════════════════════════════════════
+     TAB 1: GENERAL (Personal info, Org, Account / Danger zone)
+     ══════════════════════════════════════════════════════════════ #}
+  <div class="pf-tab-content" id="generalTab" data-pf-tab="general">
+    <div class="pf-grid">
+      <div class="pf-card" id="personal-info">
+        <div class="pf-card-head">
+          <h2>Personal Info</h2>
         </div>
-      {% else %}
-        <div class="pf-empty">No tokens yet. Create one above for a remote machine, SSH, container or CLI.</div>
+        <form id="profileForm" onsubmit="return false;">
+          <label class="f-field">
+            <span>Display name</span>
+            <input class="f-input" type="text" id="displayName" name="display_name"
+                   value="{{ user.display_name or '' }}"
+                   placeholder="How should we call you?" maxlength="255"/>
+          </label>
+          <label class="f-field">
+            <span>Email address</span>
+            <input class="f-input" type="email" id="emailField" name="email"
+                   value="{{ user.email }}"
+                   placeholder="your@email.com"/>
+          </label>
+          <label class="f-field">
+            <span>New password</span>
+            <input class="f-input" type="password" id="newPasswordField" name="new_password"
+                   autocomplete="new-password" placeholder="Leave blank to keep current"/>
+          </label>
+          <button type="button" class="btn primary" id="saveProfileBtn" onclick="Fluxito._saveProfile()">Save changes</button>
+        </form>
+      </div>
+
+      {% if org %}
+      <div class="pf-card pf-side-card" id="orgCard">
+        <div class="pf-card-head">
+          <h2>Organization</h2>
+        </div>
+        <div class="pf-pref-row">
+          <div>
+            <div class="pf-pref-name">{{ org.name }}</div>
+            <div class="pf-pref-sub">{{ org_member_count }} members</div>
+          </div>
+          <a href="/org" class="btn sm">Manage</a>
+        </div>
+      </div>
       {% endif %}
     </div>
 
-    <div class="pf-pat-foot">PATs are user-wide (same permissions as you). Revocation is immediate. Use the token as a <span class="mono">Bearer</span> header in your remote client's MCP config.</div>
-  </div>
+    {# ── Account management (Danger Zone) ── #}
+    <div class="pf-card pf-danger-card" id="danger">
+      <div class="pf-card-head">
+        <h2>Account</h2>
+      </div>
 
-  {# ── Audit shortcut ── #}
-  <a href="/activity-log" class="pf-audit">
-    <div class="pf-audit-icon">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-    </div>
-    <div style="flex:1;min-width:0">
-      <div class="pf-audit-title">Activity &amp; audit trail</div>
-      <div class="pf-audit-sub">Day-by-day AI tool calls — click any row for full traceability</div>
-    </div>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-  </a>
-
-  {% if recent_notifs %}
-  <div class="pf-card">
-    <div class="pf-card-head">
-      <h2>Recent activity</h2>
-      <div style="display:flex;gap:8px;align-items:center">
-        {% if unread_notifs > 0 %}<span class="t-flag" style="background:color-mix(in srgb, var(--ink) 6%, transparent);color:var(--ink)">{{ unread_notifs }} new</span>{% endif %}
-        <a href="/activity-log" class="pf-view-all">View all →</a>
+      <div id="accountActions">
+        {% if user.is_active %}
+          <div id="deactivateSection">
+            <div class="pf-danger-row warn">
+              <div>
+                <div class="pf-danger-title">Deactivate account</div>
+                <div class="pf-danger-sub">Temporarily disable your account. Your data is preserved and you can reactivate anytime.</div>
+              </div>
+              <button class="btn sm" style="color:var(--amber);border-color:var(--amber)" onclick="Fluxito._deactivateAccount()">Deactivate</button>
+            </div>
+            <div class="pf-danger-foot">To permanently delete your account, you must deactivate it first.</div>
+          </div>
+        {% else %}
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div class="pf-danger-row warn-filled">
+              <div>
+                <div class="pf-danger-title" style="color:var(--amber)">Account deactivated</div>
+                <div class="pf-danger-sub">Your account is currently inactive. Reactivate to resume normal access.</div>
+              </div>
+              <button class="btn primary sm" onclick="Fluxito._reactivateAccount()">Reactivate</button>
+            </div>
+            <div class="pf-danger-row danger-filled">
+              <div>
+                <div class="pf-danger-title" style="color:var(--red)">Delete account permanently</div>
+                <div class="pf-danger-sub">This will erase all your data, connections, dashboards, and history. This cannot be undone.</div>
+              </div>
+              <button class="btn sm" style="color:var(--red);border-color:var(--red)" onclick="Fluxito._deleteAccount()">Delete</button>
+            </div>
+          </div>
+        {% endif %}
       </div>
     </div>
-    <div class="pf-notif-list">
-      {% for n in recent_notifs[:6] %}
-      <a {% if n.action_url %}href="{{ n.action_url }}"{% else %}href="#"{% endif %} class="pf-notif {% if not n.is_read %}unread{% endif %}">
-        <div class="pf-notif-dot"></div>
-        <div style="flex:1;min-width:0">
-          <div class="pf-notif-title">{{ n.title }}</div>
-          <div class="pf-notif-msg">{{ n.message }}</div>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════
+     TAB 2: PREFERENCES (How Flux briefs you, AI client, AI providers)
+     ══════════════════════════════════════════════════════════════ #}
+  <div class="pf-tab-content" id="preferencesTab" data-pf-tab="preferences" hidden>
+    {# ── How Flux briefs you ── #}
+    <div class="pf-card" id="briefs">
+      <div class="pf-card-head">
+        <h2>How Flux briefs you</h2>
+      </div>
+      <div class="pf-briefs-sub">Set during onboarding — tune anytime.</div>
+
+      <div class="pf-brief-block">
+        <div class="pf-brief-label">Role</div>
+        <div class="pf-role-grid" id="pfRoleGrid">
+          <div class="pf-role-card {% if user.flux_role == 'run_marketing' %}is-selected{% endif %}" data-role="run_marketing">
+            <div class="pf-role-title">I run marketing</div>
+            <div class="pf-role-sub">Campaigns, budgets, ROAS.</div>
+          </div>
+          <div class="pf-role-card {% if user.flux_role == 'implement_tracking' %}is-selected{% endif %}" data-role="implement_tracking">
+            <div class="pf-role-title">I implement tracking</div>
+            <div class="pf-role-sub">GTM, dataLayers, pixels.</div>
+          </div>
+          <div class="pf-role-card {% if user.flux_role == 'analyze_report' %}is-selected{% endif %}" data-role="analyze_report">
+            <div class="pf-role-title">I analyze &amp; report</div>
+            <div class="pf-role-sub">Dashboards, deep dives.</div>
+          </div>
+          <div class="pf-role-card {% if user.flux_role == 'everything' %}is-selected{% endif %}" data-role="everything">
+            <div class="pf-role-title">A bit of everything</div>
+            <div class="pf-role-sub">I own the whole stack.</div>
+          </div>
         </div>
-        <div class="pf-notif-date">{{ n.created_at | fmt_date }}</div>
-      </a>
-      {% endfor %}
+      </div>
+
+      <div class="pf-brief-block">
+        <div class="pf-brief-label">Watching</div>
+        <div class="pf-chip-row" id="pfMonitorChips">
+          <span class="pf-chip {% if 'roas' in user.flux_monitors %}is-selected{% endif %}" data-monitor="roas">{% if 'roas' in user.flux_monitors %}✓ {% endif %}ROAS by channel</span>
+          <span class="pf-chip {% if 'health' in user.flux_monitors %}is-selected{% endif %}" data-monitor="health">{% if 'health' in user.flux_monitors %}✓ {% endif %}Conversion tracking health</span>
+          <span class="pf-chip {% if 'pacing' in user.flux_monitors %}is-selected{% endif %}" data-monitor="pacing">{% if 'pacing' in user.flux_monitors %}✓ {% endif %}Budget pacing</span>
+          <span class="pf-chip {% if 'funnel' in user.flux_monitors %}is-selected{% endif %}" data-monitor="funnel">{% if 'funnel' in user.flux_monitors %}✓ {% endif %}Funnel drop-offs</span>
+          <span class="pf-chip {% if 'seo' in user.flux_monitors %}is-selected{% endif %}" data-monitor="seo">{% if 'seo' in user.flux_monitors %}✓ {% endif %}SEO movement</span>
+          <span class="pf-chip {% if 'comp' in user.flux_monitors %}is-selected{% endif %}" data-monitor="comp">{% if 'comp' in user.flux_monitors %}✓ {% endif %}Competitor bidding</span>
+        </div>
+      </div>
+    </div>
+
+    {# ── Your AI client ── #}
+    <div class="pf-card" id="client">
+      <div class="pf-card-head">
+        <h2>Your AI client</h2>
+      </div>
+      <div class="pf-briefs-sub">Which tool talks to Flux over MCP. For provider API keys (the model behind in-app chat), see <a href="/settings/ai">AI providers</a>.</div>
+
+      <div class="pf-client-grid" id="pfClientGrid">
+        <div class="pf-client-card {% if user.preferred_ai_client == 'claude' %}is-selected{% endif %}" data-client="claude">
+          <span class="pf-client-icon" style="background:#d97757;"><img src="/static/img/logos/claude.svg" alt=""></span>
+          <div><div class="pf-client-name">Claude</div><div class="pf-client-desc">Web &amp; Desktop · native MCP</div></div>
+        </div>
+        <div class="pf-client-card {% if user.preferred_ai_client == 'chatgpt' %}is-selected{% endif %}" data-client="chatgpt">
+          <span class="pf-client-icon" style="background:#10a37f;"><img src="/static/img/logos/chatgpt.svg" alt=""></span>
+          <div><div class="pf-client-name">ChatGPT</div><div class="pf-client-desc">Web &amp; Desktop</div></div>
+        </div>
+        <div class="pf-client-card {% if user.preferred_ai_client == 'cursor' %}is-selected{% endif %}" data-client="cursor">
+          <span class="pf-client-icon" style="background:#09090b;"><img src="/static/img/logos/cursor.svg" alt=""></span>
+          <div><div class="pf-client-name">Cursor</div><div class="pf-client-desc">Code editor</div></div>
+        </div>
+        <div class="pf-client-card {% if user.preferred_ai_client == 'windsurf' %}is-selected{% endif %}" data-client="windsurf">
+          <span class="pf-client-icon" style="background:#09b6a2;"><img src="/static/img/logos/windsurf.svg" alt=""></span>
+          <div><div class="pf-client-name">Windsurf</div><div class="pf-client-desc">Code editor</div></div>
+        </div>
+        <div class="pf-client-card {% if user.preferred_ai_client == 'lmstudio' %}is-selected{% endif %}" data-client="lmstudio">
+          <span class="pf-client-icon" style="background:#4338ca;"><img src="/static/img/logos/lmstudio.svg" alt=""></span>
+          <div><div class="pf-client-name">LM Studio</div><div class="pf-client-desc">Local models</div></div>
+        </div>
+        <div class="pf-client-card {% if user.preferred_ai_client == 'inapp' %}is-selected{% endif %}" data-client="inapp">
+          <span class="pf-client-icon pf-client-icon-flux">F</span>
+          <div><div class="pf-client-name">Just the app</div><div class="pf-client-desc">Chat with Flux right here</div></div>
+        </div>
+      </div>
+
+      <div class="pf-mcp-box">
+        <span class="pf-mcp-url" id="pfMcpUrl">{{ base_url }}/mcp</span>
+        <span class="pf-mcp-copy" id="pfCopyMcpUrl">Copy URL</span>
+      </div>
+      <div class="pf-mcp-hint">Paste this into your client's MCP settings — see <a href="/tutorials">Tutorials</a> for a walkthrough per tool.</div>
+    </div>
+
+    {# ── AI providers (summary card — full editor lives at /settings/ai) ── #}
+    <div class="pf-card" id="ai-providers">
+      <div class="pf-card-head">
+        <h2>AI providers</h2>
+      </div>
+      <div class="pf-briefs-sub">The model behind Flux's in-app chat. Keys are encrypted at rest and never leave your instance.</div>
+      <div class="pf-ai-provider-list" id="pfAiProviderList">
+        <div class="pf-loading">Loading…</div>
+      </div>
     </div>
   </div>
-  {% endif %}
 
-  {# ── Account management ── #}
-  <div class="pf-card pf-danger-card">
-    <div class="pf-card-head">
-      <h2>Account</h2>
+  {# ══════════════════════════════════════════════════════════════
+     TAB 3: MCP TOKENS (Personal Access Tokens for remote / CLI)
+     ══════════════════════════════════════════════════════════════ #}
+  <div class="pf-tab-content" id="tokensTab" data-pf-tab="tokens" hidden>
+    <div class="pf-card" id="mcpTokensCard">
+      <div class="pf-card-head">
+        <div>
+          <h2>MCP Access Tokens</h2>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">For remote servers, SSH, containers, CLIs (no browser or localhost redirect needed on the target)</div>
+        </div>
+      </div>
+
+      {# Create form #}
+      <form id="mcpTokenForm" onsubmit="return false;" class="pf-token-create">
+        <label class="f-field pf-grow">
+          <span>Name</span>
+          <input class="f-input" type="text" id="mcpTokenName" placeholder="remote-server-1" maxlength="255" required />
+        </label>
+        <label class="f-field pf-expires">
+          <span>Expires</span>
+          <select class="f-input" id="mcpTokenExpiry">
+            <option value="90">90 days (recommended)</option>
+            <option value="30">30 days</option>
+            <option value="60">60 days</option>
+            <option value="365">365 days</option>
+            <option value="0">Never</option>
+          </select>
+        </label>
+        <button type="button" class="btn primary pf-btn-create" id="mcpCreateBtn" onclick="Fluxito._createMcpPat()">Create token</button>
+      </form>
+
+      {# Post-create reveal (populated by JS, shown once) #}
+      <div id="mcpPatReveal" class="pf-pat-reveal" style="display:none;margin-bottom:16px;border:2px solid var(--green);border-radius:var(--r-m);padding:14px;background:var(--bg-2)">
+        <div style="font-size:12px;font-weight:600;color:var(--green);margin-bottom:6px">✓ Token created — copy the full value now (shown only once, never again)</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <code id="mcpPatPlain" style="flex:1;font-family:var(--mono);font-size:13px;word-break:break-all;background:var(--bg);padding:8px 10px;border-radius:6px;border:1px solid var(--line);user-select:all" onclick="try{this.select()}catch(e){}"></code>
+          <button type="button" class="btn primary sm" onclick="Fluxito.copy(document.getElementById('mcpPatPlain').textContent, 'MCP PAT')">Copy token</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Config snippet for your remote MCP client (add the Authorization header):</div>
+        <pre id="mcpPatSnippet" style="font-size:11px;background:var(--bg);padding:8px;border-radius:4px;border:1px solid var(--line);overflow:auto;white-space:pre-wrap;margin-bottom:8px"></pre>
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <button type="button" class="btn sm" onclick="Fluxito.copy(document.getElementById('mcpPatSnippet').textContent, 'Config snippet')">Copy snippet</button>
+          <button type="button" class="btn sm" onclick="document.getElementById('mcpPatReveal').style.display='none'">Done — I've copied the token</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">The full token will never be shown again. Keep it safe.</div>
+      </div>
+
+      {# Existing tokens list #}
+      <div id="mcpPatList">
+        {% if mcp_pats %}
+          <div style="font-size:11px;font-weight:600;color:var(--muted);margin:6px 0 4px;text-transform:uppercase;letter-spacing:.06em">Your tokens</div>
+          <div class="pf-pat-list">
+            {% for p in mcp_pats %}
+              <div class="pf-pat-row" data-id="{{ p.id }}">
+                <div class="pf-pat-main">
+                  <span class="pf-pat-name">{{ p.name or '(unnamed)' }}</span>
+                  <span class="pf-pat-hint mono">{{ p.token_hint or '' }}</span>
+                </div>
+                <div class="pf-pat-meta">
+                  {% if p.access_token_expires_at %}
+                    <span class="pf-pat-exp">expires {{ p.access_token_expires_at | fmt_date if p.access_token_expires_at else '—' }}</span>
+                  {% else %}
+                    <span class="pf-pat-exp">no expiry</span>
+                  {% endif %}
+                  {% if p.last_used_at %}<span class="pf-pat-last">last used {{ p.last_used_at | fmt_date }}</span>{% endif %}
+                </div>
+                <button type="button" class="btn sm" style="color:var(--red);border-color:var(--red)" onclick="Fluxito._revokeMcpPat('{{ p.id }}', '{{ p.name or p.token_hint or 'this token' }}')">Revoke</button>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="pf-empty">No tokens yet. Create one above for a remote machine, SSH, container or CLI.</div>
+        {% endif %}
+      </div>
+
+      <div class="pf-pat-foot">PATs are user-wide (same permissions as you). Revocation is immediate. Use the token as a <span class="mono">Bearer</span> header in your remote client's MCP config.</div>
+    </div>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════
+     TAB 4: ACTIVITY (Stats, Audit link, Usage modal, Recent activity)
+     ══════════════════════════════════════════════════════════════ #}
+  <div class="pf-tab-content" id="activityTab" data-pf-tab="activity" hidden>
+    {# ── Stats row ── #}
+    <div class="pf-stats">
+      <div class="pf-stat">
+        <div class="pf-stat-label">Platforms</div>
+        <div class="pf-stat-val">{{ total_conns }}</div>
+        <div class="pf-stat-foot">Connected</div>
+      </div>
+      <div class="pf-stat">
+        <div class="pf-stat-label">Dashboards</div>
+        <div class="pf-stat-val">{{ dashboard_count }}</div>
+        <div class="pf-stat-foot">Live dashboards</div>
+      </div>
+      <div class="pf-stat">
+        <div class="pf-stat-label">Notifications</div>
+        <div class="pf-stat-val">{{ unread_notifs }}</div>
+        <div class="pf-stat-foot">Unread</div>
+      </div>
     </div>
 
-    <div id="accountActions">
-      {% if user.is_active %}
-        <div id="deactivateSection">
-          <div class="pf-danger-row warn">
-            <div>
-              <div class="pf-danger-title">Deactivate account</div>
-              <div class="pf-danger-sub">Temporarily disable your account. Your data is preserved and you can reactivate anytime.</div>
-            </div>
-            <button class="btn sm" style="color:var(--amber);border-color:var(--amber)" onclick="Fluxito._deactivateAccount()">Deactivate</button>
-          </div>
-          <div class="pf-danger-foot">To permanently delete your account, you must deactivate it first.</div>
+    {# ── Audit and Usage Summary card ── #}
+    <div class="pf-card" style="margin-bottom:20px">
+      <div class="pf-card-head">
+        <h2>Activity &amp; Usage</h2>
+        <button type="button" class="btn sm" onclick="Fluxito._openUsageModal()">Usage breakdown</button>
+      </div>
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 14px;line-height:1.5">
+        Day-by-day AI tool calls, platform requests, and background runs. Full end-to-end traceability is recorded in your project activity log.
+      </p>
+      <a href="/activity-log" class="pf-audit" style="margin-bottom:0">
+        <div class="pf-audit-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
+        <div style="flex:1;min-width:0">
+          <div class="pf-audit-title">Open Activity Log</div>
+          <div class="pf-audit-sub">View full audit trail of AI tool calls, executions, and actions</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+
+    {# ── Recent activity feed ── #}
+    <div class="pf-card" id="recent-activity">
+      <div class="pf-card-head">
+        <h2>Recent activity</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          {% if unread_notifs > 0 %}<span class="t-flag" style="background:color-mix(in srgb, var(--ink) 6%, transparent);color:var(--ink)">{{ unread_notifs }} new</span>{% endif %}
+          <a href="/activity-log" class="pf-view-all">View all →</a>
+        </div>
+      </div>
+      {% if recent_notifs %}
+      <div class="pf-notif-list">
+        {% for n in recent_notifs[:6] %}
+        <a {% if n.action_url %}href="{{ n.action_url }}"{% else %}href="#"{% endif %} class="pf-notif {% if not n.is_read %}unread{% endif %}">
+          <div class="pf-notif-dot"></div>
+          <div style="flex:1;min-width:0">
+            <div class="pf-notif-title">{{ n.title }}</div>
+            <div class="pf-notif-msg">{{ n.message }}</div>
+          </div>
+          <div class="pf-notif-date">{{ n.created_at | fmt_date }}</div>
+        </a>
+        {% endfor %}
+      </div>
       {% else %}
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div class="pf-danger-row warn-filled">
-            <div>
-              <div class="pf-danger-title" style="color:var(--amber)">Account deactivated</div>
-              <div class="pf-danger-sub">Your account is currently inactive. Reactivate to resume normal access.</div>
-            </div>
-            <button class="btn primary sm" onclick="Fluxito._reactivateAccount()">Reactivate</button>
-          </div>
-          <div class="pf-danger-row danger-filled">
-            <div>
-              <div class="pf-danger-title" style="color:var(--red)">Delete account permanently</div>
-              <div class="pf-danger-sub">This will erase all your data, connections, dashboards, and history. This cannot be undone.</div>
-            </div>
-            <button class="btn sm" style="color:var(--red);border-color:var(--red)" onclick="Fluxito._deleteAccount()">Delete</button>
-          </div>
-        </div>
+      <div class="pf-empty">No recent notifications or activity records found.</div>
       {% endif %}
     </div>
   </div>
@@ -346,30 +385,55 @@
 </main>
 
 <style>
-.pf-identity {
-  display: flex; align-items: center; gap: 16px;
-  padding: 4px 0 18px;
+/* ── Page Head (Matching Project Settings) ── */
+.ps-eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-hover);
+  margin-bottom: 10px;
 }
-.pf-avatar {
-  width: 56px; height: 56px;
-  border-radius: 50%;
-  background: var(--accent); color: #FFF9EF;
+.ps-head {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+}
+.ps-mark {
+  width: 52px; height: 52px;
+  border-radius: var(--r-l);
+  background: var(--ink); color: var(--paper);
   display: flex; align-items: center; justify-content: center;
-  font-weight: 600; font-size: 20px;
-  letter-spacing: 0.02em;
+  font-weight: 600; font-size: 16px;
+  font-family: var(--mono);
   flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--paper) 18%, transparent);
+}
+.ps-head-main { flex: 1; min-width: 260px; }
+.ps-head-main h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(26px, 3.6vw, 36px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.ps-subline {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  margin-top: 4px;
 }
 .pf-name-row {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
-.pf-name-row h1 {
-  font-size: clamp(20px, 2.6vw, 26px);
-  font-weight: 600; letter-spacing: -0.02em;
-  margin: 0;
-}
-.pf-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
 
-/* Stats row — 3 columns, compact, no empty 4th column */
+/* ── Tab bar ── */
+.pf-tabs { margin: 20px 0 22px; }
+[data-pf-tab][hidden] { display: none !important; }
+
+/* Stats row */
 .pf-stats {
   display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 10px; margin-bottom: 18px;
@@ -380,8 +444,6 @@
   border-radius: var(--r-l);
   background: var(--bg);
 }
-.pf-stat-click { cursor: pointer; transition: border-color 0.15s; }
-.pf-stat-click:hover { border-color: var(--ink); }
 .pf-stat-label {
   font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--muted);
@@ -394,7 +456,7 @@
 }
 .pf-stat-foot { font-size: 10.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
 
-/* Grid for Personal + Preferences: side-by-side on wide, stack on narrow. Fills space, no giant empty column. */
+/* Grid for Personal + Org */
 .pf-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -406,20 +468,20 @@
 }
 
 .pf-card {
-  padding: 16px 18px;
+  padding: 18px 20px;
   border: 1px solid var(--line);
   border-radius: var(--r-l);
   background: var(--bg);
 }
-.app-main > .pf-card {
+.pf-tab-content > .pf-card {
   margin-bottom: 20px;
 }
 .pf-card-head {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .pf-card-head h2 {
-  font-size: 14px; font-weight: 600; margin: 0;
+  font-size: 15px; font-weight: 600; margin: 0;
   letter-spacing: -0.01em; color: var(--ink);
 }
 .pf-side-card .pf-card-head { margin-bottom: 8px; }
@@ -431,7 +493,7 @@
 }
 .pf-view-all:hover { text-decoration: underline; }
 
-/* Preferences rows — compact */
+/* Preferences rows */
 .pf-pref-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 10px; background: var(--bg-2);
@@ -441,7 +503,7 @@
 .pf-pref-name { font-size: 12.5px; font-weight: 500; color: var(--ink); }
 .pf-pref-sub { font-size: 11px; color: var(--muted); margin-top: 1px; font-family: var(--mono); }
 
-/* Token create row — neat, aligned, no fighting heights */
+/* Token create row */
 .pf-token-create {
   display: grid;
   grid-template-columns: 1fr 190px auto;
@@ -463,18 +525,19 @@
 .pf-audit {
   display: flex; align-items: center; gap: 12px;
   padding: 14px 16px;
-  border: 1px solid var(--line); border-radius: var(--r-l);
-  background: var(--bg);
+  border: 1px solid var(--line); border-radius: var(--r-m);
+  background: var(--bg-2);
   text-decoration: none; color: inherit;
   margin-bottom: 20px;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background-color 0.15s;
 }
-.pf-audit:hover { border-color: var(--ink); }
+.pf-audit:hover { border-color: var(--ink); background: var(--bg); }
 .pf-audit-icon {
   width: 32px; height: 32px; border-radius: var(--r-m);
-  background: var(--bg-2); color: var(--ink);
+  background: var(--bg); color: var(--ink);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  border: 1px solid var(--line-2);
 }
 .pf-audit-title { font-size: 13px; font-weight: 600; color: var(--ink); }
 .pf-audit-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; }
@@ -557,7 +620,6 @@
 .pf-pat-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); font-family: var(--mono); flex-shrink: 0; }
 .pf-pat-exp, .pf-pat-last { white-space: nowrap; }
 
-/* Small polish for the MCP section */
 .pf-empty {
   font-size: 12px;
   color: var(--muted);
@@ -574,13 +636,12 @@
 }
 .pf-pat-foot .mono { font-family: var(--mono); font-size: 10.5px; }
 
-/* Make sure selects in this card pick up the nice chevron + consistent height from globals */
 #mcpTokensCard select.f-input {
   padding-top: 9px;
   padding-bottom: 9px;
 }
 
-/* ── How Flux briefs you + Your AI client (Flux - Profile & AI.dc.html) ── */
+/* ── How Flux briefs you + Your AI client ── */
 .pf-briefs-sub { font-size: 13px; color: var(--ink-soft); margin: -2px 0 14px; }
 .pf-briefs-sub a { color: var(--accent-hover); }
 .pf-brief-block { margin-bottom: 14px; }
@@ -674,6 +735,63 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function(){
+  // ── Tab Controller ──
+  (function initProfileTabs() {
+    var TABS = ['general', 'preferences', 'tokens', 'activity'];
+    var ALIAS = {
+      'profile': 'general',
+      'personal-info': 'general',
+      'danger': 'general',
+      'account': 'general',
+      'orgCard': 'general',
+      'briefs': 'preferences',
+      'client': 'preferences',
+      'ai-providers': 'preferences',
+      'ai': 'preferences',
+      'models': 'preferences',
+      'mcpTokensCard': 'tokens',
+      'mcp': 'tokens',
+      'tokensTab': 'tokens',
+      'pat': 'tokens',
+      'pats': 'tokens',
+      'activityTab': 'activity',
+      'recent-activity': 'activity',
+      'usage': 'activity',
+      'stats': 'activity',
+      'notifications': 'activity',
+      'audit': 'activity'
+    };
+
+    function tabFor(id) {
+      if (TABS.indexOf(id) !== -1) return id;
+      if (ALIAS[id]) return ALIAS[id];
+      var el = id && document.getElementById(id);
+      var host = el && el.closest('[data-pf-tab]');
+      return host ? host.getAttribute('data-pf-tab') : 'general';
+    }
+
+    function activate() {
+      var id = (location.hash || '').replace('#', '');
+      var tab = tabFor(id);
+      document.querySelectorAll('[data-pf-tab]').forEach(function(el) {
+        el.hidden = el.getAttribute('data-pf-tab') !== tab;
+      });
+      document.querySelectorAll('#pfTabs .sub-tab').forEach(function(a) {
+        a.classList.toggle('is-active', a.getAttribute('data-tab') === tab);
+      });
+      if (id && id !== tab) {
+        window.setTimeout(function() {
+          var el = document.getElementById(id);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
+      }
+    }
+
+    window.addEventListener('hashchange', activate);
+    activate();
+  })();
+
+  // ── Save Profile ──
   window.Fluxito._saveProfile = async function() {
     var btn = document.getElementById('saveProfileBtn');
     var name = document.getElementById('displayName').value.trim();
@@ -694,10 +812,6 @@ document.addEventListener('DOMContentLoaded', function(){
         if (el && name) el.textContent = name;
         var av = document.getElementById('profileAvatar');
         if (av && name) av.textContent = name.substring(0,2).toUpperCase();
-        // TODO(ledger-revamp): no self-service "change my password" endpoint exists yet
-        // (see app/api/auth_routes.py forgot/reset-password flow, token-based only). Once
-        // POST /api/profile (or a dedicated route) accepts a `new_password` field, send it
-        // here instead of just warning the user.
         if (newPassword) {
           Fluxito.toast('Password changes aren’t available from this page yet — use "Forgot password" on the sign-in screen.', 'error');
         }
@@ -709,8 +823,7 @@ document.addEventListener('DOMContentLoaded', function(){
     btn.disabled = false; btn.textContent = 'Save changes';
   };
 
-  // --- AI providers summary card (fetches the same account-level key data
-  // as /settings/ai, shown here as a compact link-out per Flux - Profile & AI.dc.html) ---
+  // ── AI Providers Summary ──
   (function loadAiProvidersSummary() {
     var listEl = document.getElementById('pfAiProviderList');
     if (!listEl) return;
@@ -786,6 +899,7 @@ document.addEventListener('DOMContentLoaded', function(){
       });
   })();
 
+  // ── Usage Modal ──
   window.Fluxito._openUsageModal = async function() {
     var modal = document.getElementById('usageModal');
     var body = document.getElementById('usageModalBody');
@@ -858,6 +972,7 @@ document.addEventListener('DOMContentLoaded', function(){
     }
   };
 
+  // ── Account Management ──
   window.Fluxito._deactivateAccount = async function() {
     if (!confirm('Are you sure you want to deactivate your account? You can reactivate it later.')) return;
     try {
@@ -907,9 +1022,7 @@ document.addEventListener('DOMContentLoaded', function(){
     } catch(e) { Fluxito.toast('Network error', 'error'); }
   };
 
-  // --- "How Flux briefs you" + "Your AI client" — editable onboarding prefs ---
-  // Reuses POST /api/onboarding/preferences (same endpoint the onboarding
-  // wizard uses); selections save immediately, no separate "Save" button.
+  // ── Onboarding / Briefing Preferences ──
   window.Fluxito._savePrefs = async function(payload) {
     try {
       await fetch('/api/onboarding/preferences', {
@@ -969,7 +1082,7 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   }
 
-  // --- MCP PAT (remote access token) helpers ---
+  // ── MCP PATs ──
   window.Fluxito._createMcpPat = async function() {
     var btn = document.getElementById('mcpCreateBtn');
     var nameEl = document.getElementById('mcpTokenName');
@@ -986,7 +1099,6 @@ document.addEventListener('DOMContentLoaded', function(){
       });
       var data = await res.json();
       if (res.ok && data.token) {
-        // Populate reveal
         var plain = document.getElementById('mcpPatPlain');
         var snippet = document.getElementById('mcpPatSnippet');
         if (plain) plain.textContent = data.token;
@@ -997,12 +1109,10 @@ document.addEventListener('DOMContentLoaded', function(){
         if (reveal) reveal.style.display = 'block';
         Fluxito.toast('Token created — copy it now (shown only once)');
 
-        // Update the list in place so the new token appears with its hint (no full reload)
         if (window.Fluxito && Fluxito._addPatToList) {
           Fluxito._addPatToList(data);
         }
 
-        // Clear the form for next token
         if (nameEl) nameEl.value = '';
       } else {
         Fluxito.toast(data.error || 'Failed to create token', 'error');
@@ -1017,7 +1127,6 @@ document.addEventListener('DOMContentLoaded', function(){
     var container = document.getElementById('mcpPatList');
     if (!container) return;
 
-    // If we were showing the empty state, replace it with list structure
     var empty = container.querySelector('.pf-empty');
     if (empty) {
       container.innerHTML = ''
@@ -1027,7 +1136,6 @@ document.addEventListener('DOMContentLoaded', function(){
 
     var list = container.querySelector('.pf-pat-list');
     if (!list) {
-      // Fallback
       container.insertAdjacentHTML('beforeend',
         '<div style="font-size:12px;color:var(--muted);margin-top:8px">Token created. <a href="#" onclick="location.reload();return false">Refresh to see it in the list</a>.</div>');
       return;
@@ -1064,12 +1172,10 @@ document.addEventListener('DOMContentLoaded', function(){
       var data = await res.json();
       if (res.ok && data.ok) {
         Fluxito.toast('Token revoked');
-        // Remove the row from the list (no need to reload; revoked entries are hidden anyway)
         var row = document.querySelector('.pf-pat-row[data-id="' + id + '"]');
         if (row && row.parentNode) {
           row.parentNode.removeChild(row);
         }
-        // If the list is now empty, show the empty state (simple heuristic)
         var list = document.querySelector('#mcpPatList .pf-pat-list');
         if (list && list.children.length === 0) {
           var container = document.getElementById('mcpPatList');
@@ -1084,5 +1190,4 @@ document.addEventListener('DOMContentLoaded', function(){
   };
 });
 </script>
-
 {% endblock %}
