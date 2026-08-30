@@ -11,26 +11,26 @@ from app.ask.providers.openai import OpenAIProvider
 _OPENAI_COMPAT: dict[str, dict[str, object]] = {
     "openai": {
         "base_url": "https://api.openai.com/v1",
-        "default_model": "gpt-4o",
+        "default_model": "gpt-5.6-sol",
         "send_usage": True,
         # OpenAI's newer models (gpt-5/o-series) reject max_tokens.
         "token_param": "max_completion_tokens",
     },
     "grok": {
         "base_url": "https://api.x.ai/v1",
-        "default_model": "grok-3",
+        "default_model": "grok-4.6",
         "send_usage": False,
         "token_param": "max_tokens",
     },
     "mistral": {
         "base_url": "https://api.mistral.ai/v1",
-        "default_model": "mistral-large-latest",
+        "default_model": "mistral-medium-3-5",
         "send_usage": False,
         "token_param": "max_tokens",
     },
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "gemini-3.7-flash",
         "send_usage": False,
         "token_param": "max_tokens",
     },
@@ -48,7 +48,7 @@ SUPPORTED_PROVIDERS = ("anthropic", "openai", "grok", "gemini", "mistral", "lmst
 OPENAI_COMPAT: dict[str, dict[str, object]] = _OPENAI_COMPAT
 
 _DEFAULT_MODELS: dict[str, str] = {
-    "anthropic": "claude-3-7-sonnet-latest",
+    "anthropic": "claude-opus-5",
     **{k: str(v["default_model"]) for k, v in _OPENAI_COMPAT.items()},
 }
 

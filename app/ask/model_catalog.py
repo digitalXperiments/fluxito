@@ -20,53 +20,66 @@ _SETTING_KEY = "ask_extra_models"
 
 _BUILTIN_MODELS: dict[str, list[str]] = {
     "anthropic": [
+        "claude-opus-5",
+        "claude-opus-5-fast",
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "claude-opus-4.8",
+        "claude-sonnet-4.6",
+        "claude-haiku-4.5",
         "claude-3-7-sonnet-latest",
         "claude-3-5-sonnet-latest",
-        "claude-3-5-haiku-latest",
-        "claude-3-opus-latest",
-        "claude-3-7-sonnet-20250219",
-        "claude-3-5-sonnet-20241022",
-        "claude-3-5-haiku-20241022",
     ],
     "openai": [
-        "gpt-4.5-preview",
+        "gpt-5.6-sol-pro",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra-pro",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna-pro",
+        "gpt-5.6-luna",
+        "gpt-5.5-pro",
+        "gpt-5.5",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
+        "gpt-5.3-codex",
+        "o3-pro",
         "o3-mini",
-        "o1",
-        "o1-mini",
-        "gpt-4o",
-        "gpt-4o-mini",
-        "chatgpt-4o-latest",
-        "gpt-4-turbo",
+        "o4-mini",
+        "gpt-4.1",
     ],
     "grok": [
+        "grok-4.6",
+        "grok-4.5",
+        "grok-4.3",
+        "grok-4.20",
         "grok-3",
-        "grok-3-latest",
         "grok-3-mini",
-        "grok-3-mini-latest",
-        "grok-2-latest",
-        "grok-2-vision-1212",
     ],
     "gemini": [
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-pro-preview",
         "gemini-2.5-pro",
         "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
     ],
     "mistral": [
-        "mistral-large-latest",
-        "mistral-small-latest",
-        "codestral-latest",
+        "mistral-medium-3-5",
+        "mistral-large-2512",
+        "mistral-small-2603",
+        "devstral-2512",
+        "ministral-14b-2512",
+        "ministral-8b-2512",
+        "codestral-2508",
         "pixtral-large-latest",
-        "ministral-8b-latest",
-        "ministral-3b-latest",
     ],
     "lmstudio": [
+        "deepseek-r1-distill-qwen-32b",
         "qwen2.5-coder-32b-instruct",
         "llama-3.3-70b-instruct",
-        "deepseek-r1-distill-qwen-32b",
-        "deepseek-r1-distill-llama-70b",
+        "deepseek-reasoner",
+        "deepseek-chat",
         "phi-4",
     ],
 }
@@ -87,11 +100,16 @@ class CatalogEntry:
 
 async def get_extra_models() -> dict[str, list[str]]:
     """Return the extra models dict {provider: [model, ...]}. Empty dict if none."""
-    async with app_state.db_session_factory() as db:
-        raw = await get_setting(db, _SETTING_KEY, default=None)
-    if not isinstance(raw, dict):
+    if app_state.db_session_factory is None:
         return {}
-    return {k: v for k, v in raw.items() if k in SUPPORTED_PROVIDERS and isinstance(v, list)}
+    try:
+        async with app_state.db_session_factory() as db:
+            raw = await get_setting(db, _SETTING_KEY, default=None)
+        if not isinstance(raw, dict):
+            return {}
+        return {k: v for k, v in raw.items() if k in SUPPORTED_PROVIDERS and isinstance(v, list)}
+    except Exception:
+        return {}
 
 
 async def set_extra_models(value: dict[str, list[str]]) -> None:
@@ -102,11 +120,42 @@ async def set_extra_models(value: dict[str, list[str]]) -> None:
         await db.commit()
 
 
+_EXCLUDED_MODEL_SUBSTRINGS = (
+    "text-embedding",
+    "embedding",
+    "whisper",
+    "tts-",
+    "dall-e",
+    "babbage",
+    "davinci",
+    "curie",
+    "ada",
+    "canary",
+    "text-moderation",
+    "omni-moderation",
+    "instruct-preview",
+    "realtime-preview",
+    "audio-preview",
+    "search-preview",
+    "transcription",
+    "translation",
+    "moderation",
+    ":batch",
+)
+
+
+def _is_excluded_model(model_id: str) -> bool:
+    lower = model_id.lower()
+    return any(p in lower for p in _EXCLUDED_MODEL_SUBSTRINGS)
+
+
 async def get_merged_catalog() -> dict[str, list[CatalogEntry]]:
     """Return the full merged catalog keyed by provider.
 
-    For each provider, models are ordered: builtin → live → extra.
-    Within each source, models are sorted alphabetically by model_id.
+    For each provider, models are ordered by priority:
+    1. Curated Builtin flagship models (exact priority order: newest first)
+    2. Extra/Custom models added by administrators
+    3. Live models synced from provider APIs (non-excluded, active only)
     """
     extras = await get_extra_models()
     live_rows = await _load_live_models()
@@ -124,7 +173,7 @@ async def get_merged_catalog() -> dict[str, list[CatalogEntry]]:
             _seen.add(key)
             _entries.append(entry)
 
-        # 1. Builtin models
+        # 1. Curated Builtin models (preserves flagship priority order)
         for mid in _BUILTIN_MODELS.get(provider, []):
             meta = enrich_model(mid, provider)
             add(
@@ -140,24 +189,7 @@ async def get_merged_catalog() -> dict[str, list[CatalogEntry]]:
                 )
             )
 
-        # 2. Live models (from vendor API)
-        for row in live_rows:
-            if row.provider == provider:
-                add(
-                    CatalogEntry(
-                        provider=row.provider,
-                        model_id=row.model_id,
-                        display_name=row.display_name,
-                        context_window=row.context_window,
-                        capabilities=row.capabilities or [],
-                        is_deprecated=row.is_deprecated,
-                        source="live",
-                        is_enabled=row.is_enabled,
-                        id_=str(row.id),
-                    )
-                )
-
-        # 3. Extra models (superadmin-managed)
+        # 2. Extra models (superadmin-managed custom models)
         for mid in extras.get(provider, []):
             meta = enrich_model(mid, provider)
             add(
@@ -173,7 +205,28 @@ async def get_merged_catalog() -> dict[str, list[CatalogEntry]]:
                 )
             )
 
-        catalog[provider] = sorted(entries, key=lambda e: (e.source, e.model_id))
+        # 3. Live models (from vendor API / public fetcher)
+        for row in live_rows:
+            if row.provider == provider:
+                if _is_excluded_model(row.model_id) or row.is_deprecated or not row.is_enabled:
+                    continue
+                add(
+                    CatalogEntry(
+                        provider=row.provider,
+                        model_id=row.model_id,
+                        display_name=row.display_name,
+                        context_window=row.context_window,
+                        capabilities=row.capabilities or [],
+                        is_deprecated=row.is_deprecated,
+                        source="live",
+                        is_enabled=row.is_enabled,
+                        id_=str(row.id),
+                    )
+                )
+
+        catalog[provider] = entries
+
+    return catalog
 
     return catalog
 
@@ -186,6 +239,8 @@ async def get_catalog_for_provider(provider: str) -> list[CatalogEntry]:
 
 async def _load_live_models() -> list[AiCatalogModel]:
     """Load all live-synced models from the DB."""
+    if app_state.db_session_factory is None:
+        return []
     from sqlalchemy import select
 
     try:

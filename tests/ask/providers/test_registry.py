@@ -52,11 +52,11 @@ def test_unknown_provider_raises():
 
 
 def test_default_models():
-    assert default_model_for("anthropic") == "claude-3-7-sonnet-latest"
-    assert default_model_for("openai") == "gpt-4o"
-    assert default_model_for("grok") == "grok-3"
-    assert default_model_for("gemini") == "gemini-2.5-flash"
-    assert default_model_for("mistral") == "mistral-large-latest"
+    assert default_model_for("anthropic") == "claude-opus-5"
+    assert default_model_for("openai") == "gpt-5.6-sol"
+    assert default_model_for("grok") == "grok-4.6"
+    assert default_model_for("gemini") == "gemini-3.7-flash"
+    assert default_model_for("mistral") == "mistral-medium-3-5"
 
 
 def test_default_model_unknown_raises():

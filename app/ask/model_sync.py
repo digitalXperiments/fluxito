@@ -37,13 +37,19 @@ class RawModel:
 
 
 async def sync_all_providers() -> list[SyncResult]:
-    """Fetch models from every provider that has at least one stored key.
+    """Sync all supported providers.
 
-    If no stored keys exist, falls back to public vendor model fetchers to
-    populate live models without requiring private API keys.
+    Uses stored user keys where available; for all other providers,
+    uses the public vendor model fetcher to ensure live frontier models are populated.
     Returns a list of per-provider sync results.
     """
+    from app.ask.providers.registry import SUPPORTED_PROVIDERS
+    from app.ask.public_catalog_fetcher import fetch_public_models_for_provider
+    from app.utils.encryption import decrypt_str
+
     results: list[SyncResult] = []
+    keys_by_provider: dict[str, Any] = {}
+
     async with app_state.db_session_factory() as db:
         from sqlalchemy import select
         from sqlalchemy.orm import load_only
@@ -66,35 +72,28 @@ async def sync_all_providers() -> list[SyncResult]:
             .scalars()
             .all()
         )
+        for row in rows:
+            if row.provider not in keys_by_provider:
+                keys_by_provider[row.provider] = row
 
-        if not rows:
-            from app.ask.public_catalog_fetcher import fetch_all_public_vendor_models
-
-            public_catalog = await fetch_all_public_vendor_models()
-            for prov, scraped_list in public_catalog.items():
-                if not scraped_list:
-                    continue
+    for prov in SUPPORTED_PROVIDERS:
+        if prov in keys_by_provider and prov != "lmstudio":
+            row = keys_by_provider[prov]
+            api_key = decrypt_str(row.api_key_encrypted)
+            res = await sync_provider(prov, api_key, base_url=row.base_url)
+            results.append(res)
+        else:
+            try:
+                scraped_list = await fetch_public_models_for_provider(prov)
                 raw_models = [
                     RawModel(id=sm.model_id, display_name=sm.display_name, is_deprecated=False)
                     for sm in scraped_list
                 ]
                 await _persist_models(prov, raw_models)
                 results.append(SyncResult(provider=prov, model_count=len(raw_models), errors=[]))
-            return results
+            except Exception as exc:
+                results.append(SyncResult(provider=prov, model_count=0, errors=[str(exc)]))
 
-        seen: set[str] = set()
-        for row in rows:
-            prov = row.provider
-            if prov in seen:
-                continue
-            seen.add(prov)
-            if prov == "lmstudio":
-                continue
-            from app.utils.encryption import decrypt_str
-
-            api_key = decrypt_str(row.api_key_encrypted)
-            result = await sync_provider(prov, api_key, base_url=row.base_url)
-            results.append(result)
     return results
 
 
@@ -136,9 +135,11 @@ async def _fetch_openai_compat_models(
 
     raw_list: list[dict[str, Any]] = body.get("data", [])
     results: list[RawModel] = []
+    from app.ask.model_catalog import _is_excluded_model
+
     for item in raw_list:
         mid: str = item.get("id", "")
-        if not mid:
+        if not mid or _is_excluded_model(mid):
             continue
         results.append(
             RawModel(
@@ -171,9 +172,11 @@ async def _fetch_anthropic_models(api_key: str) -> list[RawModel]:
 
     raw_list: list[dict[str, Any]] = body.get("data", [])
     results: list[RawModel] = []
+    from app.ask.model_catalog import _is_excluded_model
+
     for item in raw_list:
         mid: str = item.get("id", "")
-        if not mid:
+        if not mid or _is_excluded_model(mid):
             continue
         display_name: str | None = item.get("display_name")
         results.append(
@@ -205,6 +208,8 @@ def _is_deprecated_anthropic(item: dict[str, Any]) -> bool:
 
 async def _persist_models(provider: str, models: list[RawModel]) -> None:
     """Replace the 'live' source models for *provider* with the given list."""
+    from app.ask.model_catalog import _is_excluded_model
+
     async with app_state.db_session_factory() as db:
         from sqlalchemy import delete
 
@@ -216,6 +221,8 @@ async def _persist_models(provider: str, models: list[RawModel]) -> None:
         )
 
         for rm in models:
+            if _is_excluded_model(rm.id):
+                continue
             meta = enrich_model(rm.id, provider)
             db.add(
                 AiCatalogModel(
