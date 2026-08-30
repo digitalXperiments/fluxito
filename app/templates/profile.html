@@ -28,6 +28,7 @@
   <div class="sub-tabs pf-tabs" id="pfTabs">
     <a class="sub-tab is-active" href="#general" data-tab="general">General</a>
     <a class="sub-tab" href="#preferences" data-tab="preferences">Preferences</a>
+    <a class="sub-tab" href="#ai" data-tab="ai">AI Providers</a>
     <a class="sub-tab" href="#tokens" data-tab="tokens">MCP Tokens</a>
     <a class="sub-tab" href="#activity" data-tab="activity">Activity</a>
   </div>
@@ -170,7 +171,7 @@
       <div class="pf-card-head">
         <h2>Your AI client</h2>
       </div>
-      <div class="pf-briefs-sub">Which tool talks to Flux over MCP. For provider API keys (the model behind in-app chat), see <a href="/settings/ai">AI providers</a>.</div>
+      <div class="pf-briefs-sub">Which tool talks to Flux over MCP. For provider API keys (the model behind in-app chat), see <a href="#ai">AI providers</a>.</div>
 
       <div class="pf-client-grid" id="pfClientGrid">
         <div class="pf-client-card {% if user.preferred_ai_client == 'claude' %}is-selected{% endif %}" data-client="claude">
@@ -205,11 +206,16 @@
       </div>
       <div class="pf-mcp-hint">Paste this into your client's MCP settings — see <a href="/tutorials">Tutorials</a> for a walkthrough per tool.</div>
     </div>
+  </div>
 
-    {# ── AI providers (summary card — full editor lives at /settings/ai) ── #}
+  {# ══════════════════════════════════════════════════════════════
+     TAB 3: AI PROVIDERS (API keys for in-app chat models)
+     ══════════════════════════════════════════════════════════════ #}
+  <div class="pf-tab-content" id="aiTab" data-pf-tab="ai" hidden>
     <div class="pf-card" id="ai-providers">
       <div class="pf-card-head">
         <h2>AI providers</h2>
+        <a href="/settings/ai" class="btn sm">Full AI settings →</a>
       </div>
       <div class="pf-briefs-sub">The model behind Flux's in-app chat. Keys are encrypted at rest and never leave your instance.</div>
       <div class="pf-ai-provider-list" id="pfAiProviderList">
@@ -219,7 +225,7 @@
   </div>
 
   {# ══════════════════════════════════════════════════════════════
-     TAB 3: MCP TOKENS (Personal Access Tokens for remote / CLI)
+     TAB 4: MCP TOKENS (Personal Access Tokens for remote / CLI)
      ══════════════════════════════════════════════════════════════ #}
   <div class="pf-tab-content" id="tokensTab" data-pf-tab="tokens" hidden>
     <div class="pf-card" id="mcpTokensCard">
@@ -737,7 +743,7 @@
 document.addEventListener('DOMContentLoaded', function(){
   // ── Tab Controller ──
   (function initProfileTabs() {
-    var TABS = ['general', 'preferences', 'tokens', 'activity'];
+    var TABS = ['general', 'preferences', 'ai', 'tokens', 'activity'];
     var ALIAS = {
       'profile': 'general',
       'personal-info': 'general',
@@ -746,9 +752,11 @@ document.addEventListener('DOMContentLoaded', function(){
       'orgCard': 'general',
       'briefs': 'preferences',
       'client': 'preferences',
-      'ai-providers': 'preferences',
-      'ai': 'preferences',
-      'models': 'preferences',
+      'aiTab': 'ai',
+      'ai-providers': 'ai',
+      'ai': 'ai',
+      'models': 'ai',
+      'keys': 'ai',
       'mcpTokensCard': 'tokens',
       'mcp': 'tokens',
       'tokensTab': 'tokens',

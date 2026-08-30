@@ -14,12 +14,14 @@ def test_profile_tabs_structure_and_order():
     assert 'id="pfTabs"' in source
     assert 'data-tab="general"' in source
     assert 'data-tab="preferences"' in source
+    assert 'data-tab="ai"' in source
     assert 'data-tab="tokens"' in source
     assert 'data-tab="activity"' in source
 
     # Tab contents carry matching data-pf-tab markers
     assert 'data-pf-tab="general"' in source
     assert 'data-pf-tab="preferences"' in source
+    assert 'data-pf-tab="ai"' in source
     assert 'data-pf-tab="tokens"' in source
     assert 'data-pf-tab="activity"' in source
 
