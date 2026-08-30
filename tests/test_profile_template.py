@@ -14,16 +14,16 @@ def test_profile_tabs_structure_and_order():
     assert 'id="pfTabs"' in source
     assert 'data-tab="general"' in source
     assert 'data-tab="preferences"' in source
-    assert 'data-tab="ai"' in source
     assert 'data-tab="tokens"' in source
     assert 'data-tab="activity"' in source
+    assert 'data-tab="ai"' not in source
 
     # Tab contents carry matching data-pf-tab markers
     assert 'data-pf-tab="general"' in source
     assert 'data-pf-tab="preferences"' in source
-    assert 'data-pf-tab="ai"' in source
     assert 'data-pf-tab="tokens"' in source
     assert 'data-pf-tab="activity"' in source
+    assert 'data-pf-tab="ai"' not in source
 
 
 def test_profile_header_matches_settings_style():
@@ -50,7 +50,6 @@ def test_profile_preserves_required_hooks_and_forms():
         "pfClientGrid",
         "pfMcpUrl",
         "pfCopyMcpUrl",
-        "pfAiProviderList",
         "mcpTokensCard",
         "mcpTokenForm",
         "mcpTokenName",

@@ -28,7 +28,6 @@
   <div class="sub-tabs pf-tabs" id="pfTabs">
     <a class="sub-tab is-active" href="#general" data-tab="general">General</a>
     <a class="sub-tab" href="#preferences" data-tab="preferences">Preferences</a>
-    <a class="sub-tab" href="#ai" data-tab="ai">AI Providers</a>
     <a class="sub-tab" href="#tokens" data-tab="tokens">MCP Tokens</a>
     <a class="sub-tab" href="#activity" data-tab="activity">Activity</a>
   </div>
@@ -171,7 +170,7 @@
       <div class="pf-card-head">
         <h2>Your AI client</h2>
       </div>
-      <div class="pf-briefs-sub">Which tool talks to Flux over MCP. For provider API keys (the model behind in-app chat), see <a href="#ai">AI providers</a>.</div>
+      <div class="pf-briefs-sub">Which tool talks to Flux over MCP. For provider API keys (the model behind in-app chat), see <a href="/settings/ai">AI providers</a>.</div>
 
       <div class="pf-client-grid" id="pfClientGrid">
         <div class="pf-client-card {% if user.preferred_ai_client == 'claude' %}is-selected{% endif %}" data-client="claude">
@@ -209,23 +208,7 @@
   </div>
 
   {# ══════════════════════════════════════════════════════════════
-     TAB 3: AI PROVIDERS (API keys for in-app chat models)
-     ══════════════════════════════════════════════════════════════ #}
-  <div class="pf-tab-content" id="aiTab" data-pf-tab="ai" hidden>
-    <div class="pf-card" id="ai-providers">
-      <div class="pf-card-head">
-        <h2>AI providers</h2>
-        <a href="/settings/ai" class="btn sm">Full AI settings →</a>
-      </div>
-      <div class="pf-briefs-sub">The model behind Flux's in-app chat. Keys are encrypted at rest and never leave your instance.</div>
-      <div class="pf-ai-provider-list" id="pfAiProviderList">
-        <div class="pf-loading">Loading…</div>
-      </div>
-    </div>
-  </div>
-
-  {# ══════════════════════════════════════════════════════════════
-     TAB 4: MCP TOKENS (Personal Access Tokens for remote / CLI)
+     TAB 3: MCP TOKENS (Personal Access Tokens for remote / CLI)
      ══════════════════════════════════════════════════════════════ #}
   <div class="pf-tab-content" id="tokensTab" data-pf-tab="tokens" hidden>
     <div class="pf-card" id="mcpTokensCard">
@@ -694,34 +677,6 @@
 .pf-client-name { font-size: 13px; font-weight: 700; color: var(--ink); }
 .pf-client-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
-/* ── AI providers summary card ── */
-.pf-ai-provider-list { display: flex; flex-direction: column; gap: 10px; }
-.pf-ai-provider-row {
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px 16px; border: 1px solid var(--line-3); border-radius: 10px;
-  transition: border-color .15s;
-}
-.pf-ai-provider-row.is-default { border-color: var(--good); }
-.pf-ai-provider-icon {
-  width: 32px; height: 32px; border-radius: 8px;
-  display: inline-flex; align-items: center; justify-content: center;
-  flex-shrink: 0; color: var(--paper);
-}
-.pf-ai-provider-icon img { width: 17px; height: 17px; display: block; }
-.pf-ai-provider-icon-initial { font-family: var(--sans); font-size: 13px; font-weight: 700; }
-.pf-ai-provider-info { flex: 1; min-width: 0; }
-.pf-ai-provider-name { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--ink); flex-wrap: wrap; }
-.pf-ai-provider-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 1px; }
-.pf-ai-provider-sub.is-plain { font-family: var(--sans); font-size: 12px; }
-.pf-ai-default-badge {
-  display: inline-flex; align-items: center; padding: 2px 7px;
-  border: 1px solid var(--good); color: var(--good); border-radius: 999px;
-  font-family: var(--mono); font-size: 9px; font-weight: 600;
-  letter-spacing: 0.06em; text-transform: uppercase;
-}
-.pf-ai-provider-link { font-family: var(--mono); font-size: 11px; color: var(--accent-hover); flex-shrink: 0; white-space: nowrap; }
-.pf-ai-provider-link:hover { text-decoration: underline; }
-
 .pf-mcp-box {
   display: flex; align-items: center; gap: 12px;
   padding: 13px 16px; background: var(--dark-bg, #201B14); border-radius: 10px;
@@ -743,7 +698,7 @@
 document.addEventListener('DOMContentLoaded', function(){
   // ── Tab Controller ──
   (function initProfileTabs() {
-    var TABS = ['general', 'preferences', 'ai', 'tokens', 'activity'];
+    var TABS = ['general', 'preferences', 'tokens', 'activity'];
     var ALIAS = {
       'profile': 'general',
       'personal-info': 'general',
@@ -752,11 +707,6 @@ document.addEventListener('DOMContentLoaded', function(){
       'orgCard': 'general',
       'briefs': 'preferences',
       'client': 'preferences',
-      'aiTab': 'ai',
-      'ai-providers': 'ai',
-      'ai': 'ai',
-      'models': 'ai',
-      'keys': 'ai',
       'mcpTokensCard': 'tokens',
       'mcp': 'tokens',
       'tokensTab': 'tokens',
@@ -830,82 +780,6 @@ document.addEventListener('DOMContentLoaded', function(){
     if (pwField) pwField.value = '';
     btn.disabled = false; btn.textContent = 'Save changes';
   };
-
-  // ── AI Providers Summary ──
-  (function loadAiProvidersSummary() {
-    var listEl = document.getElementById('pfAiProviderList');
-    if (!listEl) return;
-    var SUMMARY_PROVIDERS = [
-      { key: 'anthropic', label: 'Anthropic', color: '#d97757', logo: '/static/img/logos/claude.svg' },
-      { key: 'openai', label: 'OpenAI', color: '#10a37f', logo: '/static/img/logos/chatgpt.svg' },
-      { key: 'lmstudio', label: 'LM Studio (local)', color: '#4338ca', logo: '/static/img/logos/lmstudio.svg' },
-    ];
-    fetch('/api/ask/keys', { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var configured = {};
-        (data.keys || []).forEach(function (k) { configured[k.provider] = k; });
-        listEl.innerHTML = '';
-        SUMMARY_PROVIDERS.forEach(function (p) {
-          var info = configured[p.key] || null;
-          var row = document.createElement('div');
-          row.className = 'pf-ai-provider-row' + (info && info.is_default ? ' is-default' : '');
-
-          var icon = document.createElement('span');
-          icon.className = 'pf-ai-provider-icon';
-          icon.style.background = p.color;
-          if (p.logo) {
-            var img = document.createElement('img');
-            img.src = p.logo; img.alt = '';
-            icon.appendChild(img);
-          } else {
-            var initial = document.createElement('span');
-            initial.className = 'pf-ai-provider-icon-initial';
-            initial.textContent = p.label.charAt(0).toUpperCase();
-            icon.appendChild(initial);
-          }
-          row.appendChild(icon);
-
-          var infoDiv = document.createElement('div');
-          infoDiv.className = 'pf-ai-provider-info';
-          var nameRow = document.createElement('div');
-          nameRow.className = 'pf-ai-provider-name';
-          var nameSpan = document.createElement('span');
-          nameSpan.textContent = p.label;
-          nameRow.appendChild(nameSpan);
-          if (info && info.is_default) {
-            var badge = document.createElement('span');
-            badge.className = 'pf-ai-default-badge';
-            badge.textContent = 'DEFAULT';
-            nameRow.appendChild(badge);
-          }
-          infoDiv.appendChild(nameRow);
-          var sub = document.createElement('div');
-          if (info) {
-            sub.className = 'pf-ai-provider-sub';
-            sub.textContent = info.default_model || (info.base_url ? info.base_url : 'Connected');
-          } else {
-            sub.className = 'pf-ai-provider-sub is-plain';
-            sub.textContent = p.key === 'lmstudio'
-              ? 'Point Flux at a local model — nothing leaves your machine'
-              : 'Not configured';
-          }
-          infoDiv.appendChild(sub);
-          row.appendChild(infoDiv);
-
-          var link = document.createElement('a');
-          link.className = 'pf-ai-provider-link';
-          link.href = '/settings/ai';
-          link.textContent = info ? 'Manage' : (p.key === 'lmstudio' ? 'Configure' : 'Add key');
-          row.appendChild(link);
-
-          listEl.appendChild(row);
-        });
-      })
-      .catch(function () {
-        listEl.innerHTML = '<div class="pf-loading" style="color:var(--red);">Could not load providers.</div>';
-      });
-  })();
 
   // ── Usage Modal ──
   window.Fluxito._openUsageModal = async function() {
