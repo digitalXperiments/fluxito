@@ -39,6 +39,8 @@ class RawModel:
 async def sync_all_providers() -> list[SyncResult]:
     """Fetch models from every provider that has at least one stored key.
 
+    If no stored keys exist, falls back to public vendor model fetchers to
+    populate live models without requiring private API keys.
     Returns a list of per-provider sync results.
     """
     results: list[SyncResult] = []
@@ -66,6 +68,18 @@ async def sync_all_providers() -> list[SyncResult]:
         )
 
         if not rows:
+            from app.ask.public_catalog_fetcher import fetch_all_public_vendor_models
+
+            public_catalog = await fetch_all_public_vendor_models()
+            for prov, scraped_list in public_catalog.items():
+                if not scraped_list:
+                    continue
+                raw_models = [
+                    RawModel(id=sm.model_id, display_name=sm.display_name, is_deprecated=False)
+                    for sm in scraped_list
+                ]
+                await _persist_models(prov, raw_models)
+                results.append(SyncResult(provider=prov, model_count=len(raw_models), errors=[]))
             return results
 
         seen: set[str] = set()
