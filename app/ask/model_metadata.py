@@ -18,6 +18,46 @@ ModelMeta = dict[str, object]
 
 _MODEL_METADATA: dict[str, ModelMeta] = {
     # ── Anthropic ──────────────────────────────────────────────────────────
+    "claude-3-7-sonnet-latest": {
+        "display_name": "Claude 3.7 Sonnet",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION, CAP_AGENTIC],
+        "context_window": 200_000,
+    },
+    "claude-3-7-sonnet-20250219": {
+        "display_name": "Claude 3.7 Sonnet (2025-02-19)",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION, CAP_AGENTIC],
+        "context_window": 200_000,
+    },
+    "claude-3-5-sonnet-latest": {
+        "display_name": "Claude 3.5 Sonnet",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
+        "context_window": 200_000,
+    },
+    "claude-3-5-sonnet-20241022": {
+        "display_name": "Claude 3.5 Sonnet (2024-10-22)",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
+        "context_window": 200_000,
+    },
+    "claude-3-5-haiku-latest": {
+        "display_name": "Claude 3.5 Haiku",
+        "capabilities": [CAP_FAST, CAP_CODE, CAP_VISION, CAP_CHEAP],
+        "context_window": 200_000,
+    },
+    "claude-3-5-haiku-20241022": {
+        "display_name": "Claude 3.5 Haiku (2024-10-22)",
+        "capabilities": [CAP_FAST, CAP_CODE, CAP_VISION, CAP_CHEAP],
+        "context_window": 200_000,
+    },
+    "claude-3-opus-latest": {
+        "display_name": "Claude 3 Opus",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
+        "context_window": 200_000,
+    },
+    "claude-3-opus-20240229": {
+        "display_name": "Claude 3 Opus (2024-02-29)",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
+        "context_window": 200_000,
+    },
     "claude-opus-4-8": {
         "display_name": "Claude Opus 4.8",
         "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION, CAP_AGENTIC],
@@ -48,29 +88,64 @@ _MODEL_METADATA: dict[str, ModelMeta] = {
         "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
         "context_window": 200_000,
     },
-    "claude-3-5-sonnet-latest": {
-        "display_name": "Claude 3.5 Sonnet",
-        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
-        "context_window": 200_000,
-    },
-    "claude-3-5-haiku-latest": {
-        "display_name": "Claude 3.5 Haiku",
-        "capabilities": [CAP_FAST, CAP_CODE, CAP_VISION, CAP_CHEAP],
-        "context_window": 200_000,
-    },
-    "claude-3-opus-latest": {
-        "display_name": "Claude 3 Opus",
-        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
-        "context_window": 200_000,
-    },
     # ── OpenAI ─────────────────────────────────────────────────────────────
+    "gpt-4.5-preview": {
+        "display_name": "GPT-4.5 Preview",
+        "capabilities": [CAP_REASONING, CAP_VISION, CAP_AGENTIC],
+        "context_window": 128_000,
+    },
+    "gpt-4.5-preview-2025-02-27": {
+        "display_name": "GPT-4.5 Preview (2025-02-27)",
+        "capabilities": [CAP_REASONING, CAP_VISION, CAP_AGENTIC],
+        "context_window": 128_000,
+    },
+    "o3-mini": {
+        "display_name": "o3-mini",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_FAST, CAP_CHEAP],
+        "context_window": 200_000,
+    },
+    "o3-mini-2025-01-31": {
+        "display_name": "o3-mini (2025-01-31)",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_FAST, CAP_CHEAP],
+        "context_window": 200_000,
+    },
+    "o1": {
+        "display_name": "o1",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
+        "context_window": 200_000,
+    },
+    "o1-2024-12-17": {
+        "display_name": "o1 (2024-12-17)",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
+        "context_window": 200_000,
+    },
+    "o1-mini": {
+        "display_name": "o1-mini",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_FAST, CAP_CHEAP],
+        "context_window": 128_000,
+    },
     "gpt-4o": {
         "display_name": "GPT-4o",
         "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION, CAP_FAST],
         "context_window": 128_000,
     },
+    "gpt-4o-2024-11-20": {
+        "display_name": "GPT-4o (2024-11-20)",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION, CAP_FAST],
+        "context_window": 128_000,
+    },
+    "chatgpt-4o-latest": {
+        "display_name": "ChatGPT-4o Dynamic",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
+        "context_window": 128_000,
+    },
     "gpt-4o-mini": {
         "display_name": "GPT-4o mini",
+        "capabilities": [CAP_CODE, CAP_VISION, CAP_FAST, CAP_CHEAP],
+        "context_window": 128_000,
+    },
+    "gpt-4o-mini-2024-07-18": {
+        "display_name": "GPT-4o mini (2024-07-18)",
         "capabilities": [CAP_CODE, CAP_VISION, CAP_FAST, CAP_CHEAP],
         "context_window": 128_000,
     },
@@ -88,16 +163,6 @@ _MODEL_METADATA: dict[str, ModelMeta] = {
         "display_name": "GPT-4.1 nano",
         "capabilities": [CAP_FAST, CAP_CHEAP],
         "context_window": 1_047_576,
-    },
-    "o3-mini": {
-        "display_name": "o3-mini",
-        "capabilities": [CAP_REASONING, CAP_CODE, CAP_CHEAP],
-        "context_window": 200_000,
-    },
-    "o3": {
-        "display_name": "o3",
-        "capabilities": [CAP_REASONING, CAP_CODE],
-        "context_window": 200_000,
     },
     "o4-mini": {
         "display_name": "o4-mini",
@@ -120,6 +185,26 @@ _MODEL_METADATA: dict[str, ModelMeta] = {
         "context_window": 16_385,
     },
     # ── xAI Grok ───────────────────────────────────────────────────────────
+    "grok-3": {
+        "display_name": "Grok 3",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION, CAP_AGENTIC],
+        "context_window": 131_072,
+    },
+    "grok-3-latest": {
+        "display_name": "Grok 3",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION, CAP_AGENTIC],
+        "context_window": 131_072,
+    },
+    "grok-3-mini": {
+        "display_name": "Grok 3 mini",
+        "capabilities": [CAP_FAST, CAP_CHEAP, CAP_REASONING],
+        "context_window": 131_072,
+    },
+    "grok-3-mini-latest": {
+        "display_name": "Grok 3 mini",
+        "capabilities": [CAP_FAST, CAP_CHEAP, CAP_REASONING],
+        "context_window": 131_072,
+    },
     "grok-2-latest": {
         "display_name": "Grok 2",
         "capabilities": [CAP_REASONING, CAP_CODE],
@@ -130,24 +215,14 @@ _MODEL_METADATA: dict[str, ModelMeta] = {
         "capabilities": [CAP_REASONING, CAP_CODE],
         "context_window": 131_072,
     },
-    "grok-3-latest": {
-        "display_name": "Grok 3",
-        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
+    "grok-2-vision-1212": {
+        "display_name": "Grok 2 Vision (1212)",
+        "capabilities": [CAP_VISION, CAP_REASONING],
         "context_window": 131_072,
     },
-    "grok-3": {
-        "display_name": "Grok 3",
-        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION],
-        "context_window": 131_072,
-    },
-    "grok-3-mini-latest": {
-        "display_name": "Grok 3 mini",
-        "capabilities": [CAP_FAST, CAP_CHEAP],
-        "context_window": 131_072,
-    },
-    "grok-3-mini": {
-        "display_name": "Grok 3 mini",
-        "capabilities": [CAP_FAST, CAP_CHEAP],
+    "grok-2-vision": {
+        "display_name": "Grok 2 Vision",
+        "capabilities": [CAP_VISION, CAP_REASONING],
         "context_window": 131_072,
     },
     "grok-vision-latest": {
@@ -155,26 +230,36 @@ _MODEL_METADATA: dict[str, ModelMeta] = {
         "capabilities": [CAP_VISION, CAP_REASONING],
         "context_window": 131_072,
     },
-    # ── Google Gemini ──────────────────────────────────────────────────────
-    "gemini-2.5-flash": {
-        "display_name": "Gemini 2.5 Flash",
-        "capabilities": [CAP_VISION, CAP_CODE, CAP_FAST, CAP_CHEAP],
-        "context_window": 1_048_576,
+    "grok-beta": {
+        "display_name": "Grok Beta",
+        "capabilities": [CAP_REASONING, CAP_CODE],
+        "context_window": 131_072,
     },
+    # ── Google Gemini ──────────────────────────────────────────────────────
     "gemini-2.5-pro": {
         "display_name": "Gemini 2.5 Pro",
         "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION, CAP_AGENTIC],
         "context_window": 1_048_576,
     },
+    "gemini-2.5-flash": {
+        "display_name": "Gemini 2.5 Flash",
+        "capabilities": [CAP_VISION, CAP_CODE, CAP_FAST, CAP_CHEAP, CAP_REASONING],
+        "context_window": 1_048_576,
+    },
     "gemini-2.0-flash": {
         "display_name": "Gemini 2.0 Flash",
-        "capabilities": [CAP_VISION, CAP_FAST, CAP_CHEAP],
+        "capabilities": [CAP_VISION, CAP_FAST, CAP_CHEAP, CAP_CODE],
         "context_window": 1_048_576,
     },
     "gemini-2.0-flash-lite": {
         "display_name": "Gemini 2.0 Flash Lite",
         "capabilities": [CAP_FAST, CAP_CHEAP],
         "context_window": 1_048_576,
+    },
+    "gemini-2.0-pro-exp-02-05": {
+        "display_name": "Gemini 2.0 Pro Experimental",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_VISION, CAP_AGENTIC],
+        "context_window": 2_097_152,
     },
     "gemini-1.5-pro": {
         "display_name": "Gemini 1.5 Pro",
@@ -207,15 +292,25 @@ _MODEL_METADATA: dict[str, ModelMeta] = {
         "capabilities": [CAP_FAST, CAP_CHEAP],
         "context_window": 32_000,
     },
-    "mistral-moderation-latest": {
-        "display_name": "Mistral Moderation",
-        "capabilities": [],
-        "context_window": 32_000,
-    },
     "codestral-latest": {
         "display_name": "Codestral",
         "capabilities": [CAP_CODE],
         "context_window": 256_000,
+    },
+    "codestral-2501": {
+        "display_name": "Codestral 2501",
+        "capabilities": [CAP_CODE],
+        "context_window": 256_000,
+    },
+    "pixtral-large-latest": {
+        "display_name": "Pixtral Large",
+        "capabilities": [CAP_VISION, CAP_REASONING, CAP_CODE],
+        "context_window": 128_000,
+    },
+    "pixtral-12b": {
+        "display_name": "Pixtral 12B",
+        "capabilities": [CAP_VISION, CAP_FAST, CAP_CHEAP],
+        "context_window": 128_000,
     },
     "ministral-8b-latest": {
         "display_name": "Ministral 8B",
@@ -227,10 +322,51 @@ _MODEL_METADATA: dict[str, ModelMeta] = {
         "capabilities": [CAP_FAST, CAP_CHEAP],
         "context_window": 128_000,
     },
+    "mistral-moderation-latest": {
+        "display_name": "Mistral Moderation",
+        "capabilities": [],
+        "context_window": 32_000,
+    },
     "mistral-embed": {
         "display_name": "Mistral Embed",
         "capabilities": [],
         "context_window": 8_192,
+    },
+    # ── LM Studio / Local & Open Weights ──────────────────────────────────
+    "qwen2.5-coder-32b-instruct": {
+        "display_name": "Qwen 2.5 Coder 32B",
+        "capabilities": [CAP_CODE, CAP_REASONING],
+        "context_window": 131_072,
+    },
+    "llama-3.3-70b-instruct": {
+        "display_name": "Llama 3.3 70B Instruct",
+        "capabilities": [CAP_REASONING, CAP_CODE],
+        "context_window": 128_000,
+    },
+    "deepseek-r1-distill-qwen-32b": {
+        "display_name": "DeepSeek-R1 Distill Qwen 32B",
+        "capabilities": [CAP_REASONING, CAP_CODE],
+        "context_window": 65_536,
+    },
+    "deepseek-r1-distill-llama-70b": {
+        "display_name": "DeepSeek-R1 Distill Llama 70B",
+        "capabilities": [CAP_REASONING, CAP_CODE],
+        "context_window": 65_536,
+    },
+    "deepseek-reasoner": {
+        "display_name": "DeepSeek-R1",
+        "capabilities": [CAP_REASONING, CAP_CODE, CAP_CHEAP],
+        "context_window": 64_000,
+    },
+    "deepseek-chat": {
+        "display_name": "DeepSeek-V3",
+        "capabilities": [CAP_CODE, CAP_FAST, CAP_CHEAP],
+        "context_window": 64_000,
+    },
+    "phi-4": {
+        "display_name": "Phi-4",
+        "capabilities": [CAP_REASONING, CAP_FAST, CAP_CHEAP],
+        "context_window": 16_384,
     },
 }
 

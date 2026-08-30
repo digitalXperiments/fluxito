@@ -52,9 +52,9 @@ def test_unknown_provider_raises():
 
 
 def test_default_models():
-    assert default_model_for("anthropic") == "claude-opus-4-8"
+    assert default_model_for("anthropic") == "claude-3-7-sonnet-latest"
     assert default_model_for("openai") == "gpt-4o"
-    assert default_model_for("grok") == "grok-2-latest"
+    assert default_model_for("grok") == "grok-3"
     assert default_model_for("gemini") == "gemini-2.5-flash"
     assert default_model_for("mistral") == "mistral-large-latest"
 

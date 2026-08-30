@@ -18,7 +18,7 @@ _OPENAI_COMPAT: dict[str, dict[str, object]] = {
     },
     "grok": {
         "base_url": "https://api.x.ai/v1",
-        "default_model": "grok-2-latest",
+        "default_model": "grok-3",
         "send_usage": False,
         "token_param": "max_tokens",
     },
@@ -48,7 +48,7 @@ SUPPORTED_PROVIDERS = ("anthropic", "openai", "grok", "gemini", "mistral", "lmst
 OPENAI_COMPAT: dict[str, dict[str, object]] = _OPENAI_COMPAT
 
 _DEFAULT_MODELS: dict[str, str] = {
-    "anthropic": "claude-opus-4-8",
+    "anthropic": "claude-3-7-sonnet-latest",
     **{k: str(v["default_model"]) for k, v in _OPENAI_COMPAT.items()},
 }
 
