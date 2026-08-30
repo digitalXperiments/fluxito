@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from jinja2 import Environment
 
 PROFILE_TEMPLATE = Path("app/templates/profile.html")
