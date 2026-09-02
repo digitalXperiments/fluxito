@@ -203,6 +203,8 @@ def register_marketing_tools(mcp_server):
         resource_id: str | None = None,
         filters: dict | None = None,
         app_id: str | None = None,
+        dimensions: list[str] | None = None,
+        customer_id: str | None = None,
     ) -> dict:
         """Reads ad platform data. Use marketing_audit for health checks, marketing_write for changes.
 
@@ -260,6 +262,7 @@ def register_marketing_tools(mcp_server):
             },
             "branch": {
                 "get_app",
+                "query_analytics",
             },
             "appsflyer": {
                 "list_apps",
@@ -287,6 +290,7 @@ def register_marketing_tools(mcp_server):
                 "get_user_info",
                 "list_campaigns",
                 "get_campaign_details",
+                "list_events",
             },
         }
         valid_actions = _VALID_MARKETING_READ_ACTIONS.get(platform, set())
@@ -771,13 +775,32 @@ def register_marketing_tools(mcp_server):
                 return _no_branch()
             br = state.branch_connector
 
-            if action == "get_app":
+            if action in ("get_app", "branch_get_app"):
                 return await cached_tool_response(
                     f"cache:branch:app:{conn_id}",
                     300,
                     br.get_app,
                     api_key,
                     secret_key,
+                )
+            elif action in ("query_analytics", "branch_query_analytics"):
+                if not date_range_start or not date_range_end:
+                    return {
+                        "error": True,
+                        "message": "date_range_start and date_range_end are required for Branch query_analytics",
+                    }
+                dim_key = ",".join(sorted(dimensions)) if dimensions else "none"
+                data_source = (filters or {}).get("data_source", "eo_click")
+                return await cached_tool_response(
+                    f"cache:branch:analytics:{conn_id}:{date_range_start}:{date_range_end}:{dim_key}:{data_source}",
+                    60,
+                    br.query_analytics,
+                    api_key,
+                    secret_key,
+                    date_range_start,
+                    date_range_end,
+                    data_source=data_source,
+                    dimensions=dimensions,
                 )
             # request_daily_export is a write action (see marketing_write)
 
@@ -1021,17 +1044,17 @@ def register_marketing_tools(mcp_server):
             p = filters or {}
 
             if action == "get_user_info":
-                customer_id = p.get("customer_id")
+                cust_id = customer_id or p.get("customer_id")
                 moengage_id = p.get("moengage_id")
                 user_fields = p.get("user_fields_to_export")
                 return await cached_tool_response(
-                    f"cache:moengage:user_info:{creds['connection_id']}:{customer_id}:{moengage_id}:{user_fields}",
+                    f"cache:moengage:user_info:{creds['connection_id']}:{cust_id}:{moengage_id}:{user_fields}",
                     _MOENGAGE_CACHE_TTL,
                     moe.get_user_info,
                     dc,
                     app_id_moe,
                     api_key_moe,
-                    customer_id=customer_id,
+                    customer_id=cust_id,
                     moengage_id=moengage_id,
                     user_fields_to_export=user_fields,
                 )
@@ -1049,7 +1072,7 @@ def register_marketing_tools(mcp_server):
                     limit=lmt,
                 )
             elif action == "get_campaign_details":
-                camp_id = p.get("campaign_id")
+                camp_id = campaign_id or p.get("campaign_id")
                 camp_name = p.get("campaign_name")
                 return await cached_tool_response(
                     f"cache:moengage:campaign_details:{creds['connection_id']}:{camp_id}:{camp_name}",
@@ -1060,6 +1083,16 @@ def register_marketing_tools(mcp_server):
                     api_key_moe,
                     campaign_id=camp_id,
                     campaign_name=camp_name,
+                )
+            elif action == "list_events":
+                return await cached_tool_response(
+                    f"cache:moengage:events:{creds['connection_id']}:{limit}",
+                    _MOENGAGE_CACHE_TTL,
+                    moe.list_events,
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    limit=limit,
                 )
 
             return {"error": True, "message": f"Unknown action '{action}' for MoEngage marketing_read"}
@@ -1919,6 +1952,24 @@ def register_marketing_tools(mcp_server):
                     external_ids=p.get("external_ids"),
                     braze_ids=p.get("braze_ids"),
                 )
+            elif action == "create_user_alias":
+                return await brz.create_user_alias(
+                    rest_url,
+                    api_key_braze,
+                    user_aliases=p.get("user_aliases", []),
+                )
+            elif action == "identify_users":
+                return await brz.identify_users(
+                    rest_url,
+                    api_key_braze,
+                    aliases_to_identify=p.get("aliases_to_identify", []),
+                )
+            elif action == "merge_users":
+                return await brz.merge_users(
+                    rest_url,
+                    api_key_braze,
+                    merge_updates=p.get("merge_updates", []),
+                )
 
             return {"error": True, "message": f"Unknown action '{action}' for Braze marketing_write"}
 
@@ -1995,6 +2046,19 @@ def register_marketing_tools(mcp_server):
                     alert_id=p.get("alert_id"),
                     alert_reference_name=p.get("alert_reference_name"),
                     personalization=p.get("personalization"),
+                )
+            elif action == "add_device":
+                customer_id = p.get("customer_id")
+                if not customer_id:
+                    return {"error": True, "message": "payload.customer_id is required for add_device"}
+                return await moe.add_device(
+                    dc,
+                    app_id_moe,
+                    api_key_moe,
+                    customer_id=customer_id,
+                    push_token=p.get("push_token", ""),
+                    device_platform=p.get("device_platform", "ANDROID"),
+                    device_id=p.get("device_id"),
                 )
 
             return {"error": True, "message": f"Unknown action '{action}' for MoEngage marketing_write"}

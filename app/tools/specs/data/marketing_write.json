@@ -67,7 +67,15 @@
         ],
         "example": "SEARCH",
         "doc": "Google: channel type (SEARCH|DISPLAY|SHOPPING|VIDEO|PERFORMANCE_MAX). Meta: objective (OUTCOME_SALES|OUTCOME_TRAFFIC|...). TikTok: objective_type (TRAFFIC|CONVERSIONS|REACH|VIDEO_VIEWS). LinkedIn: objectiveType (BRAND_AWARENESS|WEBSITE_VISITS|LEAD_GENERATION). Pinterest: objective_type (AWARENESS|TRAFFIC|VIDEO_VIEWS). Snap: objective (APP_INSTALL|AWARENESS). X: objective (APP_INSTALLS|WEBSITE_CLICKS|ENGAGEMENT|VIDEO_VIEWS). Reddit/Apple: not used (omit or pass default).",
-        "platforms": ["google", "meta", "tiktok", "linkedin", "pinterest", "snap", "x"]
+        "platforms": [
+          "google",
+          "meta",
+          "tiktok",
+          "linkedin",
+          "pinterest",
+          "snap",
+          "x"
+        ]
       },
       {
         "name": "daily_budget_usd",
@@ -430,6 +438,418 @@
     ],
     "returns": "Connector result (updated status) | {error,...}",
     "scope": "Google: inline SCOPE_GA4_FULL (Full Access) check; others: token presence only",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "branch_request_daily_export",
+    "summary": "Branch: request daily log-level data export job.",
+    "group": "BRANCH (DEEP LINKING & ATTRIBUTION)",
+    "params": [
+      {
+        "name": "export_date",
+        "type": "string",
+        "required": true,
+        "example": "2026-05-01",
+        "doc": "Export date (YYYY-MM-DD)."
+      }
+    ],
+    "platforms": [
+      "branch"
+    ],
+    "returns": "{ success: true, files: {...} } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "braze_track_users",
+    "summary": "Braze: track user attributes, custom events, and purchases via /users/track.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "attributes": [
+            {
+              "external_id": "user1",
+              "first_name": "Alex"
+            }
+          ],
+          "events": []
+        },
+        "doc": "Braze tracking payload with attributes, events, or purchases."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ message: 'success', attributes_processed: ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "braze_create_user_alias",
+    "summary": "Braze: create user aliases for anonymous-to-identified mapping.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "user_aliases": [
+            {
+              "alias_name": "anon_123",
+              "alias_label": "device_id"
+            }
+          ]
+        },
+        "doc": "Array of user alias objects."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ message: 'success' } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "braze_identify_users",
+    "summary": "Braze: identify users by connecting alias to external_id.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "aliases_to_identify": [
+            {
+              "external_id": "user1",
+              "user_alias": {
+                "alias_name": "anon_123",
+                "alias_label": "device_id"
+              }
+            }
+          ]
+        },
+        "doc": "Array of alias identification objects."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ message: 'success' } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "braze_merge_users",
+    "summary": "Braze: merge duplicate user profiles.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "merge_updates": [
+            {
+              "identifier_to_merge": {
+                "external_id": "old_user"
+              },
+              "identifier_to_keep": {
+                "external_id": "new_user"
+              }
+            }
+          ]
+        },
+        "doc": "Array of merge instruction objects."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ message: 'success' } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "braze_delete_users",
+    "summary": "Braze: delete user profiles by external ID or Braze ID.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "external_ids": [
+            "user_123"
+          ]
+        },
+        "doc": "Dict containing external_ids or braze_ids list."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ message: 'success', deleted: ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "braze_send_message",
+    "summary": "Braze: send transactional or triggered messages via /messages/send.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "messages": {
+            "email": {
+              "subject": "Hello",
+              "body": "World"
+            }
+          },
+          "external_user_ids": [
+            "user1"
+          ]
+        },
+        "doc": "Braze message send payload."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ message: 'success', dispatch_id: ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "braze_trigger_campaign",
+    "summary": "Braze: trigger an API-triggered campaign via /campaigns/trigger/send.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "campaign_id": "camp_123",
+          "recipients": [
+            {
+              "user_alias": {
+                "alias_name": "u1",
+                "alias_label": "id"
+              }
+            }
+          ]
+        },
+        "doc": "Payload containing campaign_id and recipients or broadcast=true."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ message: 'success', dispatch_id: ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "braze_trigger_canvas",
+    "summary": "Braze: trigger an API-triggered canvas via /canvas/trigger/send.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "canvas_id": "canvas_123",
+          "recipients": [
+            {
+              "external_user_id": "user1"
+            }
+          ]
+        },
+        "doc": "Payload containing canvas_id and recipients."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ message: 'success', dispatch_id: ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "moengage_create_user",
+    "summary": "MoEngage: create a new user profile.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "customer_id": "user_123",
+          "attributes": {
+            "first_name": "Jane",
+            "email": "jane@example.com"
+          }
+        },
+        "doc": "User creation payload with customer_id and attributes."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ status: 'success', ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "moengage_update_user",
+    "summary": "MoEngage: update attributes on an existing user profile.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "customer_id": "user_123",
+          "attributes": {
+            "plan": "premium"
+          }
+        },
+        "doc": "User update payload with customer_id and updated attributes."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ status: 'success', ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "moengage_add_device",
+    "summary": "MoEngage: register a push token or device for a user.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "customer_id": "user_123",
+          "push_token": "token_abc",
+          "device_platform": "ANDROID"
+        },
+        "doc": "Device payload with customer_id, push_token, device_platform."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ status: 'success', ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "moengage_send_push",
+    "summary": "MoEngage: dispatch a push notification campaign.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "campaign_name": "Flash Sale",
+          "target_platform": [
+            "ANDROID",
+            "IOS"
+          ],
+          "payload": {
+            "title": "Sale",
+            "message": "50% off"
+          }
+        },
+        "doc": "MoEngage push campaign configuration payload."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ status: 'success', campaign_id: ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "moengage_send_email",
+    "summary": "MoEngage: dispatch a transactional email.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "transaction_id": "tx_123",
+          "recipients": {
+            "to": [
+              {
+                "email": "user@example.com"
+              }
+            ]
+          },
+          "alert_id": "alert_1"
+        },
+        "doc": "Transactional email payload."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ status: 'success', ... } | error",
+    "reversible": false
+  },
+  {
+    "tool": "marketing_write",
+    "action": "moengage_send_sms",
+    "summary": "MoEngage: dispatch a transactional SMS.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "payload",
+        "type": "object",
+        "required": true,
+        "example": {
+          "transaction_id": "tx_123",
+          "recipients": {
+            "to": [
+              {
+                "mobile": "+1234567890"
+              }
+            ]
+          },
+          "alert_id": "sms_alert_1"
+        },
+        "doc": "Transactional SMS payload."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ status: 'success', ... } | error",
     "reversible": false
   }
 ]

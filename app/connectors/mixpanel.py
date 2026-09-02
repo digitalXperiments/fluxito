@@ -394,33 +394,127 @@ class MixpanelConnector:
 
     @friendly_errors("Mixpanel")
     async def check_event_volume_anomalies(
-        self, api_secret: str, service_token: str, days_back: int = 30
+        self,
+        api_secret: str,
+        service_token: str,
+        days_back: int = 30,
+        event_name: str | None = None,
     ) -> dict:
         """
         Compare recent event volumes to historical baseline using segmentation API.
-        Splits into baseline/recent halves, computes z-scores, flags |z|>2.
+        Fetches daily counts for days_back*2 days, splits into baseline/recent halves,
+        computes z-scores against baseline mean and pstdev, and flags days with |z| > 2.
         """
-        # Query aggregate daily volume (no specific event -> all events)
-        # Use a broad segmentation query; Mixpanel requires an event, so we approximate
-        # by querying a common event or accept limitation. For demo, use placeholder logic
-        # but implement z-score detection as specified.
-        # In practice would call query_events multiple times or use /2.0/segmentation/ without event.
+        import statistics
+        from datetime import datetime, timedelta
 
-        # Placeholder realistic implementation: assume caller provides volume data or simulate
-        # For now return structure with guard for std==0
+        end = datetime.utcnow().date()
+        start = end - timedelta(days=days_back * 2)
+        start_str = start.isoformat()
+        end_str = end.isoformat()
+
+        # If event_name is not provided, query the primary event from get_events_list
+        target_event = event_name
+        if not target_event:
+            ev_res = await self.get_events_list(api_secret, service_token)
+            events = ev_res.get("events", [])
+            if events and isinstance(events, list):
+                target_event = events[0].get("event_type") if isinstance(events[0], dict) else str(events[0])
+
+        if not target_event:
+            return {
+                "metric": "event_volume_anomalies",
+                "days_back": days_back,
+                "baseline_mean": 0.0,
+                "baseline_std": 0.0,
+                "anomalies": [],
+                "anomaly_count": 0,
+                "health_score": 100,
+                "note": "No events found to evaluate volume anomalies.",
+            }
+
+        params = {
+            "event": target_event,
+            "from_date": start_str,
+            "to_date": end_str,
+            "type": "general",
+            "unit": "day",
+        }
+        res = await self._request(api_secret, service_token, "GET", "/2.0/segmentation/", params=params)
+        if isinstance(res, dict) and res.get("error"):
+            # Return graceful insufficient data structure on error
+            return {
+                "metric": "event_volume_anomalies",
+                "days_back": days_back,
+                "baseline_mean": 0.0,
+                "baseline_std": 0.0,
+                "anomalies": [],
+                "anomaly_count": 0,
+                "health_score": 100,
+                "note": f"Segmentation query failed: {res.get('message', 'Unknown error')}",
+            }
+
+        # Extract daily series: { "data": { "values": { event_name: { "YYYY-MM-DD": count, ... } } } }
+        values_dict = res.get("data", {}).get("values", {})
+        event_values = values_dict.get(target_event, {}) if isinstance(values_dict, dict) else {}
+
+        # Sort dates chronologically
+        sorted_dates = sorted(event_values.keys()) if isinstance(event_values, dict) else []
+        volumes = [int(event_values[d] or 0) for d in sorted_dates]
+
+        if len(volumes) < 4:
+            return {
+                "metric": "event_volume_anomalies",
+                "days_back": days_back,
+                "event_name": target_event,
+                "baseline_mean": 0.0,
+                "baseline_std": 0.0,
+                "anomalies": [],
+                "anomaly_count": 0,
+                "health_score": 100,
+                "note": "Insufficient data for anomaly detection.",
+            }
+
+        half = len(volumes) // 2
+        baseline = volumes[:half]
+        recent = volumes[half:]
+        recent_dates = sorted_dates[half:]
+
+        try:
+            baseline_mean = statistics.mean(baseline)
+            baseline_std = statistics.pstdev(baseline) if len(baseline) > 1 else 0.0
+        except Exception:
+            baseline_mean = sum(baseline) / len(baseline) if baseline else 0.0
+            baseline_std = 0.0
+
+        anomalies = []
+        if baseline_std > 0:
+            for d, val in zip(recent_dates, recent, strict=False):
+                z = (val - baseline_mean) / baseline_std
+                if abs(z) > 2.0:
+                    anomalies.append(
+                        {
+                            "date": d,
+                            "volume": val,
+                            "z_score": round(z, 2),
+                            "type": "spike" if z > 0 else "drop",
+                        }
+                    )
+
+        health_score = max(0, 100 - len(anomalies) * 15)
         return {
             "metric": "event_volume_anomalies",
             "days_back": days_back,
-            "baseline_mean": 0.0,
-            "baseline_std": 0.0,
-            "anomalies": [],
-            "anomaly_count": 0,
-            "health_score": 100,
-            "note": "Requires historical volume data from segmentation queries; implement with real daily series.",
+            "event_name": target_event,
+            "baseline_mean": round(baseline_mean, 2),
+            "baseline_std": round(baseline_std, 2),
+            "anomalies": anomalies,
+            "anomaly_count": len(anomalies),
+            "health_score": health_score,
         }
 
     # ------------------------------------------------------------------
-    # Layer 3: Write Operations
+    # Layer 3: Write Operations (Mixpanel Lexicon Schemas API)
     # ------------------------------------------------------------------
 
     @friendly_errors("Mixpanel")
@@ -431,18 +525,41 @@ class MixpanelConnector:
         event_type: str,
         description: str | None = None,
         category: str | None = None,
+        project_id: str | None = None,
     ) -> dict:
         """
-        Mixpanel does not have a direct "create event type" REST endpoint.
-        Events are created by sending them via the Ingest API (project token).
-        Use Mixpanel Lexicon (Data Governance UI/API) to label/describe events after ingestion.
-        This method returns a structured informational response.
+        Create or annotate an event schema via Mixpanel Lexicon Schemas API.
+        PUT /app/projects/{project_id}/schemas/events/{event_type}
         """
+        payload: dict[str, Any] = {
+            "name": event_type,
+            "description": description or "",
+        }
+        if category:
+            payload["tags"] = [category]
+
+        endpoint = (
+            f"/app/projects/{project_id}/schemas/events/{event_type}"
+            if project_id
+            else f"/2.0/events/schemas/{event_type}"
+        )
+        result = await self._request(api_secret, service_token, "PUT", endpoint, json_body=payload)
+        if isinstance(result, dict) and result.get("error"):
+            # Provide structured feedback if Lexicon Schemas requires additional project permissions
+            return {
+                "success": False,
+                "event_type": event_type,
+                "message": result.get("message", "Mixpanel event schema creation failed"),
+                "error": result.get("message"),
+                "note": "Mixpanel Lexicon requires Service Account with Data Governance permissions.",
+            }
+
         return {
-            "success": False,
+            "success": True,
             "event_type": event_type,
-            "message": "Mixpanel events are created via ingestion (not this API). Use Lexicon to annotate.",
-            "note": "No direct write endpoint; events appear after first tracked occurrence.",
+            "description": description,
+            "category": category,
+            "message": f"Event '{event_type}' registered in Mixpanel Lexicon.",
         }
 
     @friendly_errors("Mixpanel")
@@ -454,27 +571,70 @@ class MixpanelConnector:
         new_name: str | None = None,
         description: str | None = None,
         category: str | None = None,
+        project_id: str | None = None,
     ) -> dict:
         """
-        Mixpanel Lexicon allows limited updates via Data Governance API (not fully public).
-        Returns informational response indicating limited support.
+        Update event metadata in Mixpanel Lexicon.
+        PUT /app/projects/{project_id}/schemas/events/{event_type}
         """
+        payload: dict[str, Any] = {
+            "name": new_name or event_type,
+        }
+        if description is not None:
+            payload["description"] = description
+        if category is not None:
+            payload["tags"] = [category]
+
+        endpoint = (
+            f"/app/projects/{project_id}/schemas/events/{event_type}"
+            if project_id
+            else f"/2.0/events/schemas/{event_type}"
+        )
+        result = await self._request(api_secret, service_token, "PUT", endpoint, json_body=payload)
+        if isinstance(result, dict) and result.get("error"):
+            return {
+                "success": False,
+                "event_type": event_type,
+                "message": result.get("message", "Mixpanel event schema update failed"),
+                "error": result.get("message"),
+            }
+
         return {
-            "success": False,
-            "event_type": event_type,
-            "message": "Limited support via Mixpanel Lexicon/Data Governance API.",
-            "note": "Use the Mixpanel UI Lexicon to edit event metadata.",
+            "success": True,
+            "event_type": new_name or event_type,
+            "description": description,
+            "category": category,
+            "message": f"Event '{event_type}' updated in Mixpanel Lexicon.",
         }
 
     @friendly_errors("Mixpanel")
-    async def delete_event_type(self, api_secret: str, service_token: str, event_type: str) -> dict:
+    async def delete_event_type(
+        self,
+        api_secret: str,
+        service_token: str,
+        event_type: str,
+        project_id: str | None = None,
+    ) -> dict:
         """
-        Mixpanel allows hiding/archiving events via Lexicon.
-        No direct public REST delete for event types.
+        Hide or archive an event in Mixpanel Lexicon.
+        DELETE /app/projects/{project_id}/schemas/events/{event_type}
         """
+        endpoint = (
+            f"/app/projects/{project_id}/schemas/events/{event_type}"
+            if project_id
+            else f"/2.0/events/schemas/{event_type}"
+        )
+        result = await self._request(api_secret, service_token, "DELETE", endpoint)
+        if isinstance(result, dict) and result.get("error"):
+            return {
+                "success": False,
+                "event_type": event_type,
+                "message": result.get("message", "Mixpanel event schema deletion failed"),
+                "error": result.get("message"),
+            }
+
         return {
-            "success": False,
+            "success": True,
             "event_type": event_type,
-            "message": "Not supported via public REST API; use Lexicon to hide/archive events.",
-            "note": "Events persist in raw data; hiding affects UI visibility only.",
+            "message": f"Event '{event_type}' archived/hidden in Mixpanel Lexicon.",
         }

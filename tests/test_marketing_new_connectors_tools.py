@@ -30,6 +30,10 @@ class _StubConnector:
         self.calls.append(("request_daily_export", api_key, secret_key, export_date))
         return {"success": True, "export_date": export_date, "files": {}}
 
+    async def query_analytics(self, api_key, secret_key, start_date, end_date, **kwargs):
+        self.calls.append(("query_analytics", api_key, secret_key, start_date, end_date, kwargs))
+        return {"success": True, "results": []}
+
     async def list_apps(self, api_key):
         self.calls.append(("list_apps", api_key))
         return {"apps": [], "total": 0}
@@ -630,6 +634,18 @@ class _StubBrazeConnector:
         self.calls.append(("trigger_campaign", rest_url, api_key, campaign_id, kwargs))
         return {"success": True, "campaign_id": campaign_id}
 
+    async def create_user_alias(self, rest_url, api_key, **kwargs):
+        self.calls.append(("create_user_alias", rest_url, api_key, kwargs))
+        return {"success": True}
+
+    async def identify_users(self, rest_url, api_key, **kwargs):
+        self.calls.append(("identify_users", rest_url, api_key, kwargs))
+        return {"success": True}
+
+    async def merge_users(self, rest_url, api_key, **kwargs):
+        self.calls.append(("merge_users", rest_url, api_key, kwargs))
+        return {"success": True}
+
 
 class _BrazeUser:
     user_id = "u1"
@@ -762,6 +778,14 @@ class _StubMoengageConnector:
         self.calls.append(("send_push", dc, app_id, api_key, kwargs))
         return {"success": True}
 
+    async def list_events(self, dc, app_id, api_key, **kwargs):
+        self.calls.append(("list_events", dc, app_id, api_key, kwargs))
+        return {"events": [], "total": 0}
+
+    async def add_device(self, dc, app_id, api_key, **kwargs):
+        self.calls.append(("add_device", dc, app_id, api_key, kwargs))
+        return {"success": True}
+
 
 class _MoengageUser:
     user_id = "u1"
@@ -875,3 +899,91 @@ async def test_marketing_write_moengage_no_connection_returns_error(moengage_wir
     monkeypatch.setattr(marketing_tools, "get_moengage_creds", no_creds)
     result = await mcp.tools["marketing_write"](platform="moengage", action="create_user", payload={})
     assert result.get("error") is True
+
+
+@pytest.mark.asyncio
+async def test_marketing_read_branch_query_analytics(branch_wired):
+    mcp, conn = branch_wired
+    result = await mcp.tools["marketing_read"](
+        platform="branch",
+        action="query_analytics",
+        date_range_start="2026-05-01",
+        date_range_end="2026-05-31",
+    )
+    assert conn.calls[0][0] == "query_analytics"
+    assert conn.calls[0][3] == "2026-05-01"
+    assert conn.calls[0][4] == "2026-05-31"
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_marketing_read_moengage_list_events(moengage_wired):
+    mcp, conn = moengage_wired
+    result = await mcp.tools["marketing_read"](
+        platform="moengage",
+        action="list_events",
+        limit=25,
+    )
+    assert conn.calls[0][0] == "list_events"
+    assert conn.calls[0][4]["limit"] == 25
+    assert result["events"] == []
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_braze_aliases_and_merge(braze_wired):
+    mcp, conn = braze_wired
+    r1 = await mcp.tools["marketing_write"](
+        platform="braze",
+        action="create_user_alias",
+        payload={"user_aliases": [{"alias_name": "a1", "alias_label": "l1"}]},
+    )
+    assert conn.calls[0][0] == "create_user_alias"
+    assert r1["success"] is True
+
+    r2 = await mcp.tools["marketing_write"](
+        platform="braze",
+        action="identify_users",
+        payload={"aliases_to_identify": [{"external_id": "u1"}]},
+    )
+    assert conn.calls[1][0] == "identify_users"
+    assert r2["success"] is True
+
+    r3 = await mcp.tools["marketing_write"](
+        platform="braze",
+        action="merge_users",
+        payload={"merge_updates": [{"identifier_to_merge": {"external_id": "old"}}]},
+    )
+    assert conn.calls[2][0] == "merge_users"
+    assert r3["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_marketing_write_moengage_add_device(moengage_wired):
+    mcp, conn = moengage_wired
+    result = await mcp.tools["marketing_write"](
+        platform="moengage",
+        action="add_device",
+        payload={"customer_id": "cust-99", "push_token": "token-xyz", "device_platform": "IOS"},
+    )
+    assert conn.calls[0][0] == "add_device"
+    assert conn.calls[0][4]["customer_id"] == "cust-99"
+    assert conn.calls[0][4]["push_token"] == "token-xyz"
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_unified_routes_dispatch(monkeypatch):
+    """Test that unified dispatcher routes newly added actions to legacy tools."""
+    from app.tools.unified import MARKETING_READ_ROUTES, MARKETING_WRITE_ROUTES
+
+    assert "appsflyer_list_apps" in MARKETING_READ_ROUTES
+    assert "adjust_list_apps" in MARKETING_READ_ROUTES
+    assert "branch_get_app" in MARKETING_READ_ROUTES
+    assert "branch_query_analytics" in MARKETING_READ_ROUTES
+    assert "braze_list_campaigns" in MARKETING_READ_ROUTES
+    assert "moengage_list_campaigns" in MARKETING_READ_ROUTES
+
+    assert "branch_request_daily_export" in MARKETING_WRITE_ROUTES
+    assert "braze_track_users" in MARKETING_WRITE_ROUTES
+    assert "moengage_create_user" in MARKETING_WRITE_ROUTES
+    assert "moengage_add_device" in MARKETING_WRITE_ROUTES

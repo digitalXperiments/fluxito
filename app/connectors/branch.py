@@ -150,3 +150,42 @@ class BranchConnector:
             "files": result if isinstance(result, dict) else {},
             "raw": result,
         }
+
+    @friendly_errors("Branch")
+    async def query_analytics(
+        self,
+        api_key: str,
+        secret_key: str,
+        start_date: str,
+        end_date: str,
+        data_source: str = "eo_click",
+        dimensions: list[str] | None = None,
+        aggregation: str = "total_count",
+    ) -> dict:
+        """
+        POST /v1/query/analytics
+        Query pre-aggregated analytics data (installs, clicks, opens, conversions).
+        """
+        url = "https://api.branch.io/v1/query/analytics"
+        body: dict[str, Any] = {
+            "branch_key": api_key,
+            "branch_secret": secret_key,
+            "start_date": start_date,
+            "end_date": end_date,
+            "data_source": data_source,
+            "aggregation": aggregation,
+        }
+        if dimensions:
+            body["dimensions"] = dimensions
+
+        result = await self._request("POST", url, json_body=body)
+        if isinstance(result, dict) and result.get("error"):
+            return result
+
+        return {
+            "success": True,
+            "start_date": start_date,
+            "end_date": end_date,
+            "data_source": data_source,
+            "results": result if isinstance(result, list) else result.get("results", result),
+        }

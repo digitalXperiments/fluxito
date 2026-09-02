@@ -208,6 +208,37 @@ MARKETING_READ_ROUTES: dict[str, tuple[str, str | None]] = {
     "marketo_list_emails": ("marketing_read", "list_emails", {"platform": "marketo"}),
     "marketo_list_landing_pages": ("marketing_read", "list_landing_pages", {"platform": "marketo"}),
     "marketo_list_forms": ("marketing_read", "list_forms", {"platform": "marketo"}),
+    # AppsFlyer (MMP) — read
+    "appsflyer_list_apps": ("marketing_read", "list_apps", {"platform": "appsflyer"}),
+    "appsflyer_get_installs_report": ("marketing_read", "get_installs_report", {"platform": "appsflyer"}),
+    "appsflyer_get_in_app_events_report": (
+        "marketing_read",
+        "get_in_app_events_report",
+        {"platform": "appsflyer"},
+    ),
+    "appsflyer_get_partners_report": ("marketing_read", "get_partners_report", {"platform": "appsflyer"}),
+    # Adjust (MMP) — read
+    "adjust_list_apps": ("marketing_read", "list_apps", {"platform": "adjust"}),
+    "adjust_get_report": ("marketing_read", "get_report", {"platform": "adjust"}),
+    "adjust_get_pivot_report": ("marketing_read", "get_pivot_report", {"platform": "adjust"}),
+    "adjust_list_events": ("marketing_read", "list_events", {"platform": "adjust"}),
+    "adjust_list_app_automation_apps": ("marketing_read", "list_app_automation_apps", {"platform": "adjust"}),
+    "adjust_get_partner_links": ("marketing_read", "get_partner_links", {"platform": "adjust"}),
+    # Branch (Deep linking & Attribution) — read
+    "branch_get_app": ("marketing_read", "get_app", {"platform": "branch"}),
+    "branch_query_analytics": ("marketing_read", "query_analytics", {"platform": "branch"}),
+    # Braze (Customer engagement) — read
+    "braze_list_campaigns": ("marketing_read", "list_campaigns", {"platform": "braze"}),
+    "braze_get_campaign_details": ("marketing_read", "get_campaign_details", {"platform": "braze"}),
+    "braze_list_canvases": ("marketing_read", "list_canvases", {"platform": "braze"}),
+    "braze_get_canvas_details": ("marketing_read", "get_canvas_details", {"platform": "braze"}),
+    "braze_list_segments": ("marketing_read", "list_segments", {"platform": "braze"}),
+    "braze_get_segment_details": ("marketing_read", "get_segment_details", {"platform": "braze"}),
+    # MoEngage (Customer engagement) — read
+    "moengage_list_campaigns": ("marketing_read", "list_campaigns", {"platform": "moengage"}),
+    "moengage_get_campaign_details": ("marketing_read", "get_campaign_details", {"platform": "moengage"}),
+    "moengage_get_user_info": ("marketing_read", "get_user_info", {"platform": "moengage"}),
+    "moengage_list_events": ("marketing_read", "list_events", {"platform": "moengage"}),
 }
 
 # marketing_write
@@ -221,6 +252,24 @@ MARKETING_WRITE_ROUTES: dict[str, tuple[str, str | None]] = {
     "marketo_remove_from_list": ("marketing_write", "remove_leads_from_list", {"platform": "marketo"}),
     "marketo_request_campaign": ("marketing_write", "request_campaign", {"platform": "marketo"}),
     "marketo_schedule_campaign": ("marketing_write", "schedule_campaign", {"platform": "marketo"}),
+    # Branch (Deep linking & Attribution) — write
+    "branch_request_daily_export": ("marketing_write", "request_daily_export", {"platform": "branch"}),
+    # Braze (Customer engagement) — write
+    "braze_track_users": ("marketing_write", "track_users", {"platform": "braze"}),
+    "braze_create_user_alias": ("marketing_write", "create_user_alias", {"platform": "braze"}),
+    "braze_identify_users": ("marketing_write", "identify_users", {"platform": "braze"}),
+    "braze_merge_users": ("marketing_write", "merge_users", {"platform": "braze"}),
+    "braze_delete_users": ("marketing_write", "delete_users", {"platform": "braze"}),
+    "braze_send_message": ("marketing_write", "send_message", {"platform": "braze"}),
+    "braze_trigger_campaign": ("marketing_write", "trigger_campaign", {"platform": "braze"}),
+    "braze_trigger_canvas": ("marketing_write", "trigger_canvas", {"platform": "braze"}),
+    # MoEngage (Customer engagement) — write
+    "moengage_create_user": ("marketing_write", "create_user", {"platform": "moengage"}),
+    "moengage_update_user": ("marketing_write", "update_user", {"platform": "moengage"}),
+    "moengage_add_device": ("marketing_write", "add_device", {"platform": "moengage"}),
+    "moengage_send_push": ("marketing_write", "send_push", {"platform": "moengage"}),
+    "moengage_send_email": ("marketing_write", "send_email", {"platform": "moengage"}),
+    "moengage_send_sms": ("marketing_write", "send_sms", {"platform": "moengage"}),
 }
 
 # warehouse_read (BigQuery + Redshift + Snowflake) — schema + metadata only.
@@ -1494,15 +1543,35 @@ def rewire_unified_surface(mcp_server) -> None:
     get_session_context.__doc__ = SESSION_CONTEXT_DOC
     tm.add_tool(get_session_context, name="get_session_context")
 
-    # ── generic_tool_read / generic_tool_write stubs ───────────────────────
+    # ── generic_tool_read / generic_tool_write escape hatches ──────────────
     async def generic_tool_read(capability: str, action: str | None = None, args: dict | None = None) -> dict:
+        """Generic escape hatch: dispatches to any legacy tool or state connector."""
+        call_args = dict(args or {})
+        if capability in tm._legacy_tools:
+            tool = tm._legacy_tools[capability]
+            if action is not None:
+                call_args["action"] = action
+            return await tool.run(call_args)
+
+        try:
+            from app.context import get_state
+
+            state = get_state()
+            conn = getattr(state, f"{capability}_connector", None) or getattr(state, capability, None)
+            if conn and action and hasattr(conn, action):
+                fn = getattr(conn, action)
+                import inspect
+
+                if inspect.iscoroutinefunction(fn):
+                    return await fn(**call_args)
+                return fn(**call_args)
+        except Exception as ex:
+            return {"error": True, "error_type": "connector_error", "message": str(ex)}
+
         return {
             "error": True,
-            "error_type": "not_implemented",
-            "message": (
-                f"generic_tool_read is a placeholder for future capabilities. "
-                f"No handler registered for capability='{capability}'."
-            ),
+            "error_type": "unknown_capability",
+            "message": f"No handler registered for capability='{capability}', action='{action}'.",
         }
 
     generic_tool_read.__doc__ = GENERIC_READ_DOC
@@ -1511,13 +1580,33 @@ def rewire_unified_surface(mcp_server) -> None:
     async def generic_tool_write(
         capability: str, action: str | None = None, args: dict | None = None
     ) -> dict:
+        """Generic escape hatch for write operations: dispatches to legacy tools or state connectors."""
+        call_args = dict(args or {})
+        if capability in tm._legacy_tools:
+            tool = tm._legacy_tools[capability]
+            if action is not None:
+                call_args["action"] = action
+            return await tool.run(call_args)
+
+        try:
+            from app.context import get_state
+
+            state = get_state()
+            conn = getattr(state, f"{capability}_connector", None) or getattr(state, capability, None)
+            if conn and action and hasattr(conn, action):
+                fn = getattr(conn, action)
+                import inspect
+
+                if inspect.iscoroutinefunction(fn):
+                    return await fn(**call_args)
+                return fn(**call_args)
+        except Exception as ex:
+            return {"error": True, "error_type": "connector_error", "message": str(ex)}
+
         return {
             "error": True,
-            "error_type": "not_implemented",
-            "message": (
-                f"generic_tool_write is a placeholder for future capabilities. "
-                f"No handler registered for capability='{capability}'."
-            ),
+            "error_type": "unknown_capability",
+            "message": f"No write handler registered for capability='{capability}', action='{action}'.",
         }
 
     generic_tool_write.__doc__ = GENERIC_WRITE_DOC

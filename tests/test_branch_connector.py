@@ -113,3 +113,32 @@ async def test_api_error_returns_error_dict(monkeypatch):
 
     assert result["error"] is True
     assert result["status_code"] == 401
+
+
+@pytest.mark.asyncio
+async def test_query_analytics_posts_json_body_with_filters(monkeypatch):
+    captured = {}
+
+    class FakeClient(_FakeClientBase):
+        async def post(self, url, *, headers=None, params=None, json=None):
+            captured["url"] = url
+            captured["json"] = json or {}
+            return _resp(200, [{"timestamp": "2025-01-01", "count": 150}])
+
+    monkeypatch.setattr("app.connectors.branch.httpx.AsyncClient", FakeClient)
+
+    result = await BranchConnector().query_analytics(
+        _API_KEY,
+        _SECRET_KEY,
+        start_date="2025-01-01",
+        end_date="2025-01-07",
+        data_source="eo_click",
+    )
+
+    assert captured["url"] == "https://api.branch.io/v1/query/analytics"
+    assert captured["json"]["branch_key"] == _API_KEY
+    assert captured["json"]["branch_secret"] == _SECRET_KEY
+    assert captured["json"]["start_date"] == "2025-01-01"
+    assert captured["json"]["end_date"] == "2025-01-07"
+    assert result["success"] is True
+    assert len(result["results"]) == 1

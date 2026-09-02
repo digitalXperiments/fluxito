@@ -664,5 +664,549 @@
       "marketo"
     ],
     "returns": "Raw Marketo REST envelope { result:[...programs] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "appsflyer_list_apps",
+    "summary": "AppsFlyer: list connected mobile applications.",
+    "group": "APPSFLYER (MMP)",
+    "params": [],
+    "platforms": [
+      "appsflyer"
+    ],
+    "returns": "{ apps: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "appsflyer_get_installs_report",
+    "summary": "AppsFlyer: raw installs aggregate/performance report for an app and date range.",
+    "group": "APPSFLYER (MMP)",
+    "params": [
+      {
+        "name": "app_id",
+        "type": "string",
+        "required": true,
+        "example": "id123456789",
+        "doc": "AppsFlyer App ID (e.g. bundle id or package name)."
+      },
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": true,
+        "example": "2026-05-01",
+        "doc": "Start date (YYYY-MM-DD)."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": true,
+        "example": "2026-05-31",
+        "doc": "End date (YYYY-MM-DD)."
+      }
+    ],
+    "platforms": [
+      "appsflyer"
+    ],
+    "returns": "{ report: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "appsflyer_get_in_app_events_report",
+    "summary": "AppsFlyer: in-app events report for an app and date range.",
+    "group": "APPSFLYER (MMP)",
+    "params": [
+      {
+        "name": "app_id",
+        "type": "string",
+        "required": true,
+        "example": "id123456789",
+        "doc": "AppsFlyer App ID."
+      },
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": true,
+        "example": "2026-05-01",
+        "doc": "Start date (YYYY-MM-DD)."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": true,
+        "example": "2026-05-31",
+        "doc": "End date (YYYY-MM-DD)."
+      }
+    ],
+    "platforms": [
+      "appsflyer"
+    ],
+    "returns": "{ report: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "appsflyer_get_partners_report",
+    "summary": "AppsFlyer: partner-by-partner attribution report.",
+    "group": "APPSFLYER (MMP)",
+    "params": [
+      {
+        "name": "app_id",
+        "type": "string",
+        "required": true,
+        "example": "id123456789",
+        "doc": "AppsFlyer App ID."
+      },
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": true,
+        "example": "2026-05-01",
+        "doc": "Start date (YYYY-MM-DD)."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": true,
+        "example": "2026-05-31",
+        "doc": "End date (YYYY-MM-DD)."
+      }
+    ],
+    "platforms": [
+      "appsflyer"
+    ],
+    "returns": "{ report: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "adjust_list_apps",
+    "summary": "Adjust: list registered applications.",
+    "group": "ADJUST (MMP)",
+    "params": [],
+    "platforms": [
+      "adjust"
+    ],
+    "returns": "{ apps: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "adjust_get_report",
+    "summary": "Adjust: deliverability and attribution metrics report.",
+    "group": "ADJUST (MMP)",
+    "params": [
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "dimensions": [
+            "network",
+            "campaign"
+          ],
+          "metrics": [
+            "installs",
+            "clicks"
+          ],
+          "date_period": "2026-05-01:2026-05-31"
+        },
+        "doc": "Adjust query parameters including dimensions, metrics, date_period."
+      }
+    ],
+    "platforms": [
+      "adjust"
+    ],
+    "returns": "{ report: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "adjust_get_pivot_report",
+    "summary": "Adjust: multidimensional pivot report.",
+    "group": "ADJUST (MMP)",
+    "params": [
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "dimensions": [
+            "network"
+          ],
+          "metrics": [
+            "installs"
+          ],
+          "date_period": "2026-05-01:2026-05-31"
+        },
+        "doc": "Adjust pivot query parameters."
+      }
+    ],
+    "platforms": [
+      "adjust"
+    ],
+    "returns": "{ pivot: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "adjust_list_events",
+    "summary": "Adjust: list tracked in-app event tokens and names for an app.",
+    "group": "ADJUST (MMP)",
+    "params": [
+      {
+        "name": "app_id",
+        "type": "string",
+        "required": false,
+        "example": "abc123token",
+        "doc": "Adjust app token / ID."
+      },
+      {
+        "name": "resource_id",
+        "type": "string",
+        "required": false,
+        "example": "abc123token",
+        "doc": "Adjust app token (alternative to app_id)."
+      }
+    ],
+    "platforms": [
+      "adjust"
+    ],
+    "returns": "{ events: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "adjust_list_app_automation_apps",
+    "summary": "Adjust: list automated ad network integrations.",
+    "group": "ADJUST (MMP)",
+    "params": [],
+    "platforms": [
+      "adjust"
+    ],
+    "returns": "{ apps: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "adjust_get_partner_links",
+    "summary": "Adjust: fetch partner tracking links.",
+    "group": "ADJUST (MMP)",
+    "params": [
+      {
+        "name": "resource_id",
+        "type": "string",
+        "required": false,
+        "example": "abc123token",
+        "doc": "Adjust app token."
+      },
+      {
+        "name": "app_id",
+        "type": "string",
+        "required": false,
+        "example": "abc123token",
+        "doc": "Adjust app token."
+      }
+    ],
+    "platforms": [
+      "adjust"
+    ],
+    "returns": "{ partner_links: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "branch_get_app",
+    "summary": "Branch: fetch app configuration and settings.",
+    "group": "BRANCH (DEEP LINKING & ATTRIBUTION)",
+    "params": [],
+    "platforms": [
+      "branch"
+    ],
+    "returns": "{ app: {...} } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "branch_query_analytics",
+    "summary": "Branch: query pre-aggregated performance analytics data.",
+    "group": "BRANCH (DEEP LINKING & ATTRIBUTION)",
+    "params": [
+      {
+        "name": "date_range_start",
+        "type": "string",
+        "required": true,
+        "example": "2026-05-01",
+        "doc": "Start date (YYYY-MM-DD)."
+      },
+      {
+        "name": "date_range_end",
+        "type": "string",
+        "required": true,
+        "example": "2026-05-31",
+        "doc": "End date (YYYY-MM-DD)."
+      },
+      {
+        "name": "dimensions",
+        "type": "array",
+        "required": false,
+        "example": [
+          "last_attributed_touch_data_tilde_campaign"
+        ],
+        "doc": "Dimensions to group by."
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "data_source": "eo_click"
+        },
+        "doc": "Branch query options (data_source, aggregation)."
+      }
+    ],
+    "platforms": [
+      "branch"
+    ],
+    "returns": "{ results: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "braze_list_campaigns",
+    "summary": "Braze: list messaging campaigns.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Max campaigns to return."
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "page": 0,
+          "include_archived": false
+        },
+        "doc": "Pagination & filter parameters."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ campaigns: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "braze_get_campaign_details",
+    "summary": "Braze: retrieve detailed info, steps, and stats for a campaign.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "campaign_id",
+        "type": "string",
+        "required": true,
+        "example": "camp_12345",
+        "doc": "Braze campaign ID."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ campaign: {...} } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "braze_list_canvases",
+    "summary": "Braze: list automated journey canvases.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "page": 0
+        },
+        "doc": "Filter and pagination options."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ canvases: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "braze_get_canvas_details",
+    "summary": "Braze: retrieve details for a canvas journey.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "resource_id",
+        "type": "string",
+        "required": false,
+        "example": "canvas_12345",
+        "doc": "Braze canvas ID."
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "canvas_id": "canvas_12345"
+        },
+        "doc": "Filters containing canvas_id."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ canvas: {...} } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "braze_list_segments",
+    "summary": "Braze: list audience segments.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "page": 0
+        },
+        "doc": "Pagination parameters."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ segments: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "braze_get_segment_details",
+    "summary": "Braze: retrieve detailed info and membership stats for a segment.",
+    "group": "BRAZE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "resource_id",
+        "type": "string",
+        "required": false,
+        "example": "seg_12345",
+        "doc": "Braze segment ID."
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "segment_id": "seg_12345"
+        },
+        "doc": "Filters containing segment_id."
+      }
+    ],
+    "platforms": [
+      "braze"
+    ],
+    "returns": "{ segment: {...} } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "moengage_list_campaigns",
+    "summary": "MoEngage: list campaigns across push, email, SMS, and in-app channels.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Max campaigns to return."
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "channel": "PUSH"
+        },
+        "doc": "Channel filter (PUSH, EMAIL, SMS)."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ campaigns: [...] } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "moengage_get_campaign_details",
+    "summary": "MoEngage: retrieve performance stats and configuration for a campaign.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "campaign_id",
+        "type": "string",
+        "required": false,
+        "example": "camp_12345",
+        "doc": "MoEngage campaign ID."
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "campaign_name": "Spring Sale"
+        },
+        "doc": "Alternative campaign_name filter."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ campaign: {...} } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "moengage_get_user_info",
+    "summary": "MoEngage: retrieve user profile attributes and device info.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "customer_id",
+        "type": "string",
+        "required": false,
+        "example": "user_123",
+        "doc": "External customer ID."
+      },
+      {
+        "name": "filters",
+        "type": "object",
+        "required": false,
+        "example": {
+          "moengage_id": "moe_123"
+        },
+        "doc": "Alternative moengage_id filter."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ user: {...} } | error"
+  },
+  {
+    "tool": "marketing_read",
+    "action": "moengage_list_events",
+    "summary": "MoEngage: list trackable business events and metadata.",
+    "group": "MOENGAGE (CUSTOMER ENGAGEMENT)",
+    "params": [
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "example": 50,
+        "doc": "Max events to list."
+      }
+    ],
+    "platforms": [
+      "moengage"
+    ],
+    "returns": "{ events: [...] } | error"
   }
 ]

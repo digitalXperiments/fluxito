@@ -291,16 +291,82 @@ class AppleAdsConnector:
 
     @friendly_errors("Apple Ads")
     async def audit_tracking_setup(self, access_token: str, org_id: str) -> dict:
-        return {
-            "score": 75,
-            "issues": [
+        """
+        Audit Apple Search Ads tracking & campaign configuration.
+        Queries live campaigns, inspects status, budget allocation, and attribution readiness.
+        """
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{_BASE}/campaigns",
+                headers=self._headers(access_token, org_id),
+                params={"limit": 100},
+            )
+            err = self._check(resp, "audit_tracking_setup:campaigns")
+            if err:
+                return err
+
+        data = resp.json().get("data", [])
+        campaigns = data if isinstance(data, list) else []
+
+        issues = []
+        enabled_count = 0
+        unbudgeted_count = 0
+
+        for c in campaigns:
+            status = str(c.get("status") or c.get("servingStatus") or "").upper()
+            if status in {"ENABLED", "RUNNING"}:
+                enabled_count += 1
+                budget = c.get("dailyBudgetAmount")
+                if not budget or not isinstance(budget, dict) or not budget.get("amount"):
+                    unbudgeted_count += 1
+
+        if not campaigns:
+            issues.append(
                 {
-                    "severity": "info",
-                    "issue": "Apple Ads does not expose pixel setup through the Campaign Management API",
-                    "recommendation": "Validate Apple Ads attribution with App Store Connect, SKAdNetwork, or your mobile measurement partner.",
+                    "severity": "warning",
+                    "issue": "No campaigns found in Apple Ads account",
+                    "recommendation": "Create and enable at least one search campaign.",
                 }
-            ],
+            )
+        elif enabled_count == 0:
+            issues.append(
+                {
+                    "severity": "warning",
+                    "issue": "All Apple Ads campaigns are paused or inactive",
+                    "recommendation": "Enable active campaigns to start receiving attribution data.",
+                }
+            )
+
+        if unbudgeted_count > 0:
+            issues.append(
+                {
+                    "severity": "warning",
+                    "issue": f"{unbudgeted_count} enabled campaign(s) lack explicit daily budgets",
+                    "recommendation": "Set dailyBudgetAmount to ensure consistent ad delivery and impression attribution.",
+                }
+            )
+
+        issues.append(
+            {
+                "severity": "info",
+                "issue": "Apple Search Ads attribution is mediated via App Store Connect / AdServices framework",
+                "recommendation": "Ensure your app integrates the Apple AdServices framework (or MMP SDK) to attribute Apple Search Ads installs.",
+            }
+        )
+
+        score = 100
+        for iss in issues:
+            if iss["severity"] == "critical":
+                score -= 25
+            elif iss["severity"] == "warning":
+                score -= 15
+
+        return {
+            "score": max(0, score),
             "account_id": str(org_id),
+            "total_campaigns": len(campaigns),
+            "active_campaigns": enabled_count,
+            "issues": issues,
         }
 
     @friendly_errors("Apple Ads")
