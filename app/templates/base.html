@@ -404,13 +404,21 @@
           <h3 class="sf-col-title">Access</h3>
           <a class="sf-link" href="/request-access">Request access</a>
           <a class="sf-link" href="/signin">Sign in</a>
+          <a class="sf-link" href="/privacy">Privacy policy</a>
+          <a class="sf-link" href="/terms">Terms of service</a>
         </div>
       </div>
       <div class="sf-bottom">
         <span>{{ brand().name }}{% if brand().name == 'Fluxito' %} · Apache-2.0 · open-source MCP server{% endif %}</span>
-        {% if brand().name == 'Fluxito' %}
-        <span class="sf-bottom-links"><a href="https://github.com/digitalXperiments/fluxito" target="_blank" rel="noopener">github.com/digitalXperiments/fluxito</a></span>
-        {% endif %}
+        <span class="sf-bottom-links">
+          <a href="/privacy">Privacy</a>
+          <span style="opacity:0.4">·</span>
+          <a href="/terms">Terms</a>
+          {% if brand().name == 'Fluxito' %}
+          <span style="opacity:0.4">·</span>
+          <a href="https://github.com/digitalXperiments/fluxito" target="_blank" rel="noopener">github.com/digitalXperiments/fluxito</a>
+          {% endif %}
+        </span>
       </div>
     </div>
   </footer>

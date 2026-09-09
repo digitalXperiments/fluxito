@@ -508,6 +508,7 @@ app.include_router(test_flow_router)
 from app.api import (
     apple_oauth_routes,
     bing_oauth_routes,
+    legal_routes,
     linkedin_oauth_routes,
     pinterest_oauth_routes,
     reddit_oauth_routes,
@@ -520,6 +521,7 @@ app.include_router(reddit_oauth_routes.router)
 app.include_router(x_oauth_routes.router)
 app.include_router(bing_oauth_routes.router)
 app.include_router(apple_oauth_routes.router)
+app.include_router(legal_routes.router)
 
 
 # ---------------------------------------------------------------------------
@@ -553,6 +555,9 @@ _SETUP_BYPASS_PREFIXES = (
     "/setup",
     "/signin",
     "/request-access",
+    "/privacy",
+    "/terms",
+    "/legal/",
     "/auth/",
     "/api/",
     "/mcp",
@@ -743,6 +748,9 @@ _MAINTENANCE_ALLOW_PREFIXES = (
     "/.well-known",
     "/favicon",
     "/signin",
+    "/privacy",
+    "/terms",
+    "/legal/",
     "/auth/",
     "/setup",
     "/healthz",
