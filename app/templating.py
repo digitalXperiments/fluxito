@@ -23,6 +23,7 @@ from fastapi.templating import Jinja2Templates
 from app._version import get_version as _get_version
 from app.branding import announcement as _announcement_global
 from app.branding import brand as _brand_global
+from app.branding import gtm_container_id as _gtm_global
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,9 @@ templates.env.globals["brand"] = _brand_global
 
 # Expose the site-wide announcement banner to all templates
 templates.env.globals["announcement"] = _announcement_global
+
+# Expose the site-wide GTM container ID to all templates
+templates.env.globals["gtm_container_id"] = _gtm_global
 
 # Expose the running app version to all templates
 templates.env.globals["app_version"] = _get_version()

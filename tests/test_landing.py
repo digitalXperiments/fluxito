@@ -44,7 +44,8 @@ async def test_landing_renders_for_anonymous(_http_client):
         resp = await _http_client.get("/")
     assert resp.status_code == 200
     body = resp.text
-    assert "/request-access" in body
+    assert "/signin" in body
+    assert "/request-access" not in body
     assert "/signin" not in resp.headers.get("location", "")
 
 

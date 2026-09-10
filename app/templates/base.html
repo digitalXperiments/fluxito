@@ -2,6 +2,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  {% if gtm_container_id() %}
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','{{ gtm_container_id() }}');</script>
+  <!-- End Google Tag Manager -->
+  {% endif %}
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#F6F1E8"/>
@@ -78,6 +87,12 @@
   {% block head_extra %}{% endblock %}
 </head>
 <body class="{% if user and not embed %}has-sidebar{% endif %}{% if embed %} embed{% endif %}"{% if active %} data-page="{{ active }}"{% endif %}{% if section %} data-section="{{ section }}"{% endif %}{% if active_project_id %} data-project-id="{{ active_project_id }}"{% endif %}>
+  {% if gtm_container_id() %}
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ gtm_container_id() }}"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+  {% endif %}
   {# ── Page-loading overlay ──────────────────────────────────────────────
      Opt in by setting  {% set page_loading = true %}  in a child template.
      The overlay shows immediately on page load and is dismissed by calling
@@ -402,7 +417,6 @@
         {% endif %}
         <div class="sf-col">
           <h3 class="sf-col-title">Access</h3>
-          <a class="sf-link" href="/request-access">Request access</a>
           <a class="sf-link" href="/signin">Sign in</a>
           <a class="sf-link" href="/privacy">Privacy policy</a>
           <a class="sf-link" href="/terms">Terms of service</a>

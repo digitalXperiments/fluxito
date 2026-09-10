@@ -1312,7 +1312,7 @@ async def signin_callback(
 
             gate_on = bool(await get_runtime_setting(db, "require_access_approval", default=False))
             if gate_on:
-                return RedirectResponse(url="/request-access?gated=1", status_code=302)
+                return RedirectResponse(url="/signin?gated=1", status_code=302)
             user = User(
                 email=email,
                 display_name=display_name,

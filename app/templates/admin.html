@@ -95,6 +95,12 @@
     <label class="f-field">Announcement banner (shown to all signed-in users; blank to hide)
       <textarea id="opBanner" class="f-input" rows="2" maxlength="280" placeholder="e.g. Fluxito is in beta — expect frequent changes."></textarea>
     </label>
+    <label class="f-field" style="margin-top:16px">Google Tag Manager (GTM) container ID
+      <input id="opGtmId" class="f-input mono" maxlength="32" placeholder="e.g. GTM-XXXXXXX" spellcheck="false" autocomplete="off">
+      <small style="color:var(--text-muted);font-size:12.5px;margin-top:4px;display:block">
+        Loads Google Tag Manager on all pages across the site. Leave blank to disable.
+      </small>
+    </label>
     <div class="admin-btn-row"><button class="btn primary" onclick="saveOperations()">Save</button></div>
   </section>
 
@@ -452,15 +458,22 @@ async function loadOperations(){
     document.getElementById('opMaintenance').checked = !!d.maintenance_mode;
     document.getElementById('opMaintenanceRow').classList.toggle('is-danger', !!d.maintenance_mode);
     document.getElementById('opBanner').value = d.announcement_banner || '';
+    document.getElementById('opGtmId').value = d.gtm_container_id || '';
   }catch(e){ /* leave default */ }
 }
 async function saveOperations(){
   const maintenance_mode = document.getElementById('opMaintenance').checked;
   const announcement_banner = document.getElementById('opBanner').value.trim();
+  const gtm_container_id = document.getElementById('opGtmId').value.trim().toUpperCase();
   const m = document.getElementById('opMsg');
   try{
-    await api('/api/admin/settings/operations', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({maintenance_mode, announcement_banner})});
+    await api('/api/admin/settings/operations', {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({maintenance_mode, announcement_banner, gtm_container_id})
+    });
     m.textContent = 'Saved.'; m.style.display='block';
+    document.getElementById('opGtmId').value = gtm_container_id;
   }catch(e){ m.textContent = e.message; m.style.display='block'; }
 }
 function pickAccentSwatch(el){

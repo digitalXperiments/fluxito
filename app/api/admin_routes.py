@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _ACCENT_RE = _re.compile(r"^#?[0-9a-zA-Z]{3,8}$")
+_GTM_RE = _re.compile(r"^GTM-[A-Z0-9_-]{4,24}$")
 
 
 @router.get("/admin", response_class=HTMLResponse)
@@ -325,7 +326,14 @@ async def admin_get_operations(request: Request):
     async with app_state.db_session_factory() as db:
         maintenance = bool(await get_runtime_setting(db, "maintenance_mode", default=False))
         banner = await get_runtime_setting(db, "announcement_banner", default="")
-    return JSONResponse({"maintenance_mode": maintenance, "announcement_banner": str(banner or "")})
+        gtm_id = await get_runtime_setting(db, "gtm_container_id", default="")
+    return JSONResponse(
+        {
+            "maintenance_mode": maintenance,
+            "announcement_banner": str(banner or ""),
+            "gtm_container_id": str(gtm_id or ""),
+        }
+    )
 
 
 @router.patch("/api/admin/settings/operations")
@@ -334,8 +342,11 @@ async def admin_set_operations(request: Request):
     body = await request.json()
     maintenance = bool(body.get("maintenance_mode"))
     banner = (body.get("announcement_banner") or "").strip()
+    gtm_container_id = (body.get("gtm_container_id") or "").strip().upper()
     if len(banner) > 280:
         raise HTTPException(400, "Announcement banner is too long (max 280 chars).")
+    if gtm_container_id and not _GTM_RE.match(gtm_container_id):
+        raise HTTPException(400, "Invalid GTM container ID format. Expected GTM-XXXXXXX.")
     from app.settings_service import set_setting
 
     async with app_state.db_session_factory() as db:
@@ -353,11 +364,60 @@ async def admin_set_operations(request: Request):
             is_secret=False,
             updated_by_user_id=uuid.UUID(me["id"]),
         )
+        await set_setting(
+            db,
+            key="gtm_container_id",
+            value=gtm_container_id,
+            is_secret=False,
+            updated_by_user_id=uuid.UUID(me["id"]),
+        )
         await db.commit()
-    from app.branding import refresh_announcement
+    from app.branding import refresh_announcement, refresh_gtm
 
     await refresh_announcement()
-    return JSONResponse({"success": True, "maintenance_mode": maintenance, "announcement_banner": banner})
+    await refresh_gtm()
+    return JSONResponse(
+        {
+            "success": True,
+            "maintenance_mode": maintenance,
+            "announcement_banner": banner,
+            "gtm_container_id": gtm_container_id,
+        }
+    )
+
+
+@router.get("/api/admin/settings/gtm")
+async def admin_get_gtm(request: Request):
+    await require_superadmin(request)
+    from app.settings_service import get_runtime_setting
+
+    async with app_state.db_session_factory() as db:
+        gtm_id = await get_runtime_setting(db, "gtm_container_id", default="")
+    return JSONResponse({"gtm_container_id": str(gtm_id or "")})
+
+
+@router.patch("/api/admin/settings/gtm")
+async def admin_set_gtm(request: Request):
+    me = await require_superadmin(request)
+    body = await request.json()
+    gtm_container_id = (body.get("gtm_container_id") or "").strip().upper()
+    if gtm_container_id and not _GTM_RE.match(gtm_container_id):
+        raise HTTPException(400, "Invalid GTM container ID format. Expected GTM-XXXXXXX.")
+
+    from app.branding import refresh_gtm
+    from app.settings_service import set_setting
+
+    async with app_state.db_session_factory() as db:
+        await set_setting(
+            db,
+            key="gtm_container_id",
+            value=gtm_container_id,
+            is_secret=False,
+            updated_by_user_id=uuid.UUID(me["id"]),
+        )
+        await db.commit()
+    await refresh_gtm()
+    return JSONResponse({"success": True, "gtm_container_id": gtm_container_id})
 
 
 # ---------------------------------------------------------------------------
@@ -372,7 +432,7 @@ async def admin_get_auth_methods(request: Request):
 
     async with app_state.db_session_factory() as db:
         google = bool(await get_runtime_setting(db, "auth_google_enabled", default=True))
-        password = bool(await get_runtime_setting(db, "auth_password_enabled", default=True))
+        password = bool(await get_runtime_setting(db, "auth_password_enabled", default=False))
     return JSONResponse({"google_enabled": google, "password_enabled": password})
 
 

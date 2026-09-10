@@ -266,14 +266,15 @@ async def lifespan(app: FastAPI):
     mcp_session_cm = mcp_server.session_manager.run()
     await mcp_session_cm.__aenter__()
 
-    # Warm the branding + announcement caches so the first request renders correctly.
+    # Warm the branding + announcement + GTM caches so the first request renders correctly.
     try:
-        from app.branding import refresh_announcement, refresh_brand
+        from app.branding import refresh_announcement, refresh_brand, refresh_gtm
 
         await refresh_brand()
         await refresh_announcement()
+        await refresh_gtm()
     except Exception:
-        logger.warning("Initial brand/announcement refresh failed; using defaults", exc_info=True)
+        logger.warning("Initial brand/announcement/GTM refresh failed; using defaults", exc_info=True)
 
     logger.info("Application started (APP_ENV=%s)", settings.APP_ENV)
 

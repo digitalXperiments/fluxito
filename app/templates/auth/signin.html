@@ -42,16 +42,17 @@
     <div class="auth-lead">
       <div class="auth-eyebrow">Sign in</div>
       <h1>Welcome <em>back.</em></h1>
-      {% if signup_enabled %}
+      {% if not password_enabled %}
+      <p>Flux kept the seat warm. Sign in or get started with your Google account.</p>
+      {% elif signup_enabled %}
       <p>Flux kept the seat warm. Sign in to your workspace, or create a new account to get started.</p>
       {% else %}
       <p>Flux kept the seat warm. {{ brand().name }} is in invite-only beta — <a href="/request-access">request access</a>.</p>
       {% endif %}
     </div>
 
-    {# Mode toggle — only when self-serve sign-up is open. In invite-only beta
-       we hide "Create account" so visitors use the request-access flow. #}
-    {% if signup_enabled %}
+    {# Mode toggle — only when self-serve sign-up is open AND password is enabled #}
+    {% if signup_enabled and password_enabled %}
     <div class="auth-toggle" id="authToggle">
       <button class="auth-toggle-btn is-active" data-mode="signin" type="button">Sign in</button>
       <button class="auth-toggle-btn" data-mode="register" type="button">Create account</button>

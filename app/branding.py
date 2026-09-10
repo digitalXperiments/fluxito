@@ -18,6 +18,9 @@ _BRAND_CACHE: dict = dict(_DEFAULTS)
 # Site-wide announcement banner — same sync-cache pattern as brand().
 _ANNOUNCEMENT_CACHE: dict = {"text": ""}
 
+# Site-wide Google Tag Manager (GTM) container ID — same sync-cache pattern.
+_GTM_CACHE: dict = {"container_id": ""}
+
 
 def brand() -> dict:
     """Return the current brand dict (sync, non-blocking). Jinja global."""
@@ -27,6 +30,11 @@ def brand() -> dict:
 def announcement() -> str:
     """Return the current site-wide announcement banner text (sync). Jinja global."""
     return _ANNOUNCEMENT_CACHE["text"]
+
+
+def gtm_container_id() -> str:
+    """Return the current GTM container ID (sync, non-blocking). Jinja global."""
+    return _GTM_CACHE["container_id"]
 
 
 async def refresh_brand() -> dict:
@@ -57,3 +65,16 @@ async def refresh_announcement() -> str:
     except Exception as e:
         logger.warning("refresh_announcement failed; keeping last banner cache: %s", e)
     return _ANNOUNCEMENT_CACHE["text"]
+
+
+async def refresh_gtm() -> str:
+    """Reload GTM container ID into the module cache. Safe to call anytime."""
+    from app.settings_service import get_runtime_setting
+
+    try:
+        async with app_state.db_session_factory() as db:
+            cid = await get_runtime_setting(db, "gtm_container_id", default="")
+        _GTM_CACHE["container_id"] = str(cid or "")
+    except Exception as e:
+        logger.warning("refresh_gtm failed; keeping last GTM cache: %s", e)
+    return _GTM_CACHE["container_id"]

@@ -81,7 +81,14 @@ async def register(payload: RegisterRequest, request: Request):
     if len(password) < 8:
         return JSONResponse({"error": "Password must be at least 8 characters."}, status_code=400)
 
-    from app.settings_service import access_approval_required
+    from app.settings_service import access_approval_required, get_auth_flags
+
+    auth_flags = await get_auth_flags()
+    if not auth_flags["password_enabled"]:
+        return JSONResponse(
+            {"error": "Email and password registration is disabled. Please sign in with Google."},
+            status_code=403,
+        )
 
     if await access_approval_required():
         from sqlalchemy import select as _select
@@ -131,6 +138,15 @@ async def login(payload: LoginRequest, request: Request):
     """Sign in with email/password."""
     email = payload.email.strip().lower()
     password = payload.password.strip()
+
+    from app.settings_service import get_auth_flags
+
+    auth_flags = await get_auth_flags()
+    if not auth_flags["password_enabled"]:
+        return JSONResponse(
+            {"error": "Email and password sign-in is disabled. Please sign in with Google."},
+            status_code=403,
+        )
 
     user, error = await authenticate_user(email, password)
 
@@ -264,6 +280,15 @@ async def resend_verification(request: Request):
 @router.post("/auth/forgot-password")
 async def forgot_password(request: Request):
     """Send a password reset email."""
+    from app.settings_service import get_auth_flags
+
+    auth_flags = await get_auth_flags()
+    if not auth_flags["password_enabled"]:
+        return JSONResponse(
+            {"error": "Password reset is disabled because email/password sign-in is turned off."},
+            status_code=403,
+        )
+
     body = await request.json()
     email = body.get("email", "").strip().lower()
 
@@ -307,6 +332,15 @@ class ResetPasswordRequest(BaseModel):
 @router.post("/auth/reset-password")
 async def reset_password(payload: ResetPasswordRequest):
     """Process password reset."""
+    from app.settings_service import get_auth_flags
+
+    auth_flags = await get_auth_flags()
+    if not auth_flags["password_enabled"]:
+        return JSONResponse(
+            {"error": "Password reset is disabled because email/password sign-in is turned off."},
+            status_code=403,
+        )
+
     if len(payload.password) < 8:
         return JSONResponse({"error": "Password must be at least 8 characters."}, status_code=400)
 

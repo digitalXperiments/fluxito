@@ -192,6 +192,13 @@ RUNTIME_SETTINGS: tuple[RuntimeSetting, ...] = (
         "bool",
         category="operations",
     ),
+    RuntimeSetting(
+        "gtm_container_id",
+        "GTM container ID",
+        "Google Tag Manager container ID for site tracking (e.g. GTM-XXXXXXX).",
+        "GTM_CONTAINER_ID",
+        category="operations",
+    ),
     # ── Branding ──
     RuntimeSetting(
         "brand_name",
@@ -428,7 +435,7 @@ async def get_auth_flags() -> dict[str, bool]:
         gate = bool(await get_runtime_setting(db, "require_access_approval", default=False))
         return {
             "google_enabled": bool(await get_runtime_setting(db, "auth_google_enabled", default=True)),
-            "password_enabled": bool(await get_runtime_setting(db, "auth_password_enabled", default=True)),
+            "password_enabled": bool(await get_runtime_setting(db, "auth_password_enabled", default=False)),
             # When access approval is required, account self-creation is closed.
             "signup_enabled": not gate,
         }
@@ -450,3 +457,9 @@ async def update_checks_enabled() -> bool:
     """True when the instance is allowed to check GitHub for newer releases."""
     async with app_state.db_session_factory() as db:
         return bool(await get_runtime_setting(db, "update_checks_enabled", default=True))
+
+
+async def get_gtm_container_id() -> str:
+    """The site-wide GTM container ID, or '' when unset."""
+    async with app_state.db_session_factory() as db:
+        return str(await get_runtime_setting(db, "gtm_container_id", default="") or "")
