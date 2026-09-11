@@ -88,3 +88,61 @@ async def test_landing_hides_oss_when_rebranded(_http_client):
         assert "Open-source" not in body
     finally:
         b._BRAND_CACHE.update({"name": "Fluxito", "logo_url": "", "accent": ""})
+
+
+def test_landing_social_share_metadata():
+    """Verify that landing.html renders complete OpenGraph and Twitter card metadata for LinkedIn/social sharing."""
+    from pathlib import Path
+
+    from starlette.requests import Request
+
+    from app.templating import _base_url_from_request, templates
+
+    req = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [(b"host", b"fluxito.app"), (b"x-forwarded-proto", b"https")],
+        }
+    )
+
+    ctx = {
+        "request": req,
+        "user": None,
+        "active": None,
+        "base_url": _base_url_from_request(req),
+        "github_url": "https://github.com/digitalXperiments/fluxito",
+    }
+
+    tmpl = templates.get_template("landing.html")
+    html = tmpl.render(ctx)
+
+    # OpenGraph tags for LinkedIn, Facebook, Slack
+    assert '<meta property="og:type" content="website"/>' in html
+    assert '<meta property="og:url" content="https://fluxito.app/"/>' in html
+    assert (
+        '<meta property="og:title" content="Fluxito — The analytics hire you never managed to make"/>' in html
+    )
+    assert 'property="og:description"' in html
+    assert '<meta property="og:image" content="https://fluxito.app/static/img/og-preview.png"/>' in html
+    assert (
+        '<meta property="og:image:secure_url" content="https://fluxito.app/static/img/og-preview.png"/>'
+        in html
+    )
+    assert '<meta property="og:image:width" content="1200"/>' in html
+    assert '<meta property="og:image:height" content="630"/>' in html
+    assert '<link rel="image_src" href="https://fluxito.app/static/img/og-preview.png"/>' in html
+
+    # Twitter card tags
+    assert '<meta name="twitter:card" content="summary_large_image"/>' in html
+    assert (
+        '<meta name="twitter:title" content="Fluxito — The analytics hire you never managed to make"/>'
+        in html
+    )
+    assert '<meta name="twitter:image" content="https://fluxito.app/static/img/og-preview.png"/>' in html
+
+    # Ensure og-preview.png asset exists on disk and is non-empty
+    img_path = Path(__file__).resolve().parent.parent / "app" / "static" / "img" / "og-preview.png"
+    assert img_path.is_file()
+    assert img_path.stat().st_size > 10_000

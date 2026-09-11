@@ -17,8 +17,28 @@
   <title>{% block title %}{{ brand().name }}{% endblock %}</title>
   {% block meta %}
   <meta name="description" content="{% block description %}Connect GA4, GTM, Google Ads, Meta, TikTok, Snap, and BigQuery to any AI. Live marketing analytics, one interface.{% endblock %}"/>
+  <link rel="canonical" href="{% block canonical_url %}{{ base_url }}{{ (request.url.path if request and request.url else '') or '/' }}{% endblock %}"/>
+
+  <!-- Open Graph / LinkedIn / Facebook -->
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}"/>
+  <meta property="og:site_name" content="{{ brand().name }}"/>
+  <meta property="og:url" content="{% block og_url %}{{ self.canonical_url() }}{% endblock %}"/>
   <meta property="og:title" content="{% block og_title %}{{ brand().name }} — Marketing analytics for AI{% endblock %}"/>
   <meta property="og:description" content="{% block og_description %}Connect every marketing platform to any AI. Live dashboards, MCP-ready.{% endblock %}"/>
+  <meta property="og:image" content="{% block og_image %}{{ base_url }}/static/img/og-preview.png{% endblock %}"/>
+  <meta property="og:image:secure_url" content="{% block og_image_secure %}{{ self.og_image() }}{% endblock %}"/>
+  <meta property="og:image:type" content="image/png"/>
+  <meta property="og:image:width" content="1200"/>
+  <meta property="og:image:height" content="630"/>
+  <meta property="og:image:alt" content="{% block og_image_alt %}{{ self.og_title() }}{% endblock %}"/>
+  <link rel="image_src" href="{{ self.og_image() }}"/>
+
+  <!-- Twitter / X Cards -->
+  <meta name="twitter:card" content="{% block twitter_card %}summary_large_image{% endblock %}"/>
+  <meta name="twitter:title" content="{% block twitter_title %}{{ self.og_title() }}{% endblock %}"/>
+  <meta name="twitter:description" content="{% block twitter_description %}{{ self.og_description() }}{% endblock %}"/>
+  <meta name="twitter:image" content="{% block twitter_image %}{{ self.og_image() }}{% endblock %}"/>
+  <meta name="twitter:image:alt" content="{% block twitter_image_alt %}{{ self.og_image_alt() }}{% endblock %}"/>
   {% endblock %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
