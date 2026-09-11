@@ -20,7 +20,7 @@ from pathlib import Path as _Path
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select as _sel
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -409,6 +409,14 @@ async def oauth_not_configured_handler(request: Request, exc: _OAuthAppNotConfig
 
 @app.exception_handler(StarletteHTTPException)
 async def not_found_handler(request: Request, exc: StarletteHTTPException):
+    if (
+        exc.status_code in (401, 403)
+        and request.method == "GET"
+        and not request.url.path.startswith(("/api/", "/mcp"))
+    ):
+        target = "/" if exc.status_code == 401 else "/home"
+        return RedirectResponse(url=target, status_code=302)
+
     if exc.status_code != 404 or request.url.path.startswith(("/api/", "/mcp")):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 

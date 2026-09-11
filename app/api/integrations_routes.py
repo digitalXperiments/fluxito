@@ -626,13 +626,27 @@ async def reset_system_setting(request: Request, key: str):
 
 @router.get("/settings/integrations", response_class=HTMLResponse)
 async def integrations_page(request: Request):
-    """Render the install-admin integrations settings page."""
+    """Render the install-admin integrations settings page. Redirects to homepage if unauthenticated or not install admin."""
     from app.api.google_oauth_routes import _load_user_view, _resolve_user_ctx
 
-    # Auth gate: must be signed in and an install admin
+    user = await _resolve_user(request)
+    if user is None:
+        return RedirectResponse(url="/", status_code=302)
+
     async with app_state.db_session_factory() as db:
-        await _require_install_admin(request, db)
-    async with app_state.db_session_factory() as db:
+        is_admin = (
+            await db.execute(
+                select(ProjectMember.id)
+                .where(ProjectMember.user_id == user.id)
+                .where(ProjectMember.role.in_(("owner", "admin")))
+                .where(ProjectMember.is_active.is_(True))
+                .limit(1)
+            )
+        ).scalar_one_or_none() is not None
+
+        if not is_admin:
+            return RedirectResponse(url="/home", status_code=302)
+
         items = await list_oauth_app_status(db)
 
     user_ctx = await _resolve_user_ctx(request)

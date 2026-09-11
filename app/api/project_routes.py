@@ -396,7 +396,7 @@ async def project_settings_page(request: Request, slug: str):
     uid = uuid.UUID(user["user_id"])
     membership = await _get_membership(project.id, uid)
     if not membership:
-        raise HTTPException(403, "You are not a member of this project")
+        return RedirectResponse(url="/home", status_code=302)
 
     # Load all members
     async with app_state.db_session_factory() as db:

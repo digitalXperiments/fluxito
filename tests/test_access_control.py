@@ -138,6 +138,70 @@ async def test_admin_users_unauthenticated_401(_http_client, db_session_factory)
 
 
 @pytest.mark.asyncio
+async def test_admin_page_unauthenticated_redirects_to_homepage(_http_client):
+    from unittest.mock import AsyncMock, patch
+
+    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=None)):
+        resp = await _http_client.get("/admin")
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/"
+
+
+@pytest.mark.asyncio
+async def test_admin_page_non_superadmin_redirects_to_homepage(_http_client, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
+    uid = await _make_user(db_session_factory, "regular@example.com", is_superadmin=False)
+    ctx = type("C", (), {"user_id": uid, "email": "regular@example.com"})()
+    with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=ctx)):
+        resp = await _http_client.get("/admin")
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/home"
+
+
+@pytest.mark.asyncio
+async def test_admin_page_superadmin_allowed(_http_client, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
+    sid = await _make_user(db_session_factory, "admin-user@example.com", is_superadmin=True)
+    ctx = type("C", (), {"user_id": sid, "email": "admin-user@example.com"})()
+    with (
+        patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=ctx)),
+        patch(
+            "app.api.google_oauth_routes._load_user_view",
+            new=AsyncMock(return_value={"id": sid, "email": "admin-user@example.com"}),
+        ),
+    ):
+        resp = await _http_client.get("/admin")
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_integrations_page_unauthenticated_redirects_to_homepage(_http_client):
+    from unittest.mock import AsyncMock, patch
+
+    with patch("app.api.integrations_routes._resolve_user", new=AsyncMock(return_value=None)):
+        resp = await _http_client.get("/settings/integrations")
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/"
+
+
+@pytest.mark.asyncio
+async def test_integrations_page_non_admin_redirects_to_homepage(_http_client, db_session_factory):
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.user import User
+
+    uid = await _make_user(db_session_factory, "member-only@example.com")
+    async with db_session_factory() as db:
+        user_obj = await db.get(User, uuid.UUID(uid))
+    with patch("app.api.integrations_routes._resolve_user", new=AsyncMock(return_value=user_obj)):
+        resp = await _http_client.get("/settings/integrations")
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/home"
+
+
+@pytest.mark.asyncio
 async def test_admin_cannot_revoke_last_superadmin(_http_client, db_session_factory):
     from unittest.mock import AsyncMock, patch
 

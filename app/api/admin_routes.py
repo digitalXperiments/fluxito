@@ -8,7 +8,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func, select
 
 import app.app_state as app_state
@@ -25,12 +25,21 @@ _GTM_RE = _re.compile(r"^GTM-[A-Z0-9_-]{4,24}$")
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
-    """Super-admin instance panel (page enforces 401/403)."""
-    await require_superadmin(request)
+    """Super-admin instance panel. Redirects to homepage if unauthenticated or not super-admin."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/", status_code=302)
+
+    async with app_state.db_session_factory() as db:
+        u = (
+            await db.execute(select(User).where(User.id == uuid.UUID(user_ctx.user_id)))
+        ).scalar_one_or_none()
+        if not u or not u.is_superadmin:
+            return RedirectResponse(url="/home", status_code=302)
+
     from app.api.google_oauth_routes import _load_user_view
     from app.settings_service import access_approval_required
 
-    user_ctx = await _resolve_user_ctx(request)
     user_view = await _load_user_view(user_ctx)
     gate_enabled = await access_approval_required()
     return render(request, "admin.html", {"user": user_view, "active": "admin", "gate_enabled": gate_enabled})
