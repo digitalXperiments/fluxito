@@ -413,13 +413,35 @@ async def home(request: Request):
     if user_ctx is None:
         return RedirectResponse(url="/signin?next=/home", status_code=302)
 
+    # Ensure the user has completed onboarding. If not, redirect to tutorial.
+    try:
+        db_session_user = app_state.db_session_factory()
+        async with db_session_user as db_u:
+            user_rec = (
+                await db_u.execute(select(User).where(User.id == uuid.UUID(user_ctx.user_id)))
+            ).scalar_one_or_none()
+            if user_rec and user_rec.tutorial_completed_at is None:
+                return RedirectResponse(url="/tutorial", status_code=302)
+    except Exception:
+        pass
+
     # Resolve active project — if the user has none yet, send them to
-    # /projects to create one (rendering /home with no project produces
-    # an empty/broken state and no obvious next action).
+    # /tutorial to create one as part of the onboarding journey.
     active_pid = await ensure_active_project(request, user_ctx.user_id)
     if not active_pid:
-        return RedirectResponse(url="/projects", status_code=302)
+        return RedirectResponse(url="/tutorial", status_code=302)
     active_pid_uuid = uuid.UUID(active_pid) if active_pid else None
+
+    # Check if project has an active AI key configured for in-app chat
+    has_ai_key = False
+    try:
+        from app.ask.keys import get_active_key
+
+        has_ai_key = bool(
+            await get_active_key(project_id=active_pid_uuid, user_id=uuid.UUID(user_ctx.user_id))
+        )
+    except Exception:
+        pass
 
     # ── Fetch connections scoped to the active project ──────────────
     from app.models.credential_connection import (
@@ -826,6 +848,7 @@ async def home(request: Request):
             "last_audit_display": last_audit_display,
             "audit_open_issues": audit_open_issues,
             "running_automations": running_automations,
+            "has_ai_key": has_ai_key,
         },
     )
 
@@ -1360,7 +1383,7 @@ async def signin_callback(
         await db.commit()
         user_id = str(user.id)
 
-    if is_new_user:
+    if is_new_user and not needs_tutorial:
         try:
             from app.api.project_routes import ensure_default_project
 
@@ -1411,13 +1434,21 @@ async def tutorial_page(request: Request):
     if user_ctx is None:
         return RedirectResponse(url="/signin?next=/tutorial", status_code=302)
 
-    # The tutorial walks the user through connecting platforms — every
-    # connection is project-scoped, so a project must exist first or the
-    # tutorial steps have no destination. Send them to /projects to
-    # create one (the first project setup will bring them back here).
+    # Resolve active project if one already exists. If not, the user will
+    # create their project in Step 2 of the onboarding journey.
     active_pid = await ensure_active_project(request, user_ctx.user_id)
-    if not active_pid:
-        return RedirectResponse(url="/projects?next=/tutorial", status_code=302)
+    active_project_name = None
+    if active_pid:
+        try:
+            db_session_p = app_state.db_session_factory()
+            async with db_session_p as db_p:
+                p_row = (
+                    await db_p.execute(select(Project).where(Project.id == uuid.UUID(active_pid)))
+                ).scalar_one_or_none()
+                if p_row:
+                    active_project_name = p_row.name
+        except Exception:
+            pass
 
     force = request.query_params.get("force") == "1" or request.query_params.get("replay") == "1"
 
@@ -1489,6 +1520,8 @@ async def tutorial_page(request: Request):
             "flux_role": flux_role,
             "flux_monitors": flux_monitors,
             "preferred_ai_client": preferred_ai_client,
+            "active_project_id": active_pid,
+            "active_project_name": active_project_name,
         },
     )
 
@@ -1506,10 +1539,14 @@ async def tutorial_complete(request: Request):
     # to /projects.
     active_pid = await ensure_active_project(request, user_ctx.user_id)
     if not active_pid:
-        return JSONResponse(
-            {"error": "no_project", "message": "Create a project before completing the tutorial."},
-            status_code=400,
+        from app.api.project_routes import ensure_default_project
+
+        await ensure_default_project(
+            user_id=user_ctx.user_id,
+            display_name=user_ctx.display_name,
+            email=user_ctx.email,
         )
+        active_pid = await ensure_active_project(request, user_ctx.user_id)
 
     try:
         db_session = app_state.db_session_factory()
@@ -1523,7 +1560,12 @@ async def tutorial_complete(request: Request):
     except Exception:
         return JSONResponse({"error": "failed"}, status_code=500)
 
-    return JSONResponse({"ok": True})
+    res = JSONResponse({"ok": True})
+    if active_pid:
+        from app.api.project_routes import set_active_project_cookie
+
+        set_active_project_cookie(res, active_pid)
+    return res
 
 
 @router.post("/api/onboarding/preferences")

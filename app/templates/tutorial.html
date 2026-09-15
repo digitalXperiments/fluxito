@@ -9,7 +9,7 @@
   <div class="ob-rail">
     <div class="ob-rail-word"><span>fluxito</span><span class="ob-rail-dot"></span></div>
     <div class="ob-rail-steps" id="obRailSteps">
-      {% for s in [('Meet Flux','Your resident analyst'), ('Your role & goals','So Flux briefs you right'), ('Connect your data','GA4, GTM, ads, warehouse'), ('Add your AI','Claude, ChatGPT, Cursor — or in-app'), ('First briefing','Flux runs a live health check')] %}
+      {% for s in [('Meet Flux','Your resident analyst'), ('AI Engine','MCP or In-App API key'), ('Create Workspace','Name, currency & timezone'), ('Connect your data','GA4, GTM, ads, warehouse'), ('First briefing','Flux runs a live health check')] %}
       <div class="ob-rail-item {% if loop.first %}is-current{% endif %}">
         {% if not loop.first %}<div class="ob-rail-connector"></div>{% endif %}
         <div class="ob-rail-row" data-goto="{{ loop.index }}">
@@ -52,43 +52,112 @@
       <div class="ob-note"><span class="ob-note-dot ob-note-dot-good"></span><span><strong>Read-only by default.</strong> I can't change anything in your accounts unless you explicitly grant write access — and even then, you approve every change.</span></div>
     </div>
 
-    <!-- STEP 2 · ROLE & GOALS -->
+    <!-- STEP 2 · CHOOSE AI ENGINE -->
     <div class="ob-step" data-panel="2" hidden>
-      <div class="ob-eyebrow">Step 2 · Your role &amp; goals</div>
-      <h1 class="ob-h1">What does your week look like?</h1>
-      <p class="ob-lede">I'll tune my briefings, defaults and tone to how you work. Pick the closest fit — change it anytime.</p>
-      <div class="ob-grid-2" id="obRoleCards">
-        <div class="ob-role-card" data-role="run_marketing">
-          <div class="ob-role-title">I run marketing</div>
-          <div class="ob-role-sub">Campaigns, budgets, ROAS. I need answers and alerts, not implementation details.</div>
+      <div class="ob-eyebrow">Step 2 · Choose AI Engine</div>
+      <h1 class="ob-h1">How would you like to <em>talk to Flux?</em></h1>
+      <p class="ob-lede">Fluxito connects directly to your favorite AI agent via MCP (using your existing subscription), or runs right inside this dashboard with your own API key.</p>
+
+      <div class="ob-choice-grid">
+        <div class="ob-choice-card is-selected" id="obAiChoiceMcp" data-ai-mode="mcp">
+          <span class="ob-choice-badge">Most Popular</span>
+          <div class="ob-choice-head">
+            <div class="ob-choice-icon" style="background:#25201B;color:#FFF;">⚡</div>
+            <div>
+              <div class="ob-choice-title">Connect via MCP</div>
+              <div class="ob-choice-sub">Claude · Cursor · ChatGPT · Windsurf</div>
+            </div>
+          </div>
+          <p class="ob-choice-body">
+            Use your existing <strong>Claude Pro/Team, Cursor, or ChatGPT Plus</strong> subscription. Zero API token bills, runs directly in your daily workflow.
+          </p>
+          <div class="ob-mcp-box" style="margin-top:auto;">
+            <span class="ob-mcp-url">{{ base_url }}/mcp</span>
+            <span class="ob-mcp-copy" id="obCopyUrl">Copy URL</span>
+          </div>
         </div>
-        <div class="ob-role-card" data-role="implement_tracking">
-          <div class="ob-role-title">I implement tracking</div>
-          <div class="ob-role-sub">GTM, dataLayers, pixels. I want plans, diffs, and QA — with write access.</div>
+
+        <div class="ob-choice-card" id="obAiChoiceKey" data-ai-mode="key">
+          <div class="ob-choice-head">
+            <div class="ob-choice-icon" style="background:var(--paper-2);color:var(--accent);">🔑</div>
+            <div>
+              <div class="ob-choice-title">In-App Dashboard Chat</div>
+              <div class="ob-choice-sub">Anthropic · OpenAI · Gemini · OpenRouter</div>
+            </div>
+          </div>
+          <p class="ob-choice-body">
+            Add your LLM provider API key to run conversations and scheduled briefings right here inside this web app.
+          </p>
+
+          <div class="ob-key-subpanel" id="obKeySubpanel" style="display:none;margin-top:auto;">
+            <div class="ob-provider-pills">
+              <button type="button" class="ob-provider-pill is-active" data-provider="anthropic">Anthropic</button>
+              <button type="button" class="ob-provider-pill" data-provider="openai">OpenAI</button>
+              <button type="button" class="ob-provider-pill" data-provider="gemini">Gemini</button>
+              <button type="button" class="ob-provider-pill" data-provider="openrouter">OpenRouter</button>
+            </div>
+            <div class="ob-input-row" style="margin-top:10px;">
+              <input type="password" class="ob-text-input" id="obApiKeyInput" placeholder="Paste API key (e.g. sk-ant-...)" autocomplete="off">
+              <button type="button" class="ob-verify-btn" id="obVerifyKeyBtn">Verify</button>
+            </div>
+            <div class="ob-key-hint" id="obKeyHint">Keys are encrypted with AES-256-GCM.</div>
+          </div>
         </div>
-        <div class="ob-role-card" data-role="analyze_report">
-          <div class="ob-role-title">I analyze &amp; report</div>
-          <div class="ob-role-sub">Dashboards, deep dives, weekly narratives for stakeholders.</div>
-        </div>
-        <div class="ob-role-card" data-role="everything">
-          <div class="ob-role-title">A bit of everything</div>
-          <div class="ob-role-sub">Small team — I own the whole stack end to end.</div>
-        </div>
-      </div>
-      <div class="ob-sub-eyebrow">And what should I watch for you?</div>
-      <div class="ob-chips" id="obMonitorChips">
-        <span class="ob-chip" data-monitor="roas">ROAS by channel</span>
-        <span class="ob-chip" data-monitor="health">Conversion tracking health</span>
-        <span class="ob-chip" data-monitor="pacing">Budget pacing</span>
-        <span class="ob-chip" data-monitor="funnel">Funnel drop-offs</span>
-        <span class="ob-chip" data-monitor="seo">SEO movement</span>
-        <span class="ob-chip" data-monitor="comp">Competitor bidding</span>
       </div>
     </div>
 
-    <!-- STEP 3 · CONNECT DATA -->
+    <!-- STEP 3 · CREATE WORKSPACE -->
     <div class="ob-step" data-panel="3" hidden>
-      <div class="ob-eyebrow">Step 3 · Connect your data</div>
+      <div class="ob-eyebrow">Step 3 · Create Workspace</div>
+      <h1 class="ob-h1">Name your <em>analytics workspace.</em></h1>
+      <p class="ob-lede">Every project isolates its own data connections, tracking plans, audit logs, and AI conversations. Configure your defaults below.</p>
+
+      <div class="ob-form-card">
+        <div class="ob-field-group">
+          <label class="ob-field-label" for="obProjectName">Workspace / Project Name</label>
+          <input type="text" class="ob-text-input ob-input-lg" id="obProjectName"
+                 value="{{ active_project_name or ((user.display_name or user.email.split('@')[0]) | title ~ \"'s Workspace\") }}"
+                 placeholder="e.g. BMK Eco Farms or Acme Commerce" required>
+          <div class="ob-slug-hint">Slug: <span class="mono" id="obSlugPreview">my-workspace</span></div>
+        </div>
+
+        <div class="ob-form-grid-2">
+          <div class="ob-field-group">
+            <label class="ob-field-label" for="obProjectCurrency">Primary Currency</label>
+            <select class="ob-select-input" id="obProjectCurrency">
+              <option value="USD">USD ($) — US Dollar</option>
+              <option value="INR" selected>INR (₹) — Indian Rupee</option>
+              <option value="EUR">EUR (€) — Euro</option>
+              <option value="GBP">GBP (£) — British Pound</option>
+            </select>
+          </div>
+
+          <div class="ob-field-group">
+            <label class="ob-field-label" for="obProjectTimezone">Reporting Timezone</label>
+            <select class="ob-select-input" id="obProjectTimezone">
+              <option value="Asia/Kolkata" selected>Asia/Kolkata (IST +05:30)</option>
+              <option value="America/New_York">America/New_York (EST -05:00)</option>
+              <option value="America/Los_Angeles">America/Los_Angeles (PST -08:00)</option>
+              <option value="Europe/London">Europe/London (GMT +00:00)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="ob-sub-eyebrow" style="margin-top:18px;">What should Flux watch closely?</div>
+        <div class="ob-chips" id="obMonitorChips">
+          <span class="ob-chip" data-monitor="roas">ROAS by channel</span>
+          <span class="ob-chip" data-monitor="health">Conversion tracking health</span>
+          <span class="ob-chip" data-monitor="pacing">Budget pacing</span>
+          <span class="ob-chip" data-monitor="funnel">Funnel drop-offs</span>
+          <span class="ob-chip" data-monitor="seo">SEO movement</span>
+          <span class="ob-chip" data-monitor="comp">Competitor bidding</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4 · CONNECT DATA -->
+    <div class="ob-step" data-panel="4" hidden>
+      <div class="ob-eyebrow">Step 4 · Connect your data</div>
       <h1 class="ob-h1">Give Flux its <em>instruments.</em></h1>
       <p class="ob-lede">Read-only by default. One connection is enough to start — GA4 unlocks the most. Click to connect; Flux verifies each pipe as you go.</p>
       <div class="ob-grid-2" id="obConnCards">
@@ -119,28 +188,8 @@
       </div>
       <div class="ob-note">
         <span class="ob-note-dot ob-note-dot-accent"></span>
-        <span><strong id="obLiveCount">{{ conn_live_count }} connected.</strong> You can skip ahead and add the rest later — Flux will remind you when a question needs a source you haven't connected. <a href="/tutorial?step=3" class="ob-refresh-link">Refresh status →</a></span>
+        <span><strong id="obLiveCount">{{ conn_live_count }} connected.</strong> You can skip ahead and add the rest later — Flux will remind you when a question needs a source you haven't connected. <a href="/tutorial?step=4" class="ob-refresh-link">Refresh status →</a></span>
       </div>
-    </div>
-
-    <!-- STEP 4 · ADD YOUR AI -->
-    <div class="ob-step" data-panel="4" hidden>
-      <div class="ob-eyebrow">Step 4 · Add your AI</div>
-      <h1 class="ob-h1">Where do you want to <em>talk to Flux?</em></h1>
-      <p class="ob-lede">Flux lives in this app — and in any MCP-compatible AI. Same brain, same memory, same permissions everywhere. Pick your favorite; add more later.</p>
-      <div class="ob-grid-3" id="obClientCards">
-        <div class="ob-client-card" data-client="claude"><span class="ob-client-icon" style="background:#d97757;"><img src="/static/img/logos/claude.svg" alt=""></span><div><div class="ob-client-name">Claude</div><div class="ob-client-sub">Web &amp; Desktop · native MCP</div></div></div>
-        <div class="ob-client-card" data-client="chatgpt"><span class="ob-client-icon" style="background:#10a37f;"><img src="/static/img/logos/chatgpt.svg" alt=""></span><div><div class="ob-client-name">ChatGPT</div><div class="ob-client-sub">Web &amp; Desktop</div></div></div>
-        <div class="ob-client-card" data-client="cursor"><span class="ob-client-icon" style="background:#09090b;"><img src="/static/img/logos/cursor.svg" alt=""></span><div><div class="ob-client-name">Cursor</div><div class="ob-client-sub">Code editor</div></div></div>
-        <div class="ob-client-card" data-client="windsurf"><span class="ob-client-icon" style="background:#09b6a2;"><img src="/static/img/logos/windsurf.svg" alt=""></span><div><div class="ob-client-name">Windsurf</div><div class="ob-client-sub">Code editor</div></div></div>
-        <div class="ob-client-card" data-client="lmstudio"><span class="ob-client-icon" style="background:#4338ca;"><img src="/static/img/logos/lmstudio.svg" alt=""></span><div><div class="ob-client-name">LM Studio</div><div class="ob-client-sub">Local models</div></div></div>
-        <div class="ob-client-card" data-client="inapp"><span class="ob-client-icon ob-client-icon-flux">F</span><div><div class="ob-client-name">Just the app</div><div class="ob-client-sub">Chat with Flux right here</div></div></div>
-      </div>
-      <div class="ob-mcp-box">
-        <span class="ob-mcp-url">{{ base_url }}/mcp</span>
-        <span class="ob-mcp-copy" id="obCopyUrl">Copy URL</span>
-      </div>
-      <div class="ob-mcp-hint" id="obMcpHint">Paste this into your client's MCP settings — we'll walk you through it for the tool you picked.</div>
     </div>
 
     <!-- STEP 5 · FIRST BRIEFING -->
@@ -244,21 +293,101 @@
 .ob-note-dot-accent { background: var(--accent); }
 .ob-refresh-link { color: var(--accent-hover); }
 
-/* Step 2 */
-.ob-role-card { padding: 22px 24px; background: var(--card); border: 1px solid var(--line-2); border-radius: 12px; cursor: pointer; transition: border-color .15s; }
-.ob-role-card:hover { border-color: var(--accent); }
-.ob-role-card.is-selected { border: 2px solid var(--accent); box-shadow: 0 10px 26px rgba(196,112,58,0.14); }
-.ob-role-title { font-size: 16px; font-weight: 700; margin-bottom: 5px; }
-.ob-role-sub { font-size: 13px; color: #6B6459; line-height: 1.5; }
-.ob-sub-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 30px 0 12px; }
-.ob-chips { display: flex; flex-wrap: wrap; gap: 10px; max-width: 700px; }
-.ob-chip {
-  padding: 10px 17px; background: var(--card); border: 1px solid var(--line-strong); color: var(--ink);
-  font-size: 13.5px; font-weight: 400; border-radius: 999px; cursor: pointer;
+/* Step 2 — AI Engine choice */
+.ob-choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 760px; margin-bottom: 24px; }
+.ob-choice-card {
+  padding: 24px; background: var(--card); border: 1.5px solid var(--line-2); border-radius: 14px;
+  cursor: pointer; display: flex; flex-direction: column; transition: all .15s ease; position: relative;
 }
+.ob-choice-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.ob-choice-card.is-selected {
+  border: 2px solid var(--accent); background: #FFFDF9;
+  box-shadow: 0 10px 30px rgba(196,112,58,0.12);
+}
+.ob-choice-badge {
+  position: absolute; top: 14px; right: 14px; background: var(--accent); color: #FFF;
+  font-family: var(--mono); font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 3px 8px; border-radius: 99px;
+}
+.ob-choice-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.ob-choice-icon {
+  width: 38px; height: 38px; border-radius: 9px; display: inline-flex;
+  align-items: center; justify-content: center; font-size: 17px; font-weight: 700; flex-shrink: 0;
+}
+.ob-choice-title { font-family: var(--serif); font-size: 20px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.ob-choice-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 2px; }
+.ob-choice-body { font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); margin-bottom: 16px; }
+.ob-choice-body strong { color: var(--ink); }
+
+.ob-mcp-box {
+  display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 12px 14px;
+  background: var(--dark-bg); border-radius: 9px;
+}
+.ob-mcp-url { font-family: var(--mono); font-size: 12px; color: #B8B0A0; flex: 1; word-break: break-all; }
+.ob-mcp-copy {
+  display: inline-flex; padding: 6px 12px; background: var(--accent); color: #FFF9EF;
+  font-size: 11.5px; font-weight: 600; border-radius: 6px; cursor: pointer; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.ob-mcp-copy:hover { opacity: 0.9; }
+
+.ob-key-subpanel { border-top: 1px dashed var(--line-2); padding-top: 14px; margin-top: auto; }
+.ob-provider-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.ob-provider-pill {
+  padding: 5px 11px; font-size: 11.5px; font-family: var(--mono); border: 1px solid var(--line-strong);
+  background: var(--paper-2); border-radius: 99px; cursor: pointer; color: var(--ink-soft);
+  transition: all .15s;
+}
+.ob-provider-pill:hover { border-color: var(--accent); color: var(--ink); }
+.ob-provider-pill.is-active { background: var(--ink); border-color: var(--ink); color: var(--paper); font-weight: 600; }
+.ob-input-row { display: flex; gap: 8px; align-items: center; }
+.ob-text-input {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 8px;
+  font-family: var(--mono); font-size: 13px; background: #FFF; color: var(--ink);
+  outline: none; transition: border-color .15s, box-shadow .15s; box-sizing: border-box;
+}
+.ob-text-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(196,112,58,0.15); }
+.ob-verify-btn {
+  padding: 10px 14px; font-size: 12px; font-weight: 600; font-family: var(--mono);
+  background: var(--paper-2); border: 1px solid var(--line-strong); border-radius: 8px;
+  cursor: pointer; color: var(--ink); white-space: nowrap; transition: all .15s;
+}
+.ob-verify-btn:hover { background: var(--card); border-color: var(--accent); }
+.ob-key-hint { font-size: 11.5px; color: var(--muted); margin-top: 8px; min-height: 16px; }
+.ob-key-hint.is-good { color: var(--good); }
+.ob-key-hint.is-err { color: var(--bad); }
+
+/* Step 3 — Workspace details */
+.ob-form-card {
+  padding: 26px 28px; background: var(--card); border: 1px solid var(--line-2);
+  border-radius: 14px; max-width: 760px;
+}
+.ob-field-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.ob-field-label {
+  font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--ink-soft); font-weight: 600;
+}
+.ob-input-lg { font-family: var(--sans); font-size: 15.5px; font-weight: 500; padding: 12px 14px; }
+.ob-slug-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.ob-slug-hint .mono { font-family: var(--mono); color: var(--ink-soft); background: var(--paper-2); padding: 2px 6px; border-radius: 4px; }
+.ob-form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ob-select-input {
+  width: 100%; padding: 11px 14px; border: 1px solid var(--line-strong); border-radius: 8px;
+  font-size: 13.5px; background: #FFF; color: var(--ink); outline: none;
+  cursor: pointer; box-sizing: border-box; transition: border-color .15s, box-shadow .15s;
+}
+.ob-select-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(196,112,58,0.15); }
+.ob-sub-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 24px 0 12px; }
+.ob-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ob-chip {
+  padding: 9px 15px; background: var(--paper-2); border: 1px solid var(--line-strong);
+  color: var(--ink-soft); font-size: 13px; border-radius: 999px; cursor: pointer;
+  transition: all .15s; user-select: none;
+}
+.ob-chip:hover { border-color: var(--accent); color: var(--ink); }
 .ob-chip.is-selected { background: var(--accent); border-color: var(--accent); color: #FFF9EF; font-weight: 600; }
 
-/* Step 3 */
+/* Step 4 — Connect data */
 .ob-conn-card, .ob-conn-more {
   display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: var(--card);
   border: 1px solid var(--line-2); border-radius: 11px; cursor: pointer; text-decoration: none; color: inherit; transition: border-color .15s;
@@ -276,22 +405,7 @@
 .ob-conn-more .ob-conn-name { font-size: 15px; font-weight: 600; color: var(--ink-soft); }
 .ob-conn-more-label { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 
-/* Step 4 */
-.ob-client-card { display: flex; align-items: center; gap: 12px; padding: 15px 16px; background: var(--card); border: 1px solid var(--line-2); border-radius: 11px; cursor: pointer; transition: border-color .15s; }
-.ob-client-card:hover { border-color: var(--accent); }
-.ob-client-card.is-selected { border: 2px solid var(--accent); box-shadow: 0 10px 26px rgba(196,112,58,0.14); }
-.ob-client-icon { width: 34px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.ob-client-icon img { width: 18px; height: 18px; }
-.ob-client-icon-flux { background: var(--ink); color: var(--paper); font-family: var(--serif); font-style: italic; font-size: 16px; }
-.ob-client-name { font-size: 14px; font-weight: 700; }
-.ob-client-sub { font-size: 11.5px; color: var(--muted); }
-.ob-mcp-box { display: flex; align-items: center; gap: 12px; margin-top: 22px; padding: 14px 18px; background: var(--dark-bg); border-radius: 10px; max-width: 700px; }
-.ob-mcp-url { font-family: var(--mono); font-size: 12.5px; color: #B8B0A0; flex: 1; word-break: break-all; }
-.ob-mcp-copy { display: inline-flex; padding: 8px 15px; background: var(--accent); color: #FFF9EF; font-size: 12.5px; font-weight: 600; border-radius: 7px; cursor: pointer; flex-shrink: 0; }
-.ob-mcp-hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
-.ob-mcp-hint a { color: var(--accent-hover); }
-
-/* Step 5 */
+/* Step 5 — First briefing scan */
 .ob-scan { max-width: 700px; background: var(--card); border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; }
 .ob-scan-head { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--line-3); }
 .ob-scan-title { font-size: 13px; font-weight: 700; flex: 1; }
@@ -307,8 +421,9 @@
 
 /* Footer nav */
 .ob-footer { display: flex; align-items: center; gap: 16px; margin-top: auto; padding-top: 36px; }
-.ob-next { display: inline-flex; align-items: center; padding: 13px 26px; background: var(--ink); color: var(--paper); font-size: 14.5px; font-weight: 600; border-radius: 9px; cursor: pointer; }
+.ob-next { display: inline-flex; align-items: center; padding: 13px 26px; background: var(--ink); color: var(--paper); font-size: 14.5px; font-weight: 600; border-radius: 9px; cursor: pointer; transition: background .15s; }
 .ob-next:hover { background: var(--ink-2); }
+.ob-next[disabled] { opacity: 0.6; cursor: not-allowed; }
 .ob-back { font-size: 13.5px; color: var(--muted); cursor: pointer; }
 .ob-back:hover { color: var(--ink); }
 .ob-time { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
@@ -317,17 +432,17 @@
   .ob-shell { grid-template-columns: 1fr; }
   .ob-rail { display: none; }
   .ob-content { padding: 24px 20px 32px; }
-  .ob-grid-2, .ob-grid-3 { grid-template-columns: 1fr; }
+  .ob-grid-2, .ob-grid-3, .ob-choice-grid, .ob-form-grid-2 { grid-template-columns: 1fr; }
 }
 </style>
 
 <script>
 (function(){
   var STEP_META = [
-    { quote: '“Nice to meet you. I promise to only ping you when it matters.”', nextLabel: 'Let’s get started →', time: '~2 minutes' },
-    { quote: '“Two minutes of context saves us both a week of guessing.”', nextLabel: 'Continue →', time: '~90 seconds' },
-    { quote: '“One connection is enough to start. GA4 tells me the most.”', nextLabel: 'Continue →', time: '~60 seconds' },
-    { quote: '“Same brain everywhere — the app, Claude, ChatGPT, Cursor.”', nextLabel: 'Continue →', time: '~30 seconds' },
+    { quote: '“Nice to meet you. I promise to only ping you when it matters.”', nextLabel: 'Let’s get started →', time: '~3 minutes' },
+    { quote: '“Most analysts connect me to Claude or Cursor. Zero token markup.”', nextLabel: 'Continue to Workspace →', time: '~2 minutes' },
+    { quote: '“Every workspace has its own data perimeter and tracking plans.”', nextLabel: 'Create & Connect Data →', time: '~90 seconds' },
+    { quote: '“One connection is enough to start. GA4 tells me the most.”', nextLabel: 'Continue to Briefing →', time: '~60 seconds' },
     { quote: '“Give me thirty seconds. I read fast.”', nextLabel: 'Open my briefing →', time: 'Done — welcome aboard' }
   ];
   var step = 1;
@@ -340,8 +455,11 @@
   var skipLink = document.getElementById('obSkip');
   var briefingStarted = false;
 
+  var activeProjectId = {{ (active_project_id or '') | tojson }};
+  var initialProjectName = {{ (active_project_name or '') | tojson }};
+
   function savePrefs(payload) {
-    fetch('/api/onboarding/preferences', {
+    return fetch('/api/onboarding/preferences', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -349,9 +467,19 @@
   }
 
   function completeTutorial() {
-    fetch('/api/tutorial/complete', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
+    return fetch('/api/tutorial/complete', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
   }
-  skipLink.addEventListener('click', function(e){ e.preventDefault(); completeTutorial(); window.location.href = '/home'; });
+
+  if (skipLink) {
+    skipLink.addEventListener('click', async function(e){
+      e.preventDefault();
+      skipLink.textContent = 'Preparing workspace…';
+      try {
+        await completeTutorial();
+      } catch (_) {}
+      window.location.href = '/home';
+    });
+  }
 
   function render() {
     panels.forEach(function(p){ p.hidden = (parseInt(p.dataset.panel, 10) !== step); });
@@ -360,115 +488,213 @@
       item.classList.toggle('is-current', n === step);
       item.classList.toggle('is-done', n < step);
       var marker = item.querySelector('.ob-rail-marker');
-      marker.textContent = n < step ? '✓' : String(n);
+      if (marker) marker.textContent = n < step ? '✓' : String(n);
     });
     var meta = STEP_META[step - 1];
-    quoteEl.innerHTML = '<em>' + meta.quote + '</em><br><span class="ob-rail-quote-attr">— Flux</span>';
-    nextBtn.textContent = meta.nextLabel;
-    timeEl.textContent = meta.time;
-    backBtn.hidden = step === 1;
+    if (meta) {
+      if (quoteEl) quoteEl.innerHTML = '<em>' + meta.quote + '</em><br><span class="ob-rail-quote-attr">— Flux</span>';
+      if (nextBtn) nextBtn.textContent = meta.nextLabel;
+      if (timeEl) timeEl.textContent = meta.time;
+    }
+    if (backBtn) backBtn.hidden = (step === 1);
     if (step === 5 && !briefingStarted) runHealthCheck();
   }
 
   function go(n) {
     step = Math.max(1, Math.min(5, n));
     render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   document.querySelectorAll('[data-goto]').forEach(function(el){
-    el.addEventListener('click', function(){ go(parseInt(el.dataset.goto, 10)); });
-  });
-
-  nextBtn.addEventListener('click', function(){
-    if (step === 5) { completeTutorial(); window.location.href = '/home'; return; }
-    go(step + 1);
-  });
-  backBtn.addEventListener('click', function(){ go(step - 1); });
-
-  // Step 2 — role (single-select) + monitors (multi-select)
-  var selectedRole = {{ (flux_role or '') | tojson }};
-  var selectedMonitors = {{ (flux_monitors or []) | tojson }};
-  document.querySelectorAll('.ob-role-card').forEach(function(card){
-    if (card.dataset.role === selectedRole) card.classList.add('is-selected');
-    card.addEventListener('click', function(){
-      document.querySelectorAll('.ob-role-card').forEach(function(c){ c.classList.remove('is-selected'); });
-      card.classList.add('is-selected');
-      selectedRole = card.dataset.role;
-      savePrefs({ role: selectedRole });
+    el.addEventListener('click', function(){
+      var target = parseInt(el.dataset.goto, 10);
+      if (target <= step) go(target);
     });
   });
-  document.querySelectorAll('.ob-chip').forEach(function(chip){
+
+  // Step 2 — AI Engine choice
+  var aiMode = 'mcp';
+  var activeProvider = 'anthropic';
+  var stagedKey = '';
+  var mcpCard = document.getElementById('obAiChoiceMcp');
+  var keyCard = document.getElementById('obAiChoiceKey');
+  var keySubpanel = document.getElementById('obKeySubpanel');
+  var apiKeyInput = document.getElementById('obApiKeyInput');
+  var verifyKeyBtn = document.getElementById('obVerifyKeyBtn');
+  var keyHint = document.getElementById('obKeyHint');
+
+  var placeholders = {
+    anthropic: 'Paste Anthropic key (sk-ant-...)',
+    openai: 'Paste OpenAI key (sk-...)',
+    gemini: 'Paste Google AI key (AIzaSy...)',
+    openrouter: 'Paste OpenRouter key (sk-or-...)'
+  };
+
+  if (mcpCard && keyCard) {
+    mcpCard.addEventListener('click', function(){
+      aiMode = 'mcp';
+      mcpCard.classList.add('is-selected');
+      keyCard.classList.remove('is-selected');
+      if (keySubpanel) keySubpanel.style.display = 'none';
+      savePrefs({ ai_client: 'mcp' });
+    });
+    keyCard.addEventListener('click', function(e){
+      aiMode = 'key';
+      keyCard.classList.add('is-selected');
+      mcpCard.classList.remove('is-selected');
+      if (keySubpanel) keySubpanel.style.display = 'block';
+      if (apiKeyInput && !apiKeyInput.contains(e.target) && (!verifyKeyBtn || !verifyKeyBtn.contains(e.target))) {
+        apiKeyInput.focus();
+      }
+      savePrefs({ ai_client: activeProvider });
+    });
+  }
+
+  document.querySelectorAll('.ob-provider-pill').forEach(function(pill){
+    pill.addEventListener('click', function(e){
+      e.stopPropagation();
+      document.querySelectorAll('.ob-provider-pill').forEach(function(p){ p.classList.remove('is-active'); });
+      pill.classList.add('is-active');
+      activeProvider = pill.dataset.provider || 'anthropic';
+      if (apiKeyInput) {
+        apiKeyInput.placeholder = placeholders[activeProvider] || 'Paste API key...';
+        apiKeyInput.focus();
+      }
+      if (keyHint) {
+        keyHint.className = 'ob-key-hint';
+        keyHint.textContent = 'Keys are encrypted with AES-256-GCM.';
+      }
+      if (aiMode === 'key') {
+        savePrefs({ ai_client: activeProvider });
+      }
+    });
+  });
+
+  if (verifyKeyBtn && apiKeyInput) {
+    verifyKeyBtn.addEventListener('click', async function(e){
+      e.stopPropagation();
+      var key = (apiKeyInput.value || '').trim();
+      if (!key) {
+        if (keyHint) {
+          keyHint.className = 'ob-key-hint is-err';
+          keyHint.textContent = 'Please paste an API key first.';
+        }
+        return;
+      }
+      verifyKeyBtn.disabled = true;
+      verifyKeyBtn.textContent = 'Verifying…';
+      if (keyHint) {
+        keyHint.className = 'ob-key-hint';
+        keyHint.textContent = 'Checking key against provider…';
+      }
+      try {
+        var resp = await fetch('/api/ask/keys/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ provider: activeProvider, api_key: key })
+        });
+        var res = await resp.json();
+        if (res.ok) {
+          stagedKey = key;
+          if (keyHint) {
+            keyHint.className = 'ob-key-hint is-good';
+            keyHint.textContent = '✓ Valid ' + activeProvider.toUpperCase() + ' API key verified!';
+          }
+        } else {
+          if (keyHint) {
+            keyHint.className = 'ob-key-hint is-err';
+            keyHint.textContent = 'Verification error: ' + (res.error || 'Invalid API key');
+          }
+        }
+      } catch (err) {
+        if (keyHint) {
+          keyHint.className = 'ob-key-hint is-err';
+          keyHint.textContent = 'Network error while verifying key.';
+        }
+      } finally {
+        verifyKeyBtn.disabled = false;
+        verifyKeyBtn.textContent = 'Verify';
+      }
+    });
+  }
+
+  var copyUrlBtn = document.getElementById('obCopyUrl');
+  if (copyUrlBtn) {
+    copyUrlBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var urlEl = document.querySelector('.ob-mcp-url');
+      if (!urlEl) return;
+      navigator.clipboard.writeText(urlEl.textContent.trim()).then(function(){
+        var orig = copyUrlBtn.textContent;
+        copyUrlBtn.textContent = 'Copied!';
+        setTimeout(function(){ copyUrlBtn.textContent = orig; }, 1500);
+      }).catch(function(){});
+    });
+  }
+
+  // Step 3 — Workspace details & slug preview
+  var projectNameInput = document.getElementById('obProjectName');
+  var slugPreview = document.getElementById('obSlugPreview');
+
+  function slugify(text) {
+    return (text || '').toString().toLowerCase().trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^\w\-]+/g, '')
+      .replace(/\-\-+/g, '-')
+      .replace(/^-+/, '')
+      .replace(/-+$/, '') || 'my-workspace';
+  }
+
+  if (projectNameInput && slugPreview) {
+    slugPreview.textContent = slugify(projectNameInput.value);
+    projectNameInput.addEventListener('input', function(){
+      slugPreview.textContent = slugify(projectNameInput.value);
+    });
+  }
+
+  var selectedMonitors = {{ (flux_monitors or []) | tojson }};
+  document.querySelectorAll('#obMonitorChips .ob-chip').forEach(function(chip){
     var label = chip.textContent;
-    function syncLabel(on) { chip.textContent = (on ? '✓ ' : '') + label; }
+    function syncChip(on) {
+      chip.textContent = (on ? '✓ ' : '') + label;
+      chip.classList.toggle('is-selected', on);
+    }
     var isOn = selectedMonitors.indexOf(chip.dataset.monitor) !== -1;
-    if (isOn) chip.classList.add('is-selected');
-    syncLabel(isOn);
+    syncChip(isOn);
     chip.addEventListener('click', function(){
       var m = chip.dataset.monitor;
       var idx = selectedMonitors.indexOf(m);
       var on;
-      if (idx === -1) { selectedMonitors.push(m); chip.classList.add('is-selected'); on = true; }
-      else { selectedMonitors.splice(idx, 1); chip.classList.remove('is-selected'); on = false; }
-      syncLabel(on);
+      if (idx === -1) {
+        selectedMonitors.push(m);
+        on = true;
+      } else {
+        selectedMonitors.splice(idx, 1);
+        on = false;
+      }
+      syncChip(on);
       savePrefs({ monitors: selectedMonitors });
     });
   });
 
-  // Step 3 — connect cards: brief "Authorizing…" pulse on click. The OAuth
-  // flow itself runs in the new tab (target="_blank"); this just gives
-  // immediate feedback in-page. Real "live" status only ever comes from the
-  // server (conn_status on load, or the "Refresh status" link), so once the
-  // pulse ends we fall back to the idle label rather than faking a connect.
+  // Step 4 — Connect cards pulse
   document.querySelectorAll('.ob-conn-card').forEach(function(card){
     card.addEventListener('click', function(){
       if (card.classList.contains('is-live') || card.classList.contains('is-auth')) return;
       var statusEl = card.querySelector('.ob-conn-status');
-      var idleLabel = statusEl.textContent;
+      var idleLabel = statusEl ? statusEl.textContent : '';
       card.classList.add('is-auth');
-      statusEl.textContent = '◌ Authorizing…';
+      if (statusEl) statusEl.textContent = '◌ Authorizing…';
       setTimeout(function(){
         card.classList.remove('is-auth');
-        statusEl.textContent = idleLabel;
+        if (statusEl) statusEl.textContent = idleLabel;
       }, 900);
     });
   });
 
-  // Step 4 — AI client (single-select) + copy URL
-  var selectedClient = {{ (preferred_ai_client or '') | tojson }};
-  var mcpHintEl = document.getElementById('obMcpHint');
-  function syncMcpHint() {
-    var card = document.querySelector('.ob-client-card[data-client="' + selectedClient + '"]');
-    var name = card ? card.querySelector('.ob-client-name').textContent : '';
-    if (!name) {
-      mcpHintEl.textContent = 'Paste this into your client\'s MCP settings — we\'ll walk you through it for the tool you picked.';
-    } else if (selectedClient === 'inapp') {
-      mcpHintEl.textContent = 'You picked the in-app chat — no MCP setup needed, Flux is already right here.';
-    } else {
-      mcpHintEl.innerHTML = 'Paste this into ' + name + '’s MCP settings — see the <a href="/tutorials/connect-ai-mcp">' + name + ' walkthrough</a> for exact steps.';
-    }
-  }
-  document.querySelectorAll('.ob-client-card').forEach(function(card){
-    if (card.dataset.client === selectedClient) card.classList.add('is-selected');
-    card.addEventListener('click', function(){
-      document.querySelectorAll('.ob-client-card').forEach(function(c){ c.classList.remove('is-selected'); });
-      card.classList.add('is-selected');
-      selectedClient = card.dataset.client;
-      syncMcpHint();
-      savePrefs({ ai_client: selectedClient });
-    });
-  });
-  syncMcpHint();
-  var copyBtn = document.getElementById('obCopyUrl');
-  copyBtn.addEventListener('click', function(){
-    var url = document.querySelector('.ob-mcp-url').textContent;
-    navigator.clipboard.writeText(url).then(function(){
-      var orig = copyBtn.textContent;
-      copyBtn.textContent = 'Copied!';
-      setTimeout(function(){ copyBtn.textContent = orig; }, 1500);
-    }).catch(function(){});
-  });
-
-  // Step 5 — real health-check scan (paced reveal of real data, not fake findings)
+  // Step 5 — First briefing health-check scan
   function runHealthCheck() {
     briefingStarted = true;
     var pctEl = document.getElementById('obScanPct');
@@ -505,12 +731,104 @@
         tick();
       })
       .catch(function(){
-        summaryText.textContent = 'Your first briefing is ready. See you on the home screen.';
-        summaryEl.hidden = false;
+        if (summaryText) summaryText.textContent = 'Your first briefing is ready. See you on the home screen.';
+        if (summaryEl) summaryEl.hidden = false;
       });
   }
 
-  // Deep-link support: /tutorial?step=3 (used by the Step 3 "refresh status" link)
+  // Navigation handlers
+  if (nextBtn) {
+    nextBtn.addEventListener('click', async function(){
+      if (nextBtn.disabled) return;
+
+      if (step === 2) {
+        if (aiMode === 'key') {
+          savePrefs({ ai_client: activeProvider });
+          if (apiKeyInput && apiKeyInput.value.trim()) {
+            stagedKey = apiKeyInput.value.trim();
+          }
+        } else {
+          savePrefs({ ai_client: 'mcp' });
+        }
+        go(3);
+        return;
+      }
+
+      if (step === 3) {
+        var pName = (projectNameInput ? projectNameInput.value : '').trim();
+        if (!pName) {
+          alert('Please enter a workspace name to continue.');
+          if (projectNameInput) projectNameInput.focus();
+          return;
+        }
+
+        if (!activeProjectId || (pName && pName !== initialProjectName)) {
+          nextBtn.disabled = true;
+          nextBtn.textContent = 'Creating workspace…';
+          try {
+            var pRes = await fetch('/api/projects', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ name: pName })
+            });
+            var pData = await pRes.json();
+            if (pData.success && pData.project) {
+              activeProjectId = pData.project.id;
+              initialProjectName = pData.project.name;
+            }
+          } catch (e) {
+            console.error(e);
+          } finally {
+            nextBtn.disabled = false;
+          }
+        }
+
+        savePrefs({ monitors: selectedMonitors });
+
+        if (stagedKey && activeProjectId) {
+          try {
+            await fetch('/api/ask/keys', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({
+                provider: activeProvider,
+                api_key: stagedKey,
+                scope: 'personal'
+              })
+            });
+          } catch (_) {}
+        }
+
+        go(4);
+        return;
+      }
+
+      if (step === 4) {
+        go(5);
+        return;
+      }
+
+      if (step === 5) {
+        nextBtn.disabled = true;
+        nextBtn.textContent = 'Opening briefing…';
+        try {
+          await completeTutorial();
+        } catch (_) {}
+        window.location.href = '/home';
+        return;
+      }
+
+      go(step + 1);
+    });
+  }
+
+  if (backBtn) {
+    backBtn.addEventListener('click', function(){ go(step - 1); });
+  }
+
+  // Deep-link support: /tutorial?step=4
   var qsStep = parseInt(new URLSearchParams(window.location.search).get('step'), 10);
   if (qsStep >= 1 && qsStep <= 5) step = qsStep;
 

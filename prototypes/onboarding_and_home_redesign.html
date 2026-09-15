@@ -1,0 +1,2183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fluxito UX Prototype — Onboarding Journey & Redesigned Home</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,300..800;1,300..800&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       Fluxito "Ledger" Design System Tokens
+       ============================================================ */
+    :root {
+      --paper: #F6F1E8;
+      --paper-2: #F1EBDF;
+      --paper-3: #E8E0D0;
+      --card: #FFFDF8;
+      --card-well: #FBF7EE;
+      --line: #E5DCCB;
+      --line-2: #E0D6C3;
+      --line-3: #EEE6D6;
+      --line-strong: #C9BFA9;
+      --ink: #201B14;
+      --ink-2: #39332A;
+      --ink-soft: #57503F;
+      --muted: #8A857C;
+      --muted-2: #A89F8D;
+      --accent: #C4703A;
+      --accent-hover: #A85A2B;
+      --accent-soft: rgba(196, 112, 58, 0.12);
+      --good: #3E8A5F;
+      --good-bg: #F2FBF4;
+      --warn: #C4903A;
+      --warn-bg: #FFF9EF;
+      --bad: #B4452F;
+      --bad-bg: #FFF6F0;
+      --serif: 'Newsreader', Georgia, serif;
+      --sans: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono: 'IBM Plex Mono', monospace;
+      --r-sm: 6px;
+      --r-md: 10px;
+      --r-lg: 16px;
+      --r-xl: 20px;
+      --shadow-sm: 0 2px 6px rgba(32, 27, 20, 0.04);
+      --shadow-md: 0 8px 24px rgba(32, 27, 20, 0.07);
+      --shadow-lg: 0 16px 40px rgba(32, 27, 20, 0.12);
+      --shadow-float: 0 20px 48px rgba(32, 27, 20, 0.18), 0 4px 12px rgba(32, 27, 20, 0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--sans);
+      background: #181512;
+      color: var(--ink);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Prototype Switcher Banner */
+    .proto-bar {
+      background: #1E1A16;
+      border-bottom: 1px solid #332B24;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #E2DACB;
+      font-size: 13px;
+      z-index: 9999;
+      flex-shrink: 0;
+    }
+    .proto-badge {
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .proto-title {
+      font-weight: 600;
+      color: #FFFDF8;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .proto-tabs {
+      display: flex;
+      gap: 6px;
+      background: #28221C;
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid #3D342C;
+    }
+    .proto-tab-btn {
+      background: transparent;
+      border: none;
+      color: #A89F8D;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-family: var(--sans);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+    .proto-tab-btn:hover { color: #FFFDF8; }
+    .proto-tab-btn.active {
+      background: #3B332B;
+      color: #FFFDF8;
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    .proto-tab-num {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10.5px;
+      font-family: var(--mono);
+    }
+    .proto-tab-btn.active .proto-tab-num {
+      background: var(--accent);
+      color: white;
+    }
+
+    /* Main Viewport Container */
+    .proto-viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--paper);
+    }
+    .proto-view {
+      position: absolute;
+      inset: 0;
+      display: none;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .proto-view.active {
+      display: flex;
+      opacity: 1;
+    }
+
+    /* ============================================================
+       VIEW 1: ONBOARDING JOURNEY
+       ============================================================ */
+    .ob-container {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      background: var(--paper);
+    }
+    .ob-rail {
+      width: 320px;
+      background: #1C1813;
+      color: #F6F1E8;
+      padding: 40px 32px;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #2F2820;
+      flex-shrink: 0;
+    }
+    .ob-brand {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--serif);
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin-bottom: 48px;
+    }
+    .ob-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .ob-steps-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .ob-step-nav-item {
+      display: flex;
+      gap: 16px;
+      position: relative;
+      cursor: pointer;
+      opacity: 0.45;
+      transition: opacity 0.2s;
+    }
+    .ob-step-nav-item.active { opacity: 1; }
+    .ob-step-nav-item.completed { opacity: 0.85; }
+    .ob-step-indicator {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1.5px solid #4A4033;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: #A89F8D;
+      background: #1C1813;
+      z-index: 2;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+    }
+    .ob-step-nav-item.active .ob-step-indicator {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+    .ob-step-nav-item.completed .ob-step-indicator {
+      border-color: var(--good);
+      background: var(--good);
+      color: #fff;
+    }
+    .ob-step-text {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .ob-step-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #FFFDF8;
+    }
+    .ob-step-subtitle {
+      font-size: 11.5px;
+      color: #9E9585;
+      line-height: 1.4;
+    }
+    .ob-rail-bottom {
+      margin-top: auto;
+      padding-top: 24px;
+      border-top: 1px solid #2E271F;
+      font-size: 12px;
+      color: #8A8172;
+      line-height: 1.5;
+    }
+    .ob-rail-quote {
+      font-family: var(--serif);
+      font-style: italic;
+      color: #D6CEBE;
+      margin-bottom: 6px;
+    }
+
+    /* Onboarding Content Area */
+    .ob-main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 56px 80px;
+      display: flex;
+      flex-direction: column;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .ob-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 40px;
+    }
+    .ob-stage-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .ob-skip-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 4px;
+    }
+    .ob-skip-btn:hover { color: var(--ink); }
+
+    .ob-screen {
+      display: none;
+      flex-direction: column;
+      animation: fadeIn 0.25s ease-out;
+    }
+    .ob-screen.active { display: flex; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .ob-heading {
+      font-family: var(--serif);
+      font-size: 38px;
+      font-weight: 500;
+      line-height: 1.15;
+      color: var(--ink);
+      margin-bottom: 12px;
+    }
+    .ob-heading em {
+      font-style: italic;
+      color: var(--ink-2);
+    }
+    .ob-desc {
+      font-size: 15px;
+      color: var(--ink-soft);
+      line-height: 1.55;
+      margin-bottom: 32px;
+      max-width: 680px;
+    }
+
+    /* Choice Cards for Step 1 (AI Setup) */
+    .ai-choice-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 28px;
+    }
+    .ai-choice-card {
+      background: var(--card);
+      border: 2px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .ai-choice-card:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .ai-choice-card.selected {
+      border-color: var(--accent);
+      background: var(--card);
+      box-shadow: 0 0 0 1px var(--accent), var(--shadow-md);
+    }
+    .ai-popular-ribbon {
+      position: absolute;
+      top: -10px;
+      right: 18px;
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 9px;
+      border-radius: 999px;
+    }
+    .ai-choice-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .ai-choice-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .ai-icon-mcp {
+      background: #25201B;
+      color: #F6F1E8;
+      border: 1px solid #43392E;
+    }
+    .ai-icon-key {
+      background: #F4EDE0;
+      color: var(--accent);
+      border: 1px solid var(--line-2);
+    }
+    .ai-choice-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .ai-choice-tagline {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+      margin-top: 2px;
+    }
+    .ai-choice-body {
+      font-size: 13.5px;
+      color: var(--ink-soft);
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .ai-client-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--line-3);
+    }
+    .ai-badge-pill {
+      font-size: 11px;
+      font-family: var(--mono);
+      padding: 4px 8px;
+      border-radius: 5px;
+      background: var(--card-well);
+      border: 1px solid var(--line-2);
+      color: var(--ink-2);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Sub-panels inside Step 1 */
+    .ai-subpanel {
+      background: var(--card);
+      border: 1px solid var(--line-2);
+      border-radius: var(--r-md);
+      padding: 24px;
+      margin-bottom: 32px;
+    }
+    .ai-subpanel-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ai-mcp-codeblock {
+      background: #1E1A16;
+      color: #E2DACB;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      padding: 14px 18px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid #3B332B;
+    }
+    .ai-copy-btn {
+      background: #382F26;
+      border: 1px solid #574B3E;
+      color: #FFFDF8;
+      padding: 6px 12px;
+      border-radius: 5px;
+      font-family: var(--mono);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ai-copy-btn:hover { background: var(--accent); border-color: var(--accent); }
+
+    /* In-App API Key Form Inputs */
+    .provider-select-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .provider-btn {
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .provider-btn.active {
+      background: var(--ink);
+      color: var(--paper);
+      border-color: var(--ink);
+    }
+    .input-field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .input-label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--ink-2);
+      display: flex;
+      justify-content: space-between;
+    }
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+    .ob-input {
+      flex: 1;
+      background: var(--card-well);
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13.5px;
+      font-family: var(--sans);
+      color: var(--ink);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .ob-input:focus { border-color: var(--accent); }
+    .ob-test-btn {
+      background: var(--card-well);
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      padding: 0 16px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--ink);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .ob-test-btn:hover { border-color: var(--ink); background: var(--paper); }
+    .input-hint {
+      font-size: 11.5px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    /* Form for Step 2 (Create Project) */
+    .project-form-wrap {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: 32px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 32px;
+    }
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .ob-select {
+      background: var(--card-well);
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13.5px;
+      color: var(--ink);
+      outline: none;
+      width: 100%;
+    }
+    .role-pills {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .role-pill {
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 16px;
+      font-size: 12.5px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .role-pill.selected {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Connectors for Step 3 */
+    .conn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .conn-card {
+      background: var(--card);
+      border: 1px solid var(--line-2);
+      border-radius: var(--r-md);
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .conn-card:hover { border-color: var(--ink-2); transform: translateY(-1px); }
+    .conn-card.connected { border-color: var(--good); background: #FAFDFB; }
+    .conn-info {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .conn-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 13px;
+    }
+    .conn-name { font-size: 14px; font-weight: 700; color: var(--ink); }
+    .conn-sub { font-size: 12px; color: var(--muted); }
+    .conn-badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+      color: var(--ink);
+    }
+    .conn-card.connected .conn-badge {
+      background: var(--good-bg);
+      border-color: var(--good);
+      color: var(--good);
+      font-weight: 600;
+    }
+
+    /* Actions Footer */
+    .ob-footer {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: auto;
+      padding-top: 24px;
+      border-top: 1px solid var(--line-2);
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s, transform 0.15s;
+    }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--line-strong);
+      color: var(--ink);
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-secondary:hover { border-color: var(--ink); }
+    .ob-time-estimate {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--muted-2);
+    }
+
+    /* ============================================================
+       VIEW 2: REDESIGNED HOME PAGE WITH PROMINENT MCP & FLOATING CHAT
+       ============================================================ */
+    .home-layout {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      background: var(--paper);
+    }
+
+    /* Left Sidebar */
+    .sidebar {
+      width: 240px;
+      background: var(--paper-2);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 14px;
+      flex-shrink: 0;
+    }
+    .sidebar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding: 0 8px;
+    }
+    .sidebar-brand {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      font-family: var(--serif);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .beta-pill {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 600;
+      padding: 2px 6px;
+      background: var(--card-well);
+      border: 1px solid var(--line-2);
+      border-radius: 99px;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+    .workspace-btn {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      cursor: pointer;
+    }
+    .ws-mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 5px;
+      background: var(--ink);
+      color: var(--paper);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--mono);
+    }
+    .ws-text {
+      flex: 1;
+      text-align: left;
+      line-height: 1.2;
+    }
+    .ws-name { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+    .ws-role { font-size: 10px; font-family: var(--mono); color: var(--muted); text-transform: uppercase; }
+
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 7px;
+      font-size: 13.5px;
+      color: var(--ink-soft);
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+    .nav-item:hover { background: var(--card-well); color: var(--ink); }
+    .nav-item.active {
+      background: var(--ink);
+      color: var(--paper);
+      font-weight: 600;
+    }
+    .nav-sep {
+      height: 1px;
+      background: var(--line-2);
+      margin: 16px 8px;
+    }
+    .sidebar-bottom {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 8px;
+      margin-top: 12px;
+      border-top: 1px solid var(--line-2);
+    }
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #7B68EE;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .user-name { font-size: 12.5px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+    .user-proj { font-size: 10.5px; color: var(--muted); }
+
+    /* Home Main Center Column */
+    .home-center-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .home-scroll-feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 40px 48px 120px; /* generous bottom padding for floating bar */
+    }
+    .home-feed-inner {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    .home-topline {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .home-date-stamp {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .home-history-link {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .home-h1 {
+      font-family: var(--serif);
+      font-size: 38px;
+      font-weight: 500;
+      line-height: 1.15;
+      color: var(--ink);
+      margin-bottom: 6px;
+    }
+    .home-sub {
+      font-size: 14.5px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       NEW STAR FEATURE: PROMINENT MCP SETUP HERO CARD
+       ══════════════════════════════════════════════════════════════ */
+    .mcp-spotlight-card {
+      background: linear-gradient(135deg, #1F1A15 0%, #29221B 100%);
+      color: #F6F1E8;
+      border-radius: var(--r-xl);
+      padding: 26px 30px;
+      margin-bottom: 28px;
+      border: 1px solid #453A2F;
+      box-shadow: 0 12px 32px rgba(32, 27, 20, 0.15);
+      position: relative;
+      overflow: hidden;
+    }
+    .mcp-spotlight-card::before {
+      content: "";
+      position: absolute;
+      top: -40px;
+      right: -40px;
+      width: 180px;
+      height: 180px;
+      background: radial-gradient(circle, rgba(196, 112, 58, 0.25) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .mcp-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+    .mcp-eyebrow-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .mcp-pill-badge {
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 99px;
+    }
+    .mcp-subhead {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: #C8BFA9;
+    }
+    .mcp-title {
+      font-family: var(--serif);
+      font-size: 26px;
+      font-weight: 500;
+      color: #FFFDF8;
+      margin-bottom: 8px;
+    }
+    .mcp-lead {
+      font-size: 13.5px;
+      color: #D6CEBE;
+      line-height: 1.5;
+      max-width: 620px;
+      margin-bottom: 20px;
+    }
+    .mcp-client-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .mcp-client-pill {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #E2DACB;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s;
+    }
+    .mcp-client-pill:hover {
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+    }
+    .mcp-client-pill.active {
+      background: #FFFDF8;
+      color: #1F1A15;
+      border-color: #FFFDF8;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .mcp-client-pill .logo-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .mcp-snippet-box {
+      background: #15120E;
+      border: 1px solid #382F24;
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: #EAE2D2;
+    }
+    .mcp-command-text {
+      overflow-x: auto;
+      white-space: nowrap;
+      color: #F6F1E8;
+    }
+    .mcp-copy-action {
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .mcp-copy-action:hover { background: var(--accent-hover); }
+    .mcp-help-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 14px;
+      font-size: 12px;
+      color: #A89F8D;
+    }
+    .mcp-help-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .mcp-help-link:hover { text-decoration: underline; }
+
+    /* Normal Briefing Cards */
+    .briefing-card {
+      display: flex;
+      gap: 16px;
+      padding: 20px 22px;
+      background: var(--card);
+      border: 1px solid var(--line-2);
+      border-radius: var(--r-lg);
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+    .briefing-pill {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      height: fit-content;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .briefing-pill.sev-good { background: var(--good); color: #fff; }
+    .briefing-pill.sev-watch { background: var(--warn); color: #fff; }
+    .briefing-body { flex: 1; min-width: 0; }
+    .briefing-title { font-size: 15.5px; font-weight: 700; color: var(--ink); }
+    .briefing-desc { font-size: 13.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.5; }
+
+    /* Right Rail */
+    .home-rail {
+      width: 300px;
+      border-left: 1px solid var(--line);
+      background: var(--paper-2);
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+    .rail-heading {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .rail-card {
+      padding: 16px 18px;
+      background: var(--card);
+      border: 1px solid var(--line-2);
+      border-radius: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .rail-task-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .rail-dot-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--good);
+      box-shadow: 0 0 0 3px rgba(62, 138, 95, 0.2);
+    }
+    .rail-task-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+      padding-left: 18px;
+    }
+    .hsh-metric {
+      display: flex;
+      justify-content: space-between;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--line-3);
+      font-size: 13px;
+      color: var(--ink-soft);
+    }
+    .hsh-metric:last-child { border-bottom: none; }
+    .hsh-metric .mono { font-family: var(--mono); color: var(--ink); font-weight: 600; }
+
+    /* ══════════════════════════════════════════════════════════════
+       NEW FLOATING CHATBAR (No longer pinning the viewport!)
+       ══════════════════════════════════════════════════════════════ */
+    .floating-chat-container {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - 96px);
+      max-width: 800px;
+      z-index: 100;
+      pointer-events: auto;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .floating-chat-pill {
+      background: rgba(255, 253, 248, 0.94);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--line-strong);
+      border-radius: 18px;
+      padding: 10px 14px;
+      box-shadow: var(--shadow-float);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: text;
+      transition: all 0.2s ease;
+    }
+    .floating-chat-pill:focus-within, .floating-chat-pill:hover {
+      border-color: var(--accent);
+      box-shadow: 0 24px 54px rgba(32, 27, 20, 0.22), 0 0 0 1px var(--accent);
+      transform: translateY(-2px);
+    }
+    .float-flux-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: var(--ink);
+      color: var(--paper);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--serif);
+      font-style: italic;
+      font-size: 16px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .float-input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      outline: none;
+      font-family: var(--sans);
+      font-size: 14.5px;
+      color: var(--ink);
+    }
+    .float-input::placeholder { color: var(--muted); }
+    .float-kbd {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--line-2);
+      padding: 3px 8px;
+      border-radius: 5px;
+      background: var(--card-well);
+    }
+    .float-ask-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .float-ask-btn:hover { background: var(--accent-hover); }
+
+    .floating-chips-row {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .float-chip {
+      background: rgba(255, 253, 248, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 12px;
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.15s;
+    }
+    .float-chip:hover {
+      border-color: var(--accent);
+      color: var(--accent-hover);
+      background: var(--card);
+    }
+
+    /* Floating Modal Drawer (When user presses Cmd+K or types in floating bar) */
+    .chat-drawer-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(24, 21, 18, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .chat-drawer-overlay.active { display: flex; animation: fadeIn 0.2s ease-out; }
+    .chat-drawer-modal {
+      width: 100%;
+      max-width: 680px;
+      background: var(--card);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-xl);
+      box-shadow: var(--shadow-float);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .drawer-head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line-2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--paper-2);
+    }
+    .drawer-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .drawer-close {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .drawer-body {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .ai-warning-box {
+      background: var(--warn-bg);
+      border: 1px solid var(--warn);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13px;
+      color: #7A5615;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      line-height: 1.45;
+    }
+
+    /* Interactive Feedback Toast */
+    .proto-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--ink);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: var(--mono);
+      box-shadow: var(--shadow-lg);
+      z-index: 10000;
+      display: none;
+      animation: toastIn 0.25s ease-out;
+    }
+    @keyframes toastIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* Comparison / Architecture Tab */
+    .arch-view {
+      padding: 48px 64px;
+      overflow-y: auto;
+      max-width: 1080px;
+      margin: 0 auto;
+      color: var(--ink);
+    }
+    .arch-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 24px;
+    }
+    .arch-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: 28px;
+    }
+    .arch-card.before { border-color: #E2B8B8; }
+    .arch-card.after { border-color: #A3D4B6; box-shadow: var(--shadow-md); }
+    .arch-badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+    .arch-card.before .arch-badge { background: #FDE8E8; color: var(--bad); }
+    .arch-card.after .arch-badge { background: #E8F7EE; color: var(--good); }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       TOP INTERACTIVE NAVIGATION SWITCHER
+       ============================================================ -->
+  <header class="proto-bar">
+    <div class="proto-title">
+      <span class="proto-badge">Interactive Prototype</span>
+      <span>Fluxito Onboarding & Home Redesign</span>
+    </div>
+
+    <div class="proto-tabs">
+      <button class="proto-tab-btn active" onclick="switchView('onboarding')">
+        <span class="proto-tab-num">1</span>
+        <span>New Onboarding Journey</span>
+      </button>
+      <button class="proto-tab-btn" onclick="switchView('home')">
+        <span class="proto-tab-num">2</span>
+        <span>Redesigned Home & MCP</span>
+      </button>
+      <button class="proto-tab-btn" onclick="switchView('comparison')">
+        <span class="proto-tab-num">3</span>
+        <span>UX Architecture & Spec</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="proto-viewport">
+
+    <!-- ============================================================
+         VIEW 1: NEW ONBOARDING JOURNEY
+         ============================================================ -->
+    <section id="view-onboarding" class="proto-view active">
+      <div class="ob-container">
+        <!-- Left Steps Rail -->
+        <aside class="ob-rail">
+          <div class="ob-brand">
+            <span>fluxito</span>
+            <span class="ob-dot"></span>
+          </div>
+
+          <div class="ob-steps-nav">
+            <div class="ob-step-nav-item active" id="obNav1" onclick="jumpToObStep(1)">
+              <div class="ob-step-indicator">1</div>
+              <div class="ob-step-text">
+                <div class="ob-step-title">Choose AI & Engine</div>
+                <div class="ob-step-subtitle">Use MCP or bring API key</div>
+              </div>
+            </div>
+
+            <div class="ob-step-nav-item" id="obNav2" onclick="jumpToObStep(2)">
+              <div class="ob-step-indicator">2</div>
+              <div class="ob-step-text">
+                <div class="ob-step-title">Create Project</div>
+                <div class="ob-step-subtitle">Workspace, currency & timezone</div>
+              </div>
+            </div>
+
+            <div class="ob-step-nav-item" id="obNav3" onclick="jumpToObStep(3)">
+              <div class="ob-step-indicator">3</div>
+              <div class="ob-step-text">
+                <div class="ob-step-title">Connect Data</div>
+                <div class="ob-step-subtitle">GA4, GTM, Ads & Warehouses</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ob-rail-bottom">
+            <div class="ob-rail-quote">“No more landing on an empty home page without knowing where your AI lives.”</div>
+            <div>— Fluxito Onboarding System</div>
+          </div>
+        </aside>
+
+        <!-- Main Onboarding Content -->
+        <div class="ob-main">
+          <div class="ob-topbar">
+            <span class="ob-stage-tag" id="obStageTag">Step 1 of 3 · AI Engine Setup</span>
+            <button class="ob-skip-btn" onclick="finishOnboarding()">Skip straight to Home →</button>
+          </div>
+
+          <!-- STEP 1: AI SETUP (MCP vs IN-APP KEY) -->
+          <div class="ob-screen active" id="obStep1">
+            <h1 class="ob-heading">How would you like to <em>talk to Flux?</em></h1>
+            <p class="ob-desc">
+              Fluxito runs both as a native in-app conversational analyst and as an MCP server inside your existing Claude, Cursor, or ChatGPT subscriptions.
+            </p>
+
+            <div class="ai-choice-grid">
+              <!-- Choice 1: MCP via Subscription (Highlighted) -->
+              <div class="ai-choice-card selected" id="cardMcp" onclick="selectAiOption('mcp')">
+                <span class="ai-popular-ribbon">Most Popular</span>
+                <div class="ai-choice-head">
+                  <div class="ai-choice-icon ai-icon-mcp">⚡</div>
+                  <div>
+                    <div class="ai-choice-title">Connect via MCP</div>
+                    <div class="ai-choice-tagline">Claude · Cursor · ChatGPT · Windsurf</div>
+                  </div>
+                </div>
+                <div class="ai-choice-body">
+                  Use your existing <strong>Claude Pro/Team, Cursor, or ChatGPT</strong> subscription. Zero API token bills, runs directly where you already work.
+                </div>
+                <div class="ai-client-badges">
+                  <span class="ai-badge-pill">Claude Desktop</span>
+                  <span class="ai-badge-pill">Cursor Editor</span>
+                  <span class="ai-badge-pill">Windsurf</span>
+                  <span class="ai-badge-pill">Claude Code</span>
+                </div>
+              </div>
+
+              <!-- Choice 2: In-App AI Provider Key -->
+              <div class="ai-choice-card" id="cardKey" onclick="selectAiOption('key')">
+                <div class="ai-choice-head">
+                  <div class="ai-choice-icon ai-icon-key">🔑</div>
+                  <div>
+                    <div class="ai-choice-title">In-App Chat Key</div>
+                    <div class="ai-choice-tagline">OpenAI · Anthropic · Gemini · Grok</div>
+                  </div>
+                </div>
+                <div class="ai-choice-body">
+                  Add your own LLM API key to enable Flux's interactive chat bar and scheduled anomaly briefings right inside this dashboard.
+                </div>
+                <div class="ai-client-badges">
+                  <span class="ai-badge-pill">Claude 3.7 Sonnet</span>
+                  <span class="ai-badge-pill">GPT-4o</span>
+                  <span class="ai-badge-pill">Gemini 2.5 Flash</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Detail Panel depending on choice -->
+            <div id="mcpConfigSection" class="ai-subpanel">
+              <div class="ai-subpanel-title">
+                <span>Your Personal Fluxito MCP Endpoint</span>
+                <span style="font-size:11px;font-family:var(--mono);color:var(--good);background:var(--good-bg);padding:2px 8px;border-radius:4px;">Ready to plug in</span>
+              </div>
+              <p style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;">
+                You can add this to Claude Desktop or Cursor immediately, or finish setup and copy it from your home page anytime:
+              </p>
+              <div class="ai-mcp-codeblock">
+                <span>https://fluxito.app/mcp</span>
+                <button class="ai-copy-btn" onclick="copySnippet('https://fluxito.app/mcp')">Copy URL</button>
+              </div>
+            </div>
+
+            <div id="keyConfigSection" class="ai-subpanel" style="display: none;">
+              <div class="ai-subpanel-title">
+                <span>Enter Your AI Provider API Key</span>
+                <span style="font-size:11px;font-family:var(--mono);color:var(--muted);">Encrypted at rest with AES-256</span>
+              </div>
+              <div class="provider-select-row">
+                <div class="provider-btn active" onclick="setProvider(this, 'Anthropic')">Anthropic</div>
+                <div class="provider-btn" onclick="setProvider(this, 'OpenAI')">OpenAI</div>
+                <div class="provider-btn" onclick="setProvider(this, 'Google Gemini')">Gemini</div>
+                <div class="provider-btn" onclick="setProvider(this, 'OpenRouter')">OpenRouter</div>
+              </div>
+
+              <div class="input-field-group">
+                <label class="input-label">
+                  <span>API Key for <strong id="selectedProviderLabel">Anthropic</strong></span>
+                  <span style="color:var(--muted);font-weight:normal;">e.g. sk-ant-api03-...</span>
+                </label>
+                <div class="input-row">
+                  <input type="password" class="ob-input" id="apiKeyInput" placeholder="Paste your API key here..." value="sk-ant-api03-sample-encrypted-key">
+                  <button type="button" class="ob-test-btn" onclick="testKey()">Verify Key</button>
+                </div>
+                <div class="input-hint" id="keyTestResult">✓ Key format valid. Your in-app chat bar will be immediately functional.</div>
+              </div>
+            </div>
+
+            <div class="ob-footer">
+              <button class="btn-primary" onclick="nextObStep(2)">
+                <span>Continue to Project Setup</span>
+                <span>→</span>
+              </button>
+              <span class="ob-time-estimate">Takes ~1 minute</span>
+            </div>
+          </div>
+
+          <!-- STEP 2: CREATE PROJECT -->
+          <div class="ob-screen" id="obStep2">
+            <h1 class="ob-heading">Create your <em>analytics workspace.</em></h1>
+            <p class="ob-desc">
+              Every project in Fluxito isolates its own data connections, tracking plans, audit logs, and AI conversations. Name your project to get started.
+            </p>
+
+            <div class="project-form-wrap">
+              <div class="input-field-group">
+                <label class="input-label">Project / Workspace Name</label>
+                <input type="text" class="ob-input" id="projectNameInput" placeholder="e.g. BMK Eco Farms, Acme DTC, or Client Name" value="BMK Eco Farms">
+                <div class="input-hint">Your project slug will be: <strong class="mono" id="projectSlugPreview">bmk-eco-farms</strong></div>
+              </div>
+
+              <div class="form-grid-2">
+                <div class="input-field-group">
+                  <label class="input-label">Primary Currency</label>
+                  <select class="ob-select" id="projectCurrency">
+                    <option value="USD">USD ($) — United States Dollar</option>
+                    <option value="INR" selected>INR (₹) — Indian Rupee</option>
+                    <option value="EUR">EUR (€) — Euro</option>
+                    <option value="GBP">GBP (£) — British Pound</option>
+                  </select>
+                </div>
+
+                <div class="input-field-group">
+                  <label class="input-label">Reporting Timezone</label>
+                  <select class="ob-select" id="projectTimezone">
+                    <option value="Asia/Kolkata" selected>Asia/Kolkata (IST +05:30)</option>
+                    <option value="America/New_York">America/New_York (EST -05:00)</option>
+                    <option value="America/Los_Angeles">America/Los_Angeles (PST -08:00)</option>
+                    <option value="Europe/London">Europe/London (GMT +00:00)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="input-field-group">
+                <label class="input-label">What is your primary focus for this project?</label>
+                <div class="role-pills">
+                  <span class="role-pill selected" onclick="toggleRole(this)">ROAS & Paid Media</span>
+                  <span class="role-pill" onclick="toggleRole(this)">GTM Tag QA & Auditing</span>
+                  <span class="role-pill" onclick="toggleRole(this)">GA4 Tracking Plans</span>
+                  <span class="role-pill" onclick="toggleRole(this)">Executive Reporting</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="ob-footer">
+              <button class="btn-secondary" onclick="nextObStep(1)">← Back</button>
+              <button class="btn-primary" onclick="nextObStep(3)">
+                <span>Create Workspace & Connect Data</span>
+                <span>→</span>
+              </button>
+              <span class="ob-time-estimate">Almost done</span>
+            </div>
+          </div>
+
+          <!-- STEP 3: CONNECT DATA (OPTIONAL) -->
+          <div class="ob-screen" id="obStep3">
+            <h1 class="ob-heading">Connect your <em>data sources.</em></h1>
+            <p class="ob-desc">
+              Flux needs read-only access to verify your tracking and report marketing health. Connect now or click "Finish" to go to your new Home page.
+            </p>
+
+            <div class="conn-grid">
+              <div class="conn-card connected" onclick="toggleConn(this)">
+                <div class="conn-info">
+                  <div class="conn-icon" style="color:#EA4335">G</div>
+                  <div>
+                    <div class="conn-name">Google Tag Manager</div>
+                    <div class="conn-sub">Tags, triggers & variables</div>
+                  </div>
+                </div>
+                <span class="conn-badge">✓ Connected</span>
+              </div>
+
+              <div class="conn-card connected" onclick="toggleConn(this)">
+                <div class="conn-info">
+                  <div class="conn-icon" style="color:#F9AB00">GA</div>
+                  <div>
+                    <div class="conn-name">Google Analytics 4</div>
+                    <div class="conn-sub">Events, conversions & audiences</div>
+                  </div>
+                </div>
+                <span class="conn-badge">✓ Connected</span>
+              </div>
+
+              <div class="conn-card" onclick="toggleConn(this)">
+                <div class="conn-info">
+                  <div class="conn-icon" style="color:#1877F2">M</div>
+                  <div>
+                    <div class="conn-name">Meta Ads</div>
+                    <div class="conn-sub">Campaign spend & Pixel QA</div>
+                  </div>
+                </div>
+                <span class="conn-badge">+ Connect</span>
+              </div>
+
+              <div class="conn-card" onclick="toggleConn(this)">
+                <div class="conn-info">
+                  <div class="conn-icon" style="color:#4285F4">BQ</div>
+                  <div>
+                    <div class="conn-name">Google BigQuery</div>
+                    <div class="conn-sub">Warehouse analytics</div>
+                  </div>
+                </div>
+                <span class="conn-badge">+ Connect</span>
+              </div>
+            </div>
+
+            <div class="ob-footer">
+              <button class="btn-secondary" onclick="nextObStep(2)">← Back</button>
+              <button class="btn-primary" onclick="finishOnboarding()">
+                <span>Finish & Launch Dashboard</span>
+                <span>→</span>
+              </button>
+              <span class="ob-time-estimate">Ready to go!</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         VIEW 2: REDESIGNED HOME PAGE WITH PROMINENT MCP & FLOATING CHAT
+         ============================================================ -->
+    <section id="view-home" class="proto-view">
+      <div class="home-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+          <div class="sidebar-head">
+            <div class="sidebar-brand">
+              <span>fluxito</span>
+              <span class="ob-dot"></span>
+            </div>
+            <span class="beta-pill">BETA v2.0.38</span>
+          </div>
+
+          <div class="workspace-btn">
+            <div class="ws-mark">RA</div>
+            <div class="ws-text">
+              <div class="ws-name" id="homeProjectTitle">BMK ECO FARMS</div>
+              <div class="ws-role">Owner</div>
+            </div>
+            <span style="font-size:11px;color:var(--muted);">▼</span>
+          </div>
+
+          <nav class="nav-list">
+            <a class="nav-item active">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              <span>Home</span>
+            </a>
+            <a class="nav-item">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+              <span>Plan</span>
+            </a>
+            <a class="nav-item">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
+              <span>Implement</span>
+            </a>
+            <a class="nav-item">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>Audit</span>
+            </a>
+            <a class="nav-item">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+              <span>Report</span>
+            </a>
+
+            <div class="nav-sep"></div>
+
+            <a class="nav-item">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>Conversations</span>
+            </a>
+            <a class="nav-item">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <span>Context</span>
+            </a>
+          </nav>
+
+          <div class="sidebar-bottom">
+            <a class="nav-item">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
+              <span>Notifications</span>
+            </a>
+            <a class="nav-item">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              <span>Tutorials & help</span>
+            </a>
+            <a class="nav-item">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <span>Settings</span>
+            </a>
+
+            <div class="user-pill">
+              <div class="user-avatar">RM</div>
+              <div>
+                <div class="user-name">Ram Manohar</div>
+                <div class="user-proj">BMK Eco Farms</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Feed & Center Content -->
+        <div class="home-center-column">
+          <div class="home-scroll-feed">
+            <div class="home-feed-inner">
+              <div class="home-topline">
+                <span class="home-date-stamp">TUESDAY, SEPTEMBER 15 · 03:40</span>
+                <a href="#" class="home-history-link">Briefing history →</a>
+              </div>
+
+              <h1 class="home-h1">Morning, Ram Manohar. All clear for now.</h1>
+              <div class="home-sub">
+                Connect a platform and run an audit so Flux has something to check.
+              </div>
+
+              <!-- ══════════════════════════════════════════════════════════
+                   HERO SPOTLIGHT: ADD FLUXITO MCP TO YOUR AI AGENT
+                   ══════════════════════════════════════════════════════════ -->
+              <div class="mcp-spotlight-card">
+                <div class="mcp-card-top">
+                  <div class="mcp-eyebrow-wrap">
+                    <span class="mcp-pill-badge">Highlight</span>
+                    <span class="mcp-subhead">USE WITH YOUR EXISTING SUBSCRIPTIONS</span>
+                  </div>
+                  <span style="font-family:var(--mono);font-size:11px;color:#A89F8D;">Zero API Token Cost</span>
+                </div>
+
+                <div class="mcp-title">Add Fluxito MCP to your AI agent</div>
+                <div class="mcp-lead">
+                  Run ad-hoc ROAS queries, GTM container audits, and SDR tracking plans directly from <strong>Claude Pro, ChatGPT Plus, Cursor, or Windsurf</strong>. One connection connects your full marketing stack to your daily agent.
+                </div>
+
+                <!-- Client Selector Pills -->
+                <div class="mcp-client-tabs">
+                  <button class="mcp-client-pill active" onclick="switchMcpClient(this, 'claude')">
+                    <span class="logo-dot" style="background:#D97757"></span>
+                    <span>Claude Desktop</span>
+                  </button>
+                  <button class="mcp-client-pill" onclick="switchMcpClient(this, 'cursor')">
+                    <span class="logo-dot" style="background:#4A90E2"></span>
+                    <span>Cursor Editor</span>
+                  </button>
+                  <button class="mcp-client-pill" onclick="switchMcpClient(this, 'chatgpt')">
+                    <span class="logo-dot" style="background:#10A37F"></span>
+                    <span>ChatGPT (Web/App)</span>
+                  </button>
+                  <button class="mcp-client-pill" onclick="switchMcpClient(this, 'windsurf')">
+                    <span class="logo-dot" style="background:#09B6A2"></span>
+                    <span>Windsurf</span>
+                  </button>
+                  <button class="mcp-client-pill" onclick="switchMcpClient(this, 'claude-code')">
+                    <span class="logo-dot" style="background:#E29578"></span>
+                    <span>Claude Code CLI</span>
+                  </button>
+                </div>
+
+                <!-- Snippet Command Box with 1-Click Copy -->
+                <div class="mcp-snippet-box">
+                  <div class="mcp-command-text" id="mcpSnippetText">
+                    claude mcp add fluxito -- https://fluxito.app/mcp
+                  </div>
+                  <button class="mcp-copy-action" id="mcpCopyBtn" onclick="copyMcpCommand()">Copy Command</button>
+                </div>
+
+                <div class="mcp-help-footer">
+                  <span>💡 <em>No API key required when querying via MCP — uses your Claude/ChatGPT plan.</em></span>
+                  <a href="#" class="mcp-help-link" onclick="openMcpDrawer()">View complete setup guide →</a>
+                </div>
+              </div>
+
+              <!-- Findings & Status Feed -->
+              <div class="briefing-card">
+                <span class="briefing-pill sev-good">GOOD</span>
+                <div class="briefing-body">
+                  <div class="briefing-title">Nothing needs your attention right now.</div>
+                  <div class="briefing-desc">All tracking pipelines are healthy. Next automated tag QA scheduled for midnight.</div>
+                </div>
+              </div>
+
+              <div class="briefing-card" style="border-left: 3px solid var(--accent);">
+                <span class="briefing-pill" style="background:var(--card-well);border:1px solid var(--line-strong);color:var(--ink);">TIP</span>
+                <div class="briefing-body">
+                  <div class="briefing-title">Try your first MCP prompt in Claude or Cursor</div>
+                  <div class="briefing-desc">
+                    Ask your agent: <span class="mono" style="background:var(--paper-2);padding:2px 6px;border-radius:4px;">"What GA4 events had anomalous conversion drop-offs this week?"</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ══════════════════════════════════════════════════════════
+               NEW FLOATING CHATBAR (No longer pinning the viewport!)
+               ══════════════════════════════════════════════════════════ -->
+          <div class="floating-chat-container">
+            <div class="floating-chat-pill" onclick="focusChatInput()">
+              <div class="float-flux-badge">F</div>
+              <input type="text" class="float-input" id="floatingInput" placeholder="Ask Flux — &quot;why did ROAS dip last week?&quot;, &quot;audit my GTM container&quot;…" onkeydown="handleChatKey(event)">
+              <span class="float-kbd">⌘K</span>
+              <button class="float-ask-btn" onclick="openChatDrawerWithPrompt()">Ask</button>
+            </div>
+
+            <div class="floating-chips-row">
+              <span class="float-chip" onclick="quickAsk('Audit my tracking setup')">Audit my tracking setup</span>
+              <span class="float-chip" onclick="quickAsk('Close tracking-plan gaps')">Close tracking-plan gaps</span>
+              <span class="float-chip" onclick="quickAsk('Build a dashboard')">Build a dashboard</span>
+              <span class="float-chip" onclick="quickAsk('What should I connect next?')">What should I connect next?</span>
+            </div>
+          </div>
+
+          <!-- Interactive Drawer / Ask Modal -->
+          <div class="chat-drawer-overlay" id="chatDrawer" onclick="closeChatDrawer(event)">
+            <div class="chat-drawer-modal" onclick="event.stopPropagation()">
+              <div class="drawer-head">
+                <div class="drawer-title">
+                  <div class="float-flux-badge" style="width:24px;height:24px;font-size:13px;">F</div>
+                  <span>In-App Flux Analyst</span>
+                </div>
+                <button class="drawer-close" onclick="closeChatDrawer()">✕</button>
+              </div>
+
+              <div class="drawer-body">
+                <div class="ai-warning-box" id="drawerAiNotice">
+                  <div style="font-size:18px;">ℹ️</div>
+                  <div>
+                    <strong>Using MCP vs In-App Key:</strong><br>
+                    You are currently set to use <strong>MCP with Claude/Cursor</strong> (which costs $0 in extra tokens). To run conversations directly in this web window, configure your Anthropic or OpenAI key in <a href="#" style="color:var(--accent);font-weight:600;" onclick="switchView('onboarding');jumpToObStep(1);">Settings → AI Providers</a>.
+                  </div>
+                </div>
+
+                <div style="padding:16px;background:var(--paper-2);border-radius:10px;font-size:13.5px;color:var(--ink);">
+                  <strong>User Prompt:</strong>
+                  <div id="drawerPromptDisplay" style="margin-top:4px;font-style:italic;color:var(--ink-soft);">
+                    "Audit my tracking setup and check for discrepancies"
+                  </div>
+                </div>
+
+                <div style="font-size:12.5px;color:var(--muted);text-align:center;">
+                  Or query this live in your terminal / agent with: <br>
+                  <code class="mono" style="background:#1E1A16;color:#FFF;padding:4px 10px;border-radius:4px;display:inline-block;margin-top:6px;">claude "Ask fluxito to audit my tracking setup"</code>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Rail -->
+        <aside class="home-rail">
+          <div class="rail-heading">Flux is running</div>
+          <div class="rail-card">
+            <div class="rail-task-row">
+              <span class="rail-dot-pulse"></span>
+              <span>weekly-marketing-snapshot</span>
+            </div>
+            <div class="rail-task-meta">Slack #marketing-briefing</div>
+          </div>
+          <a href="#" style="font-family:var(--mono);font-size:11px;color:var(--muted);text-decoration:none;">Assign Flux a task →</a>
+
+          <div class="rail-heading" style="margin-top:14px;">Stack health</div>
+          <div class="rail-card">
+            <div class="hsh-metric">
+              <span>Connections</span>
+              <span class="mono">4 / 25</span>
+            </div>
+            <div class="hsh-metric">
+              <span>Plan coverage</span>
+              <span class="mono">—</span>
+            </div>
+            <div class="hsh-metric">
+              <span>Open issues</span>
+              <span class="mono" style="color:var(--good);">0</span>
+            </div>
+            <div class="hsh-metric">
+              <span>Last full audit</span>
+              <span class="mono">Never</span>
+            </div>
+          </div>
+
+          <!-- Quick MCP Status Card on Rail -->
+          <div class="rail-card" style="background:var(--card-well);border:1px dashed var(--line-strong);">
+            <div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+              <span style="color:var(--accent);">⚡</span>
+              <span>MCP Integration</span>
+            </div>
+            <p style="font-size:11.5px;color:var(--muted);line-height:1.45;margin-bottom:10px;">
+              Connect Claude or Cursor to query BMK Eco Farms data directly without logging into this web dashboard.
+            </p>
+            <button class="ai-copy-btn" style="width:100%;text-align:center;" onclick="copySnippet('https://fluxito.app/mcp')">Copy MCP URL</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         VIEW 3: ARCHITECTURE & UX COMPARISON
+         ============================================================ -->
+    <section id="view-comparison" class="proto-view">
+      <div class="arch-view">
+        <h1 class="ob-heading">UX Flow Comparison: <em>Current vs Proposed</em></h1>
+        <p class="ob-desc">
+          Summary of the identified pain points in the existing flow and how the new onboarding journey and home redesign solve them.
+        </p>
+
+        <div class="arch-grid">
+          <!-- Before Card -->
+          <div class="arch-card before">
+            <span class="arch-badge">Current Flow (Problematic)</span>
+            <h3 style="font-size:18px;margin-bottom:12px;color:var(--bad);">Confusing First Impressions</h3>
+            <ul style="display:flex;flex-direction:column;gap:12px;font-size:13.5px;color:var(--ink-soft);line-height:1.5;">
+              <li><strong>Silent project creation:</strong> User is automatically assigned a generic <code>{Name}'s Project</code> without ever being asked for workspace name, currency, or timezone.</li>
+              <li><strong>Tutorial disconnect:</strong> If redirected to <code>/tutorial</code>, Step 4 shows cards for Claude/ChatGPT but provides <em>zero</em> input for API keys or clear guidance on subscriptions.</li>
+              <li><strong>Dumped on Home without AI setup:</strong> User lands on <code>/home</code> with a prominent static chat composer, but asks fail because no AI provider key has been configured.</li>
+              <li><strong>Buried Settings:</strong> User has to discover <code>Settings → AI Providers</code> on their own to add a key.</li>
+              <li><strong>MCP is hidden:</strong> MCP availability is an 11px tiny footnote at the bottom of the right rail, despite being Fluxito's primary value proposition!</li>
+              <li><strong>Rigid viewport:</strong> The chat bar is fixed at the bottom, restricting the viewport and pushing the feed into a cramped sub-window.</li>
+            </ul>
+          </div>
+
+          <!-- After Card -->
+          <div class="arch-card after">
+            <span class="arch-badge">Proposed New Flow (This Prototype)</span>
+            <h3 style="font-size:18px;margin-bottom:12px;color:var(--good);">Guided, Intentional & MCP-First</h3>
+            <ul style="display:flex;flex-direction:column;gap:12px;font-size:13.5px;color:var(--ink-soft);line-height:1.5;">
+              <li><strong>Explicit Onboarding Journey:</strong> Signup directly lands on a guided 3-step setup journey before reaching the home page.</li>
+              <li><strong>Clear AI Engine Choice:</strong> User explicitly chooses whether to use <strong>MCP with their Claude/Cursor/ChatGPT subscription</strong> (zero token cost) or add an <strong>in-app API key</strong>.</li>
+              <li><strong>Intentional Project Creation:</strong> User creates and customizes their workspace (Name, slug, currency, timezone, focus areas) before entering.</li>
+              <li><strong>Conditional Landing:</strong> Only after completing (or intentionally skipping) the onboarding journey does the user enter <code>/home</code>.</li>
+              <li><strong>MCP is the Star Feature on Home:</strong> Prominent spotlight card right under the morning briefing with 1-click copy for Claude Desktop, Cursor, ChatGPT, and Windsurf.</li>
+              <li><strong>Floating, Non-Blocking Chatbar:</strong> Chat bar is moved out of the static viewport flow into a floating, dockable command pill with <code>⌘K</code> shortcut.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="margin-top:32px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px;">
+          <h4 style="font-size:15px;font-weight:700;margin-bottom:8px;">Backend Routing Implementation Plan:</h4>
+          <ol style="margin-left:20px;font-size:13.5px;color:var(--ink-soft);line-height:1.6;">
+            <li>Modify <code>app/api/auth_routes.py</code> and <code>app/api/google_oauth_routes.py</code>: If user has not completed onboarding or has no intentional project, redirect to <code>/onboard</code> (the new 3-step wizard).</li>
+            <li>Do not silently auto-create default projects on signup; let Step 2 of <code>/onboard</code> call <code>POST /api/projects</code>.</li>
+            <li>Update <code>app/templates/dashboard_home.html</code> and <code>app/static/css/home.css</code> to introduce the MCP Hero spotlight and the floating chat bar container.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Interactive Toast Notification -->
+  <div class="proto-toast" id="protoToast">Copied to clipboard!</div>
+
+  <!-- ============================================================
+       INTERACTION SCRIPTS
+       ============================================================ -->
+  <script>
+    // Tab View Switching (Onboarding vs Home vs Spec)
+    function switchView(viewName) {
+      document.querySelectorAll('.proto-tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.proto-view').forEach(view => view.classList.remove('active'));
+
+      const targetView = document.getElementById('view-' + viewName);
+      if (targetView) targetView.classList.add('active');
+
+      const activeBtn = Array.from(document.querySelectorAll('.proto-tab-btn')).find(b => b.getAttribute('onclick').includes(viewName));
+      if (activeBtn) activeBtn.classList.add('active');
+    }
+
+    // Onboarding Step Progression
+    let currentObStep = 1;
+    function nextObStep(stepNum) {
+      jumpToObStep(stepNum);
+    }
+
+    function jumpToObStep(stepNum) {
+      currentObStep = stepNum;
+      document.querySelectorAll('.ob-screen').forEach(s => s.classList.remove('active'));
+      const targetScreen = document.getElementById('obStep' + stepNum);
+      if (targetScreen) targetScreen.classList.add('active');
+
+      // Update Nav Rail
+      for (let i = 1; i <= 3; i++) {
+        const nav = document.getElementById('obNav' + i);
+        if (!nav) continue;
+        nav.classList.remove('active', 'completed');
+        if (i < stepNum) nav.classList.add('completed');
+        if (i === stepNum) nav.classList.add('active');
+      }
+
+      // Update Stage Tag
+      const stageTag = document.getElementById('obStageTag');
+      if (stepNum === 1) stageTag.textContent = 'Step 1 of 3 · AI Engine Setup';
+      if (stepNum === 2) stageTag.textContent = 'Step 2 of 3 · Create Workspace';
+      if (stepNum === 3) stageTag.textContent = 'Step 3 of 3 · Connect Data Sources';
+    }
+
+    // AI Option Selection (MCP vs Key)
+    let selectedAiOption = 'mcp';
+    function selectAiOption(option) {
+      selectedAiOption = option;
+      const cardMcp = document.getElementById('cardMcp');
+      const cardKey = document.getElementById('cardKey');
+      const mcpSection = document.getElementById('mcpConfigSection');
+      const keySection = document.getElementById('keyConfigSection');
+
+      if (option === 'mcp') {
+        cardMcp.classList.add('selected');
+        cardKey.classList.remove('selected');
+        mcpSection.style.display = 'block';
+        keySection.style.display = 'none';
+      } else {
+        cardKey.classList.add('selected');
+        cardMcp.classList.remove('selected');
+        mcpSection.style.display = 'none';
+        keySection.style.display = 'block';
+      }
+    }
+
+    function setProvider(el, name) {
+      document.querySelectorAll('.provider-btn').forEach(btn => btn.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('selectedProviderLabel').textContent = name;
+      const input = document.getElementById('apiKeyInput');
+      if (name === 'Anthropic') input.value = 'sk-ant-api03-sample-key';
+      if (name === 'OpenAI') input.value = 'sk-proj-sample-openai-key';
+      if (name === 'Google Gemini') input.value = 'AIzaSy-sample-gemini-key';
+      if (name === 'OpenRouter') input.value = 'sk-or-v1-sample-openrouter-key';
+    }
+
+    function testKey() {
+      const res = document.getElementById('keyTestResult');
+      res.textContent = 'Verifying with provider...';
+      res.style.color = 'var(--muted)';
+      setTimeout(() => {
+        res.textContent = '✓ Successfully authenticated and verified quota!';
+        res.style.color = 'var(--good)';
+        showToast('API Key verified successfully!');
+      }, 500);
+    }
+
+    // Live slug generation in step 2
+    const nameInput = document.getElementById('projectNameInput');
+    if (nameInput) {
+      nameInput.addEventListener('input', function(e) {
+        const val = e.target.value;
+        const slug = val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'my-workspace';
+        document.getElementById('projectSlugPreview').textContent = slug;
+        document.getElementById('homeProjectTitle').textContent = val.toUpperCase() || 'MY WORKSPACE';
+      });
+    }
+
+    function toggleRole(el) {
+      el.classList.toggle('selected');
+    }
+
+    function toggleConn(el) {
+      el.classList.toggle('connected');
+      const badge = el.querySelector('.conn-badge');
+      if (el.classList.contains('connected')) {
+        badge.textContent = '✓ Connected';
+      } else {
+        badge.textContent = '+ Connect';
+      }
+    }
+
+    function finishOnboarding() {
+      showToast('Project initialized! Welcome to Fluxito.');
+      setTimeout(() => {
+        switchView('home');
+      }, 600);
+    }
+
+    // MCP Client Snippet Switcher on Home Page
+    const clientSnippets = {
+      'claude': 'claude mcp add fluxito -- https://fluxito.app/mcp',
+      'cursor': 'npx -y @modelcontextprotocol/create-server fluxito https://fluxito.app/mcp',
+      'chatgpt': 'https://fluxito.app/mcp (Add to Custom GPT / Actions as OAuth MCP endpoint)',
+      'windsurf': 'windsurf mcp install fluxito https://fluxito.app/mcp',
+      'claude-code': 'claude mcp add fluxito -- https://fluxito.app/mcp'
+    };
+
+    function switchMcpClient(btn, clientId) {
+      document.querySelectorAll('.mcp-client-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const snippet = clientSnippets[clientId] || clientSnippets['claude'];
+      document.getElementById('mcpSnippetText').textContent = snippet;
+    }
+
+    function copyMcpCommand() {
+      const text = document.getElementById('mcpSnippetText').textContent.trim();
+      navigator.clipboard.writeText(text).catch(() => {});
+      const btn = document.getElementById('mcpCopyBtn');
+      btn.textContent = 'Copied! ✓';
+      showToast('Command copied to clipboard!');
+      setTimeout(() => { btn.textContent = 'Copy Command'; }, 2000);
+    }
+
+    function copySnippet(text) {
+      navigator.clipboard.writeText(text).catch(() => {});
+      showToast('Copied ' + text + ' to clipboard!');
+    }
+
+    // Floating Chatbar Interactions
+    function focusChatInput() {
+      document.getElementById('floatingInput').focus();
+    }
+
+    function handleChatKey(e) {
+      if (e.key === 'Enter') {
+        openChatDrawerWithPrompt();
+      }
+    }
+
+    // Keyboard shortcut Cmd+K / Ctrl+K
+    window.addEventListener('keydown', function(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const drawer = document.getElementById('chatDrawer');
+        if (drawer.classList.contains('active')) {
+          closeChatDrawer();
+        } else {
+          openChatDrawerWithPrompt();
+        }
+      }
+    });
+
+    function quickAsk(prompt) {
+      document.getElementById('floatingInput').value = prompt;
+      openChatDrawerWithPrompt();
+    }
+
+    function openChatDrawerWithPrompt() {
+      const val = document.getElementById('floatingInput').value.trim() || 'Audit my tracking setup and check for discrepancies';
+      document.getElementById('drawerPromptDisplay').textContent = '"' + val + '"';
+      document.getElementById('chatDrawer').classList.add('active');
+    }
+
+    function closeChatDrawer(e) {
+      document.getElementById('chatDrawer').classList.remove('active');
+    }
+
+    function openMcpDrawer() {
+      showToast('Opening MCP Setup Guides modal...');
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('protoToast');
+      toast.textContent = msg;
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 2500);
+    }
+  </script>
+</body>
+</html>

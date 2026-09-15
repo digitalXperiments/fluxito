@@ -17,7 +17,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 
-from passlib.hash import bcrypt
+import bcrypt
 from sqlalchemy import select
 
 import app.app_state as app_state
@@ -43,13 +43,13 @@ RESET_TTL = _RESET_PASSWORD_TTL
 
 def hash_password(password: str) -> str:
     """Hash a password with bcrypt."""
-    return bcrypt.using(rounds=12).hash(password)
+    return bcrypt.hashpw(password.encode("utf-8")[:72], bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
 def verify_password(password: str, hashed: str) -> bool:
     """Check a password against its bcrypt hash."""
     try:
-        return bcrypt.verify(password, hashed)
+        return bcrypt.checkpw(password.encode("utf-8")[:72], hashed.encode("utf-8"))
     except Exception:
         return False
 

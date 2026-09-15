@@ -812,11 +812,6 @@ async def test_key(request: Request):
     uid = _require_user_id(request)
     if not uid:
         return JSONResponse({"error": "auth"}, status_code=401)
-    from app.api.project_routes import ensure_active_project
-
-    project_id = await ensure_active_project(request, uid)
-    if not project_id:
-        return JSONResponse({"error": "No active project."}, status_code=400)
     body = await request.json()
     provider = body.get("provider")
     api_key = (body.get("api_key") or "").strip()
@@ -826,7 +821,11 @@ async def test_key(request: Request):
         return JSONResponse({"ok": False, "error": "Invalid provider."})
     key_required = provider != "lmstudio"
     if key_required and not api_key:
-        # No key in the form — try to load the stored key for this provider.
+        from app.api.project_routes import ensure_active_project
+
+        project_id = await ensure_active_project(request, uid)
+        if not project_id:
+            return JSONResponse({"ok": False, "error": "Enter an API key to test, or save one first."})
         stored = await get_active_key(
             project_id=uuid.UUID(project_id),
             user_id=uuid.UUID(uid),

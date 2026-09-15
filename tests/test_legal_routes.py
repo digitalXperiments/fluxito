@@ -1,5 +1,6 @@
 """Tests for public legal routes (Privacy Policy, Terms of Service) and brand assets."""
 
+import struct
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -9,6 +10,14 @@ from fastapi import Request
 from app.api.legal_routes import privacy_policy, terms_of_service
 
 STATIC_IMG = Path(__file__).resolve().parent.parent / "app" / "static" / "img"
+
+
+def _png_dimensions(path: Path) -> tuple[int, int]:
+    with open(path, "rb") as f:
+        header = f.read(24)
+        assert header[:8] == b"\x89PNG\r\n\x1a\n", f"{path.name} is not a valid PNG file"
+        assert header[12:16] == b"IHDR", f"{path.name} missing IHDR chunk"
+        return struct.unpack(">II", header[16:24])
 
 
 def _make_request(path: str) -> Request:
@@ -80,11 +89,6 @@ def test_brand_assets_exist_and_non_empty():
         assert file_path.is_file(), f"Missing brand asset: {asset}"
         assert file_path.stat().st_size > 0, f"Empty brand asset: {asset}"
 
-    # Verify 120x120 PNG image dimensions for Google OAuth Consent Screen
-    from PIL import Image
-
-    png_120 = Image.open(STATIC_IMG / "fluxito-logo-120.png")
-    assert png_120.size == (120, 120), f"Expected (120, 120), got {png_120.size}"
-
-    png_512 = Image.open(STATIC_IMG / "fluxito-logo-512.png")
-    assert png_512.size == (512, 512), f"Expected (512, 512), got {png_512.size}"
+    # Verify PNG image dimensions for Google OAuth Consent Screen
+    assert _png_dimensions(STATIC_IMG / "fluxito-logo-120.png") == (120, 120)
+    assert _png_dimensions(STATIC_IMG / "fluxito-logo-512.png") == (512, 512)

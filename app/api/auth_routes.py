@@ -163,16 +163,18 @@ async def login(payload: LoginRequest, request: Request):
     if error:
         return JSONResponse({"error": error}, status_code=401)
 
-    # Give brand-new users (e.g. just-invited members) a personal project.
-    try:
-        from app.api.project_routes import ensure_default_project
-
-        await ensure_default_project(user.id, user.display_name, user.email)
-    except Exception:
-        logger.warning("ensure_default_project failed on login", exc_info=True)
-
     # Check tutorial
     needs_tutorial = user.tutorial_completed_at is None
+
+    # Give existing users (e.g. past tutorial or invited members) a personal project if needed.
+    # Brand-new users go through the onboarding journey where they create their own named project.
+    if not needs_tutorial:
+        try:
+            from app.api.project_routes import ensure_default_project
+
+            await ensure_default_project(user.id, user.display_name, user.email)
+        except Exception:
+            logger.warning("ensure_default_project failed on login", exc_info=True)
 
     # Determine redirect — sanitize ``next`` to prevent open redirects
     # via crafted ``?next=//evil.com`` or ``?next=javascript:...`` values.
