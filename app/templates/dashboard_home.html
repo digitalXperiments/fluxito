@@ -32,59 +32,6 @@
           {% endif %}
         </div>
 
-        {# ── MCP Spotlight Hero Card: Add Fluxito MCP to your AI agent ── #}
-        <div class="mcp-spotlight-card">
-          <div class="mcp-card-top">
-            <div class="mcp-eyebrow-wrap">
-              <span class="mcp-pill-badge">Highlight</span>
-              <span class="mcp-subhead">USE WITH YOUR EXISTING SUBSCRIPTIONS</span>
-            </div>
-            <span class="mcp-cost-tag">Zero Extra Token Cost</span>
-          </div>
-
-          <div class="mcp-title">Add Fluxito MCP to your AI agent</div>
-          <div class="mcp-lead">
-            Run ad-hoc ROAS queries, GTM audits, and SDR tracking plans directly in <strong>Claude Pro, ChatGPT Plus, Cursor, or Windsurf</strong>. One connection gives your daily AI agent direct access to all your marketing tools.
-          </div>
-
-          <!-- Client Selector Tabs -->
-          <div class="mcp-client-tabs">
-            <button type="button" class="mcp-client-pill active" data-mcp-client="claude">
-              <span class="mcp-client-dot" style="background:#D97757"></span>
-              <span>Claude Desktop</span>
-            </button>
-            <button type="button" class="mcp-client-pill" data-mcp-client="cursor">
-              <span class="mcp-client-dot" style="background:#4A90E2"></span>
-              <span>Cursor Editor</span>
-            </button>
-            <button type="button" class="mcp-client-pill" data-mcp-client="chatgpt">
-              <span class="mcp-client-dot" style="background:#10A37F"></span>
-              <span>ChatGPT</span>
-            </button>
-            <button type="button" class="mcp-client-pill" data-mcp-client="windsurf">
-              <span class="mcp-client-dot" style="background:#09B6A2"></span>
-              <span>Windsurf</span>
-            </button>
-            <button type="button" class="mcp-client-pill" data-mcp-client="claude-code">
-              <span class="mcp-client-dot" style="background:#E29578"></span>
-              <span>Claude Code CLI</span>
-            </button>
-          </div>
-
-          <!-- Command Snippet Box -->
-          <div class="mcp-snippet-box">
-            <div class="mcp-command-text" id="mcpCommandText">
-              claude mcp add fluxito -- {{ base_url }}/mcp
-            </div>
-            <button type="button" class="mcp-copy-action" id="mcpCopyAction">Copy Command</button>
-          </div>
-
-          <div class="mcp-help-footer">
-            <span>💡 <em>No API key required when querying via MCP — uses your Claude/ChatGPT subscription.</em></span>
-            <a href="/tutorials/connect-ai-mcp" class="mcp-help-link">View complete setup guide →</a>
-          </div>
-        </div>
-
         <div class="home-findings">
           {% for f in briefing_findings %}
           <div class="briefing-card" data-finding-key="{{ f.key }}">
@@ -147,10 +94,9 @@
       </div>
     </div>
 
-    {# ── Floating Chatbar Container: Decoupled from static flow ── #}
     <div class="home-composer-wrap">
       <div class="home-composer-inner">
-        <form id="home-composer-form" class="home-composer" autocomplete="off" data-has-ai-key="{{ '1' if has_ai_key else '0' }}">
+        <form id="home-composer-form" class="home-composer" autocomplete="off">
           <span class="flux-badge" aria-hidden="true">F</span>
           <input type="text" id="home-composer-input" class="home-composer-input" data-flux-composer
                  placeholder='Ask Flux — &quot;why did ROAS dip last week?&quot;, &quot;audit my GTM container&quot;…'>
@@ -158,45 +104,10 @@
           <button type="submit" class="btn-accent home-composer-ask">Ask</button>
         </form>
         <div class="home-chips">
-          <a href="/ask?q={{ 'Run a full audit of my tracking setup and summarize what needs fixing' | urlencode }}" class="home-chip" data-quick-chip>Audit my tracking setup</a>
-          <a href="/ask?q={{ 'Where are the gaps in my tracking plan and how do I close them' | urlencode }}" class="home-chip" data-quick-chip>Close tracking-plan gaps</a>
-          <a href="/ask?q={{ 'Help me build a dashboard for my key marketing metrics' | urlencode }}" class="home-chip" data-quick-chip>Build a dashboard</a>
-          <a href="/ask?q={{ 'What should I connect next to get more out of Flux' | urlencode }}" class="home-chip" data-quick-chip>What should I connect next?</a>
-        </div>
-      </div>
-    </div>
-
-    {# ── Modal for in-app AI key prompt / MCP query fallback ── #}
-    <div class="home-ai-modal-backdrop" id="homeAiModal" hidden>
-      <div class="home-ai-modal">
-        <div class="home-ai-modal-head">
-          <div class="home-ai-modal-title">
-            <span class="flux-badge" style="width:24px;height:24px;font-size:12px;">F</span>
-            <span>Querying with Flux</span>
-          </div>
-          <button type="button" class="home-ai-modal-close" id="homeAiModalClose">✕</button>
-        </div>
-        <div class="home-ai-modal-body">
-          <div class="home-ai-modal-alert">
-            <strong>No In-App AI Provider Key Configured</strong><br>
-            In-app web chat requires an OpenAI, Anthropic, or Gemini API key. You can query via MCP using your existing AI subscription for $0 extra cost, or add an API key.
-          </div>
-          <div class="home-ai-modal-prompt-box">
-            <span class="home-ai-modal-prompt-label">Your Question:</span>
-            <div id="homeAiModalPromptText" class="home-ai-modal-prompt-val"></div>
-          </div>
-          <div class="home-ai-modal-options">
-            <div class="home-ai-opt-card">
-              <div class="home-ai-opt-title">⚡ Query via MCP (Zero Token Cost)</div>
-              <div class="home-ai-opt-desc">Copy your question and ask Claude, Cursor, or ChatGPT directly through your existing AI subscription.</div>
-              <button type="button" class="btn primary btn-sm" id="copyPromptMcpBtn">Copy Question for Claude / Cursor</button>
-            </div>
-            <div class="home-ai-opt-card">
-              <div class="home-ai-opt-title">🔑 Enable In-App Chat</div>
-              <div class="home-ai-opt-desc">Add your Anthropic, OpenAI, or Gemini key to run conversations directly in this dashboard.</div>
-              <a href="/settings/ai" class="btn secondary btn-sm">Configure AI Key in Settings →</a>
-            </div>
-          </div>
+          <a href="/ask?q={{ 'Run a full audit of my tracking setup and summarize what needs fixing' | urlencode }}" class="home-chip">Audit my tracking setup</a>
+          <a href="/ask?q={{ 'Where are the gaps in my tracking plan and how do I close them' | urlencode }}" class="home-chip">Close tracking-plan gaps</a>
+          <a href="/ask?q={{ 'Help me build a dashboard for my key marketing metrics' | urlencode }}" class="home-chip">Build a dashboard</a>
+          <a href="/ask?q={{ 'What should I connect next to get more out of Flux' | urlencode }}" class="home-chip">What should I connect next?</a>
         </div>
       </div>
     </div>
@@ -224,19 +135,6 @@
       <div class="hsh-row"><span>Open issues</span><span class="mono{% if (tp_open_issues + audit_open_issues) > 0 %} hsh-danger{% endif %}">{{ tp_open_issues + audit_open_issues }}</span></div>
       <div class="hsh-row"><span>Last full audit</span><span class="mono">{{ last_audit_display }}</span></div>
     </div>
-
-    {# ── Prominent MCP Rail Section ── #}
-    <div class="home-rail-label home-rail-label-2nd">Agent Integration</div>
-    <div class="home-rail-card home-rail-mcp">
-      <div class="home-rail-card-row">
-        <span class="home-rail-dot" style="background:var(--accent);"></span>
-        <span class="home-rail-card-title">Fluxito MCP</span>
-      </div>
-      <div class="home-rail-card-meta">Claude · Cursor · ChatGPT</div>
-      <p class="home-rail-mcp-desc">Connect your AI subscription directly to this project via MCP.</p>
-      <button type="button" class="home-rail-mcp-btn" id="railCopyMcpBtn" data-mcp-url="{{ base_url }}/mcp">Copy MCP Endpoint</button>
-    </div>
-
     <div class="home-rail-foot">Also available in Claude, ChatGPT &amp; Cursor via MCP — same Flux, same memory.</div>
   </aside>
 </div>
@@ -245,118 +143,12 @@
 (function(){
   var form = document.getElementById('home-composer-form');
   var input = document.getElementById('home-composer-input');
-  var modal = document.getElementById('homeAiModal');
-  var modalClose = document.getElementById('homeAiModalClose');
-  var modalPrompt = document.getElementById('homeAiModalPromptText');
-  var copyPromptBtn = document.getElementById('copyPromptMcpBtn');
-  var hasAiKey = form ? (form.getAttribute('data-has-ai-key') === '1') : false;
-
-  function openAiModal(queryText) {
-    if (!modal) return;
-    if (modalPrompt) modalPrompt.textContent = queryText || 'How are my marketing campaigns performing?';
-    modal.hidden = false;
-  }
-
-  function closeAiModal() {
-    if (modal) modal.hidden = true;
-  }
-
-  if (modalClose) {
-    modalClose.addEventListener('click', closeAiModal);
-  }
-  if (modal) {
-    modal.addEventListener('click', function(e){
-      if (e.target === modal) closeAiModal();
-    });
-  }
-
-  if (copyPromptBtn) {
-    copyPromptBtn.addEventListener('click', function(){
-      var text = (modalPrompt && modalPrompt.textContent) || '';
-      if (text) {
-        navigator.clipboard.writeText(text).catch(function(){});
-        copyPromptBtn.textContent = 'Copied to clipboard! ✓';
-        setTimeout(function(){ copyPromptBtn.textContent = 'Copy Question for Claude / Cursor'; }, 2000);
-      }
-    });
-  }
-
   if (form && input) {
     form.addEventListener('submit', function(e){
       e.preventDefault();
       var q = (input.value || '').trim();
       if (!q) { window.location.href = '/ask'; return; }
-      if (!hasAiKey) {
-        openAiModal(q);
-        return;
-      }
       window.location.href = '/ask?q=' + encodeURIComponent(q);
-    });
-
-    // Handle Quick Chips when no AI key
-    document.querySelectorAll('[data-quick-chip]').forEach(function(chip){
-      chip.addEventListener('click', function(e){
-        if (!hasAiKey) {
-          e.preventDefault();
-          var q = chip.textContent.trim();
-          input.value = q;
-          openAiModal(q);
-        }
-      });
-    });
-  }
-
-  // Keyboard shortcut Cmd+K / Ctrl+K
-  window.addEventListener('keydown', function(e){
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      if (input) input.focus();
-    }
-    if (e.key === 'Escape') {
-      closeAiModal();
-    }
-  });
-
-  // ── MCP Spotlight Client Tabs ──────────────────────────────────────────
-  var baseUrl = {{ base_url | tojson }};
-  var mcpSnippets = {
-    'claude': 'claude mcp add fluxito -- ' + baseUrl + '/mcp',
-    'cursor': 'npx -y @modelcontextprotocol/create-server fluxito ' + baseUrl + '/mcp',
-    'chatgpt': baseUrl + '/mcp',
-    'windsurf': 'windsurf mcp install fluxito ' + baseUrl + '/mcp',
-    'claude-code': 'claude mcp add fluxito -- ' + baseUrl + '/mcp'
-  };
-
-  var commandTextEl = document.getElementById('mcpCommandText');
-  var copyActionBtn = document.getElementById('mcpCopyAction');
-
-  document.querySelectorAll('.mcp-client-pill').forEach(function(pill){
-    pill.addEventListener('click', function(){
-      document.querySelectorAll('.mcp-client-pill').forEach(function(p){ p.classList.remove('active'); });
-      pill.classList.add('active');
-      var client = pill.getAttribute('data-mcp-client');
-      var cmd = mcpSnippets[client] || mcpSnippets['claude'];
-      if (commandTextEl) commandTextEl.textContent = cmd;
-    });
-  });
-
-  if (copyActionBtn && commandTextEl) {
-    copyActionBtn.addEventListener('click', function(){
-      var text = commandTextEl.textContent.trim();
-      navigator.clipboard.writeText(text).catch(function(){});
-      copyActionBtn.textContent = 'Copied! ✓';
-      setTimeout(function(){ copyActionBtn.textContent = 'Copy Command'; }, 2000);
-    });
-  }
-
-  // ── Rail MCP Copy ──────────────────────────────────────────────────────
-  var railCopyBtn = document.getElementById('railCopyMcpBtn');
-  if (railCopyBtn) {
-    railCopyBtn.addEventListener('click', function(){
-      var url = railCopyBtn.getAttribute('data-mcp-url') || (baseUrl + '/mcp');
-      navigator.clipboard.writeText(url).catch(function(){});
-      railCopyBtn.textContent = 'Copied! ✓';
-      setTimeout(function(){ railCopyBtn.textContent = 'Copy MCP Endpoint'; }, 2000);
     });
   }
 
