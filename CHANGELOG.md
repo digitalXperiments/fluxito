@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.39] — 2026-09-16
+
 ### Added
+- **Redesigned Signed-In Home Dashboard.** Added the MCP Spotlight hero card to `/home` with interactive AI client selector tabs (Claude Desktop, Cursor Editor, ChatGPT, Windsurf, and Claude Code CLI), 1-click launch command copy, an actionable starter prompt TIP card for zero-issue states, an in-app AI key guidance modal, and a dedicated right-rail MCP integration card.
+- **Redesigned Guest Landing Page.** Deployed full-bleed marketing homepage at `/` featuring 27 platform connectors (including Amazon Redshift), universal MCP agent integration showcase, before/after comparisons, interactive FAQ accordion, and brand protection guards.
 - **Dedicated Super Admin Panel & Navigation (Option B).** Completely decoupled Admin Panel from Settings. Added a standalone Super Admin shell (`admin/shell.html`) and dedicated navigation rail (`admin_rail.html`) covering Platform Activity, Projects Directory, and Platform Settings, with `Admin Panel` in the primary sidebar.
 - **Platform Activity Log.** Added an instance-wide activity log gated to super administrators at `/admin/activity`, exposing MCP AI tool calls across all users and projects with multi-dimensional filtering (user, project, platform, tool, status, time window), KPI scorecards, CSV export, and deep payload inspection.
 - **Instance Projects Directory.** Added `/admin/projects` giving super administrators an overview of all projects, ownership, member counts, active connectors, and 7-day tool invocation volume.
