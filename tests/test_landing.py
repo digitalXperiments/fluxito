@@ -56,7 +56,10 @@ async def test_landing_has_key_content(_http_client):
     with patch("app.api.google_oauth_routes._resolve_user_ctx", new=AsyncMock(return_value=None)):
         resp = await _http_client.get("/")
     body = resp.text
-    assert "27 platforms" in body
+    assert "OneTrust" in body
+    assert "Adobe Analytics" in body
+    assert "Paid plans coming soon." in body
+    assert "Audited in 15 minutes." in body
     assert "GTM" in body
     assert "MCP" in body
 
@@ -121,9 +124,7 @@ def test_landing_social_share_metadata():
     # OpenGraph tags for LinkedIn, Facebook, Slack
     assert '<meta property="og:type" content="website"/>' in html
     assert '<meta property="og:url" content="https://fluxito.app/"/>' in html
-    assert (
-        '<meta property="og:title" content="Fluxito — The analytics hire you never managed to make"/>' in html
-    )
+    assert '<meta property="og:title" content="Fluxito — Less busywork. Better marketing data."/>' in html
     assert 'property="og:description"' in html
     assert '<meta property="og:image" content="https://fluxito.app/static/img/og-preview.png"/>' in html
     assert (
@@ -136,10 +137,7 @@ def test_landing_social_share_metadata():
 
     # Twitter card tags
     assert '<meta name="twitter:card" content="summary_large_image"/>' in html
-    assert (
-        '<meta name="twitter:title" content="Fluxito — The analytics hire you never managed to make"/>'
-        in html
-    )
+    assert '<meta name="twitter:title" content="Fluxito — Less busywork. Better marketing data."/>' in html
     assert '<meta name="twitter:image" content="https://fluxito.app/static/img/og-preview.png"/>' in html
 
     # Ensure og-preview.png asset exists on disk and is non-empty

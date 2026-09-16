@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.43] — 2026-09-16
+
+### Changed
+- Redesigned the guest homepage around five focused workflows: tag audits, tracking plans, implementation, connected insights, and dashboards, with matching product previews.
+- Replaced generic feature messaging with a concrete checkout-launch story, showing a tracking blueprint, QA findings, and a decision view.
+- Simplified conversion paths to sign-in and GitHub and clarified introductory pricing: free for a limited time, with paid plans coming soon.
+
+### Fixed
+- Added automatic hero rotation every six seconds, manual slide selection, pause controls, reduced-motion support, and stable slide heights across screen sizes.
+- Removed misleading demo actions and obsolete guest CTAs, and updated social-sharing descriptions to match the page.
+- The admin activity API now includes `user_id` and `project_id` on each call so client-side filters can match rows.
+- Registration tests now enable password sign-up explicitly, matching the Google-only default, and the admin redirect test no longer depends on test ordering.
+
 ## [2.0.39] — 2026-09-16
 
 ### Added
