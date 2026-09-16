@@ -15,7 +15,7 @@
   </div>
 
   {# ── Summary KPIs ── #}
-  <div class="audit-hd-row">
+  <div class="admin-kpi-row cols-4">
     <div class="kpi">
       <span class="label">Total projects</span>
       <div class="val mono">{{ projects|length }}</div>
@@ -41,9 +41,9 @@
   {# ── Search & Filter ── #}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap">
     <div style="flex:1;max-width:320px">
-      <input type="text" id="projectSearchInput" class="f-input" placeholder="Filter projects or owners…" oninput="filterProjectsTable()" style="width:100%">
+      <input type="text" id="projectSearchInput" class="f-input" placeholder="Filter projects or owners…" oninput="filterProjectsTable()" style="width:100%;height:36px;background:var(--card);border-radius:6px">
     </div>
-    <div class="text-xs text-[var(--muted)]" style="font-family:var(--mono)">
+    <div class="text-xs text-[var(--muted)]" style="font-family:var(--mono);font-size:11px">
       Showing <span id="projectRowCount">{{ projects|length }}</span> of {{ projects|length }} projects
     </div>
   </div>
@@ -89,10 +89,10 @@
             {{ p.last_active_str }}
           </td>
           <td style="padding:12px 14px;text-align:center">
-            <a href="/admin/activity?project_id={{ p.id }}" class="btn ghost" style="padding:4px 8px;font-size:11px;margin-right:4px">
+            <a href="/admin/activity?project_id={{ p.id }}" class="btn-table-action" style="margin-right:4px">
               Activity →
             </a>
-            <a href="/project/{{ p.slug }}/settings" class="btn ghost" style="padding:4px 8px;font-size:11px" title="Project settings">
+            <a href="/project/{{ p.slug }}/settings" class="btn-table-action" title="Project settings">
               Settings
             </a>
           </td>

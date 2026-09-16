@@ -62,7 +62,7 @@
   </div>
 
   {# ── KPI row ── #}
-  <div class="audit-hd-row">
+  <div class="admin-kpi-row">
     <div class="kpi">
       <span class="label">Tool calls · {{ window_days }}d</span>
       <div class="val mono">{{ stats.total_week }}</div>
@@ -98,10 +98,10 @@
   </div>
 
   {# ── Filters ── #}
-  <form method="get" class="audit-filters" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--paper-2);padding:14px;border-radius:var(--r-m, 8px);border:1px solid var(--line);margin-bottom:16px">
-    <div style="flex:1;min-width:160px">
-      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Caller / User</label>
-      <select name="user_id" class="f-input" onchange="this.form.submit()" style="width:100%">
+  <form method="get" class="admin-filters-bar">
+    <div class="filter-field">
+      <label class="filter-label">Caller / User</label>
+      <select name="user_id" class="f-input" onchange="this.form.submit()">
         <option value="">All users</option>
         {% for u in all_users %}
         <option value="{{ u.id }}" {% if selected_user_id == u.id|string %}selected{% endif %}>{{ u.display_name or u.email }} ({{ u.email }})</option>
@@ -109,9 +109,9 @@
       </select>
     </div>
 
-    <div style="flex:1;min-width:160px">
-      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Project Scope</label>
-      <select name="project_id" class="f-input" onchange="this.form.submit()" style="width:100%">
+    <div class="filter-field">
+      <label class="filter-label">Project Scope</label>
+      <select name="project_id" class="f-input" onchange="this.form.submit()">
         <option value="">All projects</option>
         {% for p in all_projects %}
         <option value="{{ p.id }}" {% if selected_project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>
@@ -119,9 +119,9 @@
       </select>
     </div>
 
-    <div style="flex:1;min-width:140px">
-      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Platform</label>
-      <select name="platform" class="f-input" onchange="this.form.submit()" style="width:100%">
+    <div class="filter-field">
+      <label class="filter-label">Platform</label>
+      <select name="platform" class="f-input" onchange="this.form.submit()">
         <option value="">All platforms</option>
         {% for slug, label in platform_options %}
         <option value="{{ slug }}" {% if selected_platform == slug %}selected{% endif %}>{{ label }}</option>
@@ -129,9 +129,9 @@
       </select>
     </div>
 
-    <div style="flex:1;min-width:140px">
-      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Tool</label>
-      <select name="tool" class="f-input" onchange="this.form.submit()" style="width:100%">
+    <div class="filter-field">
+      <label class="filter-label">Tool</label>
+      <select name="tool" class="f-input" onchange="this.form.submit()">
         <option value="">All tools</option>
         {% for tn in all_tool_names %}
         <option value="{{ tn }}" {% if selected_tool == tn %}selected{% endif %}>{{ tn }}</option>
@@ -139,9 +139,9 @@
       </select>
     </div>
 
-    <div style="width:130px">
-      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Status</label>
-      <select name="status" class="f-input" onchange="this.form.submit()" style="width:100%">
+    <div class="filter-field field-sm">
+      <label class="filter-label">Status</label>
+      <select name="status" class="f-input" onchange="this.form.submit()">
         <option value="">All statuses</option>
         <option value="success" {% if selected_status == 'success' %}selected{% endif %}>Success only</option>
         <option value="error" {% if selected_status == 'error' %}selected{% endif %}>Errors only</option>
@@ -149,9 +149,9 @@
       </select>
     </div>
 
-    <div style="width:110px">
-      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Window</label>
-      <select name="days" class="f-input" onchange="this.form.submit()" style="width:100%">
+    <div class="filter-field field-xs">
+      <label class="filter-label">Window</label>
+      <select name="days" class="f-input" onchange="this.form.submit()">
         <option value="7" {% if window_days == 7 %}selected{% endif %}>7 days</option>
         <option value="14" {% if window_days == 14 %}selected{% endif %}>14 days</option>
         <option value="30" {% if window_days == 30 %}selected{% endif %}>30 days</option>
@@ -159,18 +159,32 @@
     </div>
 
     {% if selected_user_id or selected_project_id or selected_platform or selected_tool or selected_status or window_days != 14 %}
-    <div style="align-self:flex-end">
-      <a href="/admin/activity" class="btn ghost" style="padding:6px 12px;font-size:12px">Clear filters</a>
+    <div class="filter-field" style="flex:0 0 auto;min-width:auto">
+      <a href="/admin/activity" class="btn-clear-filter">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Clear filters
+      </a>
     </div>
     {% endif %}
   </form>
 
   {# ── Quick filter pills ── #}
   <div class="quick-filters">
-    <button type="button" class="qf-pill is-active" data-filter="all" onclick="setQuickFilter('all')">All calls</button>
-    <button type="button" class="qf-pill" data-filter="writes" onclick="setQuickFilter('writes')">Writes only ({{ stats.writes_week }})</button>
-    <button type="button" class="qf-pill" data-filter="errors" onclick="setQuickFilter('errors')">Errors only ({{ stats.failures_week }})</button>
-    <button type="button" class="qf-pill qf-export" onclick="exportAdminActivityCsv()">Export CSV</button>
+    <button type="button" class="qf-pill is-active" data-filter="all" onclick="setQuickFilter('all')">
+      All calls
+    </button>
+    <button type="button" class="qf-pill" data-filter="writes" onclick="setQuickFilter('writes')">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block"></span>
+      Writes only <span class="pill-badge">{{ stats.writes_week }}</span>
+    </button>
+    <button type="button" class="qf-pill" data-filter="errors" onclick="setQuickFilter('errors')">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--bad);display:inline-block"></span>
+      Errors only <span class="pill-badge">{{ stats.failures_week }}</span>
+    </button>
+    <button type="button" class="qf-pill qf-export" onclick="exportAdminActivityCsv()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export CSV
+    </button>
   </div>
 
   {# ── Daily groups ── #}
@@ -249,11 +263,17 @@
     </div>
     {% endfor %}
   {% else %}
-  <div class="audit-empty" style="text-align:center;padding:60px 20px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-m, 8px)">
-    <h3 style="font-size:18px;margin-bottom:8px">No tool calls found.</h3>
-    <p style="color:var(--muted);font-size:13px">There are no tool calls recorded matching the selected filters in this time window.</p>
-    {% if selected_user_id or selected_project_id or selected_platform or selected_tool or selected_status %}
-    <a href="/admin/activity" class="btn primary" style="margin-top:16px;display:inline-block">Clear all filters</a>
+  <div class="admin-empty-state">
+    <div class="admin-empty-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </div>
+    <h3>No tool calls found</h3>
+    <p>There are no tool calls recorded matching the selected filters in this time window.</p>
+    {% if selected_user_id or selected_project_id or selected_platform or selected_tool or selected_status or window_days != 14 %}
+    <a href="/admin/activity" class="btn primary sm" style="display:inline-flex;align-items:center;gap:6px">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      Clear all filters
+    </a>
     {% endif %}
   </div>
   {% endif %}
@@ -306,6 +326,16 @@ function setQuickFilter(f) {
     } else if (f === 'errors') {
       r.style.display = (r.dataset.issue === '1') ? '' : 'none';
     }
+  });
+
+  // Cleanly collapse platform blocks and day groups with 0 matching rows
+  document.querySelectorAll('[data-plat-group]').forEach(function(block) {
+    var visibleRows = block.querySelectorAll('.activity-row:not([style*="display: none"])');
+    block.style.display = visibleRows.length > 0 ? '' : 'none';
+  });
+  document.querySelectorAll('.day-group').forEach(function(dg) {
+    var visibleRows = dg.querySelectorAll('.activity-row:not([style*="display: none"])');
+    dg.style.display = visibleRows.length > 0 ? '' : 'none';
   });
 }
 
