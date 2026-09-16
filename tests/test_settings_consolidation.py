@@ -20,7 +20,6 @@ SETTINGS_PAGES = {
     "settings/integrations.html": "integrations",
     "connect.html": "connections",
     "settings/ai_models.html": "ai-models",
-    "admin.html": "platform",
     "audit.html": "activity",
     "projects/settings.html": "project",
 }
@@ -56,17 +55,19 @@ def test_rail_has_real_anchor_links():
         "/settings/integrations",
         "/settings/connections",
         "/activity-log",
-        "/admin",
     ):
         assert f'href="{href}"' in src, f"rail missing real link {href}"
     assert 'href="/project/{{ active_project_slug }}/settings"' in src
+    # Admin Panel is decoupled to partials/admin_rail.html (Option B)
+    assert 'href="/admin"' not in src
 
 
 def test_rail_role_gates():
     src = RAIL.read_text()
     assert "{% if active_project_slug %}" in src
     assert "{% if is_install_admin %}" in src
-    assert "{% if is_superadmin %}" in src
+    # Platform / superadmin section is decoupled into partials/admin_rail.html (Option B)
+    assert "{% if is_superadmin %}" not in src
 
 
 def test_rail_highlights_active_section():
