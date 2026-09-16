@@ -72,6 +72,11 @@ def test_admin_activity_template_elements():
     assert 'name="platform"' in act_html
     assert 'name="tool"' in act_html
     assert 'name="status"' in act_html
+    assert 'name="start_date"' in act_html
+    assert 'name="end_date"' in act_html
+    assert 'id="dateRangePicker"' in act_html
+    assert 'id="dateRangePopover"' in act_html
+    assert 'data-searchable="true"' in act_html
     assert "/admin/activity/" in act_html
 
 
@@ -333,6 +338,10 @@ async def test_admin_api_activity_and_csv_mocked(monkeypatch):
         assert "text/csv" in csv_res.headers.get("content-type", "")
         assert "user@example.com" in csv_res.text
 
+        # Test date range params
+        range_res = await c.get("/api/admin/activity?start_date=2026-09-01&end_date=2026-09-15&days=7")
+        assert range_res.status_code == 200
+
 
 @pytest.mark.asyncio
 async def test_admin_activity_page_html_mocked(monkeypatch):
@@ -416,6 +425,12 @@ async def test_admin_activity_page_html_mocked(monkeypatch):
         assert "Platform Activity" in res.text
         assert "admin-rail" in res.text
         assert "admin-shell" in res.text
+
+        # Test custom date range query params
+        res_custom = await c.get("/admin/activity?start_date=2026-09-01&end_date=2026-09-15")
+        assert res_custom.status_code == 200
+        assert "2026-09-01" in res_custom.text
+        assert "2026-09-15" in res_custom.text
 
 
 @pytest.mark.asyncio

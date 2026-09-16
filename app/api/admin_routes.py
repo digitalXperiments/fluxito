@@ -637,21 +637,51 @@ async def admin_activity_page(request: Request):
         if not u or not u.is_superadmin:
             return RedirectResponse(url="/home", status_code=302)
 
-    from datetime import date, timedelta
+    from datetime import date, datetime, timedelta
     from app.api.google_oauth_routes import _load_user_view
 
     user_view = await _load_user_view(user_ctx)
 
-    try:
-        window_days = int(request.query_params.get("days", "14"))
-    except (ValueError, TypeError):
-        window_days = 14
-    if window_days not in (7, 14, 30):
-        window_days = 14
+    start_date_str = (request.query_params.get("start_date") or "").strip()
+    end_date_str = (request.query_params.get("end_date") or "").strip()
 
     now = _utc_now_naive()
     today = now.date()
-    window_start = now - timedelta(days=window_days)
+
+    start_dt = None
+    end_dt = None
+    is_custom_range = False
+
+    if start_date_str:
+        try:
+            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+            is_custom_range = True
+        except ValueError:
+            start_dt = None
+
+    if end_date_str:
+        try:
+            end_dt = datetime.strptime(end_date_str, "%Y-%m-%d") + timedelta(days=1)
+            is_custom_range = True
+        except ValueError:
+            end_dt = None
+
+    if is_custom_range:
+        window_start = start_dt if start_dt else (now - timedelta(days=365))
+        window_end = end_dt if end_dt else (now + timedelta(days=1))
+        delta_days = max(1, (window_end.date() - window_start.date()).days)
+        window_days = delta_days
+        window_label = f"{start_date_str or 'Start'} – {end_date_str or 'Today'}"
+    else:
+        try:
+            window_days = int(request.query_params.get("days", "14"))
+        except (ValueError, TypeError):
+            window_days = 14
+        if window_days not in (7, 14, 30, 90):
+            window_days = 14
+        window_start = now - timedelta(days=window_days)
+        window_end = None
+        window_label = f"Last {window_days} days"
 
     user_id_filter = request.query_params.get("user_id")
     project_id_filter = request.query_params.get("project_id")
@@ -687,6 +717,8 @@ async def admin_activity_page(request: Request):
                 .distinct()
                 .order_by(ToolCallAudit.tool_name)
             )
+            if window_end:
+                tool_names_q = tool_names_q.where(ToolCallAudit.created_at < window_end)
             all_tool_names = [r[0] for r in (await db.execute(tool_names_q)).all()]
 
             platform_q = (
@@ -696,6 +728,8 @@ async def admin_activity_page(request: Request):
                 .distinct()
                 .order_by(ToolCallAudit.platform)
             )
+            if window_end:
+                platform_q = platform_q.where(ToolCallAudit.created_at < window_end)
             all_platforms_raw = [r[0] for r in (await db.execute(platform_q)).all()]
             inferred_from_tools = {_infer_platform(tn) for tn in all_tool_names if _infer_platform(tn)}
             all_platforms = sorted(
@@ -719,6 +753,8 @@ async def admin_activity_page(request: Request):
                 .where(ToolCallAudit.created_at >= window_start)
                 .order_by(desc(ToolCallAudit.created_at))
             )
+            if window_end:
+                stmt = stmt.where(ToolCallAudit.created_at < window_end)
 
             if user_id_filter:
                 try:
@@ -862,6 +898,10 @@ async def admin_activity_page(request: Request):
             "stats": stats,
             "day_list": day_list,
             "window_days": window_days,
+            "window_label": window_label,
+            "start_date": start_date_str,
+            "end_date": end_date_str,
+            "is_custom_range": is_custom_range,
             "all_users": all_users,
             "all_projects": all_projects,
             "selected_user_id": user_id_filter,
@@ -948,12 +988,17 @@ async def api_admin_activity_list(
     status: str | None = Query(None),
     platform: str | None = Query(None),
     source: str | None = Query(None),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
+    days: int | None = Query(None),
     format: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
     """JSON API or CSV export for platform-wide tool calls."""
     await require_superadmin(request)
+    from datetime import datetime, timedelta
+
     async with app_state.db_session_factory() as db:
         stmt = (
             select(
@@ -977,6 +1022,8 @@ async def api_admin_activity_list(
                 pass
         if tool:
             stmt = stmt.where(ToolCallAudit.tool_name == tool)
+        if platform:
+            stmt = stmt.where(ToolCallAudit.platform == platform)
         if status == "write":
             stmt = stmt.where(ToolCallAudit.is_write == True)
         elif status == "error":
@@ -985,6 +1032,23 @@ async def api_admin_activity_list(
             stmt = stmt.where(ToolCallAudit.status == status)
         if source:
             stmt = stmt.where(ToolCallAudit.source_client == source)
+
+        if start_date:
+            try:
+                s_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                stmt = stmt.where(ToolCallAudit.created_at >= s_dt)
+            except ValueError:
+                pass
+        elif days:
+            now = _utc_now_naive()
+            stmt = stmt.where(ToolCallAudit.created_at >= now - timedelta(days=days))
+
+        if end_date:
+            try:
+                e_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+                stmt = stmt.where(ToolCallAudit.created_at < e_dt)
+            except ValueError:
+                pass
 
         stmt = stmt.order_by(desc(ToolCallAudit.created_at))
 

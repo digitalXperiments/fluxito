@@ -64,7 +64,7 @@
   {# ── KPI row ── #}
   <div class="admin-kpi-row">
     <div class="kpi">
-      <span class="label">Tool calls · {{ window_days }}d</span>
+      <span class="label">Tool calls · {% if is_custom_range %}Custom range{% else %}{{ window_days }}d{% endif %}</span>
       <div class="val mono">{{ stats.total_week }}</div>
       <div class="meta">Across all workspaces</div>
     </div>
@@ -99,9 +99,9 @@
 
   {# ── Filters ── #}
   <form method="get" class="admin-filters-bar">
-    <div class="filter-field">
+    <div class="filter-field" style="flex:1.3;min-width:170px">
       <label class="filter-label">Caller / User</label>
-      <select name="user_id" class="f-input" onchange="this.form.submit()">
+      <select name="user_id" class="f-input" data-searchable="true" onchange="this.form.submit()">
         <option value="">All users</option>
         {% for u in all_users %}
         <option value="{{ u.id }}" {% if selected_user_id == u.id|string %}selected{% endif %}>{{ u.display_name or u.email }} ({{ u.email }})</option>
@@ -109,9 +109,9 @@
       </select>
     </div>
 
-    <div class="filter-field">
+    <div class="filter-field" style="flex:1.1;min-width:150px">
       <label class="filter-label">Project Scope</label>
-      <select name="project_id" class="f-input" onchange="this.form.submit()">
+      <select name="project_id" class="f-input" data-searchable="true" onchange="this.form.submit()">
         <option value="">All projects</option>
         {% for p in all_projects %}
         <option value="{{ p.id }}" {% if selected_project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>
@@ -119,9 +119,9 @@
       </select>
     </div>
 
-    <div class="filter-field">
+    <div class="filter-field" style="flex:1;min-width:140px">
       <label class="filter-label">Platform</label>
-      <select name="platform" class="f-input" onchange="this.form.submit()">
+      <select name="platform" class="f-input" data-searchable="true" onchange="this.form.submit()">
         <option value="">All platforms</option>
         {% for slug, label in platform_options %}
         <option value="{{ slug }}" {% if selected_platform == slug %}selected{% endif %}>{{ label }}</option>
@@ -129,9 +129,9 @@
       </select>
     </div>
 
-    <div class="filter-field">
+    <div class="filter-field" style="flex:1;min-width:140px">
       <label class="filter-label">Tool</label>
-      <select name="tool" class="f-input" onchange="this.form.submit()">
+      <select name="tool" class="f-input" data-searchable="true" onchange="this.form.submit()">
         <option value="">All tools</option>
         {% for tn in all_tool_names %}
         <option value="{{ tn }}" {% if selected_tool == tn %}selected{% endif %}>{{ tn }}</option>
@@ -141,7 +141,7 @@
 
     <div class="filter-field field-sm">
       <label class="filter-label">Status</label>
-      <select name="status" class="f-input" onchange="this.form.submit()">
+      <select name="status" class="f-input" data-searchable="true" onchange="this.form.submit()">
         <option value="">All statuses</option>
         <option value="success" {% if selected_status == 'success' %}selected{% endif %}>Success only</option>
         <option value="error" {% if selected_status == 'error' %}selected{% endif %}>Errors only</option>
@@ -149,16 +149,49 @@
       </select>
     </div>
 
-    <div class="filter-field field-xs">
-      <label class="filter-label">Window</label>
-      <select name="days" class="f-input" onchange="this.form.submit()">
-        <option value="7" {% if window_days == 7 %}selected{% endif %}>7 days</option>
-        <option value="14" {% if window_days == 14 %}selected{% endif %}>14 days</option>
-        <option value="30" {% if window_days == 30 %}selected{% endif %}>30 days</option>
-      </select>
+    <div class="filter-field date-range-field">
+      <label class="filter-label">Date Range</label>
+      <div class="date-range-picker" id="dateRangePicker">
+        <button type="button" class="date-range-btn" id="dateRangeBtn" aria-expanded="false" aria-haspopup="true" onclick="toggleDateRangePopover()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="date-icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span class="date-range-text">{% if is_custom_range %}{{ start_date }} – {{ end_date or 'Today' }}{% elif window_days == 7 %}Last 7 days{% elif window_days == 30 %}Last 30 days{% elif window_days == 90 %}Last 90 days{% else %}Last 14 days{% endif %}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="date-arrow"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+
+        {# Hidden inputs for form submission #}
+        <input type="hidden" name="days" id="inputDays" value="{% if not is_custom_range %}{{ window_days }}{% endif %}">
+        <input type="hidden" name="start_date" id="inputStartDate" value="{{ start_date or '' }}">
+        <input type="hidden" name="end_date" id="inputEndDate" value="{{ end_date or '' }}">
+
+        {# Popover with Presets and Custom Range #}
+        <div class="date-range-popover" id="dateRangePopover" style="display:none">
+          <div class="dr-presets">
+            <div class="dr-preset-title">Presets</div>
+            <button type="button" class="dr-preset-btn {% if not is_custom_range and window_days == 7 %}is-active{% endif %}" onclick="selectDatePreset(7)">Last 7 days</button>
+            <button type="button" class="dr-preset-btn {% if not is_custom_range and window_days == 14 %}is-active{% endif %}" onclick="selectDatePreset(14)">Last 14 days</button>
+            <button type="button" class="dr-preset-btn {% if not is_custom_range and window_days == 30 %}is-active{% endif %}" onclick="selectDatePreset(30)">Last 30 days</button>
+            <button type="button" class="dr-preset-btn {% if not is_custom_range and window_days == 90 %}is-active{% endif %}" onclick="selectDatePreset(90)">Last 90 days</button>
+          </div>
+
+          <div class="dr-custom">
+            <div class="dr-preset-title">Custom Date Range</div>
+            <div class="dr-inputs">
+              <label class="dr-input-wrap">
+                <span>From</span>
+                <input type="date" id="drStart" class="dr-date-input" value="{{ start_date or '' }}">
+              </label>
+              <label class="dr-input-wrap">
+                <span>To</span>
+                <input type="date" id="drEnd" class="dr-date-input" value="{{ end_date or '' }}">
+              </label>
+            </div>
+            <button type="button" class="btn primary sm dr-apply-btn" onclick="applyCustomDateRange()">Apply Range</button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    {% if selected_user_id or selected_project_id or selected_platform or selected_tool or selected_status or window_days != 14 %}
+    {% if selected_user_id or selected_project_id or selected_platform or selected_tool or selected_status or is_custom_range or window_days != 14 %}
     <div class="filter-field" style="flex:0 0 auto;min-width:auto">
       <a href="/admin/activity" class="btn-clear-filter">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -343,6 +376,282 @@ function exportAdminActivityCsv() {
   var params = new URLSearchParams(window.location.search);
   params.set('format', 'csv');
   window.open('/api/admin/activity?' + params.toString(), '_blank');
+}
+
+/* ── Progressive Searchable Comboboxes ── */
+function initSearchableSelects() {
+  document.querySelectorAll('select[data-searchable="true"]').forEach(function(select) {
+    if (select.dataset.searchableInit === 'true') return;
+    select.dataset.searchableInit = 'true';
+
+    select.style.display = 'none';
+
+    var wrap = document.createElement('div');
+    wrap.className = 'combo-wrap';
+
+    var inputWrap = document.createElement('div');
+    inputWrap.className = 'combo-input-wrap';
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'combo-input';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+
+    var arrow = document.createElement('button');
+    arrow.type = 'button';
+    arrow.className = 'combo-arrow';
+    arrow.tabIndex = -1;
+    arrow.setAttribute('aria-label', 'Toggle dropdown');
+    arrow.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+
+    inputWrap.appendChild(input);
+    inputWrap.appendChild(arrow);
+    wrap.appendChild(inputWrap);
+
+    var menu = document.createElement('div');
+    menu.className = 'combo-menu';
+    menu.setAttribute('role', 'listbox');
+
+    var options = Array.from(select.options);
+    var selectedOpt = select.options[select.selectedIndex] || options[0];
+    input.value = selectedOpt ? selectedOpt.text.trim() : '';
+
+    var optElements = [];
+    options.forEach(function(opt, idx) {
+      var optEl = document.createElement('div');
+      optEl.className = 'combo-opt' + (opt.selected ? ' is-selected is-highlighted' : '');
+      optEl.setAttribute('role', 'option');
+      optEl.setAttribute('data-value', opt.value);
+      optEl.setAttribute('data-index', idx);
+
+      var textSpan = document.createElement('span');
+      textSpan.className = 'combo-opt-text';
+      textSpan.textContent = opt.text.trim();
+      optEl.appendChild(textSpan);
+
+      if (opt.selected) {
+        var check = document.createElement('span');
+        check.className = 'combo-check';
+        check.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        optEl.appendChild(check);
+      }
+
+      optEl.addEventListener('click', function(e) {
+        e.stopPropagation();
+        chooseOption(opt.value, opt.text.trim());
+      });
+
+      menu.appendChild(optEl);
+      optElements.push(optEl);
+    });
+
+    var emptyMsg = document.createElement('div');
+    emptyMsg.className = 'combo-empty';
+    emptyMsg.textContent = 'No matching options';
+    emptyMsg.style.display = 'none';
+    menu.appendChild(emptyMsg);
+
+    wrap.appendChild(menu);
+    select.parentNode.insertBefore(wrap, select.nextSibling);
+
+    function openMenu() {
+      document.querySelectorAll('.combo-wrap.is-open').forEach(function(other) {
+        if (other !== wrap) other.classList.remove('is-open');
+      });
+      wrap.classList.add('is-open');
+      adjustMenuPosition();
+      filterOptions(input.value);
+      input.select();
+    }
+
+    function closeMenu() {
+      wrap.classList.remove('is-open');
+    }
+
+    function adjustMenuPosition() {
+      var rect = wrap.getBoundingClientRect();
+      if (rect.right + 80 > window.innerWidth) {
+        menu.style.left = 'auto';
+        menu.style.right = '0';
+      } else {
+        menu.style.left = '0';
+        menu.style.right = 'auto';
+      }
+    }
+
+    function chooseOption(val, text) {
+      select.value = val;
+      input.value = text;
+      closeMenu();
+      if (select.form) {
+        select.form.submit();
+      }
+    }
+
+    function filterOptions(query) {
+      var q = (query || '').toLowerCase().trim();
+      var visibleCount = 0;
+      var hasHighlighted = false;
+
+      optElements.forEach(function(el) {
+        var text = el.querySelector('.combo-opt-text').textContent.toLowerCase();
+        var match = !q || text.indexOf(q) !== -1;
+        el.style.display = match ? 'flex' : 'none';
+        if (match) {
+          visibleCount++;
+          if (!hasHighlighted) {
+            el.classList.add('is-highlighted');
+            hasHighlighted = true;
+          } else {
+            el.classList.remove('is-highlighted');
+          }
+        } else {
+          el.classList.remove('is-highlighted');
+        }
+      });
+
+      emptyMsg.style.display = visibleCount === 0 ? 'block' : 'none';
+    }
+
+    input.addEventListener('click', function() {
+      if (!wrap.classList.contains('is-open')) {
+        openMenu();
+      }
+    });
+
+    arrow.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (wrap.classList.contains('is-open')) {
+        closeMenu();
+      } else {
+        openMenu();
+        input.focus();
+      }
+    });
+
+    input.addEventListener('input', function() {
+      if (!wrap.classList.contains('is-open')) {
+        wrap.classList.add('is-open');
+        adjustMenuPosition();
+      }
+      filterOptions(input.value);
+    });
+
+    input.addEventListener('keydown', function(e) {
+      var isOpen = wrap.classList.contains('is-open');
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!isOpen) {
+          openMenu();
+          return;
+        }
+        var visible = optElements.filter(function(el) { return el.style.display !== 'none'; });
+        if (!visible.length) return;
+
+        var currIdx = visible.findIndex(function(el) { return el.classList.contains('is-highlighted'); });
+        var nextIdx = 0;
+        if (e.key === 'ArrowDown') {
+          nextIdx = (currIdx + 1) % visible.length;
+        } else {
+          nextIdx = (currIdx - 1 + visible.length) % visible.length;
+        }
+
+        visible.forEach(function(el, i) {
+          el.classList.toggle('is-highlighted', i === nextIdx);
+        });
+        visible[nextIdx].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (isOpen) {
+          var highlighted = optElements.find(function(el) {
+            return el.style.display !== 'none' && el.classList.contains('is-highlighted');
+          });
+          if (highlighted) {
+            var val = highlighted.getAttribute('data-value');
+            var text = highlighted.querySelector('.combo-opt-text').textContent;
+            chooseOption(val, text);
+          } else if (!input.value.trim()) {
+            chooseOption('', options[0] ? options[0].text.trim() : '');
+          }
+        } else {
+          openMenu();
+        }
+      } else if (e.key === 'Escape') {
+        if (isOpen) {
+          e.preventDefault();
+          closeMenu();
+          var cur = select.options[select.selectedIndex];
+          input.value = cur ? cur.text.trim() : '';
+        }
+      } else if (e.key === 'Tab') {
+        closeMenu();
+      }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#dateRangePicker')) {
+      var popover = document.getElementById('dateRangePopover');
+      var picker = document.getElementById('dateRangePicker');
+      if (popover && popover.style.display !== 'none') {
+        popover.style.display = 'none';
+        if (picker) picker.classList.remove('is-open');
+      }
+    }
+    if (!e.target.closest('.combo-wrap')) {
+      document.querySelectorAll('.combo-wrap.is-open').forEach(function(w) {
+        w.classList.remove('is-open');
+        var sel = w.previousElementSibling;
+        var inp = w.querySelector('.combo-input');
+        if (sel && sel.options && inp) {
+          var cur = sel.options[sel.selectedIndex];
+          if (cur) inp.value = cur.text.trim();
+        }
+      });
+    }
+  });
+}
+
+/* ── Date Range Popover & Selection ── */
+function toggleDateRangePopover() {
+  var popover = document.getElementById('dateRangePopover');
+  var picker = document.getElementById('dateRangePicker');
+  var btn = document.getElementById('dateRangeBtn');
+  if (!popover || !picker) return;
+  var isHidden = popover.style.display === 'none';
+  popover.style.display = isHidden ? 'flex' : 'none';
+  picker.classList.toggle('is-open', isHidden);
+  btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+  if (isHidden) {
+    document.querySelectorAll('.combo-wrap.is-open').forEach(function(w) { w.classList.remove('is-open'); });
+  }
+}
+
+function selectDatePreset(days) {
+  document.getElementById('inputDays').value = days;
+  document.getElementById('inputStartDate').value = '';
+  document.getElementById('inputEndDate').value = '';
+  document.getElementById('dateRangeBtn').closest('form').submit();
+}
+
+function applyCustomDateRange() {
+  var start = document.getElementById('drStart').value.trim();
+  var end = document.getElementById('drEnd').value.trim();
+  if (!start && !end) {
+    selectDatePreset(14);
+    return;
+  }
+  document.getElementById('inputDays').value = '';
+  document.getElementById('inputStartDate').value = start;
+  document.getElementById('inputEndDate').value = end;
+  document.getElementById('dateRangeBtn').closest('form').submit();
+}
+
+if (document.readyState !== 'loading') {
+  initSearchableSelects();
+} else {
+  document.addEventListener('DOMContentLoaded', initSearchableSelects);
 }
 </script>
 {% endblock %}
