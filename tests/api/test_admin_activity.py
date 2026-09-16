@@ -80,6 +80,30 @@ def test_admin_activity_template_elements():
     assert "/admin/activity/" in act_html
 
 
+def test_admin_activity_script_syntax():
+    import re
+    import shutil
+    import subprocess
+
+    act_html = Path("app/templates/admin_activity.html").read_text()
+    match = re.search(r"<script>(.*?)</script>", act_html, re.DOTALL)
+    assert match is not None
+    script = match.group(1)
+    assert "initSearchableSelects" in script
+    assert "toggleDateRangePopover" in script
+    assert "selectDatePreset" in script
+    assert "applyCustomDateRange" in script
+
+    node_bin = shutil.which("node")
+    if node_bin:
+        res = subprocess.run(
+            [node_bin, "-e", f"new Function({script!r})"],
+            capture_output=True,
+            text=True,
+        )
+        assert res.returncode == 0, f"Node syntax error: {res.stderr}"
+
+
 def test_admin_projects_template_elements():
     proj_html = Path("app/templates/admin_projects.html").read_text()
     assert "Instance projects" in proj_html

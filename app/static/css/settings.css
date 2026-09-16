@@ -404,15 +404,32 @@
   padding: 0 10px;
   border-radius: 6px;
   font-size: 12.5px;
-  background: var(--card);
+  background-color: var(--card);
   border: 1px solid var(--line);
   color: var(--ink);
   width: 100%;
+  box-sizing: border-box;
+}
+
+.admin-filters-bar select.f-input {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 20 20' fill='none' stroke='%2371717A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 8 10 12 14 8'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .admin-filters-bar .f-input:focus {
   border-color: var(--ink);
   outline: none;
+}
+
+.filter-field:has(.combo-wrap.is-open),
+.filter-field:has(.date-range-picker.is-open) {
+  z-index: 250;
 }
 
 .admin-filters-bar .btn-clear-filter {

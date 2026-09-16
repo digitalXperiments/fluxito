@@ -437,57 +437,76 @@ function initSearchableSelects() {
         optEl.appendChild(check);
       }
 
-      optEl.addEventListener('click', function(e) {
-        e.stopPropagation();
-        chooseOption(opt.value, opt.text.trim());
-      });
-
-      menu.appendChild(optEl);
-      optElements.push(optEl);
+    optEl.addEventListener('mousedown', function(e) {
+      e.preventDefault();
     });
 
-    var emptyMsg = document.createElement('div');
-    emptyMsg.className = 'combo-empty';
-    emptyMsg.textContent = 'No matching options';
-    emptyMsg.style.display = 'none';
-    menu.appendChild(emptyMsg);
+    optEl.addEventListener('click', function(e) {
+      e.stopPropagation();
+      chooseOption(opt.value, opt.text.trim());
+    });
 
-    wrap.appendChild(menu);
-    select.parentNode.insertBefore(wrap, select.nextSibling);
+    menu.appendChild(optEl);
+    optElements.push(optEl);
+  });
 
-    function openMenu() {
-      document.querySelectorAll('.combo-wrap.is-open').forEach(function(other) {
-        if (other !== wrap) other.classList.remove('is-open');
-      });
-      wrap.classList.add('is-open');
-      adjustMenuPosition();
-      filterOptions(input.value);
-      input.select();
-    }
+  var emptyMsg = document.createElement('div');
+  emptyMsg.className = 'combo-empty';
+  emptyMsg.textContent = 'No matching options';
+  emptyMsg.style.display = 'none';
+  menu.appendChild(emptyMsg);
 
-    function closeMenu() {
-      wrap.classList.remove('is-open');
-    }
+  wrap.appendChild(menu);
+  select.parentNode.insertBefore(wrap, select.nextSibling);
 
-    function adjustMenuPosition() {
-      var rect = wrap.getBoundingClientRect();
-      if (rect.right + 80 > window.innerWidth) {
-        menu.style.left = 'auto';
-        menu.style.right = '0';
-      } else {
-        menu.style.left = '0';
-        menu.style.right = 'auto';
+  function openMenu() {
+    document.querySelectorAll('.combo-wrap.is-open').forEach(function(other) {
+      if (other !== wrap) other.classList.remove('is-open');
+    });
+    wrap.classList.add('is-open');
+    adjustMenuPosition();
+    filterOptions('');
+    optElements.forEach(function(el) {
+      var isSel = el.classList.contains('is-selected');
+      el.classList.toggle('is-highlighted', isSel);
+      if (isSel) {
+        el.scrollIntoView({ block: 'nearest' });
       }
-    }
+    });
+    input.select();
+  }
 
-    function chooseOption(val, text) {
-      select.value = val;
-      input.value = text;
+  function closeMenu() {
+    wrap.classList.remove('is-open');
+    var cur = select.options[select.selectedIndex];
+    if (cur) {
+      input.value = cur.text.trim();
+    }
+  }
+
+  function adjustMenuPosition() {
+    var rect = wrap.getBoundingClientRect();
+    if (rect.right + 80 > window.innerWidth) {
+      menu.style.left = 'auto';
+      menu.style.right = '0';
+    } else {
+      menu.style.left = '0';
+      menu.style.right = 'auto';
+    }
+  }
+
+  function chooseOption(val, text) {
+    if (select.value === val) {
       closeMenu();
-      if (select.form) {
-        select.form.submit();
-      }
+      return;
     }
+    select.value = val;
+    input.value = text;
+    closeMenu();
+    if (select.form) {
+      select.form.submit();
+    }
+  }
 
     function filterOptions(query) {
       var q = (query || '').toLowerCase().trim();
@@ -588,6 +607,7 @@ function initSearchableSelects() {
       } else if (e.key === 'Tab') {
         closeMenu();
       }
+    });
   });
 
   document.addEventListener('click', function(e) {
