@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Platform Activity Log & Super Admin Panel.** Added an instance-wide activity log gated to super administrators at `/admin/activity`, exposing MCP AI tool calls across all users and projects with multi-dimensional filtering (user, project, platform, tool, status, time window), KPI scorecards, CSV export, and deep payload inspection.
+- **Instance Projects Directory.** Added `/admin/projects` giving super administrators an overview of all projects, ownership, member counts, active connectors, and 7-day tool invocation volume.
+- **Admin Panel Navigation.** Pinned a super-admin-gated **Admin Panel** item directly below **Settings** on the left navigation bar, with connected links in the Settings Rail under `Platform`.
 - **Adobe Launch `list_companies` action.** `tagmanager_read` now exposes `list_companies` under the `ADOBE LAUNCH` group, allowing AI agents and MCP clients to list Adobe Launch (Reactor) company IDs (`CO...`).
 
 ### Fixed

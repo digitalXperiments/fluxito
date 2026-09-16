@@ -7,12 +7,14 @@ import re as _re
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from sqlalchemy import func, select
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from sqlalchemy import desc, func, select
 
 import app.app_state as app_state
 from app.api.google_oauth_routes import _resolve_user_ctx
+from app.models.audit import ToolCallAudit
+from app.models.project import Project
 from app.models.user import User
 from app.templating import render
 
@@ -541,3 +543,714 @@ async def admin_invite_user(request: Request):
         logger.warning("invite email failed for %s", email, exc_info=True)
 
     return JSONResponse({"success": True, "email": email, "temp_password": temp_password})
+
+
+# ---------------------------------------------------------------------------
+# Platform Activity Log (Cross-User & Cross-Project Super Admin Audit)
+# ---------------------------------------------------------------------------
+
+PLATFORM_LABELS = {
+    "ga4": "Google Analytics 4",
+    "gtm": "Google Tag Manager",
+    "google_ads": "Google Ads",
+    "meta": "Meta Ads",
+    "tiktok": "TikTok Ads",
+    "snap": "Snap Ads",
+    "bigquery": "BigQuery",
+    "redshift": "Redshift",
+    "snowflake": "Snowflake",
+    "amplitude": "Amplitude",
+    "mixpanel": "Mixpanel",
+    "posthog": "PostHog",
+    "adobe": "Adobe Analytics",
+}
+
+
+def humanize_tool(name: str) -> str:
+    if not name:
+        return "Unknown"
+    stripped = name
+    for prefix in (
+        "analytics_",
+        "tagmanager_",
+        "marketing_",
+        "warehouse_",
+        "dashboard_",
+        "template_",
+        "cross_platform_",
+    ):
+        if stripped.startswith(prefix):
+            stripped = stripped[len(prefix) :]
+            break
+    return stripped.replace("_", " ").title()
+
+
+def _infer_platform(tool_name: str | None) -> str | None:
+    if not tool_name:
+        return None
+    t = tool_name.lower()
+    if t.startswith("tagmanager_") or t.startswith("gtm_"):
+        return "gtm"
+    if t.startswith("analytics_"):
+        return "ga4"
+    if t.startswith(("adwords_", "ads_", "google_ads_")):
+        return "google_ads"
+    if t.startswith(("warehouse_", "bigquery_", "bq_")):
+        return "bigquery"
+    if t.startswith("redshift_"):
+        return "redshift"
+    if t.startswith("snowflake_"):
+        return "snowflake"
+    if t.startswith("meta_"):
+        return "meta"
+    if t.startswith("tiktok_"):
+        return "tiktok"
+    if t.startswith("snap_"):
+        return "snap"
+    if t.startswith("amplitude_"):
+        return "amplitude"
+    if t.startswith("mixpanel_"):
+        return "mixpanel"
+    if t.startswith("posthog_"):
+        return "posthog"
+    if t.startswith("adobe_"):
+        return "adobe"
+    return None
+
+
+@router.get("/admin/activity", response_class=HTMLResponse)
+async def admin_activity_page(request: Request):
+    """Platform-level activity log gated to super-admins."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/admin/activity", status_code=302)
+
+    async with app_state.db_session_factory() as db:
+        u = (
+            await db.execute(select(User).where(User.id == uuid.UUID(user_ctx.user_id)))
+        ).scalar_one_or_none()
+        if not u or not u.is_superadmin:
+            return RedirectResponse(url="/home", status_code=302)
+
+    from datetime import date, timedelta
+    from app.api.google_oauth_routes import _load_user_view
+
+    user_view = await _load_user_view(user_ctx)
+
+    try:
+        window_days = int(request.query_params.get("days", "14"))
+    except (ValueError, TypeError):
+        window_days = 14
+    if window_days not in (7, 14, 30):
+        window_days = 14
+
+    now = datetime.now(UTC)
+    today = now.date()
+    window_start = now - timedelta(days=window_days)
+
+    user_id_filter = request.query_params.get("user_id")
+    project_id_filter = request.query_params.get("project_id")
+    tool_filter = request.query_params.get("tool")
+    platform_filter = request.query_params.get("platform")
+    status_filter = request.query_params.get("status")
+
+    stats = {
+        "total_week": 0,
+        "writes_week": 0,
+        "failures_week": 0,
+        "users_week": set(),
+        "projects_week": set(),
+        "total_duration_ms": 0,
+        "duration_count": 0,
+    }
+
+    async with app_state.db_session_factory() as db:
+        all_users = (await db.execute(select(User).order_by(User.email.asc()))).scalars().all()
+
+        all_projects = (await db.execute(select(Project).order_by(Project.name.asc()))).scalars().all()
+
+        tool_names_q = (
+            select(ToolCallAudit.tool_name)
+            .where(ToolCallAudit.created_at >= window_start)
+            .distinct()
+            .order_by(ToolCallAudit.tool_name)
+        )
+        all_tool_names = [r[0] for r in (await db.execute(tool_names_q)).all()]
+
+        platform_q = (
+            select(ToolCallAudit.platform)
+            .where(ToolCallAudit.created_at >= window_start)
+            .where(ToolCallAudit.platform.isnot(None))
+            .distinct()
+            .order_by(ToolCallAudit.platform)
+        )
+        all_platforms_raw = [r[0] for r in (await db.execute(platform_q)).all()]
+        inferred_from_tools = {_infer_platform(tn) for tn in all_tool_names if _infer_platform(tn)}
+        all_platforms = sorted(
+            set(all_platforms_raw) | inferred_from_tools,
+            key=lambda s: (PLATFORM_LABELS.get(s, s.replace("_", " ").title())),
+        )
+        platform_options = [(p, PLATFORM_LABELS.get(p, p.replace("_", " ").title())) for p in all_platforms]
+
+        stmt = (
+            select(
+                ToolCallAudit,
+                User.email.label("user_email"),
+                User.display_name.label("user_display_name"),
+                Project.name.label("project_name"),
+                Project.slug.label("project_slug"),
+            )
+            .join(User, ToolCallAudit.user_id == User.id)
+            .outerjoin(Project, ToolCallAudit.project_id == Project.id)
+            .where(ToolCallAudit.created_at >= window_start)
+            .order_by(desc(ToolCallAudit.created_at))
+        )
+
+        if user_id_filter:
+            try:
+                stmt = stmt.where(ToolCallAudit.user_id == uuid.UUID(user_id_filter))
+            except ValueError:
+                pass
+        if project_id_filter:
+            try:
+                stmt = stmt.where(ToolCallAudit.project_id == uuid.UUID(project_id_filter))
+            except ValueError:
+                pass
+        if tool_filter:
+            stmt = stmt.where(ToolCallAudit.tool_name == tool_filter)
+        if status_filter == "write":
+            stmt = stmt.where(ToolCallAudit.is_write == True)
+        elif status_filter == "error":
+            stmt = stmt.where(ToolCallAudit.status != "success")
+        elif status_filter in ("success", "denied"):
+            stmt = stmt.where(ToolCallAudit.status == status_filter)
+
+        results = (await db.execute(stmt.limit(1000))).all()
+
+    days: dict = {}
+    for row in results:
+        r, u_email, u_name, p_name, p_slug = row
+        if not r.created_at:
+            continue
+
+        inferred_plat = r.platform or _infer_platform(r.tool_name) or "other"
+        if platform_filter and inferred_plat != platform_filter:
+            continue
+
+        is_write = bool(r.is_write)
+        is_issue = (r.status or "success") != "success"
+        plat_label = PLATFORM_LABELS.get(inferred_plat, inferred_plat.replace("_", " ").title())
+
+        stats["total_week"] += 1
+        if is_write:
+            stats["writes_week"] += 1
+        if is_issue:
+            stats["failures_week"] += 1
+        stats["users_week"].add(r.user_id)
+        if r.project_id:
+            stats["projects_week"].add(r.project_id)
+        if r.duration_ms is not None:
+            stats["total_duration_ms"] += r.duration_ms
+            stats["duration_count"] += 1
+
+        day_key = r.created_at.date().isoformat()
+        if day_key not in days:
+            days[day_key] = {
+                "date": r.created_at.date(),
+                "total": 0,
+                "writes": 0,
+                "issues": 0,
+                "users": set(),
+                "platforms": {},
+            }
+        d = days[day_key]
+        d["total"] += 1
+        if is_write:
+            d["writes"] += 1
+        if is_issue:
+            d["issues"] += 1
+        d["users"].add(r.user_id)
+
+        if inferred_plat not in d["platforms"]:
+            d["platforms"][inferred_plat] = {
+                "slug": inferred_plat,
+                "label": plat_label,
+                "count": 0,
+                "writes": 0,
+                "issues": 0,
+                "calls": [],
+            }
+        p = d["platforms"][inferred_plat]
+        p["count"] += 1
+        if is_write:
+            p["writes"] += 1
+        if is_issue:
+            p["issues"] += 1
+
+        p["calls"].append(
+            {
+                "id": str(r.id),
+                "tool_name": r.tool_name,
+                "display_name": humanize_tool(r.tool_name),
+                "is_write": is_write,
+                "is_issue": is_issue,
+                "status": r.status,
+                "source": r.source_client,
+                "summary": r.response_summary,
+                "duration_ms": r.duration_ms,
+                "time_str": r.created_at.strftime("%H:%M"),
+                "user_id": str(r.user_id),
+                "user_email": u_email,
+                "user_name": u_name or u_email.split("@")[0],
+                "project_id": str(r.project_id) if r.project_id else None,
+                "project_name": p_name or "Global",
+            }
+        )
+
+    def day_label(d: date) -> str:
+        if d == today:
+            return "Today"
+        if d == today - timedelta(days=1):
+            return "Yesterday"
+        return d.strftime("%A, %b %-d")
+
+    day_list = []
+    for day_key in sorted(days.keys(), reverse=True):
+        d = days[day_key]
+        d["key"] = day_key
+        d["label"] = day_label(d["date"])
+        d["unique_users"] = len(d["users"])
+        platforms_list = []
+        for plat in d["platforms"].values():
+            plat["calls"].sort(key=lambda c: c["time_str"], reverse=True)
+            platforms_list.append(plat)
+        platforms_list.sort(key=lambda pl: -pl["count"])
+        d["platforms_list"] = platforms_list
+        day_list.append(d)
+
+    stats["users_count"] = len(stats["users_week"])
+    stats["projects_count"] = len(stats["projects_week"])
+    stats["avg_duration_ms"] = (
+        round(stats["total_duration_ms"] / stats["duration_count"]) if stats["duration_count"] > 0 else 0
+    )
+
+    return render(
+        request,
+        "admin_activity.html",
+        {
+            "user": user_view,
+            "active": "admin",
+            "stats": stats,
+            "day_list": day_list,
+            "window_days": window_days,
+            "all_users": all_users,
+            "all_projects": all_projects,
+            "selected_user_id": user_id_filter,
+            "selected_project_id": project_id_filter,
+            "all_tool_names": all_tool_names,
+            "selected_tool": tool_filter,
+            "platform_options": platform_options,
+            "selected_platform": platform_filter,
+            "selected_status": status_filter,
+        },
+    )
+
+
+@router.get("/admin/activity/{audit_id}", response_class=HTMLResponse)
+async def admin_activity_detail_page(request: Request, audit_id: str):
+    """Inspect any tool call execution across the platform."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        from urllib.parse import quote
+
+        return RedirectResponse(
+            f"/signin?next={quote(f'/admin/activity/{audit_id}', safe='/')}", status_code=302
+        )
+    async with app_state.db_session_factory() as db:
+        u = (
+            await db.execute(select(User).where(User.id == uuid.UUID(user_ctx.user_id)))
+        ).scalar_one_or_none()
+        if not u or not u.is_superadmin:
+            return RedirectResponse(url="/home", status_code=302)
+
+    try:
+        rid = uuid.UUID(audit_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    from app.api.google_oauth_routes import _load_user_view
+
+    user_view = await _load_user_view(user_ctx)
+
+    async with app_state.db_session_factory() as db:
+        stmt = (
+            select(
+                ToolCallAudit,
+                User.email.label("user_email"),
+                User.display_name.label("user_display_name"),
+                Project.name.label("project_name"),
+            )
+            .join(User, ToolCallAudit.user_id == User.id)
+            .outerjoin(Project, ToolCallAudit.project_id == Project.id)
+            .where(ToolCallAudit.id == rid)
+        )
+        row_tuple = (await db.execute(stmt)).first()
+
+    if not row_tuple:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    r, u_email, u_name, p_name = row_tuple
+    row_dict = r.to_dict()
+    row_dict["user_email"] = u_email
+    row_dict["user_name"] = u_name or u_email.split("@")[0]
+    row_dict["project_name"] = p_name or "Global (No project)"
+    row_dict["platform_label"] = PLATFORM_LABELS.get(
+        row_dict.get("platform") or _infer_platform(row_dict.get("tool_name")) or "",
+        (row_dict.get("platform") or "").replace("_", " ").title(),
+    )
+
+    return render(
+        request,
+        "admin_activity_detail.html",
+        {
+            "user": user_view,
+            "active": "admin",
+            "row": row_dict,
+        },
+    )
+
+
+@router.get("/api/admin/activity")
+async def api_admin_activity_list(
+    request: Request,
+    user_id: str | None = Query(None),
+    project_id: str | None = Query(None),
+    tool: str | None = Query(None),
+    status: str | None = Query(None),
+    platform: str | None = Query(None),
+    source: str | None = Query(None),
+    format: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """JSON API or CSV export for platform-wide tool calls."""
+    await require_superadmin(request)
+    async with app_state.db_session_factory() as db:
+        stmt = (
+            select(
+                ToolCallAudit,
+                User.email.label("user_email"),
+                User.display_name.label("user_display_name"),
+                Project.name.label("project_name"),
+            )
+            .join(User, ToolCallAudit.user_id == User.id)
+            .outerjoin(Project, ToolCallAudit.project_id == Project.id)
+        )
+        if user_id:
+            try:
+                stmt = stmt.where(ToolCallAudit.user_id == uuid.UUID(user_id))
+            except ValueError:
+                pass
+        if project_id:
+            try:
+                stmt = stmt.where(ToolCallAudit.project_id == uuid.UUID(project_id))
+            except ValueError:
+                pass
+        if tool:
+            stmt = stmt.where(ToolCallAudit.tool_name == tool)
+        if status == "write":
+            stmt = stmt.where(ToolCallAudit.is_write == True)
+        elif status == "error":
+            stmt = stmt.where(ToolCallAudit.status != "success")
+        elif status:
+            stmt = stmt.where(ToolCallAudit.status == status)
+        if source:
+            stmt = stmt.where(ToolCallAudit.source_client == source)
+
+        stmt = stmt.order_by(desc(ToolCallAudit.created_at))
+
+        if format == "csv":
+            import csv
+            import io
+
+            rows = (await db.execute(stmt.limit(5000))).all()
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(
+                [
+                    "id",
+                    "created_at",
+                    "user_email",
+                    "user_name",
+                    "project_name",
+                    "tool_name",
+                    "platform",
+                    "source_client",
+                    "status",
+                    "is_write",
+                    "duration_ms",
+                    "summary",
+                ]
+            )
+            for r, u_email, u_name, p_name in rows:
+                plat = r.platform or _infer_platform(r.tool_name) or ""
+                if platform and plat != platform:
+                    continue
+                writer.writerow(
+                    [
+                        str(r.id),
+                        r.created_at.isoformat() if r.created_at else "",
+                        u_email,
+                        u_name or "",
+                        p_name or "Global",
+                        r.tool_name,
+                        plat,
+                        r.source_client or "",
+                        r.status,
+                        "1" if r.is_write else "0",
+                        r.duration_ms or "",
+                        r.response_summary or "",
+                    ]
+                )
+            return Response(
+                content=output.getvalue(),
+                media_type="text/csv",
+                headers={"Content-Disposition": 'attachment; filename="platform_activity.csv"'},
+            )
+
+        rows = (await db.execute(stmt.limit(limit).offset(offset))).all()
+        calls = []
+        for r, u_email, u_name, p_name in rows:
+            plat = r.platform or _infer_platform(r.tool_name) or ""
+            if platform and plat != platform:
+                continue
+            item = r.to_dict()
+            item["user_email"] = u_email
+            item["user_name"] = u_name or u_email.split("@")[0]
+            item["project_name"] = p_name or "Global"
+            calls.append(item)
+
+    return JSONResponse({"calls": calls, "count": len(calls), "limit": limit, "offset": offset})
+
+
+@router.get("/api/admin/activity/{audit_id}")
+async def api_admin_activity_detail(request: Request, audit_id: str):
+    """Retrieve details for a single tool call."""
+    await require_superadmin(request)
+    try:
+        rid = uuid.UUID(audit_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    async with app_state.db_session_factory() as db:
+        stmt = (
+            select(
+                ToolCallAudit,
+                User.email.label("user_email"),
+                User.display_name.label("user_display_name"),
+                Project.name.label("project_name"),
+            )
+            .join(User, ToolCallAudit.user_id == User.id)
+            .outerjoin(Project, ToolCallAudit.project_id == Project.id)
+            .where(ToolCallAudit.id == rid)
+        )
+        row_tuple = (await db.execute(stmt)).first()
+
+    if not row_tuple:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    r, u_email, u_name, p_name = row_tuple
+    row_dict = r.to_dict()
+    row_dict["user_email"] = u_email
+    row_dict["user_name"] = u_name or u_email.split("@")[0]
+    row_dict["project_name"] = p_name or "Global"
+    return JSONResponse({"call": row_dict})
+
+
+# ---------------------------------------------------------------------------
+# Instance Projects Directory
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/projects", response_class=HTMLResponse)
+async def admin_projects_page(request: Request):
+    """Super-admin view of all projects on the instance."""
+    user_ctx = await _resolve_user_ctx(request)
+    if not user_ctx:
+        return RedirectResponse(url="/signin?next=/admin/projects", status_code=302)
+
+    async with app_state.db_session_factory() as db:
+        u = (
+            await db.execute(select(User).where(User.id == uuid.UUID(user_ctx.user_id)))
+        ).scalar_one_or_none()
+        if not u or not u.is_superadmin:
+            return RedirectResponse(url="/home", status_code=302)
+
+    from datetime import timedelta
+    from app.api.google_oauth_routes import _load_user_view
+    from app.models.connection import OAuthConnection
+    from app.models.project import ProjectMember
+
+    user_view = await _load_user_view(user_ctx)
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+
+    async with app_state.db_session_factory() as db:
+        stmt = (
+            select(
+                Project,
+                User.email.label("owner_email"),
+                User.display_name.label("owner_name"),
+            )
+            .join(User, Project.owner_id == User.id)
+            .order_by(Project.name.asc())
+        )
+        project_rows = (await db.execute(stmt)).all()
+
+        member_counts_q = select(ProjectMember.project_id, func.count(ProjectMember.id)).group_by(
+            ProjectMember.project_id
+        )
+        member_counts = dict((await db.execute(member_counts_q)).all())
+
+        conn_counts_q = (
+            select(OAuthConnection.project_id, func.count(OAuthConnection.id))
+            .where(OAuthConnection.project_id.isnot(None))
+            .group_by(OAuthConnection.project_id)
+        )
+        conn_counts = dict((await db.execute(conn_counts_q)).all())
+
+        tool_counts_q = (
+            select(ToolCallAudit.project_id, func.count(ToolCallAudit.id))
+            .where(ToolCallAudit.created_at >= week_ago)
+            .where(ToolCallAudit.project_id.isnot(None))
+            .group_by(ToolCallAudit.project_id)
+        )
+        tool_counts = dict((await db.execute(tool_counts_q)).all())
+
+        last_active_q = (
+            select(ToolCallAudit.project_id, func.max(ToolCallAudit.created_at))
+            .where(ToolCallAudit.project_id.isnot(None))
+            .group_by(ToolCallAudit.project_id)
+        )
+        last_active_map = dict((await db.execute(last_active_q)).all())
+
+    projects_data = []
+    total_calls_week = 0
+    total_members = 0
+    active_count = 0
+
+    now = datetime.now(UTC)
+    for proj, o_email, o_name in project_rows:
+        if proj.is_active:
+            active_count += 1
+        m_cnt = member_counts.get(proj.id, 0)
+        total_members += m_cnt
+        c_cnt = conn_counts.get(proj.id, 0)
+        tc_cnt = tool_counts.get(proj.id, 0)
+        total_calls_week += tc_cnt
+
+        last_dt = last_active_map.get(proj.id)
+        last_str = "No calls yet"
+        if last_dt:
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=UTC)
+            delta = now - last_dt
+            if delta.days == 0:
+                hours = delta.seconds // 3600
+                if hours == 0:
+                    mins = max(1, delta.seconds // 60)
+                    last_str = f"{mins}m ago"
+                else:
+                    last_str = f"{hours}h ago"
+            elif delta.days == 1:
+                last_str = "Yesterday"
+            else:
+                last_str = f"{delta.days}d ago"
+
+        projects_data.append(
+            {
+                "id": str(proj.id),
+                "name": proj.name,
+                "slug": proj.slug,
+                "is_active": proj.is_active,
+                "owner_email": o_email,
+                "owner_name": o_name or o_email.split("@")[0],
+                "members_count": m_cnt,
+                "connectors_count": c_cnt,
+                "tool_calls_7d": tc_cnt,
+                "last_active_str": last_str,
+            }
+        )
+
+    return render(
+        request,
+        "admin_projects.html",
+        {
+            "user": user_view,
+            "active": "admin",
+            "projects": projects_data,
+            "active_count": active_count,
+            "total_members": total_members,
+            "total_calls_week": total_calls_week,
+        },
+    )
+
+
+@router.get("/api/admin/projects")
+async def api_admin_projects_list(request: Request):
+    """JSON API listing all projects with member and usage statistics."""
+    await require_superadmin(request)
+    from datetime import timedelta
+    from app.models.connection import OAuthConnection
+    from app.models.project import ProjectMember
+
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+
+    async with app_state.db_session_factory() as db:
+        stmt = (
+            select(
+                Project,
+                User.email.label("owner_email"),
+                User.display_name.label("owner_name"),
+            )
+            .join(User, Project.owner_id == User.id)
+            .order_by(Project.name.asc())
+        )
+        project_rows = (await db.execute(stmt)).all()
+
+        member_counts_q = select(ProjectMember.project_id, func.count(ProjectMember.id)).group_by(
+            ProjectMember.project_id
+        )
+        member_counts = dict((await db.execute(member_counts_q)).all())
+
+        conn_counts_q = (
+            select(OAuthConnection.project_id, func.count(OAuthConnection.id))
+            .where(OAuthConnection.project_id.isnot(None))
+            .group_by(OAuthConnection.project_id)
+        )
+        conn_counts = dict((await db.execute(conn_counts_q)).all())
+
+        tool_counts_q = (
+            select(ToolCallAudit.project_id, func.count(ToolCallAudit.id))
+            .where(ToolCallAudit.created_at >= week_ago)
+            .where(ToolCallAudit.project_id.isnot(None))
+            .group_by(ToolCallAudit.project_id)
+        )
+        tool_counts = dict((await db.execute(tool_counts_q)).all())
+
+    items = []
+    for proj, o_email, o_name in project_rows:
+        items.append(
+            {
+                "id": str(proj.id),
+                "name": proj.name,
+                "slug": proj.slug,
+                "is_active": proj.is_active,
+                "owner_email": o_email,
+                "owner_name": o_name,
+                "members_count": member_counts.get(proj.id, 0),
+                "connectors_count": conn_counts.get(proj.id, 0),
+                "tool_calls_7d": tool_counts.get(proj.id, 0),
+                "created_at": proj.created_at.isoformat() if proj.created_at else None,
+            }
+        )
+    return JSONResponse({"projects": items})

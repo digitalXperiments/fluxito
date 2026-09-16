@@ -9,7 +9,7 @@
    child's head_extra override.
 #}
 {% extends "base.html" %}
-{% set active = 'settings' %}
+{% set active = active or 'settings' %}
 
 {% block main %}
 <link rel="stylesheet" href="/static/css/settings.css?v={{ asset_hash('css/settings.css') }}"/>

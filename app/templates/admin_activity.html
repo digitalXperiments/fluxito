@@ -1,0 +1,334 @@
+{% extends "settings/shell.html" %}
+{% from "partials/platform_icons.html" import platform_icon %}
+{% block title %}Platform Activity &amp; Audit — Fluxito{% endblock %}
+{% set settings_section = 'platform_activity' %}
+
+{# Map a backend platform slug to a prototype .pbadge class #}
+{% macro pbadge_class(slug) -%}
+{%- set s = (slug or '')|lower -%}
+{%- if s in ['ga4', 'google-analytics', 'google_analytics'] -%}ga4
+{%- elif s == 'amplitude' -%}amp
+{%- elif s == 'mixpanel' -%}mp
+{%- elif s == 'posthog' -%}ph
+{%- elif s in ['adobe-analytics', 'adobe_analytics', 'adobe'] -%}aa
+{%- elif s in ['marketo', 'adobe-marketo', 'adobe_marketo'] -%}marketo
+{%- elif s == 'gtm' -%}gtm
+{%- elif s in ['adobe-launch', 'adobe_launch'] -%}al
+{%- elif s in ['google-ads', 'google_ads', 'gads'] -%}gads
+{%- elif s == 'meta' -%}meta
+{%- elif s == 'tiktok' -%}tiktok
+{%- elif s in ['snap', 'snapchat'] -%}snap
+{%- elif s in ['apple', 'apple-ads', 'apple_ads'] -%}apple
+{%- elif s == 'bigquery' -%}bq
+{%- elif s == 'redshift' -%}rs
+{%- elif s == 'snowflake' -%}sf
+{%- elif s in ['search-console', 'search_console'] -%}sc
+{%- else -%}ghost
+{%- endif -%}
+{%- endmacro %}
+
+{% macro pbadge_letters(slug) -%}
+{%- set s = (slug or '')|lower -%}
+{%- if s in ['ga4', 'google-analytics', 'google_analytics'] -%}G4
+{%- elif s == 'amplitude' -%}AM
+{%- elif s == 'mixpanel' -%}MP
+{%- elif s == 'posthog' -%}PH
+{%- elif s in ['adobe-analytics', 'adobe_analytics'] -%}AA
+{%- elif s in ['marketo', 'adobe-marketo', 'adobe_marketo'] -%}MK
+{%- elif s == 'gtm' -%}GT
+{%- elif s in ['adobe-launch', 'adobe_launch', 'adobe'] -%}AL
+{%- elif s in ['google-ads', 'google_ads', 'gads'] -%}GA
+{%- elif s == 'meta' -%}MT
+{%- elif s == 'tiktok' -%}TT
+{%- elif s in ['snap', 'snapchat'] -%}SN
+{%- elif s in ['apple', 'apple-ads', 'apple_ads'] -%}AP
+{%- elif s == 'bigquery' -%}BQ
+{%- elif s == 'redshift' -%}RS
+{%- elif s == 'snowflake' -%}SF
+{%- elif s in ['search-console', 'search_console'] -%}SC
+{%- else -%}··
+{%- endif -%}
+{%- endmacro %}
+
+{% block settings_main %}
+<main class="app-main">
+
+  <div class="page-head">
+    <div>
+      <span class="label">Platform Audit · Super Admin Gated</span>
+      <h1>Platform activity, <em class="serif-italic" style="color:var(--blue)">all users &amp; projects.</em></h1>
+      <p>Instance-wide audit trail of every MCP AI tool execution across all workspaces, users, and external platforms. Writes are flagged and scope-gated.</p>
+    </div>
+  </div>
+
+  {# ── Top Admin Hub Tabs ── #}
+  <div class="admin-top-nav" style="margin-bottom:20px;border-bottom:1px solid var(--line);display:flex;gap:18px;font-size:13px;font-weight:600">
+    <a href="/admin/activity" style="padding-bottom:10px;color:var(--ink);border-bottom:2px solid var(--ink);text-decoration:none;display:flex;align-items:center;gap:6px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 3 5-5"/></svg>
+      Platform Activity Log
+    </a>
+    <a href="/admin/projects" style="padding-bottom:10px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20V4a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>
+      Projects Directory
+    </a>
+    <a href="/admin" style="padding-bottom:10px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Users &amp; Platform Settings
+    </a>
+  </div>
+
+  {# ── KPI row ── #}
+  <div class="audit-hd-row">
+    <div class="kpi">
+      <span class="label">Tool calls · {{ window_days }}d</span>
+      <div class="val mono">{{ stats.total_week }}</div>
+      <div class="meta">Across all workspaces</div>
+    </div>
+    <div class="kpi">
+      <span class="label">Active users</span>
+      <div class="val mono">{{ stats.users_count }}</div>
+      <div class="meta">Calling AI tools</div>
+    </div>
+    <div class="kpi">
+      <span class="label">Active projects</span>
+      <div class="val mono">{{ stats.projects_count }}</div>
+      <div class="meta">Receiving requests</div>
+    </div>
+    <div class="kpi">
+      <span class="label">Write ops</span>
+      <div class="val mono" style="color:var(--accent)">{{ stats.writes_week }}</div>
+      <div class="meta">Mutating external data</div>
+    </div>
+    <div class="kpi">
+      <span class="label">Issues &amp; errors</span>
+      <div class="val mono {% if stats.failures_week > 0 %}down{% endif %}">{{ stats.failures_week }}</div>
+      <div class="meta">
+        {% if stats.total_week and stats.total_week > 0 %}{{ ((stats.failures_week or 0) / stats.total_week * 100) | round(1) }}% failure rate{% else %}0%{% endif %}
+      </div>
+    </div>
+    <div class="kpi">
+      <span class="label">Avg duration</span>
+      <div class="val mono">{{ stats.avg_duration_ms }}<span style="font-size:12px;font-weight:normal">ms</span></div>
+      <div class="meta">Execution latency</div>
+    </div>
+  </div>
+
+  {# ── Filters ── #}
+  <form method="get" class="audit-filters" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--paper-2);padding:14px;border-radius:var(--r-m, 8px);border:1px solid var(--line);margin-bottom:16px">
+    <div style="flex:1;min-width:160px">
+      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Caller / User</label>
+      <select name="user_id" class="f-input" onchange="this.form.submit()" style="width:100%">
+        <option value="">All users</option>
+        {% for u in all_users %}
+        <option value="{{ u.id }}" {% if selected_user_id == u.id|string %}selected{% endif %}>{{ u.display_name or u.email }} ({{ u.email }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex:1;min-width:160px">
+      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Project Scope</label>
+      <select name="project_id" class="f-input" onchange="this.form.submit()" style="width:100%">
+        <option value="">All projects</option>
+        {% for p in all_projects %}
+        <option value="{{ p.id }}" {% if selected_project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex:1;min-width:140px">
+      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Platform</label>
+      <select name="platform" class="f-input" onchange="this.form.submit()" style="width:100%">
+        <option value="">All platforms</option>
+        {% for slug, label in platform_options %}
+        <option value="{{ slug }}" {% if selected_platform == slug %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex:1;min-width:140px">
+      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Tool</label>
+      <select name="tool" class="f-input" onchange="this.form.submit()" style="width:100%">
+        <option value="">All tools</option>
+        {% for tn in all_tool_names %}
+        <option value="{{ tn }}" {% if selected_tool == tn %}selected{% endif %}>{{ tn }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="width:130px">
+      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Status</label>
+      <select name="status" class="f-input" onchange="this.form.submit()" style="width:100%">
+        <option value="">All statuses</option>
+        <option value="success" {% if selected_status == 'success' %}selected{% endif %}>Success only</option>
+        <option value="error" {% if selected_status == 'error' %}selected{% endif %}>Errors only</option>
+        <option value="write" {% if selected_status == 'write' %}selected{% endif %}>Writes only</option>
+      </select>
+    </div>
+
+    <div style="width:110px">
+      <label class="f-field-label" style="display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--muted);margin-bottom:4px">Window</label>
+      <select name="days" class="f-input" onchange="this.form.submit()" style="width:100%">
+        <option value="7" {% if window_days == 7 %}selected{% endif %}>7 days</option>
+        <option value="14" {% if window_days == 14 %}selected{% endif %}>14 days</option>
+        <option value="30" {% if window_days == 30 %}selected{% endif %}>30 days</option>
+      </select>
+    </div>
+
+    {% if selected_user_id or selected_project_id or selected_platform or selected_tool or selected_status or window_days != 14 %}
+    <div style="align-self:flex-end">
+      <a href="/admin/activity" class="btn ghost" style="padding:6px 12px;font-size:12px">Clear filters</a>
+    </div>
+    {% endif %}
+  </form>
+
+  {# ── Quick filter pills ── #}
+  <div class="quick-filters">
+    <button type="button" class="qf-pill is-active" data-filter="all" onclick="setQuickFilter('all')">All calls</button>
+    <button type="button" class="qf-pill" data-filter="writes" onclick="setQuickFilter('writes')">Writes only ({{ stats.writes_week }})</button>
+    <button type="button" class="qf-pill" data-filter="errors" onclick="setQuickFilter('errors')">Errors only ({{ stats.failures_week }})</button>
+    <button type="button" class="qf-pill qf-export" onclick="exportAdminActivityCsv()">Export CSV</button>
+  </div>
+
+  {# ── Daily groups ── #}
+  {% if day_list %}
+    {% for d in day_list %}
+    <div class="day-group" style="margin-bottom:28px">
+      <div class="day-hd">
+        <span class="day">{{ d.label }}{% if d.date %} · {{ d.date.strftime('%B %-d, %Y') }}{% endif %}</span>
+        <span class="sum">
+          {{ d.total }} call{% if d.total != 1 %}s{% endif %}
+          {% if d.writes > 0 %} · <strong style="color:var(--accent)">{{ d.writes }}</strong> write{% if d.writes != 1 %}s{% endif %}{% endif %}
+          {% if d.issues > 0 %} · <strong style="color:var(--bad)">{{ d.issues }}</strong> issue{% if d.issues != 1 %}s{% endif %}{% endif %}
+          {% if d.unique_users > 0 %} · {{ d.unique_users }} caller{% if d.unique_users != 1 %}s{% endif %}{% endif %}
+        </span>
+      </div>
+
+      {# Platform-grouped tool calls #}
+      {% for plat in d.platforms_list %}
+      {% set group_id = d.key ~ '-' ~ plat.slug %}
+      <div class="activity" data-plat-group="{{ group_id }}" style="margin-bottom:12px;border:1px solid var(--line);border-radius:var(--r-m, 8px);overflow:hidden;background:var(--card)">
+        {# Summary row #}
+        <div class="plat-head plat-toggle" onclick="togglePlatCalls('{{ group_id }}')" role="button" tabindex="0" style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;background:var(--paper-2);border-bottom:1px solid var(--line)">
+          <span class="pbadge sm {{ pbadge_class(plat.slug) }}"><span>{{ pbadge_letters(plat.slug) }}</span></span>
+          <span class="plat-name" style="font-weight:600;font-size:13px">{{ plat.label }}</span>
+          <span class="plat-stats" style="font-size:11px;color:var(--muted);display:flex;gap:8px">
+            <span>{{ plat.count }} call{% if plat.count != 1 %}s{% endif %}</span>
+            {% if plat.writes > 0 %}<span style="color:var(--accent);font-weight:600">{{ plat.writes }} write{% if plat.writes != 1 %}s{% endif %}</span>{% endif %}
+            {% if plat.issues > 0 %}<span style="color:var(--bad);font-weight:600">{{ plat.issues }} issue{% if plat.issues != 1 %}s{% endif %}</span>{% endif %}
+          </span>
+          <span class="plat-expand-icon" id="icon-{{ group_id }}" style="margin-left:auto;transition:transform .2s ease">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </div>
+
+        {# Individual calls #}
+        <div class="plat-calls" id="calls-{{ group_id }}" style="display:block">
+          {% for c in plat.calls %}
+           <a class="activity-row{% if c.is_issue %} is-err{% endif %}" href="/admin/activity/{{ c.id }}" style="text-decoration:none;color:inherit;display:grid;grid-template-columns:55px 140px 140px 1fr 110px 130px 20px;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line-3);font-size:12px" data-actor="flux" data-write="{{ '1' if c.is_write else '0' }}" data-issue="{{ '1' if c.is_issue else '0' }}">
+             <span class="t mono" style="color:var(--muted);font-size:11px">{{ c.time_str }}</span>
+             
+             {# Caller / User #}
+             <span class="admin-caller truncate" title="{{ c.user_email }}">
+               <span style="font-weight:600;color:var(--ink)">{{ c.user_name }}</span>
+             </span>
+
+             {# Project chip #}
+             <span class="admin-project truncate">
+               <span class="t-flag" style="font-size:10px;padding:2px 6px;background:var(--paper);border:1px solid var(--line);border-radius:4px">{{ c.project_name or 'Global' }}</span>
+             </span>
+
+             {# Tool & summary #}
+             <span class="tool truncate" style="min-width:0">
+               <span class="mono" style="font-weight:600;color:var(--ink)">{{ c.tool_name }}</span>
+               {% if c.summary %}
+               <span style="color:var(--muted);font-size:11px;margin-left:6px">— {{ c.summary }}</span>
+               {% endif %}
+             </span>
+
+             {# Source Client #}
+             <span class="client mono" style="color:var(--muted);font-size:11px">{{ c.source or 'mcp' }}</span>
+
+             {# Status & Duration #}
+             <span class="status {% if c.is_issue %}err{% endif %}" style="text-align:right">
+               {% if c.is_write %}<strong style="color:var(--accent)">write</strong>{% else %}read{% endif %} · 
+               {% if c.is_issue %}<strong style="color:var(--bad)">{{ c.status }}</strong>{% else %}{{ c.status }}{% endif %}
+               {% if c.duration_ms is not none %} · {{ c.duration_ms }}ms{% endif %}
+             </span>
+
+             <span style="color:var(--line-strong);text-align:right">→</span>
+           </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="audit-empty" style="text-align:center;padding:60px 20px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-m, 8px)">
+    <h3 style="font-size:18px;margin-bottom:8px">No tool calls found.</h3>
+    <p style="color:var(--muted);font-size:13px">There are no tool calls recorded matching the selected filters in this time window.</p>
+    {% if selected_user_id or selected_project_id or selected_platform or selected_tool or selected_status %}
+    <a href="/admin/activity" class="btn primary" style="margin-top:16px;display:inline-block">Clear all filters</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</main>
+
+<style>
+.activity-row:hover {
+  background: var(--paper-2);
+}
+.activity-row.is-err {
+  background: rgba(180, 69, 47, 0.04);
+}
+.activity-row.is-err:hover {
+  background: rgba(180, 69, 47, 0.08);
+}
+@media (max-width: 900px) {
+  .activity-row {
+    grid-template-columns: 55px 1fr auto !important;
+    gap: 8px !important;
+  }
+  .admin-caller, .admin-project, .client {
+    display: none;
+  }
+}
+</style>
+
+<script>
+function togglePlatCalls(groupId) {
+  var calls = document.getElementById('calls-' + groupId);
+  var icon = document.getElementById('icon-' + groupId);
+  if (!calls) return;
+  var isHidden = calls.style.display === 'none';
+  calls.style.display = isHidden ? 'block' : 'none';
+  if (icon) {
+    icon.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-90deg)';
+  }
+}
+
+function setQuickFilter(f) {
+  document.querySelectorAll('.quick-filters .qf-pill').forEach(function(b) {
+    b.classList.toggle('is-active', b.dataset.filter === f);
+  });
+  var rows = document.querySelectorAll('.activity-row[data-actor]');
+  rows.forEach(function(r) {
+    if (f === 'all') {
+      r.style.display = '';
+    } else if (f === 'writes') {
+      r.style.display = (r.dataset.write === '1') ? '' : 'none';
+    } else if (f === 'errors') {
+      r.style.display = (r.dataset.issue === '1') ? '' : 'none';
+    }
+  });
+}
+
+function exportAdminActivityCsv() {
+  var params = new URLSearchParams(window.location.search);
+  params.set('format', 'csv');
+  window.open('/api/admin/activity?' + params.toString(), '_blank');
+}
+</script>
+{% endblock %}

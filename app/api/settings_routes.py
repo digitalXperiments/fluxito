@@ -25,6 +25,8 @@ _TAB_DESTINATIONS = {
     "system": "/admin",  # System settings retired — superadmin console covers it
     "activity": "/activity-log",
     "platform": "/admin",
+    "platform_activity": "/admin/activity",
+    "platform_projects": "/admin/projects",
     "ai-models": "/settings/ai",
 }
 
