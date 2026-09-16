@@ -8,12 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Platform Activity Log & Super Admin Panel.** Added an instance-wide activity log gated to super administrators at `/admin/activity`, exposing MCP AI tool calls across all users and projects with multi-dimensional filtering (user, project, platform, tool, status, time window), KPI scorecards, CSV export, and deep payload inspection.
+- **Dedicated Super Admin Panel & Navigation (Option B).** Completely decoupled Admin Panel from Settings. Added a standalone Super Admin shell (`admin/shell.html`) and dedicated navigation rail (`admin_rail.html`) covering Platform Activity, Projects Directory, and Platform Settings, with `Admin Panel` in the primary sidebar.
+- **Platform Activity Log.** Added an instance-wide activity log gated to super administrators at `/admin/activity`, exposing MCP AI tool calls across all users and projects with multi-dimensional filtering (user, project, platform, tool, status, time window), KPI scorecards, CSV export, and deep payload inspection.
 - **Instance Projects Directory.** Added `/admin/projects` giving super administrators an overview of all projects, ownership, member counts, active connectors, and 7-day tool invocation volume.
-- **Admin Panel Navigation.** Pinned a super-admin-gated **Admin Panel** item directly below **Settings** on the left navigation bar, with connected links in the Settings Rail under `Platform`.
-- **Adobe Launch `list_companies` action.** `tagmanager_read` now exposes `list_companies` under the `ADOBE LAUNCH` group, allowing AI agents and MCP clients to list Adobe Launch (Reactor) company IDs (`CO...`).
 
 ### Fixed
+- **Platform Activity Log 500 Internal Error.** Resolved PostgreSQL timezone comparison mismatch in asyncpg by sanitizing datetimes to naive UTC for `timestamp without time zone` columns, safe outer joins for unlinked user records, and portable strftime date formatting.
 - **Adobe Launch Reactor API tenant routing.** Injected the required `x-gw-ims-org-id: {org_id}` header and `Accept: application/vnd.api+json;revision=1` on all Adobe Launch requests, fixing 404 errors when listing properties under a company.
 - **Adobe Launch company ID auto-resolution.** `tagmanager_read(action="list_properties")` now automatically discovers and uses the organization's company ID if `account_id` is omitted.
 - **Adobe Launch dashboard connection type.** `AdobeConnection` in `list_bindable_connections` now surfaces `adobe_launch` (`tagmanager_read`) when Launch is enabled.

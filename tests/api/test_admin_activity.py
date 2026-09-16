@@ -20,12 +20,48 @@ def test_base_sidebar_has_superadmin_gated_admin_panel():
     assert "sidebar-badge" in base_html
 
 
-def test_settings_rail_has_platform_activity_and_projects():
+def test_settings_rail_does_not_have_platform_or_admin():
+    """Settings rail must NOT contain platform or admin items (Option B strict separation)."""
     rail_html = Path("app/templates/partials/settings_rail.html").read_text()
+    assert 'href="/admin/activity"' not in rail_html
+    assert 'href="/admin/projects"' not in rail_html
+    assert 'href="/admin"' not in rail_html
+    assert "Platform Activity" not in rail_html
+    assert "Platform Settings" not in rail_html
+
+
+def test_admin_rail_has_platform_activity_and_projects():
+    """Admin rail has dedicated navigation for activity, projects, and settings."""
+    rail_html = Path("app/templates/partials/admin_rail.html").read_text()
     assert 'href="/admin/activity"' in rail_html
     assert "Platform Activity" in rail_html
     assert 'href="/admin/projects"' in rail_html
     assert "Projects Directory" in rail_html
+    assert 'href="/admin"' in rail_html
+    assert "Platform Settings" in rail_html
+
+
+def test_admin_shell_and_templates_structure():
+    """Admin shell extends base.html and admin templates extend admin/shell.html."""
+    shell_html = Path("app/templates/admin/shell.html").read_text()
+    assert '{% extends "base.html" %}' in shell_html
+    assert "partials/admin_rail.html" in shell_html
+    assert "admin_main" in shell_html
+
+    act_html = Path("app/templates/admin_activity.html").read_text()
+    assert '{% extends "admin/shell.html" %}' in act_html
+    assert "admin_section = 'activity'" in act_html
+    assert "admin_main" in act_html
+
+    proj_html = Path("app/templates/admin_projects.html").read_text()
+    assert '{% extends "admin/shell.html" %}' in proj_html
+    assert "admin_section = 'projects'" in proj_html
+    assert "admin_main" in proj_html
+
+    admin_html = Path("app/templates/admin.html").read_text()
+    assert '{% extends "admin/shell.html" %}' in admin_html
+    assert "admin_section = 'settings'" in admin_html
+    assert "admin_main" in admin_html
 
 
 def test_admin_activity_template_elements():
@@ -296,3 +332,153 @@ async def test_admin_api_activity_and_csv_mocked(monkeypatch):
         assert csv_res.status_code == 200
         assert "text/csv" in csv_res.headers.get("content-type", "")
         assert "user@example.com" in csv_res.text
+
+
+@pytest.mark.asyncio
+async def test_admin_activity_page_html_mocked(monkeypatch):
+    from datetime import datetime
+    from unittest.mock import AsyncMock, MagicMock
+
+    import app.api.admin_routes as ar
+
+    async def fake_resolve_user_ctx(request):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(user_id=str(uuid.uuid4()), email="super@example.com")
+
+    monkeypatch.setattr(ar, "_resolve_user_ctx", fake_resolve_user_ctx)
+
+    super_user = User(
+        id=uuid.uuid4(),
+        email="super@example.com",
+        display_name="Super Admin",
+        is_superadmin=True,
+    )
+
+    mock_audit = MagicMock()
+    mock_audit.id = uuid.uuid4()
+    mock_audit.created_at = datetime.utcnow()
+    mock_audit.tool_name = "analytics_run_report"
+    mock_audit.platform = "ga4"
+    mock_audit.source_client = "claude"
+    mock_audit.status = "success"
+    mock_audit.is_write = False
+    mock_audit.duration_ms = 120
+    mock_audit.response_summary = "10 rows"
+    mock_audit.user_id = super_user.id
+    mock_audit.project_id = uuid.uuid4()
+
+    mock_db = AsyncMock()
+
+    async def fake_execute(stmt):
+        mock_result = MagicMock()
+        s_str = str(stmt)
+        if "FROM users" in s_str:
+            mock_result.scalar_one_or_none.return_value = super_user
+            mock_scalars = MagicMock()
+            mock_scalars.all.return_value = [super_user]
+            mock_result.scalars.return_value = mock_scalars
+        elif "FROM projects" in s_str:
+            mock_scalars = MagicMock()
+            mock_scalars.all.return_value = []
+            mock_result.scalars.return_value = mock_scalars
+        elif "DISTINCT tool_call_audit.tool_name" in s_str:
+            mock_result.all.return_value = [("analytics_run_report",)]
+        elif "DISTINCT tool_call_audit.platform" in s_str:
+            mock_result.all.return_value = [("ga4",)]
+        else:
+            mock_result.all.return_value = [
+                (mock_audit, "super@example.com", "Super Admin", "Alpha Project", "alpha-project")
+            ]
+        return mock_result
+
+    mock_db.execute = fake_execute
+
+    class MockSessionFactory:
+        def __call__(self):
+            return self
+
+        async def __aenter__(self):
+            return mock_db
+
+        async def __aexit__(self, *args):
+            pass
+
+    monkeypatch.setattr(app_state, "db_session_factory", MockSessionFactory())
+
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        res = await c.get("/admin/activity")
+        assert res.status_code == 200
+        assert "Platform activity" in res.text
+        assert "analytics_run_report" in res.text
+        assert "Platform Activity" in res.text
+        assert "admin-rail" in res.text
+        assert "admin-shell" in res.text
+
+
+@pytest.mark.asyncio
+async def test_admin_projects_page_html_mocked(monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+
+    import app.api.admin_routes as ar
+
+    async def fake_resolve_user_ctx(request):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(user_id=str(uuid.uuid4()), email="super@example.com")
+
+    monkeypatch.setattr(ar, "_resolve_user_ctx", fake_resolve_user_ctx)
+
+    super_user = User(
+        id=uuid.uuid4(),
+        email="super@example.com",
+        display_name="Super Admin",
+        is_superadmin=True,
+    )
+
+    proj = Project(
+        id=uuid.uuid4(),
+        name="Mock Project",
+        slug="mock-project",
+        is_active=True,
+        owner_id=super_user.id,
+    )
+
+    mock_db = AsyncMock()
+
+    async def fake_execute(stmt):
+        mock_result = MagicMock()
+        s_str = str(stmt)
+        if "WHERE users.id =" in s_str:
+            mock_result.scalar_one_or_none.return_value = super_user
+        elif "FROM projects" in s_str:
+            mock_result.all.return_value = [(proj, "super@example.com", "Super Admin")]
+        else:
+            mock_result.all.return_value = []
+        return mock_result
+
+    mock_db.execute = fake_execute
+
+    class MockSessionFactory:
+        def __call__(self):
+            return self
+
+        async def __aenter__(self):
+            return mock_db
+
+        async def __aexit__(self, *args):
+            pass
+
+    monkeypatch.setattr(app_state, "db_session_factory", MockSessionFactory())
+
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        res = await c.get("/admin/projects")
+        assert res.status_code == 200
+        assert "Instance projects" in res.text
+        assert "Mock Project" in res.text
+        assert "admin-rail" in res.text
+        assert "admin-shell" in res.text

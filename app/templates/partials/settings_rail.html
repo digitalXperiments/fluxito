@@ -51,23 +51,4 @@
   </div>
   {% endif %}
 
-  {# Platform — superadmins only #}
-  {% if is_superadmin %}
-  <div class="settings-rail-group">
-    <div class="settings-rail-group-label">Platform</div>
-    <a href="/admin" class="settings-tab {% if settings_section == 'platform' %}is-active{% endif %}" {% if settings_section == 'platform' %}aria-current="page"{% endif %} aria-label="Platform settings">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      Platform Settings
-    </a>
-    <a href="/admin/activity" class="settings-tab {% if settings_section == 'platform_activity' %}is-active{% endif %}" {% if settings_section == 'platform_activity' %}aria-current="page"{% endif %} aria-label="Platform activity log">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 3 5-5"/></svg>
-      Platform Activity
-    </a>
-    <a href="/admin/projects" class="settings-tab {% if settings_section == 'platform_projects' %}is-active{% endif %}" {% if settings_section == 'platform_projects' %}aria-current="page"{% endif %} aria-label="Projects directory">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20V4a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>
-      Projects Directory
-    </a>
-  </div>
-  {% endif %}
-
 </nav>

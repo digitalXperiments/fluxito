@@ -1,7 +1,7 @@
-{% extends "settings/shell.html" %}
+{% extends "admin/shell.html" %}
 {% from "partials/platform_icons.html" import platform_icon %}
 {% block title %}Platform Activity &amp; Audit — Fluxito{% endblock %}
-{% set settings_section = 'platform_activity' %}
+{% set admin_section = 'activity' %}
 
 {# Map a backend platform slug to a prototype .pbadge class #}
 {% macro pbadge_class(slug) -%}
@@ -50,7 +50,7 @@
 {%- endif -%}
 {%- endmacro %}
 
-{% block settings_main %}
+{% block admin_main %}
 <main class="app-main">
 
   <div class="page-head">
@@ -59,22 +59,6 @@
       <h1>Platform activity, <em class="serif-italic" style="color:var(--blue)">all users &amp; projects.</em></h1>
       <p>Instance-wide audit trail of every MCP AI tool execution across all workspaces, users, and external platforms. Writes are flagged and scope-gated.</p>
     </div>
-  </div>
-
-  {# ── Top Admin Hub Tabs ── #}
-  <div class="admin-top-nav" style="margin-bottom:20px;border-bottom:1px solid var(--line);display:flex;gap:18px;font-size:13px;font-weight:600">
-    <a href="/admin/activity" style="padding-bottom:10px;color:var(--ink);border-bottom:2px solid var(--ink);text-decoration:none;display:flex;align-items:center;gap:6px">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 3 5-5"/></svg>
-      Platform Activity Log
-    </a>
-    <a href="/admin/projects" style="padding-bottom:10px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20V4a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>
-      Projects Directory
-    </a>
-    <a href="/admin" style="padding-bottom:10px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      Users &amp; Platform Settings
-    </a>
   </div>
 
   {# ── KPI row ── #}
@@ -194,7 +178,7 @@
     {% for d in day_list %}
     <div class="day-group" style="margin-bottom:28px">
       <div class="day-hd">
-        <span class="day">{{ d.label }}{% if d.date %} · {{ d.date.strftime('%B %-d, %Y') }}{% endif %}</span>
+        <span class="day">{{ d.label }}{% if d.date %} · {{ d.date.strftime('%B %d, %Y') }}{% endif %}</span>
         <span class="sum">
           {{ d.total }} call{% if d.total != 1 %}s{% endif %}
           {% if d.writes > 0 %} · <strong style="color:var(--accent)">{{ d.writes }}</strong> write{% if d.writes != 1 %}s{% endif %}{% endif %}

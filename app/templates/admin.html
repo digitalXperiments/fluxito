@@ -1,8 +1,8 @@
-{% extends "settings/shell.html" %}
+{% extends "admin/shell.html" %}
 {% block title %}Admin — Fluxito{% endblock %}
-{% set settings_section = 'platform' %}
+{% set admin_section = 'settings' %}
 
-{% block settings_main %}
+{% block admin_main %}
 <main class="app-main">
   <div class="page-head">
     <div>
@@ -10,22 +10,6 @@
       <h1>Instance <em class="serif-italic">administration.</em></h1>
       <p>Users, access, limits and the machine itself. Changes apply immediately. <span class="t-flag admin-badge-pill" style="margin-left:8px;background:var(--ink);color:var(--bg);">Super Admin</span></p>
     </div>
-  </div>
-
-  {# ── Top Admin Hub Tabs ── #}
-  <div class="admin-top-nav" style="margin-bottom:20px;border-bottom:1px solid var(--line);display:flex;gap:18px;font-size:13px;font-weight:600">
-    <a href="/admin/activity" style="padding-bottom:10px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 3 5-5"/></svg>
-      Platform Activity Log
-    </a>
-    <a href="/admin/projects" style="padding-bottom:10px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20V4a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>
-      Projects Directory
-    </a>
-    <a href="/admin" style="padding-bottom:10px;color:var(--ink);border-bottom:2px solid var(--ink);text-decoration:none;display:flex;align-items:center;gap:6px">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      Users &amp; Platform Settings
-    </a>
   </div>
 
   <div class="admin-tabs">
