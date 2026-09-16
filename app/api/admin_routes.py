@@ -1109,6 +1109,8 @@ async def api_admin_activity_list(
             if platform and plat != platform:
                 continue
             item = r.to_dict()
+            item["user_id"] = str(r.user_id) if r.user_id else None
+            item["project_id"] = str(r.project_id) if r.project_id else None
             item["user_email"] = u_email or ""
             item["user_name"] = u_name or (u_email.split("@")[0] if u_email else "User")
             item["project_name"] = p_name or "Global"

@@ -138,9 +138,11 @@ async def test_admin_users_unauthenticated_401(_http_client, db_session_factory)
 
 
 @pytest.mark.asyncio
-async def test_admin_page_unauthenticated_redirects_to_homepage(_http_client):
+async def test_admin_page_unauthenticated_redirects_to_homepage(_http_client, monkeypatch):
     from unittest.mock import AsyncMock, patch
 
+    # Keep the first-run gate open so the admin route (not the empty-users gate) answers.
+    monkeypatch.setattr("app.main._setup_complete", True)
     with patch("app.api.admin_routes._resolve_user_ctx", new=AsyncMock(return_value=None)):
         resp = await _http_client.get("/admin")
     assert resp.status_code == 302
@@ -294,15 +296,19 @@ async def test_request_access_dedupes_pending(_http_client, db_session_factory):
     assert "pending" in resp.json().get("error", "").lower()
 
 
-@pytest.mark.asyncio
-async def test_register_blocked_when_gate_on(_http_client, db_session_factory):
+async def _set_flag(db_session_factory, key: str, value: bool) -> None:
     from app.settings_service import set_setting
 
     async with db_session_factory() as db:
-        await set_setting(
-            db, key="require_access_approval", value=True, is_secret=False, updated_by_user_id=None
-        )
+        await set_setting(db, key=key, value=value, is_secret=False, updated_by_user_id=None)
         await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_register_blocked_when_gate_on(_http_client, db_session_factory):
+    # Password sign-up is off by default (Google-only); enable it so the gate is what blocks.
+    await _set_flag(db_session_factory, "auth_password_enabled", True)
+    await _set_flag(db_session_factory, "require_access_approval", True)
     try:
         resp = await _http_client.post(
             "/auth/register",
@@ -311,19 +317,32 @@ async def test_register_blocked_when_gate_on(_http_client, db_session_factory):
         assert resp.status_code == 403
         assert "request access" in resp.json().get("error", "").lower()
     finally:
-        async with db_session_factory() as db:
-            await set_setting(
-                db, key="require_access_approval", value=False, is_secret=False, updated_by_user_id=None
-            )
-            await db.commit()
+        await _set_flag(db_session_factory, "require_access_approval", False)
+        await _set_flag(db_session_factory, "auth_password_enabled", False)
 
 
 @pytest.mark.asyncio
 async def test_register_open_when_gate_off(_http_client, db_session_factory):
+    await _set_flag(db_session_factory, "auth_password_enabled", True)
+    try:
+        resp = await _http_client.post(
+            "/auth/register",
+            json={"email": "open@example.com", "password": "password123", "display_name": "O"},
+        )
+        assert resp.status_code in (200, 201)
+    finally:
+        await _set_flag(db_session_factory, "auth_password_enabled", False)
+
+
+@pytest.mark.asyncio
+async def test_register_refused_when_password_auth_disabled(_http_client, db_session_factory):
+    await _set_flag(db_session_factory, "auth_password_enabled", False)
     resp = await _http_client.post(
-        "/auth/register", json={"email": "open@example.com", "password": "password123", "display_name": "O"}
+        "/auth/register",
+        json={"email": "nopw@example.com", "password": "password123", "display_name": "N"},
     )
-    assert resp.status_code in (200, 201)
+    assert resp.status_code == 403
+    assert "google" in resp.json().get("error", "").lower()
 
 
 @pytest.mark.asyncio
