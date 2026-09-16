@@ -51,6 +51,20 @@
       {% endif %}
     </div>
 
+    {% if gated %}
+    <div class="auth-message auth-warning" style="display:block; margin-bottom: 16px;">
+      <strong>Access approval required.</strong> An administrator must approve your account before you can sign in.
+    </div>
+    {% elif error == "google_not_configured" %}
+    <div class="auth-message auth-error" style="display:block; margin-bottom: 16px;">
+      Google sign-in is not configured yet. Please configure it in Settings or sign in with email.
+    </div>
+    {% elif error %}
+    <div class="auth-message auth-error" style="display:block; margin-bottom: 16px;">
+      Sign-in error: {{ error }}
+    </div>
+    {% endif %}
+
     {# Mode toggle — only when self-serve sign-up is open AND password is enabled #}
     {% if signup_enabled and password_enabled %}
     <div class="auth-toggle" id="authToggle">

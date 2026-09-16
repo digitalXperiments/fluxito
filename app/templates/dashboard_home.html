@@ -11,26 +11,15 @@
     <div class="home-feed">
       <div class="home-feed-inner">
 
-        <!-- ═══ TOP STATUS & BRIEFING GREETING ═══ -->
-        <div class="home-top-row">
-          <span class="home-eyebrow">{{ briefing_now_display }}</span>
-          <a href="/audits" class="home-history-link">Audit logs →</a>
-        </div>
-        <h1 class="home-h1">
-          {{ briefing_time_of_day }}, {{ (user.display_name or user.email.split('@')[0]) | title }}.
-          {% if briefing_needs_attention > 0 %}
-            <span class="home-h1-accent">{{ briefing_needs_attention }} thing{{ 's' if briefing_needs_attention != 1 else '' }} need{{ 's' if briefing_needs_attention == 1 else '' }} attention.</span>
-          {% else %}
-            All clear for now.
-          {% endif %}
-        </h1>
-        <div class="home-sub">
-          {% if audit_checked_summary %}
-            {{ audit_checked_summary }}
-          {% else %}
-            Your 24/7 digital analytics engineer is connected and ready to assist via MCP.
-          {% endif %}
-        </div>
+        <!-- ═══ COMPACT HEADER: GREETING & MCP STATUS ═══ -->
+        <header class="home-header">
+          <div class="home-header-main">
+            <div class="home-eyebrow">FLUXITO MCP SERVER · ACTIVE &amp; READY</div>
+            <h1 class="home-h1">Good {{ briefing_time_of_day | lower }}, {{ (user.display_name or user.email.split('@')[0]) | title }}.</h1>
+            <p class="home-sub">Your marketing &amp; analytics stack is connected. Query your data, audit tags, and reconcile revenue directly from your external AI agents.</p>
+          </div>
+          <a href="/connect" class="home-header-connect-btn">+ Connect Platforms ({{ total_conns }} / {{ total_platforms }})</a>
+        </header>
 
         <!-- ═══ HERO: TALK TO FLUXITO THROUGH YOUR AI AGENTS ═══ -->
         <section class="mcp-hub-card" id="mcp-setup">
@@ -100,12 +89,26 @@
           </div>
         </section>
 
+        <!-- ═══ CONNECTED STACK BAR (SLIM & ACTION-ORIENTED) ═══ -->
+        <div class="stack-bar">
+          <div class="stack-bar-left">
+            <span class="stack-bar-label">Connected Stack ({{ total_conns }} / {{ total_platforms }} active):</span>
+            <div class="stack-chips">
+              <span class="stack-chip"><span class="chip-dot is-good"></span> Google Analytics 4</span>
+              <span class="stack-chip"><span class="chip-dot is-good"></span> Google Tag Manager</span>
+              <span class="stack-chip"><span class="chip-dot is-good"></span> Meta Ads &amp; CAPI</span>
+              <span class="stack-chip"><span class="chip-dot is-good"></span> Google BigQuery</span>
+              <span class="stack-chip"><span class="chip-dot is-good"></span> Google Ads</span>
+            </div>
+          </div>
+          <a href="/connect" class="stack-bar-link">Manage platforms →</a>
+        </div>
+
         <!-- ═══ READY-TO-USE AGENT PROMPTS ═══ -->
         <section class="prompts-section">
           <div class="prompts-head">
-            <div class="prompts-eyebrow">WHAT TO ASK YOUR AI AGENT</div>
-            <h3 class="prompts-title">Ready-to-use prompts for your AI</h3>
-            <p class="prompts-sub">Click any card to copy the prompt to your clipboard, then paste it directly into Claude, ChatGPT, Cursor, or Grok:</p>
+            <h3 class="prompts-title">What to ask your AI agent</h3>
+            <span class="prompts-sub">Click any prompt to copy, then paste into Claude, ChatGPT, Cursor, or Grok:</span>
           </div>
 
           <div class="prompts-grid">
@@ -171,133 +174,9 @@
           </div>
         </section>
 
-        <!-- ═══ CONNECTED MARKETING STACK ═══ -->
-        <section class="stack-overview-card">
-          <div class="stack-overview-head">
-            <div>
-              <div class="stack-overview-title">Connected Marketing Stack</div>
-              <div class="stack-overview-sub">Your AI agent inherits authenticated access to all data sources active in this workspace.</div>
-            </div>
-            <a href="/connect" class="btn-connect-more">+ Connect Platforms ({{ total_conns }} / {{ total_platforms }})</a>
-          </div>
-          <div class="stack-badge-row">
-            <span class="stack-chip"><span class="chip-dot is-good"></span> Google Analytics 4</span>
-            <span class="stack-chip"><span class="chip-dot is-good"></span> Google Tag Manager</span>
-            <span class="stack-chip"><span class="chip-dot is-good"></span> Meta Ads &amp; CAPI</span>
-            <span class="stack-chip"><span class="chip-dot is-good"></span> Google BigQuery</span>
-            <span class="stack-chip"><span class="chip-dot is-good"></span> Google Ads</span>
-            <a href="/connect" class="stack-chip-more">View all 27 platforms →</a>
-          </div>
-        </section>
-
-        <!-- ═══ BRIEFING & FINDINGS ═══ -->
-        <section class="home-findings-section">
-          <div class="findings-head-row">
-            <span class="findings-head-title">Tag QA &amp; Briefing Status</span>
-            <span class="findings-head-meta">Automated Nightly Sweep</span>
-          </div>
-
-          <div class="home-findings">
-            {% for f in briefing_findings %}
-            <div class="briefing-card" data-finding-key="{{ f.key }}">
-              <span class="briefing-pill sev-{{ f.severity }}">{{ f.severity }}</span>
-              <div class="briefing-body">
-                <div class="briefing-title">{{ f.title }}</div>
-                {% if f.body %}<div class="briefing-desc">{{ f.body }}</div>{% endif %}
-
-                {% if f.severity in ('urgent', 'watch') %}
-                <div class="briefing-actions">
-                  {% if f.severity == 'urgent' and f.link %}
-                  <a href="{{ f.link }}" class="briefing-action-primary">Review the fix</a>
-                  {% endif %}
-                  {% if f.evidence_link %}
-                  <a href="{{ f.evidence_link }}" class="briefing-action-secondary">Show evidence</a>
-                  {% else %}
-                  <span class="briefing-action-secondary" data-evidence-toggle>Show evidence</span>
-                  {% endif %}
-                  <span class="briefing-action-tertiary" data-dismiss-btn>Dismiss</span>
-                </div>
-                {% if not f.evidence_link %}
-                <div class="briefing-evidence" hidden>
-                  {% if f.evidence_meta %}
-                    {% for mk, mv in f.evidence_meta.items() %}
-                    <div class="briefing-evidence-row"><span class="briefing-evidence-key">{{ mk }}</span><span class="briefing-evidence-val">{{ mv }}</span></div>
-                    {% endfor %}
-                  {% else %}
-                  <div class="briefing-evidence-row briefing-evidence-empty">No additional evidence recorded for this finding.</div>
-                  {% endif %}
-                </div>
-                {% endif %}
-                {% endif %}
-              </div>
-            </div>
-            {% else %}
-            <div class="briefing-card briefing-all-clear">
-              <span class="briefing-pill sev-good">good</span>
-              <div class="briefing-body">
-                <div class="briefing-title">All tracking pipelines are healthy.</div>
-                <div class="briefing-desc">No broken tags or duplicate conversions detected across your connected platforms. Next automated audit scheduled for midnight.</div>
-              </div>
-            </div>
-            {% endfor %}
-
-            {% if audit_checked_summary %}
-            <div class="home-done-overnight">
-              <span class="home-done-overnight-rule"></span>
-              <span class="home-done-overnight-label">Done overnight — {{ audit_checked_summary }}</span>
-              <span class="home-done-overnight-rule"></span>
-            </div>
-            {% endif %}
-          </div>
-        </section>
-
-        <!-- ═══ LATEST ACTIVITY ═══ -->
-        <div class="home-activity" id="home-activity" hidden>
-          <div class="home-activity-label">Latest activity</div>
-          <div class="home-activity-list" id="home-activity-list"></div>
-        </div>
-
       </div>
     </div>
   </div>
-
-  <!-- ═══ RIGHT RAIL ═══ -->
-  <aside class="home-rail">
-    <div class="home-rail-label">MCP Integration</div>
-    <div class="home-rail-card home-rail-mcp">
-      <div class="home-rail-card-row">
-        <span class="home-rail-dot" style="background:var(--good);"></span>
-        <span class="home-rail-card-title">Fluxito MCP Server</span>
-      </div>
-      <div class="home-rail-card-meta">Claude · Cursor · ChatGPT · Grok</div>
-      <p class="home-rail-mcp-desc">Your workspace is configured and ready for MCP queries with zero token markups.</p>
-      <button type="button" class="home-rail-mcp-btn" id="railCopyMcpBtn" data-mcp-url="{{ base_url }}/mcp">Copy MCP Endpoint</button>
-    </div>
-
-    <div class="home-rail-label home-rail-label-2nd">Stack health</div>
-    <div class="home-rail-card home-stack-health">
-      <div class="hsh-row"><span>Connections</span><span class="mono">{{ total_conns }} / {{ total_platforms }}</span></div>
-      <div class="hsh-row"><span>Plan coverage</span><span class="mono">{% if tp_coverage_pct is not none %}{{ tp_coverage_pct }}%{% else %}—{% endif %}</span></div>
-      <div class="hsh-row"><span>Open issues</span><span class="mono{% if (tp_open_issues + audit_open_issues) > 0 %} hsh-danger{% endif %}">{{ tp_open_issues + audit_open_issues }}</span></div>
-      <div class="hsh-row"><span>Last full audit</span><span class="mono">{{ last_audit_display }}</span></div>
-    </div>
-
-    <div class="home-rail-label home-rail-label-2nd">Flux is running</div>
-    {% for a in running_automations %}
-    <div class="home-rail-card">
-      <div class="home-rail-card-row"><span class="home-rail-dot{% if a.progress_pct is not none %} is-running{% endif %}"></span><span class="home-rail-card-title">{{ a.name }}</span></div>
-      <div class="home-rail-card-meta">{{ a.detail }}</div>
-      {% if a.progress_pct is not none %}
-      <div class="home-rail-progress"><div class="home-rail-progress-fill" style="width:{{ a.progress_pct }}%"></div></div>
-      {% endif %}
-    </div>
-    {% else %}
-    <div class="home-rail-card home-rail-empty">Nothing scheduled yet.</div>
-    {% endfor %}
-    <a href="/automations" class="home-rail-link">Assign Flux an audit task →</a>
-
-    <div class="home-rail-foot">Talk to Fluxito in Claude, ChatGPT, Cursor &amp; Grok via MCP.</div>
-  </aside>
 </div>
 
 <!-- Toast element for copy confirmation -->
@@ -372,17 +251,7 @@
     });
   }
 
-  var railCopyBtn = document.getElementById('railCopyMcpBtn');
-  if (railCopyBtn) {
-    railCopyBtn.addEventListener('click', function(){
-      var url = railCopyBtn.getAttribute('data-mcp-url') || (baseUrl + '/mcp');
-      navigator.clipboard.writeText(url).then(function(){
-        railCopyBtn.textContent = 'Copied! ✓';
-        showToast('Copied MCP Endpoint to clipboard!');
-        setTimeout(function(){ railCopyBtn.textContent = 'Copy MCP Endpoint'; }, 2000);
-      }).catch(function(){});
-    });
-  }
+
 
   // ── Clickable Prompt Cards (Click to Copy into AI Agent) ──
   document.querySelectorAll('.prompt-card').forEach(function(card){
@@ -404,77 +273,6 @@
     });
   });
 
-  // ── Finding Evidence Toggles & Dismissals ──
-  document.querySelectorAll('[data-evidence-toggle]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var card = btn.closest('.briefing-card');
-      var block = card && card.querySelector('.briefing-evidence');
-      if (!block) return;
-      block.hidden = !block.hidden;
-    });
-  });
-
-  document.querySelectorAll('[data-dismiss-btn]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var card = btn.closest('.briefing-card');
-      if (!card) return;
-      var key = card.getAttribute('data-finding-key');
-      card.remove();
-      if (!key) return;
-      fetch('/api/briefing/dismiss', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ finding_key: key })
-      }).catch(function(){});
-    });
-  });
-
-  // ── Hydrate Latest Activity ──
-  var ICONS = { audit: '🔍', test_flow: '🧪', draft: '✎', report: '📤', activity: '•' };
-  function relTime(iso){
-    if (!iso) return '';
-    var t = new Date(iso).getTime();
-    if (isNaN(t)) return '';
-    var s = Math.max(0, Math.floor((Date.now() - t) / 1000));
-    if (s < 60) return 'just now';
-    var m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
-    var h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
-    var d = Math.floor(h / 24); if (d < 7) return d + 'd ago';
-    return new Date(iso).toLocaleDateString();
-  }
-  function esc(str){
-    var d = document.createElement('div');
-    d.textContent = str == null ? '' : String(str);
-    return d.innerHTML;
-  }
-  fetch('/api/home/feed', { headers: { 'Accept': 'application/json' } })
-    .then(function(r){ return r.ok ? r.json() : { items: [] }; })
-    .then(function(data){
-      var items = (data && data.items) || [];
-      if (!items.length) return;
-      var wrap = document.getElementById('home-activity');
-      var list = document.getElementById('home-activity-list');
-      if (!wrap || !list) return;
-      list.innerHTML = items.map(function(it){
-        var icon = ICONS[it.kind] || '•';
-        var statusHtml = it.status
-          ? '<span class="home-activity-status is-' + esc(it.status) + '">' + esc(it.status) + '</span>'
-          : '';
-        var inner =
-          '<span class="home-activity-icon" aria-hidden="true">' + icon + '</span>' +
-          '<span class="home-activity-main">' +
-            '<span class="home-activity-title">' + esc(it.title) + statusHtml + '</span>' +
-            '<span class="home-activity-sub">' + esc(it.subtitle) + '</span>' +
-          '</span>' +
-          '<span class="home-activity-time">' + esc(relTime(it.ts)) + '</span>';
-        if (it.url) {
-          return '<a class="home-activity-item" href="' + esc(it.url) + '">' + inner + '</a>';
-        }
-        return '<div class="home-activity-item">' + inner + '</div>';
-      }).join('');
-      wrap.hidden = false;
-    })
-    .catch(function(){});
 })();
 </script>
 {% endblock %}

@@ -40,7 +40,7 @@
       <div class="ob-eyebrow">Step 1 · Meet Flux</div>
       <div class="ob-h1-row">
         <span class="ob-flux-mark">F</span>
-        <h1 class="ob-h1">Hello, {{ (user.display_name or user.email.split('@')[0]) | title }}. I'm your new <em>analytics teammate.</em></h1>
+        <h1 class="ob-h1">Hello, {{ (user.display_name or (user.email.split('@')[0] if user and user.email else 'there')) | title }}. I'm your new <em>analytics teammate.</em></h1>
       </div>
       <p class="ob-lede">I do the work of a senior digital analytics person — planning, implementation, auditing and reporting — across everything you connect. A quick tour of what that means:</p>
       <div class="ob-grid-2">
@@ -116,7 +116,7 @@
         <div class="ob-field-group">
           <label class="ob-field-label" for="obProjectName">Workspace / Project Name</label>
           <input type="text" class="ob-text-input ob-input-lg" id="obProjectName"
-                 value="{{ active_project_name or ((user.display_name or user.email.split('@')[0]) | title ~ \"'s Workspace\") }}"
+                 value="{% if active_project_name %}{{ active_project_name }}{% elif user and (user.display_name or user.email) %}{{ (user.display_name or user.email.split('@')[0]) | title }}'s Workspace{% else %}My Workspace{% endif %}"
                  placeholder="e.g. BMK Eco Farms or Acme Commerce" required>
           <div class="ob-slug-hint">Slug: <span class="mono" id="obSlugPreview">my-workspace</span></div>
         </div>

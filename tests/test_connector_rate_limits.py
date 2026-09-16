@@ -160,13 +160,11 @@ def test_settings_limits_panel_renders_via_shared_partial():
 
 
 def test_home_renders_connected_limits_section_with_deep_link():
-    # The home page is now a findings briefing. The rate-limit catalog is no
-    # longer duplicated on home — it lives solely in Project Settings (guarded
-    # by the settings tests above). Guard that home stays the briefing and does
-    # not re-embed the catalog cards or a stale partial import.
+    # The home page is now a pure MCP command center. The rate-limit catalog
+    # lives solely in Project Settings (guarded by the settings tests above).
+    # Guard that home does not re-embed the catalog cards or a stale partial import.
     src = HOME_TEMPLATE.read_text()
-    assert "briefing_findings" in src
-    assert "Latest activity" in src
+    assert "mcp-hub-card" in src
     assert "rlcards.rl_card" not in src
     assert "rate_limit_cards.html" not in src
 

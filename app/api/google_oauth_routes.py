@@ -425,11 +425,21 @@ async def home(request: Request):
     except Exception:
         pass
 
-    # Resolve active project — if the user has none yet, send them to
-    # /tutorial to create one as part of the onboarding journey.
+    # Resolve active project — for users who have completed onboarding,
+    # ensure a default workspace exists so they never get trapped in a
+    # /home ↔ /tutorial redirect loop.
     active_pid = await ensure_active_project(request, user_ctx.user_id)
     if not active_pid:
-        return RedirectResponse(url="/tutorial", status_code=302)
+        from app.api.project_routes import ensure_default_project
+
+        await ensure_default_project(
+            user_id=user_ctx.user_id,
+            display_name=user_ctx.display_name,
+            email=user_ctx.email,
+        )
+        active_pid = await ensure_active_project(request, user_ctx.user_id)
+        if not active_pid:
+            return RedirectResponse(url="/tutorial", status_code=302)
     active_pid_uuid = uuid.UUID(active_pid) if active_pid else None
 
     # Check if project has an active AI key configured for in-app chat
@@ -1100,7 +1110,12 @@ async def home_feed(request: Request):
 
 
 @router.get("/signin")
-async def signin(request: Request, next: str = Query(default="/home")):
+async def signin(
+    request: Request,
+    next: str = Query(default="/home"),
+    error: str | None = Query(default=None),
+    gated: str | None = Query(default=None),
+):
     """
     Sign-in interstitial page — shows email/password form + Google button.
 
@@ -1110,7 +1125,11 @@ async def signin(request: Request, next: str = Query(default="/home")):
     rendered. The ``next`` query parameter is sanitized to prevent open
     redirects (e.g. ``next=//evil.com``).
     """
-    safe_next = safe_next_url(next, "/home")
+    next_val = next if isinstance(next, str) else request.query_params.get("next", "/home")
+    safe_next = safe_next_url(next_val, "/home")
+
+    err_val = error if isinstance(error, str) else request.query_params.get("error")
+    gated_val = gated if isinstance(gated, str) else request.query_params.get("gated")
 
     user_ctx = await _resolve_user_ctx(request)
     if user_ctx is not None:
@@ -1165,6 +1184,8 @@ async def signin(request: Request, next: str = Query(default="/home")):
             "first_run": first_run,
             "signup_enabled": flags["signup_enabled"],
             "password_enabled": flags["password_enabled"],
+            "error": err_val,
+            "gated": gated_val in ("1", "true", "True"),
         },
     )
 
@@ -1188,7 +1209,8 @@ async def google_start(request: Request, next: str = Query(default="/home")):
 
     req_base_url = base_url_from_request(request)
 
-    safe_next = safe_next_url(next, "/home")
+    next_val = next if isinstance(next, str) else request.query_params.get("next", "/home")
+    safe_next = safe_next_url(next_val, "/home")
 
     state = secrets.token_urlsafe(32)
     redis = app_state.redis_client
@@ -1203,12 +1225,14 @@ async def google_start(request: Request, next: str = Query(default="/home")):
         ),
     )
 
+    from cryptography.fernet import InvalidToken
+
     from app.auth.oauth_app_credentials import get_oauth_app_credentials, OAuthAppNotConfigured
 
     try:
         async with app_state.db_session_factory() as _cred_db:
             _google_creds = await get_oauth_app_credentials(_cred_db, "google")
-    except OAuthAppNotConfigured:
+    except (OAuthAppNotConfigured, InvalidToken):
         return RedirectResponse(
             url="/signin?error=google_not_configured",
             status_code=302,
@@ -1225,7 +1249,7 @@ async def google_start(request: Request, next: str = Query(default="/home")):
         "prompt": "select_account",
     }
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
-    return RedirectResponse(url=url)
+    return RedirectResponse(url=url, status_code=302)
 
 
 @router.get("/auth/google/signin/callback")
@@ -1239,19 +1263,22 @@ async def signin_callback(
     Callback for the standalone sign-in flow.
     Creates/finds the user, sets uid cookie, redirects to stored `next`.
     """
-    if error:
-        return RedirectResponse(url=f"/?signin_error={error}", status_code=302)
+    err_val = error if isinstance(error, str) else request.query_params.get("error")
+    if err_val:
+        return RedirectResponse(url=f"/?signin_error={err_val}", status_code=302)
 
-    if not code or not state:
+    code_val = code if isinstance(code, str) else request.query_params.get("code")
+    state_val = state if isinstance(state, str) else request.query_params.get("state")
+    if not code_val or not state_val:
         return RedirectResponse(url="/", status_code=302)
 
     redis = app_state.redis_client
-    state_raw = await redis.get(f"signin_state:{state}")
+    state_raw = await redis.get(f"signin_state:{state_val}")
     if not state_raw:
         return RedirectResponse(url="/", status_code=302)
 
     state_str = state_raw.decode() if isinstance(state_raw, bytes) else state_raw
-    await redis.delete(f"signin_state:{state}")
+    await redis.delete(f"signin_state:{state_val}")
 
     # Parse stored state — may be plain string (legacy) or JSON object.
     try:
@@ -1283,10 +1310,18 @@ async def signin_callback(
     # Exchange code for tokens
     import base64 as _base64
 
-    from app.auth.oauth_app_credentials import get_oauth_app_credentials
+    from cryptography.fernet import InvalidToken
 
-    async with app_state.db_session_factory() as _cred_db:
-        _google_creds = await get_oauth_app_credentials(_cred_db, "google")
+    from app.auth.oauth_app_credentials import get_oauth_app_credentials, OAuthAppNotConfigured
+
+    try:
+        async with app_state.db_session_factory() as _cred_db:
+            _google_creds = await get_oauth_app_credentials(_cred_db, "google")
+    except (OAuthAppNotConfigured, InvalidToken):
+        return RedirectResponse(
+            url="/signin?error=google_not_configured",
+            status_code=302,
+        )
 
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
@@ -1294,7 +1329,7 @@ async def signin_callback(
             data={
                 "client_id": _google_creds.client_id,
                 "client_secret": _google_creds.client_secret,
-                "code": code,
+                "code": code_val,
                 "redirect_uri": signin_redirect_uri,
                 "grant_type": "authorization_code",
             },
@@ -1383,13 +1418,13 @@ async def signin_callback(
         await db.commit()
         user_id = str(user.id)
 
-    if is_new_user and not needs_tutorial:
+    if not needs_tutorial:
         try:
             from app.api.project_routes import ensure_default_project
 
             await ensure_default_project(user_id, display_name, email)
         except Exception:
-            logger.warning("ensure_default_project failed for new Google user", exc_info=True)
+            logger.warning("ensure_default_project failed for Google user", exc_info=True)
 
     # Redirect new users (or those who haven't finished) to tutorial
     redirect_url = next_url
