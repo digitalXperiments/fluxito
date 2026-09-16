@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Briefing — Fluxito{% endblock %}
+{% block title %}MCP Command Center — Fluxito{% endblock %}
 {% set active = 'home' %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/home.css?v={{ asset_hash('css/home.css') }}"/>
@@ -10,14 +10,16 @@
   <div class="home-center">
     <div class="home-feed">
       <div class="home-feed-inner">
+
+        <!-- ═══ TOP STATUS & BRIEFING GREETING ═══ -->
         <div class="home-top-row">
           <span class="home-eyebrow">{{ briefing_now_display }}</span>
-          <a href="#" class="home-history-link">Briefing history →</a>
+          <a href="/audits" class="home-history-link">Audit logs →</a>
         </div>
         <h1 class="home-h1">
           {{ briefing_time_of_day }}, {{ (user.display_name or user.email.split('@')[0]) | title }}.
           {% if briefing_needs_attention > 0 %}
-            {{ briefing_needs_attention }} thing{{ 's' if briefing_needs_attention != 1 else '' }} need{{ 's' if briefing_needs_attention == 1 else '' }} you.
+            <span class="home-h1-accent">{{ briefing_needs_attention }} thing{{ 's' if briefing_needs_attention != 1 else '' }} need{{ 's' if briefing_needs_attention == 1 else '' }} attention.</span>
           {% else %}
             All clear for now.
           {% endif %}
@@ -25,195 +27,262 @@
         <div class="home-sub">
           {% if audit_checked_summary %}
             {{ audit_checked_summary }}
-          {% elif not nav_projects %}
-            Create a project to connect your data and start asking questions.
           {% else %}
-            Connect a platform and run an audit so Flux has something to check.
+            Your 24/7 digital analytics engineer is connected and ready to assist via MCP.
           {% endif %}
         </div>
 
-        {# ── MCP Spotlight Hero Card: Add Fluxito MCP to your AI agent ── #}
-        <div class="mcp-spotlight-card">
-          <div class="mcp-card-top">
-            <div class="mcp-eyebrow-wrap">
-              <span class="mcp-pill-badge">Highlight</span>
-              <span class="mcp-subhead">USE WITH YOUR EXISTING SUBSCRIPTIONS</span>
+        <!-- ═══ HERO: TALK TO FLUXITO THROUGH YOUR AI AGENTS ═══ -->
+        <section class="mcp-hub-card" id="mcp-setup">
+          <div class="mcp-hub-header">
+            <div class="mcp-hub-badges">
+              <span class="mcp-hub-pill">MCP Server</span>
+              <span class="mcp-hub-sub">TALK VIA YOUR AI AGENTS · $0 TOKEN MARKUP</span>
             </div>
-            <span class="mcp-cost-tag">Zero Extra Token Cost</span>
+            <span class="mcp-hub-status"><span class="mcp-pulse-dot"></span> Active &amp; Ready</span>
           </div>
 
-          <div class="mcp-title">Add Fluxito MCP to your AI agent</div>
-          <div class="mcp-lead">
-            Run ad-hoc ROAS queries, GTM audits, and SDR tracking plans directly in <strong>Claude Pro, ChatGPT Plus, Cursor, or Windsurf</strong>. One connection gives your daily AI agent direct access to all your marketing tools.
-          </div>
+          <h2 class="mcp-hub-title">Talk to Fluxito through your <em>AI agents.</em></h2>
+          <p class="mcp-hub-lead">
+            Fluxito operates as an open Model Context Protocol (MCP) server. Connect it once to your daily AI tool to audit live tags, check Meta CAPI deduplication, and reconcile ad revenue — directly from your existing AI subscription.
+          </p>
 
           <!-- Client Selector Tabs -->
-          <div class="mcp-client-tabs">
-            <button type="button" class="mcp-client-pill active" data-mcp-client="claude">
-              <span class="mcp-client-dot" style="background:#D97757"></span>
+          <div class="mcp-hub-tabs" role="tablist">
+            <button type="button" class="mcp-hub-tab active" data-mcp-client="claude">
+              <span class="tab-dot" style="background:#D97757;"></span>
               <span>Claude Desktop</span>
             </button>
-            <button type="button" class="mcp-client-pill" data-mcp-client="cursor">
-              <span class="mcp-client-dot" style="background:#4A90E2"></span>
-              <span>Cursor Editor</span>
+            <button type="button" class="mcp-hub-tab" data-mcp-client="cursor">
+              <span class="tab-dot" style="background:#4A90E2;"></span>
+              <span>Cursor</span>
             </button>
-            <button type="button" class="mcp-client-pill" data-mcp-client="chatgpt">
-              <span class="mcp-client-dot" style="background:#10A37F"></span>
+            <button type="button" class="mcp-hub-tab" data-mcp-client="chatgpt">
+              <span class="tab-dot" style="background:#10A37F;"></span>
               <span>ChatGPT</span>
             </button>
-            <button type="button" class="mcp-client-pill" data-mcp-client="windsurf">
-              <span class="mcp-client-dot" style="background:#09B6A2"></span>
+            <button type="button" class="mcp-hub-tab" data-mcp-client="grok">
+              <span class="tab-dot" style="background:#201B14;"></span>
+              <span>Grok</span>
+            </button>
+            <button type="button" class="mcp-hub-tab" data-mcp-client="antigravity">
+              <span class="tab-dot" style="background:#EA4335;"></span>
+              <span>Antigravity</span>
+            </button>
+            <button type="button" class="mcp-hub-tab" data-mcp-client="windsurf">
+              <span class="tab-dot" style="background:#09B6A2;"></span>
               <span>Windsurf</span>
             </button>
-            <button type="button" class="mcp-client-pill" data-mcp-client="claude-code">
-              <span class="mcp-client-dot" style="background:#E29578"></span>
+            <button type="button" class="mcp-hub-tab" data-mcp-client="claude-code">
+              <span class="tab-dot" style="background:#E29578;"></span>
               <span>Claude Code CLI</span>
             </button>
           </div>
 
           <!-- Command Snippet Box -->
-          <div class="mcp-snippet-box">
-            <div class="mcp-command-text" id="mcpCommandText">
+          <div class="mcp-cmd-box">
+            <div class="mcp-cmd-text" id="mcpSnippetText">
               claude mcp add fluxito -- {{ base_url }}/mcp
             </div>
-            <button type="button" class="mcp-copy-action" id="mcpCopyAction">Copy Command</button>
+            <button type="button" class="mcp-cmd-btn" id="mcpCopyCmdBtn">Copy Command</button>
           </div>
 
-          <div class="mcp-help-footer">
-            <span>💡 <em>No API key required when querying via MCP — uses your Claude/ChatGPT subscription.</em></span>
-            <a href="/tutorials/connect-ai-mcp" class="mcp-help-link">View complete setup guide →</a>
-          </div>
-        </div>
-
-        <div class="home-findings">
-          {% for f in briefing_findings %}
-          <div class="briefing-card" data-finding-key="{{ f.key }}">
-            <span class="briefing-pill sev-{{ f.severity }}">{{ f.severity }}</span>
-            <div class="briefing-body">
-              <div class="briefing-title">{{ f.title }}</div>
-              {% if f.body %}<div class="briefing-desc">{{ f.body }}</div>{% endif %}
-
-              {% if f.severity in ('urgent', 'watch') %}
-              <div class="briefing-actions">
-                {% if f.severity == 'urgent' and f.link %}
-                <a href="{{ f.link }}" class="briefing-action-primary">Review the fix</a>
-                {% endif %}
-                {% if f.evidence_link %}
-                <a href="{{ f.evidence_link }}" class="briefing-action-secondary">Show evidence</a>
-                {% else %}
-                <span class="briefing-action-secondary" data-evidence-toggle>Show evidence</span>
-                {% endif %}
-                <span class="briefing-action-tertiary" data-dismiss-btn>Dismiss</span>
-              </div>
-              {% if not f.evidence_link %}
-              <div class="briefing-evidence" hidden>
-                {% if f.evidence_meta %}
-                  {% for mk, mv in f.evidence_meta.items() %}
-                  <div class="briefing-evidence-row"><span class="briefing-evidence-key">{{ mk }}</span><span class="briefing-evidence-val">{{ mv }}</span></div>
-                  {% endfor %}
-                {% else %}
-                <div class="briefing-evidence-row briefing-evidence-empty">No additional evidence recorded for this finding.</div>
-                {% endif %}
-              </div>
-              {% endif %}
-              {% endif %}
+          <!-- Universal Endpoint Row -->
+          <div class="mcp-endpoint-row">
+            <div class="endpoint-copy-wrap">
+              <span class="endpoint-label">Project MCP Endpoint:</span>
+              <code class="endpoint-val" id="mcpEndpointVal">{{ base_url }}/mcp</code>
+            </div>
+            <div class="mcp-endpoint-actions">
+              <button type="button" class="btn-endpoint-copy" id="mcpCopyUrlBtn">Copy URL</button>
+              <a href="/tutorials/connect-ai-mcp" class="mcp-doc-link">Setup Guide →</a>
             </div>
           </div>
-          {% else %}
-          <div class="briefing-card">
-            <span class="briefing-pill sev-good">good</span>
-            <div class="briefing-body">
-              <div class="briefing-title">Nothing needs your attention right now.</div>
-              <div class="briefing-desc">All tracking pipelines are healthy. Next automated tag QA scheduled for midnight.</div>
+        </section>
+
+        <!-- ═══ READY-TO-USE AGENT PROMPTS ═══ -->
+        <section class="prompts-section">
+          <div class="prompts-head">
+            <div class="prompts-eyebrow">WHAT TO ASK YOUR AI AGENT</div>
+            <h3 class="prompts-title">Ready-to-use prompts for your AI</h3>
+            <p class="prompts-sub">Click any card to copy the prompt to your clipboard, then paste it directly into Claude, ChatGPT, Cursor, or Grok:</p>
+          </div>
+
+          <div class="prompts-grid">
+            <!-- Prompt 1: Tag QA -->
+            <div class="prompt-card" data-prompt="Audit our live Google Tag Manager container. Verify that GA4, Meta, and Google Ads purchase events fire with complete parameters.">
+              <div class="prompt-card-top">
+                <span class="prompt-tag tag-qa">Tag QA</span>
+                <button type="button" class="prompt-copy-btn" aria-label="Copy prompt">Copy Prompt</button>
+              </div>
+              <div class="prompt-card-title">Audit Live Container Tags</div>
+              <p class="prompt-card-body">&ldquo;Audit our live Google Tag Manager container. Verify that GA4, Meta, and Google Ads purchase events fire with complete parameters.&rdquo;</p>
+            </div>
+
+            <!-- Prompt 2: Meta CAPI -->
+            <div class="prompt-card" data-prompt="Check our Meta Pixel vs server CAPI deduplication. Are we double-counting purchase events or inflating reported ROAS?">
+              <div class="prompt-card-top">
+                <span class="prompt-tag tag-dedup">Attribution</span>
+                <button type="button" class="prompt-copy-btn" aria-label="Copy prompt">Copy Prompt</button>
+              </div>
+              <div class="prompt-card-title">Meta Pixel vs CAPI Deduplication</div>
+              <p class="prompt-card-body">&ldquo;Check our Meta Pixel vs server CAPI deduplication. Are we double-counting purchase events or inflating reported ROAS?&rdquo;</p>
+            </div>
+
+            <!-- Prompt 3: Tracking Plan -->
+            <div class="prompt-card" data-prompt="Inspect all currently live tags in GTM and export an updated Solution Design Reference (SDR) tracking plan.">
+              <div class="prompt-card-top">
+                <span class="prompt-tag tag-sdr">Tracking Plan</span>
+                <button type="button" class="prompt-copy-btn" aria-label="Copy prompt">Copy Prompt</button>
+              </div>
+              <div class="prompt-card-title">Export Live SDR Tracking Plan</div>
+              <p class="prompt-card-body">&ldquo;Inspect all currently live tags in GTM and export an updated Solution Design Reference (SDR) tracking plan.&rdquo;</p>
+            </div>
+
+            <!-- Prompt 4: Revenue Reconciliation -->
+            <div class="prompt-card" data-prompt="Compare Meta and Google Ads reported conversion values against verified order revenue in BigQuery for this month.">
+              <div class="prompt-card-top">
+                <span class="prompt-tag tag-reconcile">Reconciliation</span>
+                <button type="button" class="prompt-copy-btn" aria-label="Copy prompt">Copy Prompt</button>
+              </div>
+              <div class="prompt-card-title">Reconcile Ad Spend vs Warehouse</div>
+              <p class="prompt-card-body">&ldquo;Compare Meta and Google Ads reported conversion values against verified order revenue in BigQuery for this month.&rdquo;</p>
+            </div>
+
+            <!-- Prompt 5: Release Drift -->
+            <div class="prompt-card" data-prompt="Inspect our checkout funnel and alert me if any tags fail to fire on the order confirmation step.">
+              <div class="prompt-card-top">
+                <span class="prompt-tag tag-drift">Drift QA</span>
+                <button type="button" class="prompt-copy-btn" aria-label="Copy prompt">Copy Prompt</button>
+              </div>
+              <div class="prompt-card-title">Checkout Release Drift Check</div>
+              <p class="prompt-card-body">&ldquo;Inspect our checkout funnel and alert me if any tags fail to fire on the order confirmation step.&rdquo;</p>
+            </div>
+
+            <!-- Prompt 6: Staging Fixes -->
+            <div class="prompt-card" data-prompt="Draft a new TikTok ViewContent tag on product cards inside a Tag Manager sandbox workspace for review.">
+              <div class="prompt-card-top">
+                <span class="prompt-tag tag-sandbox">GTM Sandbox</span>
+                <button type="button" class="prompt-copy-btn" aria-label="Copy prompt">Copy Prompt</button>
+              </div>
+              <div class="prompt-card-title">Stage Safe Tag Changes</div>
+              <p class="prompt-card-body">&ldquo;Draft a new TikTok ViewContent tag on product cards inside a Tag Manager sandbox workspace for review.&rdquo;</p>
             </div>
           </div>
-          <div class="briefing-card" style="border-left: 3px solid var(--accent);">
-            <span class="briefing-pill" style="background:var(--card-well);border:1px solid var(--line-strong);color:var(--ink);">TIP</span>
-            <div class="briefing-body">
-              <div class="briefing-title">Try your first MCP prompt in Claude, Cursor or ChatGPT</div>
-              <div class="briefing-desc">
-                Ask your agent: <span class="mono" style="background:var(--paper-2);padding:2px 6px;border-radius:4px;">"What GA4 events had anomalous conversion drop-offs this week?"</span>
+        </section>
+
+        <!-- ═══ CONNECTED MARKETING STACK ═══ -->
+        <section class="stack-overview-card">
+          <div class="stack-overview-head">
+            <div>
+              <div class="stack-overview-title">Connected Marketing Stack</div>
+              <div class="stack-overview-sub">Your AI agent inherits authenticated access to all data sources active in this workspace.</div>
+            </div>
+            <a href="/connect" class="btn-connect-more">+ Connect Platforms ({{ total_conns }} / {{ total_platforms }})</a>
+          </div>
+          <div class="stack-badge-row">
+            <span class="stack-chip"><span class="chip-dot is-good"></span> Google Analytics 4</span>
+            <span class="stack-chip"><span class="chip-dot is-good"></span> Google Tag Manager</span>
+            <span class="stack-chip"><span class="chip-dot is-good"></span> Meta Ads &amp; CAPI</span>
+            <span class="stack-chip"><span class="chip-dot is-good"></span> Google BigQuery</span>
+            <span class="stack-chip"><span class="chip-dot is-good"></span> Google Ads</span>
+            <a href="/connect" class="stack-chip-more">View all 27 platforms →</a>
+          </div>
+        </section>
+
+        <!-- ═══ BRIEFING & FINDINGS ═══ -->
+        <section class="home-findings-section">
+          <div class="findings-head-row">
+            <span class="findings-head-title">Tag QA &amp; Briefing Status</span>
+            <span class="findings-head-meta">Automated Nightly Sweep</span>
+          </div>
+
+          <div class="home-findings">
+            {% for f in briefing_findings %}
+            <div class="briefing-card" data-finding-key="{{ f.key }}">
+              <span class="briefing-pill sev-{{ f.severity }}">{{ f.severity }}</span>
+              <div class="briefing-body">
+                <div class="briefing-title">{{ f.title }}</div>
+                {% if f.body %}<div class="briefing-desc">{{ f.body }}</div>{% endif %}
+
+                {% if f.severity in ('urgent', 'watch') %}
+                <div class="briefing-actions">
+                  {% if f.severity == 'urgent' and f.link %}
+                  <a href="{{ f.link }}" class="briefing-action-primary">Review the fix</a>
+                  {% endif %}
+                  {% if f.evidence_link %}
+                  <a href="{{ f.evidence_link }}" class="briefing-action-secondary">Show evidence</a>
+                  {% else %}
+                  <span class="briefing-action-secondary" data-evidence-toggle>Show evidence</span>
+                  {% endif %}
+                  <span class="briefing-action-tertiary" data-dismiss-btn>Dismiss</span>
+                </div>
+                {% if not f.evidence_link %}
+                <div class="briefing-evidence" hidden>
+                  {% if f.evidence_meta %}
+                    {% for mk, mv in f.evidence_meta.items() %}
+                    <div class="briefing-evidence-row"><span class="briefing-evidence-key">{{ mk }}</span><span class="briefing-evidence-val">{{ mv }}</span></div>
+                    {% endfor %}
+                  {% else %}
+                  <div class="briefing-evidence-row briefing-evidence-empty">No additional evidence recorded for this finding.</div>
+                  {% endif %}
+                </div>
+                {% endif %}
+                {% endif %}
               </div>
             </div>
-          </div>
-          {% endfor %}
+            {% else %}
+            <div class="briefing-card briefing-all-clear">
+              <span class="briefing-pill sev-good">good</span>
+              <div class="briefing-body">
+                <div class="briefing-title">All tracking pipelines are healthy.</div>
+                <div class="briefing-desc">No broken tags or duplicate conversions detected across your connected platforms. Next automated audit scheduled for midnight.</div>
+              </div>
+            </div>
+            {% endfor %}
 
-          {% if audit_checked_summary %}
-          <div class="home-done-overnight">
-            <span class="home-done-overnight-rule"></span>
-            <span class="home-done-overnight-label">Done overnight — {{ audit_checked_summary }}</span>
-            <span class="home-done-overnight-rule"></span>
+            {% if audit_checked_summary %}
+            <div class="home-done-overnight">
+              <span class="home-done-overnight-rule"></span>
+              <span class="home-done-overnight-label">Done overnight — {{ audit_checked_summary }}</span>
+              <span class="home-done-overnight-rule"></span>
+            </div>
+            {% endif %}
           </div>
-          {% endif %}
-        </div>
+        </section>
 
-        {# ── Latest activity — merged feed across audits, test flows,
-             drafts, report sends and activity events. Hydrated client-side
-             from /api/home/feed so the initial page render stays cheap. ── #}
+        <!-- ═══ LATEST ACTIVITY ═══ -->
         <div class="home-activity" id="home-activity" hidden>
           <div class="home-activity-label">Latest activity</div>
           <div class="home-activity-list" id="home-activity-list"></div>
         </div>
-      </div>
-    </div>
 
-    {# ── Floating Chatbar Container: Decoupled from static flow ── #}
-    <div class="home-composer-wrap">
-      <div class="home-composer-inner">
-        <form id="home-composer-form" class="home-composer" autocomplete="off" data-has-ai-key="{{ '1' if has_ai_key else '0' }}">
-          <span class="flux-badge" aria-hidden="true">F</span>
-          <input type="text" id="home-composer-input" class="home-composer-input" data-flux-composer
-                 placeholder='Ask Flux — &quot;why did ROAS dip last week?&quot;, &quot;audit my GTM container&quot;…'>
-          <span class="home-composer-kbd">⌘K</span>
-          <button type="submit" class="btn-accent home-composer-ask">Ask</button>
-        </form>
-        <div class="home-chips">
-          <a href="/ask?q={{ 'Run a full audit of my tracking setup and summarize what needs fixing' | urlencode }}" class="home-chip" data-quick-chip>Audit my tracking setup</a>
-          <a href="/ask?q={{ 'Where are the gaps in my tracking plan and how do I close them' | urlencode }}" class="home-chip" data-quick-chip>Close tracking-plan gaps</a>
-          <a href="/ask?q={{ 'Help me build a dashboard for my key marketing metrics' | urlencode }}" class="home-chip" data-quick-chip>Build a dashboard</a>
-          <a href="/ask?q={{ 'What should I connect next to get more out of Flux' | urlencode }}" class="home-chip" data-quick-chip>What should I connect next?</a>
-        </div>
-      </div>
-    </div>
-
-    {# ── Modal for in-app AI key prompt / MCP query fallback ── #}
-    <div class="home-ai-modal-backdrop" id="homeAiModal" hidden>
-      <div class="home-ai-modal">
-        <div class="home-ai-modal-head">
-          <div class="home-ai-modal-title">
-            <span class="flux-badge" style="width:24px;height:24px;font-size:12px;">F</span>
-            <span>Querying with Flux</span>
-          </div>
-          <button type="button" class="home-ai-modal-close" id="homeAiModalClose">✕</button>
-        </div>
-        <div class="home-ai-modal-body">
-          <div class="home-ai-modal-alert">
-            <strong>No In-App AI Provider Key Configured</strong><br>
-            In-app web chat requires an OpenAI, Anthropic, or Gemini API key. You can query via MCP using your existing AI subscription for $0 extra cost, or add an API key.
-          </div>
-          <div class="home-ai-modal-prompt-box">
-            <span class="home-ai-modal-prompt-label">Your Question:</span>
-            <div id="homeAiModalPromptText" class="home-ai-modal-prompt-val"></div>
-          </div>
-          <div class="home-ai-modal-options">
-            <div class="home-ai-opt-card">
-              <div class="home-ai-opt-title">⚡ Query via MCP (Zero Token Cost)</div>
-              <div class="home-ai-opt-desc">Copy your question and ask Claude, Cursor, or ChatGPT directly through your existing AI subscription.</div>
-              <button type="button" class="btn primary btn-sm" id="copyPromptMcpBtn">Copy Question for Claude / Cursor</button>
-            </div>
-            <div class="home-ai-opt-card">
-              <div class="home-ai-opt-title">🔑 Enable In-App Chat</div>
-              <div class="home-ai-opt-desc">Add your Anthropic, OpenAI, or Gemini key to run conversations directly in this dashboard.</div>
-              <a href="/settings/ai" class="btn secondary btn-sm">Configure AI Key in Settings →</a>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
 
+  <!-- ═══ RIGHT RAIL ═══ -->
   <aside class="home-rail">
-    <div class="home-rail-label">Flux is running</div>
+    <div class="home-rail-label">MCP Integration</div>
+    <div class="home-rail-card home-rail-mcp">
+      <div class="home-rail-card-row">
+        <span class="home-rail-dot" style="background:var(--good);"></span>
+        <span class="home-rail-card-title">Fluxito MCP Server</span>
+      </div>
+      <div class="home-rail-card-meta">Claude · Cursor · ChatGPT · Grok</div>
+      <p class="home-rail-mcp-desc">Your workspace is configured and ready for MCP queries with zero token markups.</p>
+      <button type="button" class="home-rail-mcp-btn" id="railCopyMcpBtn" data-mcp-url="{{ base_url }}/mcp">Copy MCP Endpoint</button>
+    </div>
+
+    <div class="home-rail-label home-rail-label-2nd">Stack health</div>
+    <div class="home-rail-card home-stack-health">
+      <div class="hsh-row"><span>Connections</span><span class="mono">{{ total_conns }} / {{ total_platforms }}</span></div>
+      <div class="hsh-row"><span>Plan coverage</span><span class="mono">{% if tp_coverage_pct is not none %}{{ tp_coverage_pct }}%{% else %}—{% endif %}</span></div>
+      <div class="hsh-row"><span>Open issues</span><span class="mono{% if (tp_open_issues + audit_open_issues) > 0 %} hsh-danger{% endif %}">{{ tp_open_issues + audit_open_issues }}</span></div>
+      <div class="hsh-row"><span>Last full audit</span><span class="mono">{{ last_audit_display }}</span></div>
+    </div>
+
+    <div class="home-rail-label home-rail-label-2nd">Flux is running</div>
     {% for a in running_automations %}
     <div class="home-rail-card">
       <div class="home-rail-card-row"><span class="home-rail-dot{% if a.progress_pct is not none %} is-running{% endif %}"></span><span class="home-rail-card-title">{{ a.name }}</span></div>
@@ -225,126 +294,50 @@
     {% else %}
     <div class="home-rail-card home-rail-empty">Nothing scheduled yet.</div>
     {% endfor %}
-    <a href="/automations" class="home-rail-link">Assign Flux a task →</a>
+    <a href="/automations" class="home-rail-link">Assign Flux an audit task →</a>
 
-    <div class="home-rail-label home-rail-label-2nd">Stack health</div>
-    <div class="home-rail-card home-stack-health">
-      <div class="hsh-row"><span>Connections</span><span class="mono">{{ total_conns }} / {{ total_platforms }}</span></div>
-      <div class="hsh-row"><span>Plan coverage</span><span class="mono">{% if tp_coverage_pct is not none %}{{ tp_coverage_pct }}%{% else %}—{% endif %}</span></div>
-      <div class="hsh-row"><span>Open issues</span><span class="mono{% if (tp_open_issues + audit_open_issues) > 0 %} hsh-danger{% endif %}">{{ tp_open_issues + audit_open_issues }}</span></div>
-      <div class="hsh-row"><span>Last full audit</span><span class="mono">{{ last_audit_display }}</span></div>
-    </div>
-
-    {# ── Prominent MCP Rail Section ── #}
-    <div class="home-rail-label home-rail-label-2nd">Agent Integration</div>
-    <div class="home-rail-card home-rail-mcp">
-      <div class="home-rail-card-row">
-        <span class="home-rail-dot" style="background:var(--accent);"></span>
-        <span class="home-rail-card-title">Fluxito MCP</span>
-      </div>
-      <div class="home-rail-card-meta">Claude · Cursor · ChatGPT</div>
-      <p class="home-rail-mcp-desc">Connect your AI subscription directly to this project via MCP.</p>
-      <button type="button" class="home-rail-mcp-btn" id="railCopyMcpBtn" data-mcp-url="{{ base_url }}/mcp">Copy MCP Endpoint</button>
-    </div>
-
-    <div class="home-rail-foot">Also available in Claude, ChatGPT &amp; Cursor via MCP — same Flux, same memory.</div>
+    <div class="home-rail-foot">Talk to Fluxito in Claude, ChatGPT, Cursor &amp; Grok via MCP.</div>
   </aside>
 </div>
 
+<!-- Toast element for copy confirmation -->
+<div id="hubToast" class="hub-toast" role="status" aria-live="polite" hidden></div>
+
 <script>
 (function(){
-  var form = document.getElementById('home-composer-form');
-  var input = document.getElementById('home-composer-input');
-  var modal = document.getElementById('homeAiModal');
-  var modalClose = document.getElementById('homeAiModalClose');
-  var modalPrompt = document.getElementById('homeAiModalPromptText');
-  var copyPromptBtn = document.getElementById('copyPromptMcpBtn');
-  var hasAiKey = form ? (form.getAttribute('data-has-ai-key') === '1') : false;
-
-  function openAiModal(queryText) {
-    if (!modal) return;
-    if (modalPrompt) modalPrompt.textContent = queryText || 'How are my marketing campaigns performing?';
-    modal.hidden = false;
-  }
-
-  function closeAiModal() {
-    if (modal) modal.hidden = true;
-  }
-
-  if (modalClose) {
-    modalClose.addEventListener('click', closeAiModal);
-  }
-  if (modal) {
-    modal.addEventListener('click', function(e){
-      if (e.target === modal) closeAiModal();
-    });
-  }
-
-  if (copyPromptBtn) {
-    copyPromptBtn.addEventListener('click', function(){
-      var text = (modalPrompt && modalPrompt.textContent) || '';
-      if (text) {
-        navigator.clipboard.writeText(text).catch(function(){});
-        copyPromptBtn.textContent = 'Copied to clipboard! ✓';
-        setTimeout(function(){ copyPromptBtn.textContent = 'Copy Question for Claude / Cursor'; }, 2000);
-      }
-    });
-  }
-
-  if (form && input) {
-    form.addEventListener('submit', function(e){
-      e.preventDefault();
-      var q = (input.value || '').trim();
-      if (!q) { window.location.href = '/ask'; return; }
-      if (!hasAiKey) {
-        openAiModal(q);
-        return;
-      }
-      window.location.href = '/ask?q=' + encodeURIComponent(q);
-    });
-
-    // Handle Quick Chips when no AI key
-    document.querySelectorAll('[data-quick-chip]').forEach(function(chip){
-      chip.addEventListener('click', function(e){
-        if (!hasAiKey) {
-          e.preventDefault();
-          var q = chip.textContent.trim();
-          input.value = q;
-          openAiModal(q);
-        }
-      });
-    });
-  }
-
-  // Keyboard shortcut Cmd+K / Ctrl+K
-  window.addEventListener('keydown', function(e){
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      if (input) input.focus();
-    }
-    if (e.key === 'Escape') {
-      closeAiModal();
-    }
-  });
-
-  // ── MCP Spotlight Client Tabs ──────────────────────────────────────────
   var baseUrl = {{ base_url | tojson }};
+
   var mcpSnippets = {
     'claude': 'claude mcp add fluxito -- ' + baseUrl + '/mcp',
     'cursor': 'npx -y @modelcontextprotocol/create-server fluxito ' + baseUrl + '/mcp',
     'chatgpt': baseUrl + '/mcp',
+    'grok': baseUrl + '/mcp',
+    'antigravity': baseUrl + '/mcp',
     'windsurf': 'windsurf mcp install fluxito ' + baseUrl + '/mcp',
     'claude-code': 'claude mcp add fluxito -- ' + baseUrl + '/mcp'
   };
 
-  var commandTextEl = document.getElementById('mcpCommandText');
-  var copyActionBtn = document.getElementById('mcpCopyAction');
+  function showToast(msg) {
+    var toast = document.getElementById('hubToast');
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.hidden = false;
+    toast.classList.add('is-visible');
+    setTimeout(function(){
+      toast.classList.remove('is-visible');
+      setTimeout(function(){ toast.hidden = true; }, 200);
+    }, 2400);
+  }
 
-  document.querySelectorAll('.mcp-client-pill').forEach(function(pill){
-    pill.addEventListener('click', function(){
-      document.querySelectorAll('.mcp-client-pill').forEach(function(p){ p.classList.remove('active'); });
-      pill.classList.add('active');
-      var client = pill.getAttribute('data-mcp-client');
+  // ── MCP Client Tabs ──
+  var commandTextEl = document.getElementById('mcpSnippetText');
+  var copyActionBtn = document.getElementById('mcpCopyCmdBtn');
+
+  document.querySelectorAll('.mcp-hub-tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      document.querySelectorAll('.mcp-hub-tab').forEach(function(t){ t.classList.remove('active'); });
+      tab.classList.add('active');
+      var client = tab.getAttribute('data-mcp-client');
       var cmd = mcpSnippets[client] || mcpSnippets['claude'];
       if (commandTextEl) commandTextEl.textContent = cmd;
     });
@@ -353,25 +346,65 @@
   if (copyActionBtn && commandTextEl) {
     copyActionBtn.addEventListener('click', function(){
       var text = commandTextEl.textContent.trim();
-      navigator.clipboard.writeText(text).catch(function(){});
-      copyActionBtn.textContent = 'Copied! ✓';
-      setTimeout(function(){ copyActionBtn.textContent = 'Copy Command'; }, 2000);
+      navigator.clipboard.writeText(text).then(function(){
+        copyActionBtn.textContent = 'Copied! ✓';
+        copyActionBtn.style.background = 'var(--good)';
+        copyActionBtn.style.color = '#FFF';
+        showToast('Copied MCP command to clipboard!');
+        setTimeout(function(){
+          copyActionBtn.textContent = 'Copy Command';
+          copyActionBtn.style.background = '';
+          copyActionBtn.style.color = '';
+        }, 2200);
+      }).catch(function(){});
     });
   }
 
-  // ── Rail MCP Copy ──────────────────────────────────────────────────────
+  // ── Copy URL Buttons ──
+  var copyUrlBtn = document.getElementById('mcpCopyUrlBtn');
+  if (copyUrlBtn) {
+    copyUrlBtn.addEventListener('click', function(){
+      navigator.clipboard.writeText(baseUrl + '/mcp').then(function(){
+        copyUrlBtn.textContent = 'Copied! ✓';
+        showToast('Copied MCP Endpoint: ' + baseUrl + '/mcp');
+        setTimeout(function(){ copyUrlBtn.textContent = 'Copy URL'; }, 2000);
+      }).catch(function(){});
+    });
+  }
+
   var railCopyBtn = document.getElementById('railCopyMcpBtn');
   if (railCopyBtn) {
     railCopyBtn.addEventListener('click', function(){
       var url = railCopyBtn.getAttribute('data-mcp-url') || (baseUrl + '/mcp');
-      navigator.clipboard.writeText(url).catch(function(){});
-      railCopyBtn.textContent = 'Copied! ✓';
-      setTimeout(function(){ railCopyBtn.textContent = 'Copy MCP Endpoint'; }, 2000);
+      navigator.clipboard.writeText(url).then(function(){
+        railCopyBtn.textContent = 'Copied! ✓';
+        showToast('Copied MCP Endpoint to clipboard!');
+        setTimeout(function(){ railCopyBtn.textContent = 'Copy MCP Endpoint'; }, 2000);
+      }).catch(function(){});
     });
   }
 
-  // "Show evidence" — expand the inline evidence block (no separate
-  // evidence deep-link exists yet, so this just toggles visibility).
+  // ── Clickable Prompt Cards (Click to Copy into AI Agent) ──
+  document.querySelectorAll('.prompt-card').forEach(function(card){
+    card.addEventListener('click', function(){
+      var prompt = card.getAttribute('data-prompt');
+      if (!prompt) return;
+      var btn = card.querySelector('.prompt-copy-btn');
+      navigator.clipboard.writeText(prompt).then(function(){
+        if (btn) {
+          btn.textContent = 'Copied! ✓';
+          btn.classList.add('is-copied');
+          setTimeout(function(){
+            btn.textContent = 'Copy Prompt';
+            btn.classList.remove('is-copied');
+          }, 2000);
+        }
+        showToast('Prompt copied! Paste it into Claude or ChatGPT to run via MCP ✓');
+      }).catch(function(){});
+    });
+  });
+
+  // ── Finding Evidence Toggles & Dismissals ──
   document.querySelectorAll('[data-evidence-toggle]').forEach(function(btn){
     btn.addEventListener('click', function(){
       var card = btn.closest('.briefing-card');
@@ -381,8 +414,6 @@
     });
   });
 
-  // "Dismiss" — persist server-side, then remove the card immediately
-  // (no animation, per spec).
   document.querySelectorAll('[data-dismiss-btn]').forEach(function(btn){
     btn.addEventListener('click', function(){
       var card = btn.closest('.briefing-card');
@@ -394,15 +425,12 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ finding_key: key })
-      }).catch(function(){ /* best-effort — card is already gone client-side */ });
+      }).catch(function(){});
     });
   });
 
-  // ── Latest activity feed — hydrate from /api/home/feed. Best-effort:
-  // on empty or error the section simply stays hidden.
-  var ICONS = {
-    audit: '🔍', test_flow: '🧪', draft: '✎', report: '📤', activity: '•'
-  };
+  // ── Hydrate Latest Activity ──
+  var ICONS = { audit: '🔍', test_flow: '🧪', draft: '✎', report: '📤', activity: '•' };
   function relTime(iso){
     if (!iso) return '';
     var t = new Date(iso).getTime();
@@ -446,7 +474,7 @@
       }).join('');
       wrap.hidden = false;
     })
-    .catch(function(){ /* best-effort — section stays hidden */ });
+    .catch(function(){});
 })();
 </script>
 {% endblock %}
